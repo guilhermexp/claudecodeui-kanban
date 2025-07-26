@@ -1382,12 +1382,21 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     bufferTimeoutRef.current = setTimeout(flushMessageBuffer, delay);
   }, [flushMessageBuffer]);
 
-  // Simple scroll handling - just track if user scrolled up
+  // Debounced scroll handling to prevent excessive updates
+  const scrollDebounceRef = useRef(null);
   const handleScroll = useCallback(() => {
-    if (scrollContainerRef.current) {
-      const nearBottom = isNearBottom();
-      setIsUserScrolledUp(!nearBottom);
+    // Clear previous timeout
+    if (scrollDebounceRef.current) {
+      clearTimeout(scrollDebounceRef.current);
     }
+    
+    // Debounce the actual check
+    scrollDebounceRef.current = setTimeout(() => {
+      if (scrollContainerRef.current) {
+        const nearBottom = isNearBottom();
+        setIsUserScrolledUp(!nearBottom);
+      }
+    }, 100); // 100ms debounce
   }, [isNearBottom]);
 
   useEffect(() => {
@@ -1402,10 +1411,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           const messages = await loadSessionMessages(selectedProject.name, selectedSession.id);
           setSessionMessages(messages);
           // convertedMessages will be automatically updated via useMemo
-          // Scroll to bottom after loading session messages if auto-scroll is enabled
-          if (autoScrollToBottom) {
-            requestAnimationFrame(() => requestAnimationFrame(() => scrollToBottom()));
-          }
+          // Don't auto-scroll when loading sessions - let user control
         } else {
           // Reset the flag after handling system session change
           setIsSystemSessionChange(false);
@@ -1904,23 +1910,13 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     };
   }, [chatMessages.length, performanceMode]);
 
-  // Simple auto-scroll: only when enabled and user hasn't scrolled up
+  // Only auto-scroll for NEW messages when user is at bottom
   useEffect(() => {
-    if (autoScrollToBottom && !isUserScrolledUp && chatMessages.length > 0) {
-      // Small delay to ensure DOM is updated
+    if (autoScrollToBottom && !isUserScrolledUp && isLoading) {
+      // Only scroll during active conversations, not when switching sessions
       setTimeout(() => scrollToBottom(), 10);
     }
-  }, [chatMessages.length, autoScrollToBottom, isUserScrolledUp, scrollToBottom]);
-
-  // Scroll to bottom when session changes (initial load)
-  useEffect(() => {
-    if (selectedSession && chatMessages.length > 0) {
-      setTimeout(() => {
-        scrollToBottom();
-        setIsUserScrolledUp(false);
-      }, 100);
-    }
-  }, [selectedSession?.id, scrollToBottom]);
+  }, [chatMessages.length, autoScrollToBottom, isUserScrolledUp, isLoading, scrollToBottom]);
 
   // Simple scroll event handling
   useEffect(() => {
@@ -1934,13 +1930,16 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
   }, [handleScroll]);
 
-  // Cleanup buffer timeout on unmount
+  // Cleanup timeouts on unmount
   useEffect(() => {
     return () => {
       if (bufferTimeoutRef.current) {
         clearTimeout(bufferTimeoutRef.current);
         // Flush any remaining messages
         flushMessageBuffer();
+      }
+      if (scrollDebounceRef.current) {
+        clearTimeout(scrollDebounceRef.current);
       }
     };
   }, [flushMessageBuffer]);
@@ -2125,9 +2124,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       can_interrupt: true
     });
     
-    // Scroll to bottom when user sends a message
+    // Reset scroll state when user sends a message, but don't force scroll
     setIsUserScrolledUp(false);
-    scrollToBottom();
 
     // Session Protection: Mark session as active to prevent automatic project updates during conversation
     // This is crucial for maintaining chat state integrity. We handle two cases:
