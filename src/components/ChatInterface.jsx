@@ -1426,20 +1426,12 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     loadMessages();
   }, [selectedSession, selectedProject, loadSessionMessages, scrollToBottom, isSystemSessionChange]);
 
-  // Update chatMessages when session loads or changes
-  // Important: This should only happen when loading a session, not during active conversations
+  // Update chatMessages when convertedMessages changes
   useEffect(() => {
     if (sessionMessages.length > 0) {
-      // Check if this is initial session load (no current messages or session just changed)
-      const isInitialLoad = chatMessages.length === 0 || 
-                           (selectedSession && currentSessionId !== selectedSession.id);
-      
-      if (isInitialLoad) {
-        setChatMessages(convertedMessages);
-      }
-      // During active conversations, messages are managed by WebSocket handlers
+      setChatMessages(convertedMessages);
     }
-  }, [convertedMessages, sessionMessages.length, selectedSession?.id, chatMessages.length, currentSessionId]);
+  }, [convertedMessages, sessionMessages]);
 
   // Notify parent when input focus changes
   useEffect(() => {
