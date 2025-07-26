@@ -109,7 +109,7 @@ const safeLocalStorage = {
 };
 
 // Memoized message component to prevent unnecessary re-renders
-const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFileOpen, onShowSettings, autoExpandTools, showRawParameters, isSessionTransition }) => {
+const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFileOpen, onShowSettings, autoExpandTools, showRawParameters }) => {
   const isGrouped = prevMessage && prevMessage.type === message.type && 
                    prevMessage.type === 'assistant' && 
                    !prevMessage.isToolUse && !message.isToolUse;
@@ -146,8 +146,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
   return (
     <div
       ref={messageRef}
-      className={`chat-message ${message.type} ${isGrouped ? 'grouped' : ''} ${message.type === 'user' ? 'flex justify-end px-3 sm:px-0' : 'px-3 sm:px-0'} ${isSessionTransition ? 'message-enter' : ''} ${isSessionTransition && message.type === 'assistant' ? 'message-enter-assistant' : ''}`}
-      style={isSessionTransition ? { animationDelay: `${index * 50}ms` } : {}}
+      className={`chat-message ${message.type} ${isGrouped ? 'grouped' : ''} ${message.type === 'user' ? 'flex justify-end px-3 sm:px-0' : 'px-3 sm:px-0'} message-enter ${message.type === 'assistant' ? 'message-enter-assistant' : ''}`}
     >
       {message.type === 'user' ? (
         /* User message bubble on the right */
@@ -1137,7 +1136,6 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const [slashPosition, setSlashPosition] = useState(-1);
   const [visibleMessageCount, setVisibleMessageCount] = useState(100);
   const [claudeStatus, setClaudeStatus] = useState(null);
-  const [isSessionTransition, setIsSessionTransition] = useState(false);
   
   // Performance optimization states
   const [messageBuffer, setMessageBuffer] = useState([]);
@@ -1413,8 +1411,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           setIsSystemSessionChange(false);
         }
       } else {
-        setChatMessages([]);
-        setSessionMessages([]);
+        // Don't clear messages immediately to avoid flashing
         setCurrentSessionId(null);
       }
     };
@@ -1425,17 +1422,18 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   // Update chatMessages when convertedMessages changes
   useEffect(() => {
     if (sessionMessages.length > 0) {
-      setIsSessionTransition(true);
+      // Don't trigger transition animation, it's causing the flashing
       setChatMessages(convertedMessages);
       // Scroll to bottom when messages are loaded from server
       setTimeout(() => {
         scrollToBottom();
         setIsUserScrolledUp(false);
-        // Remove transition flag after animation completes
-        setTimeout(() => setIsSessionTransition(false), 500);
       }, 100);
+    } else if (!selectedSession) {
+      // Only clear messages when no session is selected
+      setChatMessages([]);
     }
-  }, [convertedMessages, sessionMessages, scrollToBottom]);
+  }, [convertedMessages, sessionMessages, scrollToBottom, selectedSession]);
 
   // Notify parent when input focus changes
   useEffect(() => {
@@ -2408,7 +2406,6 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                   onShowSettings={onShowSettings}
                   autoExpandTools={autoExpandTools}
                   showRawParameters={showRawParameters}
-                  isSessionTransition={isSessionTransition}
                 />
               );
             })}
