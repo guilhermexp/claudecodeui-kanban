@@ -48,6 +48,40 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        success: {
+          DEFAULT: "hsl(var(--success))",
+          foreground: "hsl(var(--success-foreground))",
+        },
+        warning: {
+          DEFAULT: "hsl(var(--warning))",
+          foreground: "hsl(var(--warning-foreground))",
+        },
+        info: {
+          DEFAULT: "hsl(var(--info))",
+          foreground: "hsl(var(--info-foreground))",
+        },
+        neutral: {
+          DEFAULT: "hsl(var(--neutral))",
+          foreground: "hsl(var(--neutral-foreground))",
+        },
+        status: {
+          init: "hsl(var(--status-init))",
+          "init-foreground": "hsl(var(--status-init-foreground))",
+          running: "hsl(var(--status-running))",
+          "running-foreground": "hsl(var(--status-running-foreground))",
+          complete: "hsl(var(--status-complete))",
+          "complete-foreground": "hsl(var(--status-complete-foreground))",
+          failed: "hsl(var(--status-failed))",
+          "failed-foreground": "hsl(var(--status-failed-foreground))",
+          paused: "hsl(var(--status-paused))",
+          "paused-foreground": "hsl(var(--status-paused-foreground))",
+        },
+        console: {
+          DEFAULT: "hsl(var(--console-background))",
+          foreground: "hsl(var(--console-foreground))",
+          success: "hsl(var(--console-success))",
+          error: "hsl(var(--console-error))",
+        },
         // ChatGPT-like theme colors for direct usage
         chatgpt: {
           bg: "hsl(210 11% 11%)",       // Main background
@@ -63,10 +97,27 @@ export default {
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
       },
+      keyframes: {
+        "accordion-down": {
+          from: { height: "0" },
+          to: { height: "var(--radix-accordion-content-height)" },
+        },
+        "accordion-up": {
+          from: { height: "var(--radix-accordion-content-height)" },
+          to: { height: "0" },
+        },
+      },
+      animation: {
+        "accordion-down": "accordion-down 0.2s ease-out",
+        "accordion-up": "accordion-up 0.2s ease-out",
+      },
       spacing: {
         'safe-area-inset-bottom': 'env(safe-area-inset-bottom)',
       },
     },
   },
-  plugins: [require('@tailwindcss/typography')],
+  plugins: [
+    require('@tailwindcss/typography'),
+    require('tailwindcss-animate')
+  ],
 }

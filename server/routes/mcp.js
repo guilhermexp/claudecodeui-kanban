@@ -21,7 +21,7 @@ router.get('/cli/list', async (req, res) => {
     const { promisify } = await import('util');
     const exec = promisify(spawn);
     
-    const process = spawn('claude', ['mcp', 'list', '-s', 'user'], {
+    const process = spawn('claude', ['mcp', 'list'], {
       stdio: ['pipe', 'pipe', 'pipe']
     });
     
@@ -79,8 +79,8 @@ router.post('/cli/add', async (req, res) => {
         cliArgs.push('--header', `${key}: ${value}`);
       });
     } else {
-      // stdio (default): claude mcp add <name> -s user <command> [args...]
-      cliArgs.push(name, '-s', 'user');
+      // stdio (default): claude mcp add <name> <command> [args...]
+      cliArgs.push(name);
       // Add environment variables
       Object.entries(env).forEach(([key, value]) => {
         cliArgs.push('-e', `${key}=${value}`);
@@ -136,7 +136,7 @@ router.delete('/cli/remove/:name', async (req, res) => {
     
     const { spawn } = await import('child_process');
     
-    const process = spawn('claude', ['mcp', 'remove', '-s', 'user', name], {
+    const process = spawn('claude', ['mcp', 'remove', name], {
       stdio: ['pipe', 'pipe', 'pipe']
     });
     
@@ -179,7 +179,7 @@ router.get('/cli/get/:name', async (req, res) => {
     
     const { spawn } = await import('child_process');
     
-    const process = spawn('claude', ['mcp', 'get', '-s', 'user', name], {
+    const process = spawn('claude', ['mcp', 'get', name], {
       stdio: ['pipe', 'pipe', 'pipe']
     });
     

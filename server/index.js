@@ -887,13 +887,46 @@ app.post('/api/projects/:projectName/upload-images', authenticateToken, async (r
   }
 });
 
+// Proxy VibeKanban API requests to Rust backend
+app.use('/api/vibe-kanban', express.json(), async (req, res) => {
+  try {
+    const vibeKanbanPath = req.path.replace('/api/vibe-kanban', '');
+    const queryString = req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : '';
+    const vibeKanbanUrl = `http://localhost:8081/api${vibeKanbanPath}${queryString}`;
+    
+    console.log(`Proxying VibeKanban request: ${req.method} ${req.originalUrl} -> ${vibeKanbanUrl}`);
+    
+    // Forward the request to VibeKanban backend
+    const options = {
+      method: req.method,
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+    };
+
+    // Forward body for POST/PUT requests
+    if (req.method !== 'GET' && req.method !== 'HEAD' && req.body) {
+      options.body = JSON.stringify(req.body);
+    }
+
+    const response = await fetch(vibeKanbanUrl, options);
+    const data = await response.json();
+    
+    res.status(response.status).json(data);
+  } catch (error) {
+    console.error('VibeKanban proxy error:', error);
+    res.status(502).json({ success: false, message: 'VibeKanban backend unavailable' });
+  }
+});
+
 // Serve React app for all other routes
 app.get('*', (req, res) => {
   if (process.env.NODE_ENV === 'production') {
     res.sendFile(path.join(__dirname, '../dist/index.html'));
   } else {
     // In development, redirect to Vite dev server
-    res.redirect(`http://localhost:${process.env.VITE_PORT || 3001}`);
+    res.redirect(`http://localhost:9000`);
   }
 });
 
@@ -978,7 +1011,7 @@ async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden =
   });
 }
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080;
 
 // Initialize database and start server
 async function startServer() {
@@ -987,8 +1020,8 @@ async function startServer() {
     await initializeDatabase();
     console.log('✅ Database initialization skipped (testing)');
     
-    server.listen(PORT, '0.0.0.0', async () => {
-      console.log(`Claude Code UI server running on http://0.0.0.0:${PORT}`);
+    server.listen(PORT, 'localhost', async () => {
+      console.log(`Claude Code UI server running on http://localhost:${PORT}`);
       
       // Start watching the projects folder for changes
       await setupProjectsWatcher(); // Re-enabled with better-sqlite3

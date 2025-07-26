@@ -19,6 +19,15 @@ self.addEventListener('install', event => {
 
 // Fetch event
 self.addEventListener('fetch', event => {
+  // Skip Vite development server resources
+  if (event.request.url.includes('@vite/client') || 
+      event.request.url.includes('/@react-refresh') ||
+      event.request.url.includes('?t=') ||
+      event.request.url.includes('src/main.jsx') ||
+      event.request.url.includes('node_modules')) {
+    return; // Let the browser handle these requests normally
+  }
+
   event.respondWith(
     caches.match(event.request)
       .then(response => {
@@ -27,7 +36,16 @@ self.addEventListener('fetch', event => {
           return response;
         }
         // Otherwise fetch from network
-        return fetch(event.request);
+        return fetch(event.request)
+          .catch(error => {
+            console.log('Fetch failed; returning offline page instead.', error);
+            // Return a basic offline response for failed requests
+            if (event.request.destination === 'document') {
+              return caches.match('/index.html');
+            }
+            // For other resources, just return a network error
+            throw error;
+          });
       }
     )
   );

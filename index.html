@@ -11,6 +11,7 @@
     <link rel="manifest" href="/manifest.json" />
     
     <!-- iOS Safari PWA Meta Tags -->
+    <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Claude UI" />
@@ -33,15 +34,30 @@
     <!-- Service Worker Registration -->
     <script>
       if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js')
-            .then(registration => {
-              console.log('SW registered: ', registration);
-            })
-            .catch(registrationError => {
-              console.log('SW registration failed: ', registrationError);
+        if (window.location.protocol === 'https:') {
+          // Only register service worker in production (HTTPS)
+          window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw.js')
+              .then(registration => {
+                console.log('SW registered: ', registration);
+              })
+              .catch(registrationError => {
+                console.log('SW registration failed: ', registrationError);
+              });
+          });
+        } else {
+          // In development, unregister any existing service workers
+          window.addEventListener('load', () => {
+            navigator.serviceWorker.getRegistrations().then(registrations => {
+              for (let registration of registrations) {
+                registration.unregister().then(boolean => {
+                  console.log('Service worker unregistered in development:', boolean);
+                });
+              }
             });
-        });
+          });
+          console.log('Service worker disabled in development');
+        }
       }
     </script>
   </body>
