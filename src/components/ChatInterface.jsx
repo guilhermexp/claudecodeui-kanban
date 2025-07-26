@@ -1920,17 +1920,22 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     // When Claude stops responding, do nothing - user keeps control
   }, [isLoading, autoScrollToBottom, scrollToBottom]);
 
-  // Scroll event handling DISABLED - user has full control
-  // useEffect(() => {
-  //   const scrollContainer = scrollContainerRef.current;
-  //   if (scrollContainer) {
-  //     scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
-  //     
-  //     return () => {
-  //       scrollContainer.removeEventListener('scroll', handleScroll);
-  //     };
-  //   }
-  // }, [handleScroll]);
+  // Scroll event handling - just to track if user scrolled up
+  useEffect(() => {
+    const scrollContainer = scrollContainerRef.current;
+    if (scrollContainer) {
+      const checkScrollPosition = () => {
+        const nearBottom = isNearBottom();
+        setIsUserScrolledUp(!nearBottom);
+      };
+      
+      scrollContainer.addEventListener('scroll', checkScrollPosition, { passive: true });
+      
+      return () => {
+        scrollContainer.removeEventListener('scroll', checkScrollPosition);
+      };
+    }
+  }, [isNearBottom]);
 
   // Cleanup timeouts on unmount
   useEffect(() => {
@@ -2506,7 +2511,10 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             {/* Scroll to bottom button - positioned next to mode indicator */}
             {isUserScrolledUp && chatMessages.length > 0 && (
               <button
-                onClick={scrollToBottom}
+                onClick={() => {
+                  scrollToBottom();
+                  setIsUserScrolledUp(false);
+                }}
                 className="w-8 h-8 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg flex items-center justify-center transition-all duration-200 hover:scale-105 focus:outline-none"
                 title="Scroll to bottom"
                 tabIndex={-1}
