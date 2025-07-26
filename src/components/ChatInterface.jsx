@@ -1906,18 +1906,19 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     };
   }, [chatMessages.length, performanceMode]);
 
-  // Auto-scroll DISABLED - causing too many issues
-  // useEffect(() => {
-  //   // Always scroll to bottom when messages first appear (initial load)
-  //   if (chatMessages.length > 0 && !isUserScrolledUp) {
-  //     const isNewMessage = chatMessages[chatMessages.length - 1]?.timestamp > Date.now() - 1000;
-  //     const shouldScroll = autoScrollToBottom || isNewMessage;
-  //     
-  //     if (shouldScroll) {
-  //       setTimeout(() => scrollToBottom(), 50);
-  //     }
-  //   }
-  // }, [chatMessages.length, autoScrollToBottom, isUserScrolledUp, scrollToBottom]);
+  // Smart auto-scroll - ONLY when assistant is actively responding
+  useEffect(() => {
+    // Only auto-scroll when Claude is actively responding (isLoading true)
+    if (isLoading && autoScrollToBottom) {
+      // Continuous scroll while Claude is typing
+      const scrollInterval = setInterval(() => {
+        scrollToBottom(true); // Smooth scroll
+      }, 500); // Check every 500ms
+      
+      return () => clearInterval(scrollInterval);
+    }
+    // When Claude stops responding, do nothing - user keeps control
+  }, [isLoading, autoScrollToBottom, scrollToBottom]);
 
   // Scroll event handling DISABLED - user has full control
   // useEffect(() => {
