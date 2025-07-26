@@ -1656,12 +1656,12 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           break;
           
         case 'claude-output':
-          // Use buffering for real-time output to improve performance
-          addMessageToBuffer({
+          // Add message directly to avoid ordering issues
+          setChatMessages(prev => [...prev, {
             type: 'assistant',
             content: latestMessage.data,
             timestamp: new Date()
-          });
+          }]);
           break;
         case 'claude-interactive-prompt':
           // Handle interactive prompts from CLI
