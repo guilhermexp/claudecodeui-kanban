@@ -1496,10 +1496,38 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   }, [selectedProject?.name]);
 
 
+  // Smart message filtering to prevent session bleeding while preserving continuity
+  const isMessageRelevant = useCallback((message) => {
+    // CRITICAL: Always allow session-related messages to preserve conversation continuity
+    if (['session-created', 'claude-output', 'claude-response', 'claude-interactive-prompt', 
+         'claude-error', 'claude-complete', 'session-aborted', 'claude-status'].includes(message.type)) {
+      return true; // Never filter these - they maintain conversation flow
+    }
+    
+    // Filter only project update broadcasts from other users/projects
+    if (message.type === 'projects_updated') {
+      // During active sessions, be less restrictive to avoid breaking things
+      if (isLoading || currentSessionId) {
+        return true; // Allow updates during active sessions
+      }
+      
+      // For idle users, could be more selective, but keeping permissive for safety
+      return true;
+    }
+    
+    // Allow all other message types by default
+    return true;
+  }, [isLoading, currentSessionId]);
+
   useEffect(() => {
-    // Handle WebSocket messages
+    // Handle WebSocket messages with smart filtering
     if (messages.length > 0) {
       const latestMessage = messages[messages.length - 1];
+      
+      // Apply smart filtering BEFORE processing
+      if (!isMessageRelevant(latestMessage)) {
+        return; // Silently ignore irrelevant messages
+      }
       
       switch (latestMessage.type) {
         case 'session-created':

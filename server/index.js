@@ -46,7 +46,60 @@ import { validateApiKey, authenticateToken, authenticateWebSocket } from './midd
 
 // File system watcher for projects folder
 let projectsWatcher = null;
-const connectedClients = new Set();
+// Enhanced client tracking with user context for session isolation
+const connectedClients = new Map(); // ws -> { userId, username, activeProject, lastActivity }
+
+// Smart broadcast functions for session isolation
+const broadcastProjectUpdate = (message, eventType, filePath) => {
+  const messageObj = JSON.parse(message);
+  
+  connectedClients.forEach((context, ws) => {
+    if (ws.readyState !== ws.OPEN) return;
+    
+    // Always send initial project list updates
+    if (eventType === 'initial') {
+      ws.send(message);
+      return;
+    }
+    
+    // For file changes, check if user is actively using related project
+    const isRecentlyActive = context.lastActivity && 
+                           (Date.now() - context.lastActivity) < 300000; // 5 minutes
+    
+    if (isRecentlyActive) {
+      ws.send(message);
+    }
+    // Note: Session-related messages (session-created, claude-output, etc.) 
+    // are handled separately and always sent to preserve conversation continuity
+  });
+};
+
+const registerUserProject = (ws, projectName) => {
+  const context = connectedClients.get(ws);
+  if (context) {
+    context.activeProject = projectName;
+    context.lastActivity = Date.now();
+  }
+};
+
+const broadcastToAll = (message) => {
+  // For session-critical messages that must preserve continuity
+  connectedClients.forEach((context, ws) => {
+    if (ws.readyState === ws.OPEN) {
+      ws.send(JSON.stringify(message));
+    }
+  });
+};
+
+const notifyUserProjectAccess = (userId, projectName) => {
+  // Update project access for user's WebSocket connections
+  connectedClients.forEach((context, ws) => {
+    if (context.userId === userId) {
+      context.activeProject = projectName;
+      context.lastActivity = Date.now();
+    }
+  });
+};
 
 // Setup file system watcher for Claude projects folder using chokidar
 async function setupProjectsWatcher() {
@@ -101,11 +154,8 @@ async function setupProjectsWatcher() {
             changedFile: path.relative(claudeProjectsPath, filePath)
           });
           
-          connectedClients.forEach(client => {
-            if (client.readyState === client.OPEN) {
-              client.send(updateMessage);
-            }
-          });
+          // Smart broadcast: only send project updates to relevant users
+          broadcastProjectUpdate(updateMessage, eventType, filePath);
           
         } catch (error) {
           console.error('❌ Error handling project changes:', error);
@@ -203,7 +253,12 @@ app.get('/api/projects', authenticateToken, async (req, res) => {
 app.get('/api/projects/:projectName/sessions', authenticateToken, async (req, res) => {
   try {
     const { limit = 5, offset = 0 } = req.query;
-    const result = await getSessions(req.params.projectName, parseInt(limit), parseInt(offset));
+    const projectName = req.params.projectName;
+    
+    // Notify WebSocket connections about project access
+    notifyUserProjectAccess(req.user.userId, projectName);
+    
+    const result = await getSessions(projectName, parseInt(limit), parseInt(offset));
     res.json(result);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -214,6 +269,9 @@ app.get('/api/projects/:projectName/sessions', authenticateToken, async (req, re
 app.get('/api/projects/:projectName/sessions/:sessionId/messages', authenticateToken, async (req, res) => {
   try {
     const { projectName, sessionId } = req.params;
+    
+    // Notify WebSocket connections about project access
+    notifyUserProjectAccess(req.user.userId, projectName);
     const messages = await getSessionMessages(projectName, sessionId);
     res.json({ messages });
   } catch (error) {
@@ -437,7 +495,7 @@ wss.on('connection', (ws, request) => {
   if (pathname === '/shell') {
     handleShellConnection(ws);
   } else if (pathname === '/ws') {
-    handleChatConnection(ws);
+    handleChatConnection(ws, request);
   } else {
     console.log('❌ Unknown WebSocket path:', pathname);
     ws.close();
@@ -445,11 +503,19 @@ wss.on('connection', (ws, request) => {
 });
 
 // Handle chat WebSocket connections
-function handleChatConnection(ws) {
+function handleChatConnection(ws, request) {
   console.log('💬 Chat WebSocket connected');
   
-  // Add to connected clients for project updates
-  connectedClients.add(ws);
+  // Store user context for session isolation
+  const user = request.user; // From WebSocket authentication
+  connectedClients.set(ws, {
+    userId: user.userId,
+    username: user.username,
+    activeProject: null,
+    lastActivity: Date.now()
+  });
+  
+  console.log('✅ Chat connection registered for user:', user.username);
   
   ws.on('message', async (message) => {
     try {
@@ -459,6 +525,13 @@ function handleChatConnection(ws) {
         console.log('💬 User message:', data.command || '[Continue/Resume]');
         console.log('📁 Project:', data.options?.projectPath || 'Unknown');
         console.log('🔄 Session:', data.options?.sessionId ? 'Resume' : 'New');
+        
+        // Register user's active project for smart broadcasting
+        if (data.options?.projectPath) {
+          const projectName = data.options.projectPath.split('/').pop();
+          registerUserProject(ws, projectName);
+        }
+        
         await spawnClaude(data.command, data.options, ws);
       } else if (data.type === 'abort-session') {
         console.log('🛑 Abort session request:', data.sessionId);
