@@ -218,6 +218,30 @@ function Sidebar({
     return [...initialSessions, ...additional];
   };
 
+  // Helper function to get displayed sessions (limited to 2 initially)
+  const getDisplayedSessions = (project) => {
+    const allSessions = getAllSessions(project);
+    const hasAdditional = additionalSessions[project.name]?.length > 0;
+    
+    // If we haven't loaded additional sessions yet, show only first 2
+    if (!hasAdditional) {
+      return allSessions.slice(0, 2);
+    }
+    
+    // If we have additional sessions, show all
+    return allSessions;
+  };
+
+  // Helper function to check if project has active sessions
+  const hasActiveSessions = (project) => {
+    const allSessions = getAllSessions(project);
+    return allSessions.some(session => {
+      const sessionDate = new Date(session.lastActivity);
+      const diffInMinutes = Math.floor((currentTime - sessionDate) / (1000 * 60));
+      return diffInMinutes < 10; // Active if within last 10 minutes
+    });
+  };
+
   // Helper function to get the last activity date for a project
   const getProjectLastActivity = (project) => {
     const allSessions = getAllSessions(project);
@@ -385,7 +409,7 @@ function Sidebar({
 
     try {
       const currentSessionCount = (project.sessions?.length || 0) + (additionalSessions[project.name]?.length || 0);
-      const response = await api.sessions(project.name, 5, currentSessionCount);
+      const response = await api.sessions(project.name, 2, currentSessionCount);
       
       if (response.ok) {
         const result = await response.json();
@@ -670,6 +694,7 @@ function Sidebar({
               const isExpanded = expandedProjects.has(project.name);
               const isSelected = selectedProject?.name === project.name;
               const isStarred = isProjectStarred(project.name);
+              const hasActive = hasActiveSessions(project);
               
               return (
                 <div key={project.name} className="md:space-y-1">
@@ -679,9 +704,10 @@ function Sidebar({
                     <div className="md:hidden">
                       <div
                         className={cn(
-                          "p-3 mx-3 my-1 rounded-lg bg-card border border-border/50 active:scale-[0.98] transition-all duration-150",
-                          isSelected && "bg-primary/5 border-primary/20",
-                          isStarred && !isSelected && "bg-yellow-50/50 dark:bg-yellow-900/5 border-yellow-200/30 dark:border-yellow-800/30"
+                          "p-3 mx-3 my-1 rounded-lg bg-card border border-border/50 active:scale-[0.98] transition-all duration-150 relative shadow-sm",
+                          isSelected && "bg-primary/5 border-primary/20 shadow-primary/10",
+                          isStarred && !isSelected && "bg-yellow-50/50 dark:bg-yellow-900/5 border-yellow-200/30 dark:border-yellow-800/30 shadow-yellow/10",
+                          !isSelected && !isStarred && "shadow-gray-200/50 dark:shadow-gray-800/50"
                         )}
                         onClick={() => {
                           // On mobile, just toggle the folder - don't select the project
@@ -689,6 +715,12 @@ function Sidebar({
                         }}
                         onTouchEnd={handleTouchClick(() => toggleProject(project.name))}
                       >
+                        {/* Active session indicator for mobile */}
+                        {hasActive && (
+                          <div className="absolute top-2 right-2">
+                            <div className="w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse" />
+                          </div>
+                        )}
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3 min-w-0 flex-1">
                             <div className={cn(
@@ -709,7 +741,7 @@ function Sidebar({
                                   type="text"
                                   value={editingName}
                                   onChange={(e) => setEditingName(e.target.value)}
-                                  className="w-full px-3 py-2 text-sm border-2 border-primary/40 focus:border-primary rounded-lg bg-background text-foreground shadow-sm focus:shadow-md transition-all duration-200 focus:outline-none"
+                                  className="w-full px-3 py-2 text-sm border-2 border-primary/40 focus:border-primary rounded-lg bg-background text-foreground shadow-gray-200/30 dark:shadow-gray-800/30 focus:shadow-primary/20 transition-all duration-200 focus:outline-none"
                                   placeholder="Project name"
                                   autoFocus
                                   autoComplete="off"
@@ -733,7 +765,7 @@ function Sidebar({
                                     {(() => {
                                       const sessionCount = getAllSessions(project).length;
                                       const hasMore = project.sessionMeta?.hasMore !== false;
-                                      const count = hasMore && sessionCount >= 5 ? `${sessionCount}+` : sessionCount;
+                                      const count = hasMore && sessionCount >= 2 ? `${sessionCount}+` : sessionCount;
                                       return `${count} session${count === 1 ? '' : 's'}`;
                                     })()}
                                   </p>
@@ -745,7 +777,7 @@ function Sidebar({
                             {editingProject === project.name ? (
                               <>
                                 <button
-                                  className="w-8 h-8 rounded-lg bg-green-500 dark:bg-green-600 flex items-center justify-center active:scale-90 transition-all duration-150 shadow-sm active:shadow-none"
+                                  className="w-8 h-8 rounded-lg bg-green-500 dark:bg-green-600 flex items-center justify-center active:scale-90 transition-all duration-150 shadow-green-200/50 dark:shadow-green-800/50 active:shadow-none"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     saveProjectName(project.name);
@@ -754,7 +786,7 @@ function Sidebar({
                                   <Check className="w-4 h-4 text-white" />
                                 </button>
                                 <button
-                                  className="w-8 h-8 rounded-lg bg-gray-500 dark:bg-gray-600 flex items-center justify-center active:scale-90 transition-all duration-150 shadow-sm active:shadow-none"
+                                  className="w-8 h-8 rounded-lg bg-gray-500 dark:bg-gray-600 flex items-center justify-center active:scale-90 transition-all duration-150 shadow-gray-200/50 dark:shadow-gray-800/50 active:shadow-none"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     cancelEditing();
@@ -827,7 +859,7 @@ function Sidebar({
                     <Button
                       variant="ghost"
                       className={cn(
-                        "hidden md:flex w-full justify-between p-2 h-auto font-normal hover:bg-accent/50",
+                        "hidden md:flex w-full justify-between p-2 h-auto font-normal hover:bg-accent/50 relative",
                         isSelected && "bg-accent text-accent-foreground",
                         isStarred && !isSelected && "bg-yellow-50/50 dark:bg-yellow-900/10 hover:bg-yellow-100/50 dark:hover:bg-yellow-900/20"
                       )}
@@ -845,6 +877,12 @@ function Sidebar({
                         toggleProject(project.name);
                       })}
                     >
+                      {/* Active session indicator for desktop */}
+                      {hasActive && (
+                        <div className="absolute top-1.5 right-1.5">
+                          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                        </div>
+                      )}
                       <div className="flex items-center gap-3 min-w-0 flex-1">
                         {isVibeKanbanProject(project) ? (
                           <Trello className="w-4 h-4 text-blue-500 flex-shrink-0" />
@@ -881,7 +919,7 @@ function Sidebar({
                                 {(() => {
                                   const sessionCount = getAllSessions(project).length;
                                   const hasMore = project.sessionMeta?.hasMore !== false;
-                                  return hasMore && sessionCount >= 5 ? `${sessionCount}+` : sessionCount;
+                                  return hasMore && sessionCount >= 2 ? `${sessionCount}+` : sessionCount;
                                 })()}
                                 {project.fullPath !== project.displayName && (
                                   <span className="ml-1 opacity-60" title={project.fullPath}>
@@ -993,7 +1031,7 @@ function Sidebar({
                           <p className="text-xs text-muted-foreground">No sessions yet</p>
                         </div>
                       ) : (
-                        getAllSessions(project).map((session) => {
+                        getDisplayedSessions(project).map((session) => {
                           // Calculate if session is active (within last 10 minutes)
                           const sessionDate = new Date(session.lastActivity);
                           const diffInMinutes = Math.floor((currentTime - sessionDate) / (1000 * 60));
@@ -1012,8 +1050,8 @@ function Sidebar({
                               <div
                                 className={cn(
                                   "p-1 mx-3 my-0.5 rounded-sm bg-transparent hover:bg-card/30 border-0 hover:border active:scale-[0.98] transition-all duration-150 relative",
-                                  selectedSession?.id === session.id ? "bg-primary/5 border-primary/20" :
-                                  isActive ? "border-green-500/30 bg-green-50/5 dark:bg-green-900/5" : "border-border/30"
+                                  selectedSession?.id === session.id ? "bg-primary/5 border-primary/20 shadow-primary/5" :
+                                  isActive ? "border-green-500/30 bg-green-50/5 dark:bg-green-900/5 shadow-green-200/20 dark:shadow-green-800/20" : "border-border/30 hover:shadow-gray-200/30 dark:hover:shadow-gray-800/30"
                                 )}
                                 onClick={() => {
                                   onProjectSelect(project);
@@ -1176,27 +1214,34 @@ function Sidebar({
                       )}
 
                       {/* Show More Sessions Button */}
-                      {getAllSessions(project).length > 0 && project.sessionMeta?.hasMore !== false && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="w-full justify-center gap-2 mt-2 text-muted-foreground"
-                          onClick={() => loadMoreSessions(project)}
-                          disabled={loadingSessions[project.name]}
-                        >
-                          {loadingSessions[project.name] ? (
-                            <>
-                              <div className="w-3 h-3 animate-spin rounded-full border border-muted-foreground border-t-transparent" />
-                              Loading...
-                            </>
-                          ) : (
-                            <>
-                              <ChevronDown className="w-3 h-3" />
-                              Show more sessions
-                            </>
-                          )}
-                        </Button>
-                      )}
+                      {(() => {
+                        const allSessions = getAllSessions(project);
+                        const displayedSessions = getDisplayedSessions(project);
+                        const hasMoreToShow = allSessions.length > displayedSessions.length;
+                        const hasMoreFromServer = project.sessionMeta?.hasMore !== false;
+                        
+                        return (hasMoreToShow || hasMoreFromServer) && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="w-full justify-center gap-2 mt-2 text-muted-foreground"
+                            onClick={() => loadMoreSessions(project)}
+                            disabled={loadingSessions[project.name]}
+                          >
+                            {loadingSessions[project.name] ? (
+                              <>
+                                <div className="w-3 h-3 animate-spin rounded-full border border-muted-foreground border-t-transparent" />
+                                Loading...
+                              </>
+                            ) : (
+                              <>
+                                <ChevronDown className="w-3 h-3" />
+                                Show more sessions
+                              </>
+                            )}
+                          </Button>
+                        );
+                      })()}
                       
                       {/* New Session Button */}
                       <div className="md:hidden px-3 pb-2">
@@ -1280,7 +1325,7 @@ function Sidebar({
         {/* Mobile VibeKanban */}
         <div className="md:hidden p-4 border-b border-border/50">
           <button
-            className="w-full h-14 bg-blue-600/20 hover:bg-blue-600/30 rounded-2xl flex items-center justify-start gap-4 px-4 active:scale-[0.98] transition-all duration-150 border-2 border-blue-500/30 shadow-lg"
+            className="w-full h-14 bg-blue-600/20 hover:bg-blue-600/30 rounded-2xl flex items-center justify-start gap-4 px-4 active:scale-[0.98] transition-all duration-150 border-2 border-blue-500/30 shadow-blue-200/30 dark:shadow-blue-800/30"
             onClick={() => window.location.href = '/vibe-kanban'}
           >
             <div className="w-10 h-10 rounded-2xl bg-blue-500/30 flex items-center justify-center">
@@ -1294,7 +1339,7 @@ function Sidebar({
         <div className="hidden md:block mb-2">
           <Button
             variant="default"
-            className="w-full justify-start gap-3 p-3 h-auto font-medium text-white bg-blue-600 hover:bg-blue-700 transition-colors duration-200 shadow-md hover:shadow-lg"
+            className="w-full justify-start gap-3 p-3 h-auto font-medium text-white bg-blue-600 hover:bg-blue-700 transition-colors duration-200 shadow-blue-200/40 dark:shadow-blue-800/40 hover:shadow-blue-200/60 dark:hover:shadow-blue-800/60"
             onClick={() => window.location.href = '/vibe-kanban'}
           >
             <Trello className="w-4 h-4" />
