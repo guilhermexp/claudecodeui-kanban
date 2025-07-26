@@ -110,6 +110,8 @@ const safeLocalStorage = {
 
 // Memoized message component to prevent unnecessary re-renders
 const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFileOpen, onShowSettings, autoExpandTools, showRawParameters }) => {
+  // Only animate messages that are very recent (within last 2 seconds)
+  const isNewMessage = message.timestamp && (new Date() - new Date(message.timestamp)) < 2000;
   const isGrouped = prevMessage && prevMessage.type === message.type && 
                    prevMessage.type === 'assistant' && 
                    !prevMessage.isToolUse && !message.isToolUse;
@@ -146,7 +148,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
   return (
     <div
       ref={messageRef}
-      className={`chat-message ${message.type} ${isGrouped ? 'grouped' : ''} ${message.type === 'user' ? 'flex justify-end px-3 sm:px-0' : 'px-3 sm:px-0'} message-enter ${message.type === 'assistant' ? 'message-enter-assistant' : ''}`}
+      className={`chat-message ${message.type} ${isGrouped ? 'grouped' : ''} ${message.type === 'user' ? 'flex justify-end px-3 sm:px-0' : 'px-3 sm:px-0'} ${isNewMessage ? 'message-enter' : ''} ${isNewMessage && message.type === 'assistant' ? 'message-enter-assistant' : ''}`}
     >
       {message.type === 'user' ? (
         /* User message bubble on the right */
@@ -2434,7 +2436,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         )}
         
         {isLoading && (
-          <div className="chat-message assistant message-enter message-enter-assistant">
+          <div className="chat-message assistant">
             <div className="w-full">
               <div className="flex items-center space-x-3 mb-2">
                 <div className="w-8 h-8 bg-gray-600 rounded-full flex items-center justify-center text-white text-sm flex-shrink-0">
