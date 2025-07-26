@@ -1140,10 +1140,6 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const [claudeStatus, setClaudeStatus] = useState(null);
   
   // Performance optimization states
-  const [messageBuffer, setMessageBuffer] = useState([]);
-  const [isTypingActivity, setIsTypingActivity] = useState(false);
-  const messageBufferRef = useRef([]);
-  const bufferTimeoutRef = useRef(null);
   const [performanceMode, setPerformanceMode] = useState('normal'); // normal, optimized, aggressive
   const renderTimeRef = useRef([]);
 
@@ -1346,53 +1342,13 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     return scrollHeight - scrollTop - clientHeight < 50; // Reduced threshold
   }, []);
 
-  // Throttled message updates for better performance
-  const flushMessageBuffer = useCallback(() => {
-    if (messageBufferRef.current.length > 0) {
-      const bufferedMessages = [...messageBufferRef.current];
-      messageBufferRef.current = [];
-      
-      setChatMessages(prev => [...prev, ...bufferedMessages]);
-      setIsTypingActivity(false);
-      
-      if (bufferTimeoutRef.current) {
-        clearTimeout(bufferTimeoutRef.current);
-        bufferTimeoutRef.current = null;
-      }
-    }
-  }, []);
 
-  const addMessageToBuffer = useCallback((message) => {
-    messageBufferRef.current.push(message);
-    setIsTypingActivity(true);
-    
-    // Clear existing timeout
-    if (bufferTimeoutRef.current) {
-      clearTimeout(bufferTimeoutRef.current);
-    }
-    
-    // Flush immediately if buffer is getting large, otherwise wait
-    const bufferSize = messageBufferRef.current.length;
-    const delay = bufferSize > 5 ? 100 : 300; // Faster flush for large buffers
-    
-    bufferTimeoutRef.current = setTimeout(flushMessageBuffer, delay);
-  }, [flushMessageBuffer]);
-
-  // Debounced scroll handling to prevent excessive updates
-  const scrollDebounceRef = useRef(null);
+  // Simple scroll position tracking
   const handleScroll = useCallback(() => {
-    // Clear previous timeout
-    if (scrollDebounceRef.current) {
-      clearTimeout(scrollDebounceRef.current);
+    if (scrollContainerRef.current) {
+      const nearBottom = isNearBottom();
+      setIsUserScrolledUp(!nearBottom);
     }
-    
-    // Debounce the actual check
-    scrollDebounceRef.current = setTimeout(() => {
-      if (scrollContainerRef.current) {
-        const nearBottom = isNearBottom();
-        setIsUserScrolledUp(!nearBottom);
-      }
-    }, 100); // 100ms debounce
   }, [isNearBottom]);
 
   useEffect(() => {
@@ -1526,10 +1482,6 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               currentSessionId && 
               latestMessage.data.session_id !== currentSessionId) {
             
-            console.log('🔄 Claude CLI session duplication detected:', {
-              originalSession: currentSessionId,
-              newSession: latestMessage.data.session_id
-            });
             
             // Mark this as a system-initiated session change to preserve messages
             setIsSystemSessionChange(true);
@@ -1548,9 +1500,6 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               latestMessage.data.session_id && 
               !currentSessionId) {
             
-            console.log('🔄 New session init detected:', {
-              newSession: latestMessage.data.session_id
-            });
             
             // Mark this as a system-initiated session change to preserve messages
             setIsSystemSessionChange(true);
@@ -1568,7 +1517,6 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               latestMessage.data.session_id && 
               currentSessionId && 
               latestMessage.data.session_id === currentSessionId) {
-            console.log('🔄 System init message for current session, ignoring');
             return; // Don't process the message further
           }
           
@@ -1752,7 +1700,6 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
 
         case 'claude-status':
           // Handle Claude working status messages
-          console.log('🔔 Received claude-status message:', latestMessage);
           const statusData = latestMessage.data;
           if (statusData) {
             // Parse the status message to extract relevant information
@@ -1783,7 +1730,6 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               statusInfo.can_interrupt = statusData.can_interrupt;
             }
             
-            console.log('📊 Setting claude status:', statusInfo);
             setClaudeStatus(statusInfo);
             setIsLoading(true);
             setCanAbortSession(statusInfo.can_interrupt);
@@ -1930,19 +1876,6 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     };
   }, [chatMessages.length, performanceMode]);
 
-  // Smart auto-scroll - ONLY when assistant is actively responding
-  useEffect(() => {
-    // Only auto-scroll when Claude is actively responding (isLoading true)
-    if (isLoading && autoScrollToBottom) {
-      // Continuous scroll while Claude is typing
-      const scrollInterval = setInterval(() => {
-        scrollToBottom(true); // Smooth scroll
-      }, 500); // Check every 500ms
-      
-      return () => clearInterval(scrollInterval);
-    }
-    // When Claude stops responding, do nothing - user keeps control
-  }, [isLoading, autoScrollToBottom, scrollToBottom]);
 
   // Scroll event handling - just to track if user scrolled up
   useEffect(() => {
@@ -1961,19 +1894,14 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
   }, [isNearBottom]);
 
-  // Cleanup timeouts on unmount
+  // Auto-scroll apenas quando o assistente estiver respondendo
   useEffect(() => {
-    return () => {
-      if (bufferTimeoutRef.current) {
-        clearTimeout(bufferTimeoutRef.current);
-        // Flush any remaining messages
-        flushMessageBuffer();
-      }
-      if (scrollDebounceRef.current) {
-        clearTimeout(scrollDebounceRef.current);
-      }
-    };
-  }, [flushMessageBuffer]);
+    if (isLoading && messagesEndRef.current && !isUserScrolledUp) {
+      // Scroll suave para a última mensagem
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
+  }, [chatMessages, isLoading, isUserScrolledUp]);
+
 
   // Initial textarea setup
   useEffect(() => {
@@ -2439,7 +2367,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             })}
             
             {/* Typing Activity Indicator */}
-            {isTypingActivity && (
+            {isLoading && (
               <div className="px-3 sm:px-0 mb-4">
                 <div className="flex items-start space-x-3">
                   <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-sm flex-shrink-0">

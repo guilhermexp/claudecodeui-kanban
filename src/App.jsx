@@ -29,7 +29,7 @@ import VibeKanbanApp from './components/VibeKanbanApp';
 
 import { useWebSocket } from './utils/websocket';
 import { ThemeProvider } from './contexts/ThemeContext';
-import { AuthProvider } from './contexts/AuthContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import { useVersionCheck } from './hooks/useVersionCheck';
 import { api } from './utils/api';
@@ -46,7 +46,7 @@ function AppContent() {
   const [projects, setProjects] = useState([]);
   const [selectedProject, setSelectedProject] = useState(null);
   const [selectedSession, setSelectedSession] = useState(null);
-  const [activeTab, setActiveTab] = useState('chat'); // 'chat' or 'files'
+  const [activeTab, setActiveTab] = useState('shell'); // 'shell', 'chat', 'files', 'git'
   const [isMobile, setIsMobile] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
@@ -75,7 +75,26 @@ function AppContent() {
   // until the conversation completes or is aborted.
   const [activeSessions, setActiveSessions] = useState(new Set()); // Track sessions with active conversations
   
-  const { ws, sendMessage, messages } = useWebSocket();
+  // Get auth context to know when auth is ready
+  const { isLoading: authLoading, user } = useAuth();
+  const authReady = !authLoading && !!user;
+  
+  const { ws, sendMessage, messages, reconnect } = useWebSocket(authReady);
+
+  // Monitor authentication changes and reconnect WebSocket
+  useEffect(() => {
+    const handleStorageChange = (e) => {
+      if (e.key === 'auth-token') {
+        if (e.newValue) {
+          // Token was added, reconnect WebSocket
+          reconnect();
+        }
+      }
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, [reconnect]);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -241,10 +260,7 @@ function AppContent() {
         if (session) {
           setSelectedProject(project);
           setSelectedSession(session);
-          // Only switch to chat tab if we're loading a different session
-          if (shouldSwitchTab) {
-            setActiveTab('chat');
-          }
+          // Keep current tab when loading sessions
           return;
         }
       }
@@ -267,10 +283,7 @@ function AppContent() {
   const handleSessionSelect = (session) => {
     setSelectedSession(session);
     // Only switch to chat tab when user explicitly selects a session
-    // This prevents tab switching during automatic updates
-    if (activeTab !== 'git' && activeTab !== 'preview') {
-      setActiveTab('chat');
-    }
+    // Keep current tab when navigating to sessions
     if (isMobile) {
       setSidebarOpen(false);
     }
@@ -280,7 +293,7 @@ function AppContent() {
   const handleNewSession = (project) => {
     setSelectedProject(project);
     setSelectedSession(null);
-    setActiveTab('chat');
+    // Keep current tab when selecting project
     navigate('/');
     if (isMobile) {
       setSidebarOpen(false);
@@ -502,7 +515,7 @@ function AppContent() {
       {/* Fixed Desktop Sidebar */}
       {!isMobile && (
         <div className="w-80 flex-shrink-0 border-r border-border bg-card">
-          <div className="h-full overflow-hidden">
+          <div className="h-full overflow-y-auto">
             <Sidebar
               projects={projects}
               selectedProject={selectedProject}

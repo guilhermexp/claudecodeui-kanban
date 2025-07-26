@@ -3,7 +3,7 @@ import { GitBranch, GitCommit, Plus, Minus, RefreshCw, Check, X, ChevronDown, Ch
 import { MicButton } from './MicButton.jsx';
 import { authenticatedFetch } from '../utils/api';
 
-function GitPanel({ selectedProject, isMobile }) {
+function GitPanel({ selectedProject, isMobile, isVisible = false }) {
   const [gitStatus, setGitStatus] = useState(null);
   const [gitDiff, setGitDiff] = useState({});
   const [isLoading, setIsLoading] = useState(false);
@@ -35,7 +35,8 @@ function GitPanel({ selectedProject, isMobile }) {
   const dropdownRef = useRef(null);
 
   useEffect(() => {
-    if (selectedProject) {
+    // Only fetch if the component is actually visible and project exists
+    if (selectedProject && isVisible) {
       fetchGitStatus();
       fetchBranches();
       fetchRemoteStatus();
@@ -43,7 +44,7 @@ function GitPanel({ selectedProject, isMobile }) {
         fetchRecentCommits();
       }
     }
-  }, [selectedProject, activeView]);
+  }, [selectedProject?.name, activeView, isVisible]); // Use project name instead of object to avoid unnecessary re-renders
 
   // Handle click outside dropdown
   useEffect(() => {
@@ -58,7 +59,7 @@ function GitPanel({ selectedProject, isMobile }) {
   }, []);
 
   const fetchGitStatus = async () => {
-    if (!selectedProject) return;
+    if (!selectedProject || !isVisible) return;
     
     console.log('Fetching git status for project:', selectedProject.name, 'path:', selectedProject.path);
     
@@ -106,6 +107,8 @@ function GitPanel({ selectedProject, isMobile }) {
   };
 
   const fetchBranches = async () => {
+    if (!selectedProject || !isVisible) return;
+    
     try {
       const response = await authenticatedFetch(`/api/git/branches?project=${encodeURIComponent(selectedProject.name)}`);
       const data = await response.json();
@@ -119,7 +122,7 @@ function GitPanel({ selectedProject, isMobile }) {
   };
 
   const fetchRemoteStatus = async () => {
-    if (!selectedProject) return;
+    if (!selectedProject || !isVisible) return;
     
     try {
       const response = await authenticatedFetch(`/api/git/remote-status?project=${encodeURIComponent(selectedProject.name)}`);
@@ -405,6 +408,8 @@ function GitPanel({ selectedProject, isMobile }) {
   };
 
   const fetchRecentCommits = async () => {
+    if (!selectedProject || !isVisible) return;
+    
     try {
       const response = await authenticatedFetch(`/api/git/commits?project=${encodeURIComponent(selectedProject.name)}&limit=10`);
       const data = await response.json();

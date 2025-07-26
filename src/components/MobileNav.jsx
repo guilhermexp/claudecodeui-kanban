@@ -6,14 +6,14 @@ function MobileNav({ activeTab, setActiveTab, isInputFocused }) {
   const isDarkMode = document.documentElement.classList.contains('dark');
   const navItems = [
     {
-      id: 'chat',
-      icon: MessageSquare,
-      onClick: () => setActiveTab('chat')
-    },
-    {
       id: 'shell',
       icon: Terminal,
       onClick: () => setActiveTab('shell')
+    },
+    {
+      id: 'chat',
+      icon: MessageSquare,
+      onClick: () => setActiveTab('chat')
     },
     {
       id: 'files',

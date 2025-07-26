@@ -48,8 +48,12 @@ export const AuthProvider = ({ children }) => {
       }
       
       // If we have a token, verify it
-      if (token) {
+      const savedToken = localStorage.getItem('auth-token');
+      if (savedToken) {
         try {
+          // Set the token in state first
+          setToken(savedToken);
+          
           const userResponse = await api.auth.user();
           
           if (userResponse.ok) {

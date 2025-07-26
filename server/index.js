@@ -43,11 +43,50 @@ import authRoutes from './routes/auth.js';
 import mcpRoutes from './routes/mcp.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
+import shellSessionManager from './shellSessions.js';
 
 // File system watcher for projects folder
 let projectsWatcher = null;
 // Enhanced client tracking with user context for session isolation
 const connectedClients = new Map(); // ws -> { userId, username, activeProject, lastActivity }
+
+// Simple shell session storage
+const activeShellSessions = new Map(); // sessionKey -> { process, projectPath, sessionId, created, lastAccess, timeoutId }
+const SHELL_SESSION_TIMEOUT = 10 * 60 * 1000; // 10 minutes
+
+// Helper functions for shell session management
+function createShellSessionKey(userId, projectPath, sessionId) {
+  return `${userId}:${projectPath}:${sessionId || 'default'}`;
+}
+
+function clearShellSessionTimeout(sessionKey) {
+  const session = activeShellSessions.get(sessionKey);
+  if (session && session.timeoutId) {
+    clearTimeout(session.timeoutId);
+    session.timeoutId = null;
+  }
+}
+
+function scheduleShellSessionTimeout(sessionKey) {
+  const session = activeShellSessions.get(sessionKey);
+  if (!session) return;
+  
+  // Clear any existing timeout
+  clearShellSessionTimeout(sessionKey);
+  
+  // Schedule new timeout
+  session.timeoutId = setTimeout(() => {
+    console.log(`⏱️ Shell session timeout reached for: ${sessionKey}`);
+    const session = activeShellSessions.get(sessionKey);
+    if (session && session.process) {
+      console.log('🗑️ Killing timed-out shell process');
+      session.process.kill();
+      activeShellSessions.delete(sessionKey);
+    }
+  }, SHELL_SESSION_TIMEOUT);
+  
+  console.log(`⏱️ Scheduled 10-minute timeout for session: ${sessionKey}`);
+}
 
 // Smart broadcast functions for session isolation
 const broadcastProjectUpdate = (message, eventType, filePath) => {
@@ -218,6 +257,12 @@ app.use('/api', validateApiKey);
 
 // Authentication routes (public)
 app.use('/api/auth', authRoutes);
+
+// Shell sessions debug endpoint
+app.get('/api/shell-sessions', authenticateToken, (req, res) => {
+  const sessions = shellSessionManager.getSessionInfo();
+  res.json({ sessions });
+});
 
 // Git API Routes (protected)
 app.use('/api/git', authenticateToken, gitRoutes);
@@ -493,7 +538,7 @@ wss.on('connection', (ws, request) => {
   const pathname = urlObj.pathname;
   
   if (pathname === '/shell') {
-    handleShellConnection(ws);
+    handleShellConnection(ws, request);
   } else if (pathname === '/ws') {
     handleChatConnection(ws, request);
   } else {
@@ -559,9 +604,16 @@ function handleChatConnection(ws, request) {
 }
 
 // Handle shell WebSocket connections
-function handleShellConnection(ws) {
+function handleShellConnection(ws, request) {
   console.log('🐚 Shell client connected');
+  
+  // Get user info from authenticated request
+  const user = request.user || { userId: 'anonymous', username: 'anonymous' };
+  console.log('👤 Shell user:', user.username);
+  
+  let currentSessionKey = null;
   let shellProcess = null;
+  let bypassPermissions = false;
   
   ws.on('message', async (message) => {
     try {
@@ -569,120 +621,196 @@ function handleShellConnection(ws) {
       console.log('📨 Shell message received:', data.type);
       
       if (data.type === 'init') {
-        // Initialize shell with project path and session info
         const projectPath = data.projectPath || process.cwd();
         const sessionId = data.sessionId;
         const hasSession = data.hasSession;
+        bypassPermissions = data.bypassPermissions || false;
         
-        console.log('🚀 Starting shell in:', projectPath);
-        console.log('📋 Session info:', hasSession ? `Resume session ${sessionId}` : 'New session');
+        // Create session key
+        currentSessionKey = createShellSessionKey(user.userId, projectPath, sessionId);
+        console.log('🔑 Session key:', currentSessionKey);
         
-        // First send a welcome message
-        const welcomeMsg = hasSession ? 
-          `\x1b[36mResuming Claude session ${sessionId} in: ${projectPath}\x1b[0m\r\n` :
-          `\x1b[36mStarting new Claude session in: ${projectPath}\x1b[0m\r\n`;
+        // Check if session already exists
+        const existingSession = activeShellSessions.get(currentSessionKey);
         
-        ws.send(JSON.stringify({
-          type: 'output',
-          data: welcomeMsg
-        }));
-        
-        try {
-          // Build shell command that changes to project directory first, then runs claude
-          let claudeCommand = 'claude';
+        if (existingSession && existingSession.process && !existingSession.process.killed) {
+          console.log('📦 Reusing existing shell session');
+          shellProcess = existingSession.process;
           
-          if (hasSession && sessionId) {
-            // Try to resume session, but with fallback to new session if it fails
-            claudeCommand = `claude --resume ${sessionId} || claude`;
-          }
+          // Clear timeout since session is being reused
+          clearShellSessionTimeout(currentSessionKey);
           
-          // Create shell command that cds to the project directory first
-          const shellCommand = `cd "${projectPath}" && ${claudeCommand}`;
+          // Update last access time
+          existingSession.lastAccess = Date.now();
           
-          console.log('🔧 Executing shell command:', shellCommand);
-          
-          // Start shell using PTY for proper terminal emulation
-          shellProcess = pty.spawn('bash', ['-c', shellCommand], {
-            name: 'xterm-256color',
-            cols: 80,
-            rows: 24,
-            cwd: process.env.HOME || '/', // Start from home directory
-            env: { 
-              ...process.env,
-              TERM: 'xterm-256color',
-              COLORTERM: 'truecolor',
-              FORCE_COLOR: '3',
-              // Override browser opening commands to echo URL for detection
-              BROWSER: 'echo "OPEN_URL:"'
-            }
-          });
-          
-          console.log('🟢 Shell process started with PTY, PID:', shellProcess.pid);
-          
-          // Handle data output
-          shellProcess.onData((data) => {
-            if (ws.readyState === ws.OPEN) {
-              let outputData = data;
-              
-              // Check for various URL opening patterns
-              const patterns = [
-                // Direct browser opening commands
-                /(?:xdg-open|open|start)\s+(https?:\/\/[^\s\x1b\x07]+)/g,
-                // BROWSER environment variable override
-                /OPEN_URL:\s*(https?:\/\/[^\s\x1b\x07]+)/g,
-                // Git and other tools opening URLs
-                /Opening\s+(https?:\/\/[^\s\x1b\x07]+)/gi,
-                // General URL patterns that might be opened
-                /Visit:\s*(https?:\/\/[^\s\x1b\x07]+)/gi,
-                /View at:\s*(https?:\/\/[^\s\x1b\x07]+)/gi,
-                /Browse to:\s*(https?:\/\/[^\s\x1b\x07]+)/gi
-              ];
-              
-              patterns.forEach(pattern => {
-                let match;
-                while ((match = pattern.exec(data)) !== null) {
-                  const url = match[1];
-                  console.log('🔗 Detected URL for opening:', url);
-                  
-                  // Send URL opening message to client
-                  ws.send(JSON.stringify({
-                    type: 'url_open',
-                    url: url
-                  }));
-                  
-                  // Replace the OPEN_URL pattern with a user-friendly message
-                  if (pattern.source.includes('OPEN_URL')) {
-                    outputData = outputData.replace(match[0], `🌐 Opening in browser: ${url}`);
-                  }
-                }
-              });
-              
-              // Send regular output
-              ws.send(JSON.stringify({
-                type: 'output',
-                data: outputData
-              }));
-            }
-          });
-          
-          // Handle process exit
-          shellProcess.onExit((exitCode) => {
-            console.log('🔚 Shell process exited with code:', exitCode.exitCode, 'signal:', exitCode.signal);
-            if (ws.readyState === ws.OPEN) {
-              ws.send(JSON.stringify({
-                type: 'output',
-                data: `\r\n\x1b[33mProcess exited with code ${exitCode.exitCode}${exitCode.signal ? ` (${exitCode.signal})` : ''}\x1b[0m\r\n`
-              }));
-            }
-            shellProcess = null;
-          });
-          
-        } catch (spawnError) {
-          console.error('❌ Error spawning process:', spawnError);
+          // Send reconnection message
           ws.send(JSON.stringify({
             type: 'output',
-            data: `\r\n\x1b[31mError: ${spawnError.message}\x1b[0m\r\n`
+            data: `\x1b[36mReconnected to existing shell session in: ${projectPath}\x1b[0m\r\n`
           }));
+          
+          // Resize terminal to new dimensions
+          if (existingSession.process.resize) {
+            existingSession.process.resize(data.cols || 80, data.rows || 24);
+          }
+          
+          // Send a newline to trigger any pending prompt
+          setTimeout(() => {
+            if (shellProcess.write) {
+              shellProcess.write('\n');
+            }
+          }, 100);
+          
+          // Remove any existing data handlers to avoid duplicates
+          if (shellProcess.removeAllListeners) {
+            shellProcess.removeAllListeners('data');
+          }
+          
+          // Re-attach data handlers
+          shellProcess.onData((data) => {
+            if (ws.readyState === ws.OPEN) {
+              ws.send(JSON.stringify({
+                type: 'output',
+                data: data
+              }));
+            }
+          });
+          
+        } else {
+          // Create new shell session
+          console.log('🆕 Creating new shell session');
+          
+          // Send welcome message
+          const welcomeMsg = hasSession ? 
+            `\x1b[36mResuming Claude session ${sessionId} in: ${projectPath}\x1b[0m\r\n` :
+            `\x1b[36mStarting new Claude session in: ${projectPath}\x1b[0m\r\n`;
+          
+          ws.send(JSON.stringify({
+            type: 'output',
+            data: welcomeMsg
+          }));
+          
+          // Show bypass status if enabled
+          if (bypassPermissions) {
+            ws.send(JSON.stringify({
+              type: 'output',
+              data: '\x1b[33mBypassing Permissions\x1b[0m\r\n'
+            }));
+          }
+          
+          try {
+            // Build shell command - try multiple possible locations
+            const possibleClaudePaths = [
+              '/opt/homebrew/bin/claude',
+              '/usr/local/bin/claude',
+              'claude'
+            ];
+            
+            // We'll try the most likely path first
+            let claudeCommand = possibleClaudePaths[0];
+            
+            if (bypassPermissions) {
+              claudeCommand += ' --dangerously-skip-permissions';
+            }
+            
+            if (hasSession && sessionId) {
+              claudeCommand += ` --resume ${sessionId}`;
+            }
+            
+            // Start shell using PTY and then execute claude
+            console.log('🔧 Starting shell in directory:', projectPath);
+            
+            // Use the user's default shell to ensure proper environment loading
+            const userShell = process.env.SHELL || '/bin/bash';
+            console.log('🐚 Using shell:', userShell);
+            
+            // Create an interactive shell with login flag to load user's profile
+            shellProcess = pty.spawn(userShell, ['-l'], {
+              name: 'xterm-256color',
+              cols: data.cols || 80,
+              rows: data.rows || 24,
+              cwd: projectPath,
+              env: {
+                ...process.env,
+                // Ensure PATH includes common locations for claude including Homebrew paths
+                PATH: `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:${process.env.PATH || ''}`,
+                TERM: 'xterm-256color',
+                SHELL: userShell
+              }
+            });
+            
+            // After shell starts, execute claude command
+            setTimeout(() => {
+              console.log('🚀 Executing claude command:', claudeCommand);
+              // Clear the terminal first for a clean start
+              shellProcess.write('clear\r');
+              setTimeout(() => {
+                // Show which command we're running
+                shellProcess.write(`echo "Starting Claude CLI..."\r`);
+                shellProcess.write(`echo "Command: ${claudeCommand}"\r`);
+                shellProcess.write(`echo ""\r`);
+                // Ensure PATH is set correctly before running claude
+                shellProcess.write(`export PATH="/opt/homebrew/bin:$PATH"\r`);
+                setTimeout(() => {
+                  // Execute the claude command directly
+                  shellProcess.write(`${claudeCommand}\r`);
+                }, 100);
+              }, 100);
+            }, 200);
+            
+            console.log('🟢 Shell process started with PTY, PID:', shellProcess.pid);
+            
+            // Store session
+            activeShellSessions.set(currentSessionKey, {
+              process: shellProcess,
+              projectPath,
+              sessionId,
+              created: Date.now(),
+              lastAccess: Date.now(),
+              timeoutId: null
+            });
+            
+            // Handle data output
+            shellProcess.onData((data) => {
+              const output = data.toString();
+              // Log errors or important messages (but limit output to reduce spam)
+              if (output.includes('zsh: command not found') || output.includes('bash: command not found')) {
+                console.log('❌ Shell error: command not found');
+              } else if (output.includes('Starting Claude CLI')) {
+                console.log('🚀 Claude CLI starting...');
+              } else if (output.includes('Welcome to Claude') || output.includes('claude>')) {
+                console.log('✅ Claude CLI is running');
+              }
+              if (ws.readyState === ws.OPEN) {
+                ws.send(JSON.stringify({
+                  type: 'output',
+                  data: data
+                }));
+              }
+            });
+            
+            // Handle process exit
+            shellProcess.onExit((exitCode) => {
+              console.log('🔚 Shell process exited with code:', exitCode.exitCode, 'signal:', exitCode.signal);
+              if (ws.readyState === ws.OPEN) {
+                ws.send(JSON.stringify({
+                  type: 'output',
+                  data: `\r\n\x1b[33mProcess exited with code ${exitCode.exitCode}${exitCode.signal ? ` (signal: ${exitCode.signal})` : ''}\x1b[0m\r\n`
+                }));
+              }
+              
+              // Remove session when process exits
+              activeShellSessions.delete(currentSessionKey);
+              shellProcess = null;
+            });
+            
+          } catch (spawnError) {
+            console.error('❌ Error spawning process:', spawnError);
+            ws.send(JSON.stringify({
+              type: 'output',
+              data: `\r\n\x1b[31mError: ${spawnError.message}\x1b[0m\r\n`
+            }));
+          }
         }
         
       } else if (data.type === 'input') {
@@ -702,6 +830,34 @@ function handleShellConnection(ws) {
           console.log('Terminal resize requested:', data.cols, 'x', data.rows);
           shellProcess.resize(data.cols, data.rows);
         }
+      } else if (data.type === 'bypassPermissions') {
+        // Handle bypass permissions toggle
+        bypassPermissions = data.enabled;
+        console.log('🔓 Bypass permissions:', bypassPermissions ? 'ENABLED' : 'DISABLED');
+        
+        // Send visual feedback to terminal
+        const bypassMsg = bypassPermissions 
+          ? '\x1b[33m\r\nBypassing Permissions\x1b[0m\r\n'
+          : '\x1b[90m\r\nPermissions Normal\x1b[0m\r\n';
+          
+        if (ws.readyState === ws.OPEN) {
+          ws.send(JSON.stringify({
+            type: 'output',
+            data: bypassMsg
+          }));
+        }
+        
+        // Claude CLI doesn't support changing permissions mid-session
+        if (shellProcess) {
+          const restartMsg = bypassPermissions 
+            ? '\x1b[33m⚠️  To apply bypass permissions, please disconnect and reconnect the shell.\x1b[0m\r\n'
+            : '\x1b[33m⚠️  To disable bypass permissions, please disconnect and reconnect the shell.\x1b[0m\r\n';
+            
+          ws.send(JSON.stringify({
+            type: 'output',
+            data: restartMsg
+          }));
+        }
       }
     } catch (error) {
       console.error('❌ Shell WebSocket error:', error.message);
@@ -716,9 +872,11 @@ function handleShellConnection(ws) {
   
   ws.on('close', () => {
     console.log('🔌 Shell client disconnected');
-    if (shellProcess && shellProcess.kill) {
-      console.log('🔴 Killing shell process:', shellProcess.pid);
-      shellProcess.kill();
+    
+    // Don't kill the process immediately - schedule timeout instead
+    if (currentSessionKey && activeShellSessions.has(currentSessionKey)) {
+      console.log('📅 Scheduling timeout for shell session:', currentSessionKey);
+      scheduleShellSessionTimeout(currentSessionKey);
     }
   });
   
@@ -726,6 +884,7 @@ function handleShellConnection(ws) {
     console.error('❌ Shell WebSocket error:', error);
   });
 }
+
 // Audio transcription endpoint
 app.post('/api/transcribe', authenticateToken, async (req, res) => {
   try {
@@ -1106,3 +1265,32 @@ async function startServer() {
 }
 
 startServer();
+
+// Clean up on server shutdown
+process.on('SIGINT', () => {
+  console.log('\n🛑 Shutting down server...');
+  
+  // Kill all active shell sessions
+  activeShellSessions.forEach((session, key) => {
+    console.log(`🔴 Killing shell session: ${key}`);
+    if (session.process && !session.process.killed) {
+      session.process.kill();
+    }
+  });
+  
+  process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+  console.log('\n🛑 Server termination requested...');
+  
+  // Kill all active shell sessions
+  activeShellSessions.forEach((session, key) => {
+    console.log(`🔴 Killing shell session: ${key}`);
+    if (session.process && !session.process.killed) {
+      session.process.kill();
+    }
+  });
+  
+  process.exit(0);
+});

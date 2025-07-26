@@ -1,13 +1,22 @@
 import { useState, useEffect, useRef } from 'react';
 
-export function useWebSocket() {
+export function useWebSocket(authReady = false) {
   const [ws, setWs] = useState(null);
   const [messages, setMessages] = useState([]);
   const [isConnected, setIsConnected] = useState(false);
   const reconnectTimeoutRef = useRef(null);
+  const wsRef = useRef(null);
+  const hasConnectedRef = useRef(false);
 
   useEffect(() => {
-    connect();
+    // Only connect when auth is ready and we have a token
+    if (authReady) {
+      const token = localStorage.getItem('auth-token');
+      if (token && !hasConnectedRef.current) {
+        hasConnectedRef.current = true;
+        connect();
+      }
+    }
     
     return () => {
       if (reconnectTimeoutRef.current) {
@@ -17,7 +26,7 @@ export function useWebSocket() {
         ws.close();
       }
     };
-  }, []);
+  }, [authReady]);
 
   const connect = async () => {
     try {
@@ -58,6 +67,7 @@ export function useWebSocket() {
       // Include token in WebSocket URL as query parameter
       const wsUrl = `${wsBaseUrl}/ws?token=${encodeURIComponent(token)}`;
       const websocket = new WebSocket(wsUrl);
+      wsRef.current = websocket;
 
       websocket.onopen = () => {
         setIsConnected(true);
@@ -77,10 +87,14 @@ export function useWebSocket() {
         setIsConnected(false);
         setWs(null);
         
-        // Attempt to reconnect after 3 seconds
-        reconnectTimeoutRef.current = setTimeout(() => {
-          connect();
-        }, 3000);
+        // Only attempt to reconnect if we still have a token
+        const token = localStorage.getItem('auth-token');
+        if (token) {
+          // Attempt to reconnect after 3 seconds
+          reconnectTimeoutRef.current = setTimeout(() => {
+            connect();
+          }, 3000);
+        }
       };
 
       websocket.onerror = (error) => {
@@ -100,10 +114,27 @@ export function useWebSocket() {
     }
   };
 
+  // Expose connect method to allow reconnection after login
+  const reconnect = () => {
+    // Reset the connection flag
+    hasConnectedRef.current = false;
+    // Close existing connection if any
+    if (wsRef.current) {
+      wsRef.current.close();
+    }
+    // Clear any pending reconnect
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+    }
+    // Connect again
+    connect();
+  };
+
   return {
     ws,
     sendMessage,
     messages,
-    isConnected
+    isConnected,
+    reconnect
   };
 }
