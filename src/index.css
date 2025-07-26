@@ -214,6 +214,47 @@
                 transform 300ms cubic-bezier(0.4, 0, 0.2, 1);
   }
   
+  /* Message enter animation */
+  @keyframes messageEnter {
+    from {
+      opacity: 0;
+      transform: translateY(10px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+  
+  /* Typing indicator animation */
+  @keyframes typing {
+    0%, 60%, 100% { opacity: 0.3; }
+    30% { opacity: 1; }
+  }
+  
+  /* New message animation class */
+  .message-enter {
+    animation: messageEnter 0.3s ease-out forwards;
+  }
+  
+  /* Assistant message specific animation */
+  .message-enter-assistant {
+    animation: messageEnter 0.4s ease-out forwards;
+  }
+  
+  /* Typing dots */
+  .typing-dot {
+    animation: typing 1.4s infinite;
+  }
+  
+  .typing-dot:nth-child(2) {
+    animation-delay: 0.2s;
+  }
+  
+  .typing-dot:nth-child(3) {
+    animation-delay: 0.4s;
+  }
+  
   /* Height transitions for expanding elements */
   .height-transition {
     transition: height 200ms ease-in-out,

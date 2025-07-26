@@ -146,7 +146,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
   return (
     <div
       ref={messageRef}
-      className={`chat-message ${message.type} ${isGrouped ? 'grouped' : ''} ${message.type === 'user' ? 'flex justify-end px-3 sm:px-0' : 'px-3 sm:px-0'}`}
+      className={`chat-message ${message.type} ${isGrouped ? 'grouped' : ''} ${message.type === 'user' ? 'flex justify-end px-3 sm:px-0' : 'px-3 sm:px-0'} message-enter ${message.type === 'assistant' ? 'message-enter-assistant' : ''}`}
     >
       {message.type === 'user' ? (
         /* User message bubble on the right */
@@ -2431,7 +2431,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         )}
         
         {isLoading && (
-          <div className="chat-message assistant">
+          <div className="chat-message assistant message-enter message-enter-assistant">
             <div className="w-full">
               <div className="flex items-center space-x-3 mb-2">
                 <div className="w-8 h-8 bg-gray-600 rounded-full flex items-center justify-center text-white text-sm flex-shrink-0">
@@ -2440,11 +2440,10 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 <div className="text-sm font-medium text-gray-900 dark:text-white">Claude</div>
                 {/* Abort button removed - functionality not yet implemented at backend */}
               </div>
-              <div className="w-full text-sm text-gray-500 dark:text-gray-400 pl-3 sm:pl-0">
-                <div className="flex items-center space-x-1">
-                  <div className="animate-pulse">●</div>
-                  <div className="animate-pulse" style={{ animationDelay: '0.2s' }}>●</div>
-                  <div className="animate-pulse" style={{ animationDelay: '0.4s' }}>●</div>
+              <div className="w-full text-sm text-gray-500 dark:text-gray-400 pl-3 sm:pl-0 flex items-center gap-1">
+                <span className="inline-block w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full typing-dot"></span>
+                <span className="inline-block w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full typing-dot"></span>
+                <span className="inline-block w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full typing-dot"></span>
                   <span className="ml-2">Thinking...</span>
                 </div>
               </div>
