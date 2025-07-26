@@ -23,6 +23,23 @@ export default defineConfig(({ command, mode }) => {
           target: 'ws://localhost:8080',
           ws: true
         },
+        // VibeKanban SSE streams for real-time logs
+        '/api/vibe-kanban/projects/.+/execution-processes/.+/normalized-logs/stream': {
+          target: 'http://localhost:8081',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api\/vibe-kanban/, '/api'),
+          configure: (proxy, options) => {
+            proxy.on('proxyReq', (proxyReq, req, res) => {
+              proxyReq.setHeader('Accept', 'text/event-stream');
+              proxyReq.setHeader('Cache-Control', 'no-cache');
+            });
+            proxy.on('proxyRes', (proxyRes, req, res) => {
+              proxyRes.headers['content-type'] = 'text/event-stream';
+              proxyRes.headers['cache-control'] = 'no-cache';
+              proxyRes.headers['connection'] = 'keep-alive';
+            });
+          }
+        },
         // VibeKanban API routes - proxy to Rust backend
         '/api/vibe-kanban': {
           target: 'http://localhost:8081',
