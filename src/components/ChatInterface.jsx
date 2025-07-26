@@ -1588,6 +1588,30 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                   toolId: part.id,
                   toolResult: null // Will be updated when result comes in
                 }]);
+              } else if (part.type === 'text_delta' && part.text_delta) {
+                // Handle streaming text deltas - accumulate the text
+                setChatMessages(prev => {
+                  // Find the last assistant message and append to it
+                  const messages = [...prev];
+                  const lastIndex = messages.length - 1;
+                  
+                  if (lastIndex >= 0 && messages[lastIndex].type === 'assistant' && !messages[lastIndex].isToolUse) {
+                    // Append to existing message
+                    messages[lastIndex] = {
+                      ...messages[lastIndex],
+                      content: (messages[lastIndex].content || '') + part.text_delta
+                    };
+                  } else {
+                    // Create new message for first delta
+                    messages.push({
+                      type: 'assistant',
+                      content: part.text_delta,
+                      timestamp: new Date()
+                    });
+                  }
+                  
+                  return messages;
+                });
               } else if (part.type === 'text' && part.text?.trim()) {
                 // Check for usage limit message and format it user-friendly
                 let content = part.text;
