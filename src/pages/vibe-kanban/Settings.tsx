@@ -20,6 +20,7 @@ import { Checkbox } from '../../components/vibe-kanban/ui/checkbox';
 import { Input } from '../../components/vibe-kanban/ui/input';
 import { Key, Loader2, Volume2 } from 'lucide-react';
 import type { EditorType, SoundFile, ThemeMode } from '../../lib/vibe-kanban/shared-types';
+import { cn } from '../../lib/vibe-kanban/utils';
 import {
   EDITOR_LABELS,
   EDITOR_TYPES,
@@ -127,11 +128,11 @@ export function Settings() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-4xl">
+    <div className="container mx-auto px-3 sm:px-4 py-4 sm:py-8 max-w-4xl">
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl font-bold">Settings</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl sm:text-3xl font-bold">Settings</h1>
+          <p className="text-sm sm:text-base text-muted-foreground">
             Configure your preferences and application settings.
           </p>
         </div>
@@ -150,17 +151,17 @@ export function Settings() {
           </Alert>
         )}
 
-        <div className="grid gap-6">
+        <div className="grid gap-4 sm:gap-6">
           <Card>
             <CardHeader>
-              <CardTitle>Appearance</CardTitle>
-              <CardDescription>
+              <CardTitle className="text-lg sm:text-xl">Appearance</CardTitle>
+              <CardDescription className="text-sm">
                 Customize how the application looks and feels.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 px-4 sm:px-6">
               <div className="space-y-2">
-                <Label htmlFor="theme">Theme</Label>
+                <Label htmlFor="theme" className="text-sm sm:text-base">Theme</Label>
                 <Select
                   value={config.theme}
                   onValueChange={(value: ThemeMode) => {
@@ -182,7 +183,7 @@ export function Settings() {
                     <SelectItem value="red">Red</SelectItem>
                   </SelectContent>
                 </Select>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs sm:text-sm text-muted-foreground">
                   Choose your preferred color scheme.
                 </p>
               </div>
@@ -191,14 +192,14 @@ export function Settings() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Task Execution</CardTitle>
-              <CardDescription>
+              <CardTitle className="text-lg sm:text-xl">Task Execution</CardTitle>
+              <CardDescription className="text-sm">
                 Configure how tasks are executed and processed.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 px-4 sm:px-6">
               <div className="space-y-2">
-                <Label htmlFor="executor">Default Executor</Label>
+                <Label htmlFor="executor" className="text-sm sm:text-base">Default Executor</Label>
                 <Select
                   value={config.executor.type}
                   onValueChange={(value: 'echo' | 'claude' | 'amp') =>
@@ -216,7 +217,7 @@ export function Settings() {
                     ))}
                   </SelectContent>
                 </Select>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs sm:text-sm text-muted-foreground">
                   Choose the default executor for running tasks.
                 </p>
               </div>
@@ -225,12 +226,12 @@ export function Settings() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Editor</CardTitle>
-              <CardDescription>
+              <CardTitle className="text-lg sm:text-xl">Editor</CardTitle>
+              <CardDescription className="text-sm">
                 Configure which editor to open when viewing task attempts.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 px-4 sm:px-6">
               <div className="space-y-2">
                 <Label htmlFor="editor">Preferred Editor</Label>
                 <Select
@@ -291,16 +292,16 @@ export function Settings() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Key className="h-5 w-5" />
+              <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
+                <Key className="h-4 w-4 sm:h-5 sm:w-5" />
                 GitHub Integration
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="text-sm">
                 Configure GitHub settings for creating pull requests from task
                 attempts.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 px-4 sm:px-6">
               <div className="space-y-2">
                 <Label htmlFor="github-token">Personal Access Token</Label>
                 <Input
@@ -317,7 +318,7 @@ export function Settings() {
                     })
                   }
                 />
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs sm:text-sm text-muted-foreground">
                   GitHub Personal Access Token with 'repo' permissions. Required
                   for creating pull requests.{' '}
                   <a
@@ -331,19 +332,19 @@ export function Settings() {
                 </p>
               </div>
               {config && isAuthenticated ? (
-                <div className="flex items-center justify-between gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                   <div>
-                    <Label>Signed in as</Label>
-                    <div className="text-lg font-mono">
+                    <Label className="text-sm">Signed in as</Label>
+                    <div className="text-base sm:text-lg font-mono">
                       {config.github.username}
                     </div>
                   </div>
-                  <Button variant="outline" onClick={handleLogout}>
+                  <Button variant="outline" onClick={handleLogout} className="w-full sm:w-auto">
                     Log out
                   </Button>
                 </div>
               ) : (
-                <Button onClick={() => setShowGitHubLogin(true)}>
+                <Button onClick={() => setShowGitHubLogin(true)} className="w-full sm:w-auto">
                   Sign in with GitHub
                 </Button>
               )}
@@ -376,12 +377,12 @@ export function Settings() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Notifications</CardTitle>
-              <CardDescription>
+              <CardTitle className="text-lg sm:text-xl">Notifications</CardTitle>
+              <CardDescription className="text-sm">
                 Configure how you receive notifications about task completion.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 px-4 sm:px-6">
               <div className="flex items-center space-x-2">
                 <Checkbox
                   id="sound-alerts"
@@ -461,12 +462,12 @@ export function Settings() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Privacy</CardTitle>
-              <CardDescription>
+              <CardTitle className="text-lg sm:text-xl">Privacy</CardTitle>
+              <CardDescription className="text-sm">
                 Help improve Vibe-Kanban by sharing anonymous usage data.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 px-4 sm:px-6">
               <div className="flex items-center space-x-2">
                 <Checkbox
                   id="analytics-enabled"
@@ -491,8 +492,8 @@ export function Settings() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Task Templates</CardTitle>
-              <CardDescription>
+              <CardTitle className="text-lg sm:text-xl">Task Templates</CardTitle>
+              <CardDescription className="text-sm">
                 Manage global task templates that can be used across all
                 projects.
               </CardDescription>
@@ -504,8 +505,8 @@ export function Settings() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Safety & Disclaimers</CardTitle>
-              <CardDescription>
+              <CardTitle className="text-lg sm:text-xl">Safety & Disclaimers</CardTitle>
+              <CardDescription className="text-sm">
                 Manage safety warnings and acknowledgments.
               </CardDescription>
             </CardHeader>
@@ -588,12 +589,15 @@ export function Settings() {
         </div>
 
         {/* Sticky save button */}
-        <div className="fixed bottom-0 left-0 right-0 bg-background/80 backdrop-blur-sm border-t p-4 z-10">
-          <div className="container mx-auto max-w-4xl flex justify-end">
+        <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-sm border-t p-3 sm:p-4 z-10">
+          <div className="container mx-auto max-w-4xl flex justify-end px-3 sm:px-4">
             <Button
               onClick={handleSave}
               disabled={saving || success}
-              className={success ? 'bg-green-600 hover:bg-green-700' : ''}
+              className={cn(
+                "w-full sm:w-auto",
+                success ? 'bg-green-600 hover:bg-green-700' : ''
+              )}
             >
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {success && <span className="mr-2">✓</span>}

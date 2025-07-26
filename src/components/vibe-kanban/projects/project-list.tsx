@@ -22,6 +22,7 @@ export function ProjectList() {
   const [error, setError] = useState('');
   const [focusedProjectId, setFocusedProjectId] = useState<string | null>(null);
   const [focusedColumn, setFocusedColumn] = useState<string | null>(null);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   const fetchProjects = async () => {
     setLoading(true);
@@ -127,18 +128,27 @@ export function ProjectList() {
     fetchProjects();
   }, []);
 
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   return (
-    <div className="space-y-6 p-8">
+    <div className="space-y-4 sm:space-y-6 p-3 sm:p-6 lg:p-8">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Projects</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Projects</h1>
+          <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mt-1">
             Manage your projects and track their progress
           </p>
         </div>
-        <Button onClick={() => setShowForm(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Create Project
+        <Button onClick={() => setShowForm(true)} size={isMobile ? "sm" : "default"}>
+          <Plus className="h-4 w-4" />
+          <span className="ml-2 hidden sm:inline">Create Project</span>
         </Button>
       </div>
 
@@ -155,23 +165,23 @@ export function ProjectList() {
           Loading projects...
         </div>
       ) : projects.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-lg bg-muted">
-              <Plus className="h-6 w-6" />
+        <Card className="border-gray-200 dark:border-gray-700">
+          <CardContent className="py-8 sm:py-12 text-center">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-800">
+              <Plus className="h-6 w-6 text-gray-400" />
             </div>
-            <h3 className="mt-4 text-lg font-semibold">No projects yet</h3>
-            <p className="mt-2 text-sm text-muted-foreground">
+            <h3 className="mt-4 text-lg font-semibold text-gray-900 dark:text-white">No projects yet</h3>
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
               Get started by creating your first project.
             </p>
-            <Button className="mt-4" onClick={() => setShowForm(true)}>
-              <Plus className="mr-2 h-4 w-4" />
-              Create your first project
+            <Button className="mt-4" onClick={() => setShowForm(true)} size={isMobile ? "sm" : "default"}>
+              <Plus className="h-4 w-4" />
+              <span className="ml-2">Create your first project</span>
             </Button>
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-3 sm:gap-4 lg:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
           {projects.map((project) => (
             <ProjectCard
               key={project.id}

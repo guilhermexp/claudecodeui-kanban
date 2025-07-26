@@ -65,8 +65,8 @@ export function ProjectFormFields({
   return (
     <>
       {!isEditing && (
-        <div className="space-y-3">
-          <Label>Repository Type</Label>
+        <div className="space-y-2">
+          <Label className="text-sm">Repository Type</Label>
           <div className="flex space-x-4">
             <label className="flex items-center space-x-2 cursor-pointer">
               <input
@@ -99,8 +99,8 @@ export function ProjectFormFields({
       )}
 
       {repoMode === 'existing' || isEditing ? (
-        <div className="space-y-2">
-          <Label htmlFor="git-repo-path">Git Repository Path</Label>
+        <div className="space-y-1">
+          <Label htmlFor="git-repo-path" className="text-sm">Git Repository Path</Label>
           <div className="flex space-x-2">
             <Input
               id="git-repo-path"
@@ -109,12 +109,14 @@ export function ProjectFormFields({
               onChange={(e) => handleGitRepoPathChange(e.target.value)}
               placeholder="/path/to/your/existing/repo"
               required
-              className="flex-1"
+              className="flex-1 h-9"
             />
             <Button
               type="button"
               variant="outline"
+              size="sm"
               onClick={() => setShowFolderPicker(true)}
+              className="h-9 px-3"
             >
               <Folder className="h-4 w-4" />
             </Button>
@@ -179,8 +181,8 @@ export function ProjectFormFields({
         </div>
       )}
 
-      <div className="space-y-2">
-        <Label htmlFor="name">Project Name</Label>
+      <div className="space-y-1">
+        <Label htmlFor="name" className="text-sm">Project Name</Label>
         <Input
           id="name"
           type="text"
@@ -188,54 +190,55 @@ export function ProjectFormFields({
           onChange={(e) => setName(e.target.value)}
           placeholder="Enter project name"
           required
+          className="h-9"
         />
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="setup-script">Setup Script (Optional)</Label>
+      <div className="space-y-1">
+        <Label htmlFor="setup-script" className="text-sm">Setup Script (Optional)</Label>
         <textarea
           id="setup-script"
           value={setupScript}
           onChange={(e) => setSetupScript(e.target.value)}
           placeholder={placeholders.setup}
-          rows={4}
-          className="w-full px-3 py-2 border border-input bg-background text-foreground rounded-md resize-vertical focus:outline-none focus:ring-2 focus:ring-ring"
+          rows={3}
+          className="w-full px-3 py-2 border border-input bg-muted/50 text-foreground text-sm font-mono rounded-md resize-vertical focus:outline-none focus:ring-2 focus:ring-ring"
         />
-        <p className="text-sm text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           This script will run after creating the worktree and before the
           executor starts. Use it for setup tasks like installing dependencies
           or preparing the environment.
         </p>
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="dev-script">Dev Server Script (Optional)</Label>
+      <div className="space-y-1">
+        <Label htmlFor="dev-script" className="text-sm">Dev Server Script (Optional)</Label>
         <textarea
           id="dev-script"
           value={devScript}
           onChange={(e) => setDevScript(e.target.value)}
           placeholder={placeholders.dev}
-          rows={4}
-          className="w-full px-3 py-2 border border-input bg-background text-foreground rounded-md resize-vertical focus:outline-none focus:ring-2 focus:ring-ring"
+          rows={3}
+          className="w-full px-3 py-2 border border-input bg-muted/50 text-foreground text-sm font-mono rounded-md resize-vertical focus:outline-none focus:ring-2 focus:ring-ring"
         />
-        <p className="text-sm text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           This script can be run from task attempts to start a development
           server. Use it to quickly start your project's dev server for testing
           changes.
         </p>
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="cleanup-script">Cleanup Script (Optional)</Label>
+      <div className="space-y-1">
+        <Label htmlFor="cleanup-script" className="text-sm">Cleanup Script (Optional)</Label>
         <textarea
           id="cleanup-script"
           value={cleanupScript}
           onChange={(e) => setCleanupScript(e.target.value)}
           placeholder={placeholders.cleanup}
-          rows={4}
-          className="w-full px-3 py-2 border border-input bg-background text-foreground rounded-md resize-vertical focus:outline-none focus:ring-2 focus:ring-ring"
+          rows={3}
+          className="w-full px-3 py-2 border border-input bg-muted/50 text-foreground text-sm font-mono rounded-md resize-vertical focus:outline-none focus:ring-2 focus:ring-ring"
         />
-        <p className="text-sm text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           This script will run after coding agent execution is complete. Use it
           for quality assurance tasks like running linters, formatters, tests,
           or other validation steps.

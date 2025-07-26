@@ -467,7 +467,7 @@ function Sidebar({
             <Button
               variant="ghost"
               size="sm"
-              className="h-9 w-9 px-0 hover:bg-accent transition-colors duration-200 group"
+              className="h-9 w-9 px-0 hover:bg-accent transition-colors duration-200 group rounded-md"
               onClick={async () => {
                 setIsRefreshing(true);
                 try {
@@ -484,7 +484,7 @@ function Sidebar({
             <Button
               variant="default"
               size="sm"
-              className="h-9 w-9 px-0 bg-primary hover:bg-primary/90 transition-all duration-200 shadow-sm hover:shadow-md"
+              className="h-9 w-9 px-0 bg-primary hover:bg-primary/90 transition-all duration-200 shadow-sm hover:shadow-md rounded-md"
               onClick={() => setShowNewProject(true)}
               title="Create new project (Ctrl+N)"
             >
@@ -496,18 +496,18 @@ function Sidebar({
         {/* Mobile Header */}
         <div className="md:hidden p-3 border-b border-border">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                <MessageSquare className="w-4 h-4 text-primary-foreground" />
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 bg-primary rounded-lg flex items-center justify-center">
+                <MessageSquare className="w-5 h-5 text-primary-foreground" />
               </div>
               <div>
-                <h1 className="text-lg font-semibold text-foreground">Claude Code UI</h1>
-                <p className="text-sm text-muted-foreground">Projects</p>
+                <h1 className="text-base font-semibold text-foreground">Claude Code UI</h1>
+                <p className="text-xs text-muted-foreground">Projects</p>
               </div>
             </div>
             <div className="flex gap-2">
               <button
-                className="w-8 h-8 rounded-md bg-background border border-border flex items-center justify-center active:scale-95 transition-all duration-150"
+                className="w-9 h-9 rounded-md bg-background border border-border flex items-center justify-center hover:bg-accent active:scale-95 transition-all duration-150"
                 onClick={async () => {
                   setIsRefreshing(true);
                   try {
@@ -517,12 +517,14 @@ function Sidebar({
                   }
                 }}
                 disabled={isRefreshing}
+                title="Refresh projects"
               >
                 <RefreshCw className={`w-4 h-4 text-foreground ${isRefreshing ? 'animate-spin' : ''}`} />
               </button>
               <button
-                className="w-8 h-8 rounded-md bg-primary text-primary-foreground flex items-center justify-center active:scale-95 transition-all duration-150"
+                className="w-9 h-9 rounded-md bg-primary text-primary-foreground flex items-center justify-center hover:bg-primary/90 active:scale-95 transition-all duration-150"
                 onClick={() => setShowNewProject(true)}
+                title="New project"
               >
                 <FolderPlus className="w-4 h-4" />
               </button>
@@ -533,7 +535,7 @@ function Sidebar({
       
       {/* New Project Form */}
       {showNewProject && (
-        <div className="md:p-3 md:border-b md:border-border md:bg-muted/30">
+        <div className="md:px-3 md:py-2 md:border-b md:border-border md:bg-muted/30">
           {/* Desktop Form */}
           <div className="hidden md:block space-y-2">
             <div className="flex items-center gap-2 text-sm font-medium text-foreground">
@@ -634,7 +636,7 @@ function Sidebar({
       
       {/* Search Filter */}
       {projects.length > 0 && !isLoading && (
-        <div className="px-3 md:px-4 py-2 border-b border-border">
+        <div className="px-3 md:px-3 py-2 border-b border-border">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
@@ -657,34 +659,34 @@ function Sidebar({
       )}
       
       {/* Projects List */}
-      <ScrollArea className="flex-1 md:px-2 md:py-3 overflow-y-auto overscroll-contain">
+      <ScrollArea className="flex-1 md:px-3 md:py-2 overflow-y-auto overscroll-contain">
         <div className="md:space-y-1 pb-safe-area-inset-bottom">
           {isLoading ? (
             <div className="text-center py-12 md:py-8 px-4">
-              <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center mx-auto mb-4 md:mb-3">
+              <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center mx-auto mb-4">
                 <div className="w-6 h-6 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
               </div>
-              <h3 className="text-base font-medium text-foreground mb-2 md:mb-1">Loading projects...</h3>
+              <h3 className="text-base font-medium text-foreground mb-2">Loading projects...</h3>
               <p className="text-sm text-muted-foreground">
                 Fetching your Claude projects and sessions
               </p>
             </div>
           ) : projects.length === 0 ? (
             <div className="text-center py-12 md:py-8 px-4">
-              <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center mx-auto mb-4 md:mb-3">
+              <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center mx-auto mb-4">
                 <Folder className="w-6 h-6 text-muted-foreground" />
               </div>
-              <h3 className="text-base font-medium text-foreground mb-2 md:mb-1">No projects found</h3>
+              <h3 className="text-base font-medium text-foreground mb-2">No projects found</h3>
               <p className="text-sm text-muted-foreground">
                 Run Claude CLI in a project directory to get started
               </p>
             </div>
           ) : filteredProjects.length === 0 ? (
             <div className="text-center py-12 md:py-8 px-4">
-              <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center mx-auto mb-4 md:mb-3">
+              <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center mx-auto mb-4">
                 <Search className="w-6 h-6 text-muted-foreground" />
               </div>
-              <h3 className="text-base font-medium text-foreground mb-2 md:mb-1">No matching projects</h3>
+              <h3 className="text-base font-medium text-foreground mb-2">No matching projects</h3>
               <p className="text-sm text-muted-foreground">
                 Try adjusting your search term
               </p>
@@ -859,7 +861,7 @@ function Sidebar({
                     <Button
                       variant="ghost"
                       className={cn(
-                        "hidden md:flex w-full justify-between p-2 h-auto font-normal hover:bg-accent/50 relative",
+                        "hidden md:flex w-full justify-between px-3 py-2 h-auto font-normal hover:bg-accent/50 relative rounded-md",
                         isSelected && "bg-accent text-accent-foreground",
                         isStarred && !isSelected && "bg-yellow-50/50 dark:bg-yellow-900/10 hover:bg-yellow-100/50 dark:hover:bg-yellow-900/20"
                       )}
@@ -971,7 +973,7 @@ function Sidebar({
                               title={isStarred ? "Remove from favorites" : "Add to favorites"}
                             >
                               <Star className={cn(
-                                "w-2.5 h-2.5 transition-colors",
+                                "w-3 h-3 transition-colors",
                                 isStarred 
                                   ? "text-yellow-600 dark:text-yellow-400 fill-current" 
                                   : "text-muted-foreground"
@@ -985,7 +987,7 @@ function Sidebar({
                               }}
                               title="Rename project (F2)"
                             >
-                              <Edit3 className="w-2.5 h-2.5" />
+                              <Edit3 className="w-3 h-3" />
                             </div>
                             {getAllSessions(project).length === 0 && (
                               <div
@@ -996,7 +998,7 @@ function Sidebar({
                                 }}
                                 title="Delete empty project (Delete)"
                               >
-                                <Trash2 className="w-2.5 h-2.5 text-red-600 dark:text-red-400" />
+                                <Trash2 className="w-3 h-3 text-red-600 dark:text-red-400" />
                               </div>
                             )}
                             {isExpanded ? (
@@ -1012,7 +1014,7 @@ function Sidebar({
 
                   {/* Sessions List */}
                   {isExpanded && (
-                    <div className="ml-3 space-y-1 border-l border-border pl-3">
+                    <div className="ml-4 space-y-1 border-l border-border pl-4">
                       {!initialSessionsLoaded.has(project.name) ? (
                         // Loading skeleton for sessions
                         Array.from({ length: 3 }).map((_, i) => (
@@ -1027,7 +1029,7 @@ function Sidebar({
                           </div>
                         ))
                       ) : getAllSessions(project).length === 0 && !loadingSessions[project.name] ? (
-                        <div className="py-2 px-3 text-left">
+                        <div className="py-2 px-4 text-left">
                           <p className="text-xs text-muted-foreground">No sessions yet</p>
                         </div>
                       ) : (
@@ -1039,12 +1041,6 @@ function Sidebar({
                           
                           return (
                           <div key={session.id} className="group relative">
-                            {/* Active session indicator dot */}
-                            {isActive && (
-                              <div className="absolute left-0 top-1/2 transform -translate-y-1/2 -translate-x-1">
-                                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                              </div>
-                            )}
                             {/* Mobile Session Item */}
                             <div className="md:hidden">
                               <div
@@ -1081,6 +1077,10 @@ function Sidebar({
                                       <span className="text-xs text-muted-foreground/70 leading-none">
                                         {formatTimeAgo(session.lastActivity, currentTime)}
                                       </span>
+                                      {/* Active session indicator */}
+                                      {isActive && (
+                                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse ml-1" />
+                                      )}
                                       {session.messageCount > 0 && (
                                         <Badge variant="secondary" className="text-xs px-1 py-0 ml-auto opacity-60">
                                           {session.messageCount}
@@ -1107,23 +1107,27 @@ function Sidebar({
                             <div className="hidden md:block relative">
                               <div
                                 className={cn(
-                                  "w-full px-1.5 py-1 rounded-md cursor-pointer hover:bg-accent/30 transition-colors duration-200 group",
+                                  "w-full px-3 py-1.5 rounded-md cursor-pointer hover:bg-accent/30 transition-colors duration-200 group",
                                   selectedSession?.id === session.id && "bg-accent text-accent-foreground"
                                 )}
                                 onClick={() => onSessionSelect(session)}
                                 onTouchEnd={handleTouchClick(() => onSessionSelect(session))}
                               >
                                 <div className="flex items-start gap-1.5 min-w-0 w-full">
-                                  <MessageSquare className="w-2.5 h-2.5 text-muted-foreground/70 mt-0.5 flex-shrink-0" />
+                                  <MessageSquare className="w-3 h-3 text-muted-foreground/70 mt-0.5 flex-shrink-0" />
                                   <div className="min-w-0 flex-1">
                                     <div className="text-xs font-normal truncate text-muted-foreground leading-tight">
                                       {session.summary || 'New Session'}
                                     </div>
                                     <div className="flex items-center gap-1 mt-0.5">
-                                      <Clock className="w-2.5 h-2.5 text-muted-foreground/70" />
+                                      <Clock className="w-3 h-3 text-muted-foreground/70" />
                                       <span className="text-xs text-muted-foreground/70 leading-none">
                                         {formatTimeAgo(session.lastActivity, currentTime)}
                                       </span>
+                                      {/* Active session indicator */}
+                                      {isActive && (
+                                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse ml-1" />
+                                      )}
                                       {session.messageCount > 0 && (
                                         <Badge variant="secondary" className="text-xs px-1 py-0 ml-auto opacity-60">
                                           {session.messageCount}
@@ -1224,7 +1228,7 @@ function Sidebar({
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="w-full justify-center gap-2 mt-2 text-muted-foreground"
+                            className="w-full justify-center gap-2 mt-2 text-muted-foreground h-8 rounded-md"
                             onClick={() => loadMoreSessions(project)}
                             disabled={loadingSessions[project.name]}
                           >
@@ -1260,7 +1264,7 @@ function Sidebar({
                       <Button
                         variant="default"
                         size="sm"
-                        className="hidden md:flex w-full justify-start gap-2 mt-1 h-8 text-xs font-medium bg-primary hover:bg-primary/90 text-primary-foreground transition-colors"
+                        className="hidden md:flex w-full justify-start gap-2 mt-2 h-9 text-sm font-medium bg-primary hover:bg-primary/90 text-primary-foreground transition-colors rounded-md"
                         onClick={() => onNewSession(project)}
                       >
                         <Plus className="w-3 h-3" />
@@ -1277,12 +1281,12 @@ function Sidebar({
       
       {/* Version Update Notification */}
       {updateAvailable && (
-        <div className="md:p-2 border-t border-border/50 flex-shrink-0">
+        <div className="md:px-3 md:py-2 border-t border-border/50 flex-shrink-0">
           {/* Desktop Version Notification */}
           <div className="hidden md:block">
             <Button
               variant="ghost"
-              className="w-full justify-start gap-3 p-3 h-auto font-normal text-left hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors duration-200 border border-blue-200 dark:border-blue-700 rounded-lg mb-2"
+              className="w-full justify-start gap-3 px-3 py-2 h-auto font-normal text-left hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors duration-200 border border-blue-200 dark:border-blue-700 rounded-lg"
               onClick={onShowVersionModal}
             >
               <div className="relative">
@@ -1319,56 +1323,50 @@ function Sidebar({
         </div>
       )}
       
-      {/* Settings Section */}
-      <div className="md:p-2 md:border-t md:border-border flex-shrink-0">
-        {/* VibeKanban Button - ABOVE Tools Settings */}
-        {/* Mobile VibeKanban */}
-        <div className="md:hidden p-4 border-b border-border/50">
-          <button
-            className="w-full h-14 bg-blue-600/20 hover:bg-blue-600/30 rounded-2xl flex items-center justify-start gap-4 px-4 active:scale-[0.98] transition-all duration-150 border-2 border-blue-500/30 shadow-blue-200/30 dark:shadow-blue-800/30"
-            onClick={() => window.location.href = '/vibe-kanban'}
-          >
-            <div className="w-10 h-10 rounded-2xl bg-blue-500/30 flex items-center justify-center">
-              <Trello className="w-5 h-5 text-blue-300" />
-            </div>
-            <span className="text-lg font-semibold text-blue-200">Vibe Kanban</span>
-          </button>
-        </div>
-        
-        {/* Desktop VibeKanban */}
-        <div className="hidden md:block mb-2">
+      {/* Footer Section */}
+      <div className="border-t border-border flex-shrink-0">
+        {/* Desktop Footer */}
+        <div className="hidden md:block p-3 space-y-2">
+          {/* VibeKanban Button */}
           <Button
-            variant="default"
-            className="w-full justify-start gap-3 p-3 h-auto font-medium text-white bg-blue-600 hover:bg-blue-700 transition-colors duration-200 shadow-blue-200/40 dark:shadow-blue-800/40 hover:shadow-blue-200/60 dark:hover:shadow-blue-800/60"
+            variant="outline"
+            className="w-full justify-start gap-2 h-9 text-sm font-medium bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 hover:from-blue-100 hover:to-indigo-100 dark:hover:from-blue-900/30 dark:hover:to-indigo-900/30 border-blue-200 dark:border-blue-800 transition-all duration-200"
             onClick={() => window.location.href = '/vibe-kanban'}
           >
-            <Trello className="w-4 h-4" />
-            <span className="text-sm">Vibe Kanban</span>
+            <Trello className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+            <span>Vibe Kanban</span>
           </Button>
-        </div>
-        {/* Mobile Settings */}
-        <div className="md:hidden p-4 pb-20 border-t border-border/50">
-          <button
-            className="w-full h-14 bg-muted/50 hover:bg-muted/70 rounded-2xl flex items-center justify-start gap-4 px-4 active:scale-[0.98] transition-all duration-150"
-            onClick={onShowSettings}
-          >
-            <div className="w-10 h-10 rounded-2xl bg-background/80 flex items-center justify-center">
-              <Settings className="w-5 h-5 text-muted-foreground" />
-            </div>
-            <span className="text-lg font-medium text-foreground">Settings</span>
-          </button>
-        </div>
-        
-        {/* Desktop Settings */}
-        <div className="hidden md:block">
+          
+          {/* Tools Settings Button */}
           <Button
             variant="ghost"
-            className="w-full justify-start gap-2 p-2 h-auto font-normal text-muted-foreground hover:text-foreground hover:bg-accent transition-colors duration-200"
+            className="w-full justify-start gap-2 h-9 text-sm font-normal text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors duration-200"
             onClick={onShowSettings}
           >
-            <Settings className="w-3 h-3" />
-            <span className="text-xs">Tools Settings</span>
+            <Settings className="w-4 h-4" />
+            <span>Tools Settings</span>
           </Button>
+        </div>
+        
+        {/* Mobile Footer */}
+        <div className="md:hidden p-3 pb-safe-area-inset-bottom space-y-2">
+          {/* VibeKanban Button */}
+          <button
+            className="w-full h-12 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 hover:from-blue-100 hover:to-indigo-100 dark:hover:from-blue-900/30 dark:hover:to-indigo-900/30 rounded-lg flex items-center justify-center gap-3 active:scale-[0.98] transition-all duration-150 border border-blue-200 dark:border-blue-800"
+            onClick={() => window.location.href = '/vibe-kanban'}
+          >
+            <Trello className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+            <span className="text-sm font-medium text-blue-600 dark:text-blue-400">Vibe Kanban</span>
+          </button>
+          
+          {/* Tools Settings Button */}
+          <button
+            className="w-full h-12 bg-muted/30 hover:bg-muted/50 rounded-lg flex items-center justify-center gap-3 active:scale-[0.98] transition-all duration-150"
+            onClick={onShowSettings}
+          >
+            <Settings className="w-4 h-4 text-muted-foreground" />
+            <span className="text-sm font-medium text-muted-foreground">Tools Settings</span>
+          </button>
         </div>
       </div>
     </div>

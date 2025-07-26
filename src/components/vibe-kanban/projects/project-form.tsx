@@ -217,7 +217,7 @@ export function ProjectForm({
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent
-        className={isEditing ? 'sm:max-w-[600px]' : 'sm:max-w-[425px]'}
+        className={isEditing ? 'sm:max-w-[600px] max-h-[90vh] overflow-y-auto' : 'sm:max-w-[425px] max-h-[85vh] overflow-y-auto'}
       >
         <DialogHeader>
           <DialogTitle>
@@ -300,45 +300,54 @@ export function ProjectForm({
                 />
 
                 {/* Show script fields for GitHub source */}
-                <div className="space-y-4 pt-4 border-t">
-                  <div className="space-y-2">
-                    <Label htmlFor="setup-script">
-                      Setup Script (optional)
+                <div className="space-y-3 pt-3 border-t">
+                  <div className="space-y-1">
+                    <Label htmlFor="setup-script" className="text-sm">
+                      Setup Script (Optional)
                     </Label>
                     <textarea
                       id="setup-script"
-                      placeholder="e.g., npm install"
+                      placeholder="#!/bin/bash\nnpm install\n# Add any setup commands here..."
                       value={setupScript}
                       onChange={(e) => setSetupScript(e.target.value)}
-                      className="w-full p-2 border rounded-md resize-none"
-                      rows={2}
+                      className="w-full p-2 border rounded-md resize-none text-sm font-mono bg-muted/50"
+                      rows={3}
                     />
+                    <p className="text-xs text-muted-foreground">
+                      This script will run after creating the worktree and before the executor starts. Use it for setup tasks like installing dependencies or preparing the environment.
+                    </p>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="dev-script">
-                      Dev Server Script (optional)
+                  <div className="space-y-1">
+                    <Label htmlFor="dev-script" className="text-sm">
+                      Dev Server Script (Optional)
                     </Label>
                     <textarea
                       id="dev-script"
-                      placeholder="e.g., npm run dev"
+                      placeholder="#!/bin/bash\nnpm run dev\n# Add dev server start command here..."
                       value={devScript}
                       onChange={(e) => setDevScript(e.target.value)}
-                      className="w-full p-2 border rounded-md resize-none"
-                      rows={2}
+                      className="w-full p-2 border rounded-md resize-none text-sm font-mono bg-muted/50"
+                      rows={3}
                     />
+                    <p className="text-xs text-muted-foreground">
+                      This script can be run from task attempts to start a development server. Use it to quickly start your project's dev server for testing changes.
+                    </p>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="cleanup-script">
-                      Cleanup Script (optional)
+                  <div className="space-y-1">
+                    <Label htmlFor="cleanup-script" className="text-sm">
+                      Cleanup Script (Optional)
                     </Label>
                     <textarea
                       id="cleanup-script"
-                      placeholder="e.g., docker-compose down"
+                      placeholder="#!/bin/bash\n# Add cleanup commands here...\n# This runs after coding agent execution"
                       value={cleanupScript}
                       onChange={(e) => setCleanupScript(e.target.value)}
-                      className="w-full p-2 border rounded-md resize-none"
-                      rows={2}
+                      className="w-full p-2 border rounded-md resize-none text-sm font-mono bg-muted/50"
+                      rows={3}
                     />
+                    <p className="text-xs text-muted-foreground">
+                      This script will run after coding agent execution is complete. Use it for quality assurance tasks like running linters, formatters, tests, or other validation steps.
+                    </p>
                   </div>
                 </div>
               </>

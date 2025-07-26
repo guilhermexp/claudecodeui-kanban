@@ -22,7 +22,7 @@ const Dialog = React.forwardRef<
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-start justify-center p-4 overflow-y-auto">
+    <div className="fixed inset-0 z-[9999] flex items-start justify-center sm:p-4 overflow-y-auto">
       <div
         className="fixed inset-0 bg-black/50"
         onClick={() => (uncloseable ? {} : onOpenChange?.(false))}
@@ -30,7 +30,7 @@ const Dialog = React.forwardRef<
       <div
         ref={ref}
         className={cn(
-          'relative z-[9999] grid w-full max-w-lg gap-4 bg-background p-6 shadow-lg duration-200 sm:rounded-lg my-8',
+          'relative z-[9999] grid w-full max-w-lg gap-4 bg-background p-4 sm:p-6 shadow-lg duration-200 sm:rounded-lg sm:my-8 min-h-screen sm:min-h-0',
           className
         )}
         {...props}
@@ -106,7 +106,7 @@ const DialogFooter = ({
 }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
     className={cn(
-      'flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2',
+      'flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2 space-y-2 space-y-reverse sm:space-y-0',
       className
     )}
     {...props}

@@ -124,7 +124,7 @@ function AppContent() {
 
   return (
     <ThemeProvider initialTheme={config?.theme || 'system'}>
-      <div className="h-screen flex flex-col bg-background">
+      <div className="min-h-screen flex flex-col bg-background">
         <GitHubLoginDialog
           open={showGitHubLogin}
           onOpenChange={handleGitHubLoginComplete}
@@ -142,7 +142,7 @@ function AppContent() {
           onComplete={handlePrivacyOptInComplete}
         />
         {showNavbar && <Navbar />}
-        <div className="flex-1 overflow-y-scroll">
+        <div className="flex-1 overflow-y-auto pb-safe">
           <Routes>
             <Route path="/" element={<Projects />} />
             <Route path="/projects" element={<Projects />} />
