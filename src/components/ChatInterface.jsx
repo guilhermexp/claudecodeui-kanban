@@ -1143,6 +1143,14 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const [slashPosition, setSlashPosition] = useState(-1);
   const [visibleMessageCount, setVisibleMessageCount] = useState(100);
   const [claudeStatus, setClaudeStatus] = useState(null);
+  
+  // Performance optimization states
+  const [messageBuffer, setMessageBuffer] = useState([]);
+  const [isTypingActivity, setIsTypingActivity] = useState(false);
+  const messageBufferRef = useRef([]);
+  const bufferTimeoutRef = useRef(null);
+  const [performanceMode, setPerformanceMode] = useState('normal'); // normal, optimized, aggressive
+  const renderTimeRef = useRef([]);
 
 
   // Memoized diff calculation to prevent recalculating on every render
@@ -1322,9 +1330,16 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   }, [sessionMessages]);
 
   // Define scroll functions early to avoid hoisting issues in useEffect dependencies
-  const scrollToBottom = useCallback(() => {
+  const scrollToBottom = useCallback((smooth = false) => {
     if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+      if (smooth) {
+        scrollContainerRef.current.scrollTo({
+          top: scrollContainerRef.current.scrollHeight,
+          behavior: 'smooth'
+        });
+      } else {
+        scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+      }
       setIsUserScrolledUp(false);
     }
   }, []);
@@ -1333,15 +1348,79 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const isNearBottom = useCallback(() => {
     if (!scrollContainerRef.current) return false;
     const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
-    // Consider "near bottom" if within 50px of the bottom
-    return scrollHeight - scrollTop - clientHeight < 50;
+    // Consider "near bottom" if within 100px of the bottom (increased tolerance)
+    return scrollHeight - scrollTop - clientHeight < 100;
   }, []);
 
-  // Handle scroll events to detect when user manually scrolls up
+  // Smart auto-scroll: only scroll if user is near bottom or actively typing
+  const shouldAutoScroll = useCallback(() => {
+    return isNearBottom() || isLoading;
+  }, [isNearBottom, isLoading]);
+
+  // Throttled message updates for better performance
+  const flushMessageBuffer = useCallback(() => {
+    if (messageBufferRef.current.length > 0) {
+      const bufferedMessages = [...messageBufferRef.current];
+      messageBufferRef.current = [];
+      
+      setChatMessages(prev => [...prev, ...bufferedMessages]);
+      setIsTypingActivity(false);
+      
+      if (bufferTimeoutRef.current) {
+        clearTimeout(bufferTimeoutRef.current);
+        bufferTimeoutRef.current = null;
+      }
+    }
+  }, []);
+
+  const addMessageToBuffer = useCallback((message) => {
+    messageBufferRef.current.push(message);
+    setIsTypingActivity(true);
+    
+    // Clear existing timeout
+    if (bufferTimeoutRef.current) {
+      clearTimeout(bufferTimeoutRef.current);
+    }
+    
+    // Flush immediately if buffer is getting large, otherwise wait
+    const bufferSize = messageBufferRef.current.length;
+    const delay = bufferSize > 5 ? 100 : 300; // Faster flush for large buffers
+    
+    bufferTimeoutRef.current = setTimeout(flushMessageBuffer, delay);
+  }, [flushMessageBuffer]);
+
+  // Enhanced scroll handling for mobile touch interactions
+  const scrollTimeoutRef = useRef(null);
+  const lastScrollRef = useRef(0);
+  
   const handleScroll = useCallback(() => {
     if (scrollContainerRef.current) {
       const nearBottom = isNearBottom();
-      setIsUserScrolledUp(!nearBottom);
+      const currentTime = Date.now();
+      const scrollTop = scrollContainerRef.current.scrollTop;
+      
+      // Detect intentional user scroll vs programmatic scroll
+      const timeSinceLastScroll = currentTime - lastScrollRef.current;
+      const isIntentionalScroll = timeSinceLastScroll > 50; // 50ms threshold
+      
+      if (isIntentionalScroll) {
+        setIsUserScrolledUp(!nearBottom);
+      }
+      
+      lastScrollRef.current = currentTime;
+      
+      // Debounce scroll updates for better mobile performance
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+      
+      scrollTimeoutRef.current = setTimeout(() => {
+        // Final check after scroll momentum stops (important for iOS)
+        if (scrollContainerRef.current) {
+          const finalNearBottom = isNearBottom();
+          setIsUserScrolledUp(!finalNearBottom);
+        }
+      }, 150);
     }
   }, [isNearBottom]);
 
@@ -1581,11 +1660,12 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           break;
           
         case 'claude-output':
-          setChatMessages(prev => [...prev, {
+          // Use buffering for real-time output to improve performance
+          addMessageToBuffer({
             type: 'assistant',
             content: latestMessage.data,
             timestamp: new Date()
-          }]);
+          });
           break;
         case 'claude-interactive-prompt':
           // Handle interactive prompts from CLI
@@ -1771,13 +1851,64 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     return () => clearTimeout(timer);
   }, [input]);
 
-  // Show only recent messages for better performance
+  // Intelligent message virtualization for better performance
   const visibleMessages = useMemo(() => {
-    if (chatMessages.length <= visibleMessageCount) {
+    const totalMessages = chatMessages.length;
+    
+    // No virtualization needed for small message counts
+    if (totalMessages <= 50) {
       return chatMessages;
     }
-    return chatMessages.slice(-visibleMessageCount);
-  }, [chatMessages, visibleMessageCount]);
+    
+    // Dynamic virtualization based on message count and performance
+    let effectiveVisibleCount = visibleMessageCount;
+    
+    // Reduce visible messages for very large conversations
+    if (totalMessages > 500) {
+      effectiveVisibleCount = Math.min(visibleMessageCount, 75);
+    } else if (totalMessages > 200) {
+      effectiveVisibleCount = Math.min(visibleMessageCount, 100);
+    }
+    
+    // Always show recent messages, but provide earlier context if user scrolled up
+    if (isUserScrolledUp) {
+      // When user scrolled up, show more context to avoid jarring experience
+      effectiveVisibleCount = Math.min(effectiveVisibleCount * 1.5, totalMessages);
+    }
+    
+    return chatMessages.slice(-effectiveVisibleCount);
+  }, [chatMessages, visibleMessageCount, isUserScrolledUp]);
+
+  // Performance monitoring and adaptive optimization
+  useEffect(() => {
+    const startTime = performance.now();
+    
+    return () => {
+      const endTime = performance.now();
+      const renderTime = endTime - startTime;
+      
+      // Track render times for performance monitoring
+      renderTimeRef.current.push(renderTime);
+      if (renderTimeRef.current.length > 10) {
+        renderTimeRef.current.shift(); // Keep only last 10 measurements
+      }
+      
+      // Calculate average render time
+      const avgRenderTime = renderTimeRef.current.reduce((a, b) => a + b, 0) / renderTimeRef.current.length;
+      
+      // Automatically adjust performance mode based on render performance
+      if (avgRenderTime > 100 && performanceMode === 'normal') {
+        setPerformanceMode('optimized');
+        setVisibleMessageCount(75);
+      } else if (avgRenderTime > 200 && performanceMode === 'optimized') {
+        setPerformanceMode('aggressive');
+        setVisibleMessageCount(50);
+      } else if (avgRenderTime < 50 && performanceMode !== 'normal') {
+        setPerformanceMode('normal');
+        setVisibleMessageCount(100);
+      }
+    };
+  }, [chatMessages.length, performanceMode]);
 
   // Capture scroll position before render when auto-scroll is disabled
   useEffect(() => {
@@ -1794,9 +1925,11 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     // Auto-scroll to bottom when new messages arrive
     if (scrollContainerRef.current && chatMessages.length > 0) {
       if (autoScrollToBottom) {
-        // If auto-scroll is enabled, always scroll to bottom unless user has manually scrolled up
-        if (!isUserScrolledUp) {
-          requestAnimationFrame(() => scrollToBottom());
+        // Use smart auto-scroll logic: only scroll if user is near bottom or actively loading
+        if (shouldAutoScroll()) {
+          // Use smooth scroll for real-time updates, instant for user actions
+          const useSmooth = isLoading && !isUserScrolledUp;
+          requestAnimationFrame(() => scrollToBottom(useSmooth));
         }
       } else {
         // When auto-scroll is disabled, preserve the visual position
@@ -1812,7 +1945,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         }
       }
     }
-  }, [chatMessages.length, isUserScrolledUp, scrollToBottom, autoScrollToBottom]);
+  }, [chatMessages.length, shouldAutoScroll, scrollToBottom, autoScrollToBottom, isLoading, isUserScrolledUp]);
 
   // Scroll to bottom when component mounts with existing messages or when messages first load
   useEffect(() => {
@@ -1824,14 +1957,70 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
   }, [chatMessages.length > 0, scrollToBottom]); // Trigger when messages first appear
 
-  // Add scroll event listener to detect user scrolling
+  // Enhanced touch and scroll event handling for mobile
   useEffect(() => {
     const scrollContainer = scrollContainerRef.current;
     if (scrollContainer) {
-      scrollContainer.addEventListener('scroll', handleScroll);
-      return () => scrollContainer.removeEventListener('scroll', handleScroll);
+      // Touch event handlers for better mobile experience
+      let touchStartY = 0;
+      let touchStartTime = 0;
+      
+      const handleTouchStart = (e) => {
+        touchStartY = e.touches[0].clientY;
+        touchStartTime = Date.now();
+      };
+      
+      const handleTouchMove = (e) => {
+        // Detect intentional scroll gestures on mobile
+        const touchCurrentY = e.touches[0].clientY;
+        const deltaY = touchCurrentY - touchStartY;
+        const deltaTime = Date.now() - touchStartTime;
+        
+        // If user is actively scrolling up with sufficient velocity
+        if (deltaY > 10 && deltaTime < 300) {
+          setIsUserScrolledUp(true);
+        }
+      };
+      
+      const handleTouchEnd = () => {
+        // Final check after touch ends
+        setTimeout(() => {
+          if (scrollContainer) {
+            const nearBottom = isNearBottom();
+            setIsUserScrolledUp(!nearBottom);
+          }
+        }, 100);
+      };
+      
+      // Add all event listeners
+      scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
+      scrollContainer.addEventListener('touchstart', handleTouchStart, { passive: true });
+      scrollContainer.addEventListener('touchmove', handleTouchMove, { passive: true });
+      scrollContainer.addEventListener('touchend', handleTouchEnd, { passive: true });
+      
+      return () => {
+        scrollContainer.removeEventListener('scroll', handleScroll);
+        scrollContainer.removeEventListener('touchstart', handleTouchStart);
+        scrollContainer.removeEventListener('touchmove', handleTouchMove);
+        scrollContainer.removeEventListener('touchend', handleTouchEnd);
+        
+        if (scrollTimeoutRef.current) {
+          clearTimeout(scrollTimeoutRef.current);
+        }
+      };
     }
-  }, [handleScroll]);
+  }, [handleScroll, isNearBottom]);
+
+  // Cleanup buffer timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (bufferTimeoutRef.current) {
+        clearTimeout(bufferTimeoutRef.current);
+        // Flush any remaining messages
+        flushMessageBuffer();
+      }
+    };
+  }, [flushMessageBuffer]);
 
   // Initial textarea setup
   useEffect(() => {
@@ -2296,6 +2485,27 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 />
               );
             })}
+            
+            {/* Typing Activity Indicator */}
+            {isTypingActivity && (
+              <div className="px-3 sm:px-0 mb-4">
+                <div className="flex items-start space-x-3">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-sm flex-shrink-0">
+                    <ClaudeLogo className="w-5 h-5 text-white" />
+                  </div>
+                  <div className="bg-gray-100 dark:bg-gray-800 rounded-2xl rounded-tl-md px-4 py-3 shadow-sm">
+                    <div className="flex items-center space-x-1">
+                      <div className="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                      <div className="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                      <div className="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                    </div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Claude is typing...
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </>
         )}
         
