@@ -1105,13 +1105,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
     return '';
   });
-  const [chatMessages, setChatMessages] = useState(() => {
-    if (typeof window !== 'undefined' && selectedProject) {
-      const saved = safeLocalStorage.getItem(`chat_messages_${selectedProject.name}`);
-      return saved ? JSON.parse(saved) : [];
-    }
-    return [];
-  });
+  const [chatMessages, setChatMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [currentSessionId, setCurrentSessionId] = useState(selectedSession?.id || null);
   const [isInputFocused, setIsInputFocused] = useState(false);
@@ -1449,12 +1443,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
   }, [input, selectedProject]);
 
-  // Persist chat messages to localStorage
-  useEffect(() => {
-    if (selectedProject && chatMessages.length > 0) {
-      safeLocalStorage.setItem(`chat_messages_${selectedProject.name}`, JSON.stringify(chatMessages));
-    }
-  }, [chatMessages, selectedProject]);
+  // Removed localStorage persistence of chat messages
+  // Messages should only come from server (sessionMessages) to prevent cross-session leakage
 
   // Load saved state when project changes (but don't interfere with session loading)
   useEffect(() => {
