@@ -1424,8 +1424,13 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   useEffect(() => {
     if (sessionMessages.length > 0) {
       setChatMessages(convertedMessages);
+      // Scroll to bottom when messages are loaded from server
+      setTimeout(() => {
+        scrollToBottom();
+        setIsUserScrolledUp(false);
+      }, 100);
     }
-  }, [convertedMessages, sessionMessages]);
+  }, [convertedMessages, sessionMessages, scrollToBottom]);
 
   // Notify parent when input focus changes
   useEffect(() => {
@@ -1900,13 +1905,18 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     };
   }, [chatMessages.length, performanceMode]);
 
-  // Only auto-scroll for NEW messages when user is at bottom
+  // Auto-scroll management
   useEffect(() => {
-    if (autoScrollToBottom && !isUserScrolledUp && isLoading) {
-      // Only scroll during active conversations, not when switching sessions
-      setTimeout(() => scrollToBottom(), 10);
+    // Always scroll to bottom when messages first appear (initial load)
+    if (chatMessages.length > 0 && !isUserScrolledUp) {
+      const isNewMessage = chatMessages[chatMessages.length - 1]?.timestamp > Date.now() - 1000;
+      const shouldScroll = autoScrollToBottom || isNewMessage;
+      
+      if (shouldScroll) {
+        setTimeout(() => scrollToBottom(), 50);
+      }
     }
-  }, [chatMessages.length, autoScrollToBottom, isUserScrolledUp, isLoading, scrollToBottom]);
+  }, [chatMessages.length, autoScrollToBottom, isUserScrolledUp, scrollToBottom]);
 
   // Simple scroll event handling
   useEffect(() => {
