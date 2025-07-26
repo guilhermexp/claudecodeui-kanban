@@ -1134,7 +1134,6 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const [atSymbolPosition, setAtSymbolPosition] = useState(-1);
   const [canAbortSession, setCanAbortSession] = useState(false);
   const [isUserScrolledUp, setIsUserScrolledUp] = useState(false);
-  const scrollPositionRef = useRef({ height: 0, top: 0 });
   const [showCommandMenu, setShowCommandMenu] = useState(false);
   const [slashCommands, setSlashCommands] = useState([]);
   const [filteredCommands, setFilteredCommands] = useState([]);
@@ -1329,18 +1328,18 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     return convertSessionMessages(sessionMessages);
   }, [sessionMessages]);
 
-  // Define scroll functions early to avoid hoisting issues in useEffect dependencies
+  // Simplified scroll functions - only scroll when explicitly requested
   const scrollToBottom = useCallback((smooth = false) => {
     if (scrollContainerRef.current) {
+      const container = scrollContainerRef.current;
       if (smooth) {
-        scrollContainerRef.current.scrollTo({
-          top: scrollContainerRef.current.scrollHeight,
+        container.scrollTo({
+          top: container.scrollHeight,
           behavior: 'smooth'
         });
       } else {
-        scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+        container.scrollTop = container.scrollHeight;
       }
-      setIsUserScrolledUp(false);
     }
   }, []);
 
@@ -1348,14 +1347,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const isNearBottom = useCallback(() => {
     if (!scrollContainerRef.current) return false;
     const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
-    // Consider "near bottom" if within 100px of the bottom (increased tolerance)
-    return scrollHeight - scrollTop - clientHeight < 100;
+    return scrollHeight - scrollTop - clientHeight < 50; // Reduced threshold
   }, []);
-
-  // Smart auto-scroll: only scroll if user is near bottom or actively typing
-  const shouldAutoScroll = useCallback(() => {
-    return isNearBottom() || isLoading;
-  }, [isNearBottom, isLoading]);
 
   // Throttled message updates for better performance
   const flushMessageBuffer = useCallback(() => {
@@ -1389,38 +1382,11 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     bufferTimeoutRef.current = setTimeout(flushMessageBuffer, delay);
   }, [flushMessageBuffer]);
 
-  // Enhanced scroll handling for mobile touch interactions
-  const scrollTimeoutRef = useRef(null);
-  const lastScrollRef = useRef(0);
-  
+  // Simple scroll handling - just track if user scrolled up
   const handleScroll = useCallback(() => {
     if (scrollContainerRef.current) {
       const nearBottom = isNearBottom();
-      const currentTime = Date.now();
-      const scrollTop = scrollContainerRef.current.scrollTop;
-      
-      // Detect intentional user scroll vs programmatic scroll
-      const timeSinceLastScroll = currentTime - lastScrollRef.current;
-      const isIntentionalScroll = timeSinceLastScroll > 50; // 50ms threshold
-      
-      if (isIntentionalScroll) {
-        setIsUserScrolledUp(!nearBottom);
-      }
-      
-      lastScrollRef.current = currentTime;
-      
-      // Debounce scroll updates for better mobile performance
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current);
-      }
-      
-      scrollTimeoutRef.current = setTimeout(() => {
-        // Final check after scroll momentum stops (important for iOS)
-        if (scrollContainerRef.current) {
-          const finalNearBottom = isNearBottom();
-          setIsUserScrolledUp(!finalNearBottom);
-        }
-      }, 150);
+      setIsUserScrolledUp(!nearBottom);
     }
   }, [isNearBottom]);
 
@@ -1938,106 +1904,35 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     };
   }, [chatMessages.length, performanceMode]);
 
-  // Capture scroll position before render when auto-scroll is disabled
+  // Simple auto-scroll: only when enabled and user hasn't scrolled up
   useEffect(() => {
-    if (!autoScrollToBottom && scrollContainerRef.current) {
-      const container = scrollContainerRef.current;
-      scrollPositionRef.current = {
-        height: container.scrollHeight,
-        top: container.scrollTop
-      };
+    if (autoScrollToBottom && !isUserScrolledUp && chatMessages.length > 0) {
+      // Small delay to ensure DOM is updated
+      setTimeout(() => scrollToBottom(), 10);
     }
-  });
+  }, [chatMessages.length, autoScrollToBottom, isUserScrolledUp, scrollToBottom]);
 
+  // Scroll to bottom when session changes (initial load)
   useEffect(() => {
-    // Auto-scroll to bottom when new messages arrive
-    if (scrollContainerRef.current && chatMessages.length > 0) {
-      if (autoScrollToBottom) {
-        // Use smart auto-scroll logic: only scroll if user is near bottom or actively loading
-        if (shouldAutoScroll()) {
-          // Use smooth scroll for real-time updates, instant for user actions
-          const useSmooth = isLoading && !isUserScrolledUp;
-          requestAnimationFrame(() => scrollToBottom(useSmooth));
-        }
-      } else {
-        // When auto-scroll is disabled, preserve the visual position
-        const container = scrollContainerRef.current;
-        const prevHeight = scrollPositionRef.current.height;
-        const prevTop = scrollPositionRef.current.top;
-        const newHeight = container.scrollHeight;
-        const heightDiff = newHeight - prevHeight;
-        
-        // If content was added above the current view, adjust scroll position
-        if (heightDiff > 0 && prevTop > 0) {
-          container.scrollTop = prevTop + heightDiff;
-        }
-      }
+    if (selectedSession && chatMessages.length > 0) {
+      setTimeout(() => {
+        scrollToBottom();
+        setIsUserScrolledUp(false);
+      }, 100);
     }
-  }, [chatMessages.length, shouldAutoScroll, scrollToBottom, autoScrollToBottom, isLoading, isUserScrolledUp]);
+  }, [selectedSession?.id, scrollToBottom]);
 
-  // Scroll to bottom when component mounts with existing messages or when messages first load
-  useEffect(() => {
-    if (scrollContainerRef.current && chatMessages.length > 0) {
-      // Always scroll to bottom when messages first load (user expects to see latest)
-      // Also reset scroll state
-      setIsUserScrolledUp(false);
-      requestAnimationFrame(() => requestAnimationFrame(() => scrollToBottom())); // Double RAF for full rendering
-    }
-  }, [chatMessages.length > 0, scrollToBottom]); // Trigger when messages first appear
-
-  // Enhanced touch and scroll event handling for mobile
+  // Simple scroll event handling
   useEffect(() => {
     const scrollContainer = scrollContainerRef.current;
     if (scrollContainer) {
-      // Touch event handlers for better mobile experience
-      let touchStartY = 0;
-      let touchStartTime = 0;
-      
-      const handleTouchStart = (e) => {
-        touchStartY = e.touches[0].clientY;
-        touchStartTime = Date.now();
-      };
-      
-      const handleTouchMove = (e) => {
-        // Detect intentional scroll gestures on mobile
-        const touchCurrentY = e.touches[0].clientY;
-        const deltaY = touchCurrentY - touchStartY;
-        const deltaTime = Date.now() - touchStartTime;
-        
-        // If user is actively scrolling up with sufficient velocity
-        if (deltaY > 10 && deltaTime < 300) {
-          setIsUserScrolledUp(true);
-        }
-      };
-      
-      const handleTouchEnd = () => {
-        // Final check after touch ends
-        setTimeout(() => {
-          if (scrollContainer) {
-            const nearBottom = isNearBottom();
-            setIsUserScrolledUp(!nearBottom);
-          }
-        }, 100);
-      };
-      
-      // Add all event listeners
       scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
-      scrollContainer.addEventListener('touchstart', handleTouchStart, { passive: true });
-      scrollContainer.addEventListener('touchmove', handleTouchMove, { passive: true });
-      scrollContainer.addEventListener('touchend', handleTouchEnd, { passive: true });
       
       return () => {
         scrollContainer.removeEventListener('scroll', handleScroll);
-        scrollContainer.removeEventListener('touchstart', handleTouchStart);
-        scrollContainer.removeEventListener('touchmove', handleTouchMove);
-        scrollContainer.removeEventListener('touchend', handleTouchEnd);
-        
-        if (scrollTimeoutRef.current) {
-          clearTimeout(scrollTimeoutRef.current);
-        }
       };
     }
-  }, [handleScroll, isNearBottom]);
+  }, [handleScroll]);
 
   // Cleanup buffer timeout on unmount
   useEffect(() => {
@@ -2230,9 +2125,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       can_interrupt: true
     });
     
-    // Always scroll to bottom when user sends a message and reset scroll state
-    setIsUserScrolledUp(false); // Reset scroll state so auto-scroll works for Claude's response
-    requestAnimationFrame(() => scrollToBottom()); // Ensure message is rendered
+    // Scroll to bottom when user sends a message
+    setIsUserScrolledUp(false);
+    scrollToBottom();
 
     // Session Protection: Mark session as active to prevent automatic project updates during conversation
     // This is crucial for maintaining chat state integrity. We handle two cases:
