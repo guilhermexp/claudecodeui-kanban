@@ -2444,8 +2444,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 <span className="inline-block w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full typing-dot"></span>
                 <span className="inline-block w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full typing-dot"></span>
                 <span className="inline-block w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full typing-dot"></span>
-                  <span className="ml-2">Thinking...</span>
-                </div>
+                <span className="ml-2">Thinking...</span>
               </div>
             </div>
           </div>
