@@ -1426,16 +1426,12 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     if (sessionMessages.length > 0) {
       // Don't trigger transition animation, it's causing the flashing
       setChatMessages(convertedMessages);
-      // Scroll to bottom when messages are loaded from server
-      setTimeout(() => {
-        scrollToBottom();
-        setIsUserScrolledUp(false);
-      }, 100);
+      // NO AUTO SCROLL - user controls their own scrolling
     } else if (!selectedSession) {
       // Only clear messages when no session is selected
       setChatMessages([]);
     }
-  }, [convertedMessages, sessionMessages, scrollToBottom, selectedSession]);
+  }, [convertedMessages, sessionMessages, selectedSession]);
 
   // Notify parent when input focus changes
   useEffect(() => {
@@ -1910,30 +1906,30 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     };
   }, [chatMessages.length, performanceMode]);
 
-  // Auto-scroll management
-  useEffect(() => {
-    // Always scroll to bottom when messages first appear (initial load)
-    if (chatMessages.length > 0 && !isUserScrolledUp) {
-      const isNewMessage = chatMessages[chatMessages.length - 1]?.timestamp > Date.now() - 1000;
-      const shouldScroll = autoScrollToBottom || isNewMessage;
-      
-      if (shouldScroll) {
-        setTimeout(() => scrollToBottom(), 50);
-      }
-    }
-  }, [chatMessages.length, autoScrollToBottom, isUserScrolledUp, scrollToBottom]);
+  // Auto-scroll DISABLED - causing too many issues
+  // useEffect(() => {
+  //   // Always scroll to bottom when messages first appear (initial load)
+  //   if (chatMessages.length > 0 && !isUserScrolledUp) {
+  //     const isNewMessage = chatMessages[chatMessages.length - 1]?.timestamp > Date.now() - 1000;
+  //     const shouldScroll = autoScrollToBottom || isNewMessage;
+  //     
+  //     if (shouldScroll) {
+  //       setTimeout(() => scrollToBottom(), 50);
+  //     }
+  //   }
+  // }, [chatMessages.length, autoScrollToBottom, isUserScrolledUp, scrollToBottom]);
 
-  // Simple scroll event handling
-  useEffect(() => {
-    const scrollContainer = scrollContainerRef.current;
-    if (scrollContainer) {
-      scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
-      
-      return () => {
-        scrollContainer.removeEventListener('scroll', handleScroll);
-      };
-    }
-  }, [handleScroll]);
+  // Scroll event handling DISABLED - user has full control
+  // useEffect(() => {
+  //   const scrollContainer = scrollContainerRef.current;
+  //   if (scrollContainer) {
+  //     scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
+  //     
+  //     return () => {
+  //       scrollContainer.removeEventListener('scroll', handleScroll);
+  //     };
+  //   }
+  // }, [handleScroll]);
 
   // Cleanup timeouts on unmount
   useEffect(() => {
