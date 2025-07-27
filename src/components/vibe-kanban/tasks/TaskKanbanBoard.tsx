@@ -13,6 +13,7 @@ import {
   useKeyboardShortcuts,
   useKanbanKeyboardNavigation,
 } from '../../../lib/vibe-kanban/keyboard-shortcuts';
+import MobileTaskKanban from './MobileTaskKanban';
 
 type Task = TaskWithAttemptStatus;
 
@@ -26,7 +27,7 @@ interface TaskKanbanBoardProps {
   isPanelOpen: boolean;
 }
 
-const allTaskStatuses: TaskStatus[] = [
+export const allTaskStatuses: TaskStatus[] = [
   'todo',
   'inprogress',
   'inreview',
@@ -34,7 +35,7 @@ const allTaskStatuses: TaskStatus[] = [
   'cancelled',
 ];
 
-const statusLabels: Record<TaskStatus, string> = {
+export const statusLabels: Record<TaskStatus, string> = {
   todo: 'To Do',
   inprogress: 'In Progress',
   inreview: 'In Review',
@@ -42,7 +43,7 @@ const statusLabels: Record<TaskStatus, string> = {
   cancelled: 'Cancelled',
 };
 
-const statusBoardColors: Record<TaskStatus, string> = {
+export const statusBoardColors: Record<TaskStatus, string> = {
   todo: 'hsl(var(--neutral))',
   inprogress: 'hsl(var(--info))',
   inreview: 'hsl(var(--warning))',
@@ -74,6 +75,7 @@ function TaskKanbanBoard({
     taskId || null
   );
   const [focusedStatus, setFocusedStatus] = useState<TaskStatus | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
 
   // Memoize filtered tasks
   const filteredTasks = useMemo(() => {
@@ -129,6 +131,18 @@ function TaskKanbanBoard({
     }
   }, [taskId, focusedTaskId, groupedTasks]);
 
+  // Check if mobile and handle resize
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
   // Keyboard navigation handler
   useKanbanKeyboardNavigation({
     focusedTaskId,
@@ -148,6 +162,26 @@ function TaskKanbanBoard({
     allTaskStatuses,
   });
 
+  // Use mobile component on small screens
+  if (isMobile) {
+    return (
+      <MobileTaskKanban
+        tasks={tasks}
+        searchQuery={searchQuery}
+        onDragEnd={onDragEnd}
+        onEditTask={onEditTask}
+        onDeleteTask={onDeleteTask}
+        onViewTaskDetails={onViewTaskDetails}
+        groupedTasks={groupedTasks}
+        allTaskStatuses={allTaskStatuses}
+        statusLabels={statusLabels}
+        statusBoardColors={statusBoardColors}
+        focusedTaskId={focusedTaskId}
+      />
+    );
+  }
+
+  // Desktop view
   return (
     <KanbanProvider onDragEnd={onDragEnd}>
       {Object.entries(groupedTasks).map(([status, statusTasks]) => (
