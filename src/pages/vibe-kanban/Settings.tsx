@@ -19,7 +19,7 @@ import { Alert, AlertDescription } from '../../components/vibe-kanban/ui/alert';
 import { Checkbox } from '../../components/vibe-kanban/ui/checkbox';
 import { Input } from '../../components/vibe-kanban/ui/input';
 import { Key, Loader2, Volume2 } from 'lucide-react';
-import type { EditorType, SoundFile, ThemeMode } from '../../lib/vibe-kanban/shared-types';
+import type { EditorType, SoundFile } from '../../lib/vibe-kanban/shared-types';
 import { cn } from '../../lib/vibe-kanban/utils';
 import {
   EDITOR_LABELS,
@@ -29,7 +29,6 @@ import {
   SOUND_FILES,
   SOUND_LABELS,
 } from '../../lib/vibe-kanban/shared-types';
-import { useTheme } from '../../components/vibe-kanban/theme-provider';
 import { useConfig } from '../../components/vibe-kanban/config-provider';
 import { GitHubLoginDialog } from '../../components/vibe-kanban/GitHubLoginDialog';
 import { TaskTemplateManager } from '../../components/vibe-kanban/TaskTemplateManager';
@@ -40,7 +39,6 @@ export function Settings() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-  const { setTheme } = useTheme();
   const [showGitHubLogin, setShowGitHubLogin] = useState(false);
 
   const playSound = async (soundFile: SoundFile) => {
@@ -65,9 +63,6 @@ export function Settings() {
 
       if (success) {
         setSuccess(true);
-        // Update theme provider to reflect the saved theme
-        setTheme(config.theme);
-
         setTimeout(() => setSuccess(false), 3000);
       } else {
         setError('Failed to save configuration');
@@ -156,37 +151,13 @@ export function Settings() {
             <CardHeader>
               <CardTitle className="text-lg sm:text-xl">Appearance</CardTitle>
               <CardDescription className="text-sm">
-                Customize how the application looks and feels.
+                Theme is synchronized with Claude Code UI.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4 px-4 sm:px-6">
-              <div className="space-y-2">
-                <Label htmlFor="theme" className="text-sm sm:text-base">Theme</Label>
-                <Select
-                  value={config.theme}
-                  onValueChange={(value: ThemeMode) => {
-                    updateConfig({ theme: value });
-                    setTheme(value);
-                  }}
-                >
-                  <SelectTrigger id="theme">
-                    <SelectValue placeholder="Select theme" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="light">Light</SelectItem>
-                    <SelectItem value="dark">Dark</SelectItem>
-                    <SelectItem value="system">System</SelectItem>
-                    <SelectItem value="purple">Purple</SelectItem>
-                    <SelectItem value="green">Green</SelectItem>
-                    <SelectItem value="blue">Blue</SelectItem>
-                    <SelectItem value="orange">Orange</SelectItem>
-                    <SelectItem value="red">Red</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs sm:text-sm text-muted-foreground">
-                  Choose your preferred color scheme.
-                </p>
-              </div>
+            <CardContent className="px-4 sm:px-6">
+              <p className="text-sm text-muted-foreground">
+                To change between light and dark mode, use the theme toggle in the Claude Code UI interface.
+              </p>
             </CardContent>
           </Card>
 

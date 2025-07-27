@@ -13,9 +13,11 @@ import { ThemeProvider } from '../components/vibe-kanban/theme-provider';
 import { Loader } from '../components/vibe-kanban/ui/loader';
 import { GitHubLoginDialog } from '../components/vibe-kanban/GitHubLoginDialog';
 import { configApi } from '../lib/vibe-kanban/api';
+import { useTheme as useClaudeTheme } from '../contexts/ThemeContext';
 
 function AppContent() {
   const { config, updateConfig, loading } = useConfig();
+  const { isDarkMode } = useClaudeTheme(); // Get theme from Claude Code UI
   const [showDisclaimer, setShowDisclaimer] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showPrivacyOptIn, setShowPrivacyOptIn] = useState(false);
@@ -123,7 +125,7 @@ function AppContent() {
   }
 
   return (
-    <ThemeProvider initialTheme={config?.theme || 'system'}>
+    <ThemeProvider initialTheme={isDarkMode ? 'dark' : 'light'}>
       <div className="min-h-screen flex flex-col bg-background">
         <GitHubLoginDialog
           open={showGitHubLogin}
