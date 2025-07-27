@@ -26,6 +26,7 @@ import MobileNav from './components/MobileNav';
 import ToolsSettings from './components/ToolsSettings';
 import QuickSettingsPanel from './components/QuickSettingsPanel';
 import VibeKanbanApp from './components/VibeKanbanApp';
+import SessionKeepAlive from './components/SessionKeepAlive';
 
 import { useWebSocket } from './utils/websocket';
 import { ThemeProvider } from './contexts/ThemeContext';
