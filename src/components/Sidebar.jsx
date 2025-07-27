@@ -4,7 +4,7 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
 
-import { FolderOpen, Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, Edit3, Check, X, Trash2, Settings, FolderPlus, RefreshCw, Sparkles, Edit2, Star, Search, Trello, Moon, Sun } from 'lucide-react';
+import { FolderOpen, Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, Edit3, Check, X, Trash2, Settings, FolderPlus, RefreshCw, Sparkles, Edit2, Star, Search, Trello, Moon, Sun, Loader2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import ClaudeLogo from './ClaudeLogo';
 import { api } from '../utils/api';
@@ -17,7 +17,9 @@ const isVibeKanbanProject = (project) => {
     project.fullPath.includes('\\vibe-kanban\\') ||
     project.name.startsWith('vk-') ||
     project.fullPath.includes('/T/vibe-kanban/') ||
-    project.fullPath.includes('\\T\\vibe-kanban\\')
+    project.fullPath.includes('\\T\\vibe-kanban\\') ||
+    project.fullPath.includes('/vk-') ||
+    project.fullPath.includes('\\vk-')
   );
 };
 
@@ -739,7 +741,7 @@ function Sidebar({
                         {/* Active session indicator for mobile */}
                         {hasActive && (
                           <div className="absolute top-2 right-2">
-                            <div className="w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse" />
+                            <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
                           </div>
                         )}
                         <div className="flex items-center justify-between">
@@ -900,8 +902,8 @@ function Sidebar({
                     >
                       {/* Active session indicator for desktop */}
                       {hasActive && (
-                        <div className="absolute top-1.5 right-1.5">
-                          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                        <div className="absolute top-1 right-1">
+                          <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
                         </div>
                       )}
                       <div className="flex items-center gap-3 min-w-0 flex-1">

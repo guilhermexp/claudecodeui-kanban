@@ -6,6 +6,8 @@
   "main": "server/index.js",
   "scripts": {
     "dev": "node scripts/dev.js",
+    "dev:protected": "node scripts/dev-protected.js",
+    "analyze:crashes": "node scripts/analyze-crashes.js",
     "dev:old": "concurrently --kill-others \"npm run server\" \"npm run client\" \"npm run vibe-backend\"",
     "dev:network": "node scripts/network-access.js",
     "server": "node server/index.js",
@@ -23,8 +25,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "start": "npm run build && npm run server",
-    "ngrok:start": "./run.sh",
-    "start:claude": "./claude-start.sh"
+    "health": "node scripts/health-check.js",
+    "start:safe": "./start-safe.sh"
   },
   "keywords": [
     "claude",
