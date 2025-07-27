@@ -102,34 +102,34 @@ function MobileTaskKanban({
   const currentTasks = groupedTasks[currentStatus];
 
   return (
-    <div className="relative w-full h-full" id="mobile-kanban-container">
+    <div className="relative w-full h-full flex flex-col" id="mobile-kanban-container">
       {/* Navigation header */}
-      <div className="sticky top-0 z-10 bg-background border-b mb-4">
-        <div className="flex items-center justify-between px-4 py-3">
+      <div className="sticky top-0 z-10 bg-background border-b">
+        <div className="flex items-center justify-between px-3 py-2">
           <Button
             variant="ghost"
             size="icon"
             onClick={handlePrevColumn}
             disabled={currentColumnIndex === 0}
-            className="h-8 w-8"
+            className="h-8 w-8 flex-shrink-0"
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
           
-          <div className="flex flex-col items-center gap-2">
-            <h3 className="font-medium" style={{ color: statusBoardColors[currentStatus] }}>
+          <div className="flex flex-col items-center gap-1.5 flex-1">
+            <h3 className="text-sm font-medium" style={{ color: statusBoardColors[currentStatus] }}>
               {statusLabels[currentStatus]}
             </h3>
-            <div className="flex gap-1">
+            <div className="flex gap-1.5">
               {allTaskStatuses.map((_, index) => (
                 <button
                   key={index}
                   onClick={() => setCurrentColumnIndex(index)}
                   className={cn(
-                    "h-2 w-2 rounded-full transition-all",
+                    "h-1.5 w-1.5 rounded-full transition-all",
                     index === currentColumnIndex
                       ? "bg-primary scale-125"
-                      : "bg-muted-foreground/30 hover:bg-muted-foreground/50"
+                      : "bg-muted-foreground/30"
                   )}
                   aria-label={`Go to ${statusLabels[allTaskStatuses[index]]}`}
                 />
@@ -142,7 +142,7 @@ function MobileTaskKanban({
             size="icon"
             onClick={handleNextColumn}
             disabled={currentColumnIndex === allTaskStatuses.length - 1}
-            className="h-8 w-8"
+            className="h-8 w-8 flex-shrink-0"
           >
             <ChevronRight className="h-4 w-4" />
           </Button>
@@ -150,32 +150,37 @@ function MobileTaskKanban({
       </div>
 
       {/* Single column view */}
-      <div className="px-4 pb-4">
-        <KanbanProvider onDragEnd={onDragEnd}>
-          <KanbanBoard id={currentStatus}>
-            <KanbanCards>
-              {currentTasks.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <p>No tasks in {statusLabels[currentStatus].toLowerCase()}</p>
-                </div>
-              ) : (
-                currentTasks.map((task, index) => (
-                  <TaskCard
-                    key={task.id}
-                    task={task}
-                    index={index}
-                    status={currentStatus}
-                    onEdit={onEditTask}
-                    onDelete={onDeleteTask}
-                    onViewDetails={onViewTaskDetails}
-                    isFocused={focusedTaskId === task.id}
-                    tabIndex={focusedTaskId === task.id ? 0 : -1}
-                  />
-                ))
-              )}
-            </KanbanCards>
-          </KanbanBoard>
-        </KanbanProvider>
+      <div className="flex-1 overflow-y-auto bg-muted/20">
+        <div className="max-w-2xl mx-auto px-3 py-3">
+          {currentTasks.length === 0 ? (
+            <div className="flex items-center justify-center min-h-[300px]">
+              <div className="text-center">
+                <p className="text-sm text-muted-foreground">
+                  No tasks in {statusLabels[currentStatus].toLowerCase()}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <KanbanProvider onDragEnd={onDragEnd}>
+              <div className="space-y-2">
+                {currentTasks.map((task, index) => (
+                  <div key={task.id} className="w-full">
+                    <TaskCard
+                      task={task}
+                      index={index}
+                      status={currentStatus}
+                      onEdit={onEditTask}
+                      onDelete={onDeleteTask}
+                      onViewDetails={onViewTaskDetails}
+                      isFocused={focusedTaskId === task.id}
+                      tabIndex={focusedTaskId === task.id ? 0 : -1}
+                    />
+                  </div>
+                ))}
+              </div>
+            </KanbanProvider>
+          )}
+        </div>
       </div>
     </div>
   );
