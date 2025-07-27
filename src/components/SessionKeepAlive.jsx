@@ -10,7 +10,7 @@ function SessionKeepAlive() {
       if (token) {
         try {
           // Faz uma chamada simples para manter a sessão ativa
-          await api.projects.list();
+          await api.projects();
           // Renova a expiração do token
           authPersistence.refreshExpiry();
         } catch (error) {
