@@ -9,7 +9,7 @@ import { Card, CardContent } from '../ui/card';
 import { Alert, AlertDescription } from '../ui/alert';
 import { Project } from '../../../lib/vibe-kanban/shared-types';
 import { ProjectForm } from './project-form';
-import { projectsApi } from '../../../lib/vibe-kanban/api';
+import { projectsApi, tasksApi } from '../../../lib/vibe-kanban/api';
 import { AlertCircle, Loader2, Plus } from 'lucide-react';
 import ProjectCard from './ProjectCard';
 
@@ -23,6 +23,7 @@ export function ProjectList() {
   const [focusedProjectId, setFocusedProjectId] = useState<string | null>(null);
   const [focusedColumn, setFocusedColumn] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [projectsWithActiveTasks, setProjectsWithActiveTasks] = useState<Set<string>>(new Set());
 
   const fetchProjects = async () => {
     setLoading(true);
@@ -31,6 +32,26 @@ export function ProjectList() {
     try {
       const result = await projectsApi.getAll();
       setProjects(result);
+      
+      // Fetch tasks for each project to check for active tasks
+      const activeProjects = new Set<string>();
+      await Promise.all(
+        result.map(async (project) => {
+          try {
+            const tasks = await tasksApi.getAll(project.id);
+            // Check if any task has an active status or in-progress attempt
+            const hasActive = tasks.some(
+              task => task.status === 'inprogress' || task.has_in_progress_attempt
+            );
+            if (hasActive) {
+              activeProjects.add(project.id);
+            }
+          } catch (error) {
+            console.error(`Failed to fetch tasks for project ${project.id}:`, error);
+          }
+        })
+      );
+      setProjectsWithActiveTasks(activeProjects);
     } catch (error) {
       console.error('Failed to fetch projects:', error);
       setError('Failed to fetch projects');
@@ -126,6 +147,13 @@ export function ProjectList() {
 
   useEffect(() => {
     fetchProjects();
+    
+    // Set up periodic refresh to update active task status every 30 seconds
+    const interval = setInterval(() => {
+      fetchProjects();
+    }, 30000); // 30 seconds
+    
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
@@ -191,6 +219,7 @@ export function ProjectList() {
               setEditingProject={setEditingProject}
               setShowForm={setShowForm}
               fetchProjects={fetchProjects}
+              hasActiveTasks={projectsWithActiveTasks.has(project.id)}
             />
           ))}
         </div>
