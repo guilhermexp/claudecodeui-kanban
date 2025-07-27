@@ -1339,7 +1339,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const isNearBottom = useCallback(() => {
     if (!scrollContainerRef.current) return false;
     const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
-    return scrollHeight - scrollTop - clientHeight < 50; // Reduced threshold
+    // Aumentar threshold para ser menos sensível
+    return scrollHeight - scrollTop - clientHeight < 100;
   }, []);
 
 
@@ -1877,30 +1878,31 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   }, [chatMessages.length, performanceMode]);
 
 
-  // Scroll event handling - just to track if user scrolled up
+  // Scroll event handling - com debounce para evitar mudanças bruscas
   useEffect(() => {
     const scrollContainer = scrollContainerRef.current;
     if (scrollContainer) {
+      let scrollTimeout;
+      
       const checkScrollPosition = () => {
-        const nearBottom = isNearBottom();
-        setIsUserScrolledUp(!nearBottom);
+        clearTimeout(scrollTimeout);
+        scrollTimeout = setTimeout(() => {
+          const nearBottom = isNearBottom();
+          setIsUserScrolledUp(!nearBottom);
+        }, 100); // Debounce de 100ms
       };
       
       scrollContainer.addEventListener('scroll', checkScrollPosition, { passive: true });
       
       return () => {
+        clearTimeout(scrollTimeout);
         scrollContainer.removeEventListener('scroll', checkScrollPosition);
       };
     }
   }, [isNearBottom]);
 
-  // Auto-scroll apenas quando o assistente estiver respondendo
-  useEffect(() => {
-    if (isLoading && messagesEndRef.current && !isUserScrolledUp) {
-      // Scroll suave para a última mensagem
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
-    }
-  }, [chatMessages, isLoading, isUserScrolledUp]);
+  // Auto-scroll removido - usuário controla completamente o scroll
+  // Isso previne o comportamento indesejado de forçar scroll durante leitura
 
 
   // Initial textarea setup
@@ -2121,8 +2123,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       can_interrupt: true
     });
     
-    // Reset scroll state when user sends a message, but don't force scroll
-    setIsUserScrolledUp(false);
+    // Manter estado de scroll do usuário - não resetar automaticamente
 
     // Session Protection: Mark session as active to prevent automatic project updates during conversation
     // This is crucial for maintaining chat state integrity. We handle two cases:
