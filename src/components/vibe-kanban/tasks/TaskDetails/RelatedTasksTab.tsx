@@ -135,7 +135,8 @@ function RelatedTasksTab() {
   }
 
   return (
-    <div className="space-y-6 p-4">
+    <div className="flex-1 overflow-y-auto min-h-0 p-4">
+      <div className="space-y-6">
       {/* Parent Task */}
       {hasParent && (
         <div>
@@ -209,6 +210,7 @@ function RelatedTasksTab() {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

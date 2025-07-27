@@ -21,7 +21,7 @@ function LogsTab() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
+      <div className="flex items-center justify-center h-full min-h-[200px]">
         <Loader message="Loading..." size={32} />
       </div>
     );
@@ -108,7 +108,7 @@ function LogsTab() {
     }
 
     return (
-      <div className="h-full overflow-y-auto">
+      <div className="flex-1 overflow-y-auto min-h-0">
         <div className="mb-4">
           <p
             className={`text-lg font-semibold mb-2 ${isSetupFailed ? 'text-destructive' : ''}`}
