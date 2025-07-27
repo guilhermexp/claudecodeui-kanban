@@ -63,6 +63,36 @@ const sessionTimeouts = new Map();
 // Store all active terminals for tab display
 const activeTerminals = new Map();
 
+// Save session info to localStorage for reconnection after page reload
+const saveSessionsToStorage = () => {
+  const sessionsData = [];
+  shellSessions.forEach((session, key) => {
+    if (session.isConnected) {
+      sessionsData.push({
+        key,
+        sessionSummary: session.sessionSummary,
+        projectDisplayName: session.projectDisplayName,
+        isBypassingPermissions: session.isBypassingPermissions,
+        bufferContent: session.bufferContent || ''
+      });
+    }
+  });
+  localStorage.setItem('activeShellSessions', JSON.stringify(sessionsData));
+};
+
+// Load sessions from storage
+const loadSessionsFromStorage = () => {
+  try {
+    const stored = localStorage.getItem('activeShellSessions');
+    if (stored) {
+      return JSON.parse(stored);
+    }
+  } catch (error) {
+    console.error('Error loading sessions from storage:', error);
+  }
+  return [];
+};
+
 // Helper to disconnect session after timeout (but keep it available for reconnection)
 const clearSessionAfterTimeout = (sessionKey) => {
   // Clear any existing timeout
@@ -70,7 +100,7 @@ const clearSessionAfterTimeout = (sessionKey) => {
     clearTimeout(sessionTimeouts.get(sessionKey));
   }
   
-  // Set new 10-minute timeout
+  // Set new 1-hour timeout
   const timeoutId = setTimeout(() => {
     const session = shellSessions.get(sessionKey);
     if (session) {
@@ -306,6 +336,9 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
     // Update terminals list
     updateTerminalsList();
     
+    // Update localStorage
+    saveSessionsToStorage();
+    
     setIsConnected(false);
     setIsConnecting(false);
   };
@@ -465,7 +498,18 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
     const sessionKey = selectedSession?.id || `project-${selectedProject.name}`;
     
     // Check if we have an existing session
-    const existingSession = shellSessions.get(sessionKey);
+    let existingSession = shellSessions.get(sessionKey);
+    
+    // If no existing session but we have saved sessions in storage (page refresh)
+    if (!existingSession && shellSessions.size === 0) {
+      const savedSessions = loadSessionsFromStorage();
+      const savedSession = savedSessions.find(s => s.key === sessionKey);
+      if (savedSession) {
+        console.log('🔄 Found saved session in localStorage, will attempt to reconnect:', sessionKey);
+        // Mark that we should try to reconnect after creating the terminal
+        existingSession = { shouldReconnect: true, ...savedSession };
+      }
+    }
     if (existingSession && !terminal.current) {
       
       try {
@@ -656,6 +700,14 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
     // Update active terminal key
     const currentKey = selectedSession?.id || `project-${selectedProject?.name}`;
     setActiveTerminalKey(currentKey);
+    
+    // Check if we should auto-reconnect (after page refresh)
+    if (existingSession && existingSession.shouldReconnect) {
+      console.log('🔄 Auto-reconnecting to saved session...');
+      setTimeout(() => {
+        connectToShell();
+      }, 500);
+    }
     
     // Don't update terminals list here - only when connected
     // This prevents creating tabs before user authorizes connection
@@ -851,15 +903,15 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
         // If the config returns localhost but we're not on localhost, use current host but with API server port
         if (wsBaseUrl.includes('localhost') && !window.location.hostname.includes('localhost')) {
           const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-          // For development, API server is typically on port 3002 when Vite is on 3001
-          const apiPort = window.location.port === '3001' ? '3002' : window.location.port;
-          wsBaseUrl = `${protocol}//${window.location.hostname}:${apiPort}`;
+          // When using ngrok or similar proxy, WebSocket should use the same host and port
+          wsBaseUrl = `${protocol}//${window.location.host}`;
+          console.log('Config returned localhost, using current host instead:', wsBaseUrl);
         }
       } catch (error) {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        // For development, API server is typically on port 3002 when Vite is on 3001
-        const apiPort = window.location.port === '3001' ? '3002' : window.location.port;
-        wsBaseUrl = `${protocol}//${window.location.hostname}:${apiPort}`;
+        // When using ngrok or similar proxy, use the same host and port
+        wsBaseUrl = `${protocol}//${window.location.host}`;
+        console.log('Using fallback WebSocket URL:', wsBaseUrl);
       }
       
       // Include token in WebSocket URL as query parameter
@@ -886,6 +938,9 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
         
         // Update terminals list to reflect connected state
         updateTerminalsList();
+        
+        // Save sessions to localStorage
+        saveSessionsToStorage();
         
         // Wait for terminal to be ready, then fit and send dimensions
         setTimeout(() => {
@@ -1026,6 +1081,9 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
         // Remove from maps
         shellSessions.delete(terminalKey);
         cancelSessionTimeout(terminalKey);
+        
+        // Update localStorage
+        saveSessionsToStorage();
         
         // If this was the active terminal, switch to another
         if (terminalKey === activeTerminalKey) {

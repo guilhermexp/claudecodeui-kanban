@@ -10,7 +10,16 @@ function MobileNav({ activeTab, setActiveTab, isInputFocused, isShellConnected }
     if (activeTab === 'chat') {
       const checkText = () => {
         if (window.hasChatText && typeof window.hasChatText === 'function') {
-          setHasChatText(window.hasChatText());
+          const hasText = window.hasChatText();
+          setHasChatText(hasText);
+        } else {
+          // Try again in a moment if function not available yet
+          setTimeout(() => {
+            if (window.hasChatText && typeof window.hasChatText === 'function') {
+              const hasText = window.hasChatText();
+              setHasChatText(hasText);
+            }
+          }, 200);
         }
       };
       

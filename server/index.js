@@ -1142,8 +1142,24 @@ async function startServer() {
     await initializeDatabase();
     console.log('✅ Database initialization skipped (testing)');
     
-    server.listen(PORT, 'localhost', async () => {
-      console.log(`Claude Code UI server running on http://localhost:${PORT}`);
+    // Get local network IP
+    const networkInterfaces = os.networkInterfaces();
+    let localIP = 'localhost';
+    
+    // Find the local network IP (usually en0 on macOS)
+    Object.keys(networkInterfaces).forEach(interfaceName => {
+      networkInterfaces[interfaceName].forEach(iface => {
+        if (iface.family === 'IPv4' && !iface.internal && iface.address.startsWith('192.168')) {
+          localIP = iface.address;
+        }
+      });
+    });
+    
+    // Listen on all interfaces (0.0.0.0) to allow access from network
+    server.listen(PORT, '0.0.0.0', async () => {
+      console.log(`Claude Code UI server running on:`)
+      console.log(`  - Local: http://localhost:${PORT}`);
+      console.log(`  - Network: http://${localIP}:${PORT}`);
       
       // Start watching the projects folder for changes
       await setupProjectsWatcher(); // Re-enabled with better-sqlite3

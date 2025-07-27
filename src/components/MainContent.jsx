@@ -355,37 +355,15 @@ function MainContent({
           <FileTree selectedProject={selectedProject} />
         </div>
         <div className={`h-full overflow-hidden ${activeTab === 'shell' ? 'block' : 'hidden'} ${isMobile && activeTab === 'shell' ? 'pb-16' : ''}`}>
-          {activeTab === 'shell' && openShellSessions === 0 ? (
-            // Show empty state when no terminals are open
-            <div className="flex-1 flex items-center justify-center h-full">
-              <div className="text-center text-gray-500 dark:text-gray-400 max-w-md mx-auto px-6">
-                <div className="w-16 h-16 mx-auto mb-6 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center">
-                  <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                  </svg>
-                </div>
-                <h2 className="text-2xl font-semibold mb-3 text-gray-900 dark:text-white">No Terminal Sessions</h2>
-                <p className="text-gray-600 dark:text-gray-300 mb-6 leading-relaxed">
-                  All terminal sessions have been closed. Start a new shell session to continue working.
-                </p>
-                <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 border border-blue-200 dark:border-blue-800">
-                  <p className="text-sm text-blue-700 dark:text-blue-300">
-                    💡 <strong>Tip:</strong> You can start a new shell session from the chat tab
-                  </p>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <Shell 
-              selectedProject={selectedProject} 
-              selectedSession={selectedSession}
-              isActive={activeTab === 'shell'}
-              onSessionCountChange={setOpenShellSessions}
-              onTerminalsChange={setShellTerminals}
-              onActiveTerminalChange={setActiveShellTerminal}
-              onConnectionChange={onShellConnectionChange}
-            />
-          )}
+          <Shell 
+            selectedProject={selectedProject} 
+            selectedSession={selectedSession}
+            isActive={activeTab === 'shell'}
+            onSessionCountChange={setOpenShellSessions}
+            onTerminalsChange={setShellTerminals}
+            onActiveTerminalChange={setActiveShellTerminal}
+            onConnectionChange={onShellConnectionChange}
+          />
         </div>
         <div className={`h-full overflow-hidden ${activeTab === 'git' ? 'block' : 'hidden'}`}>
           <GitPanel selectedProject={selectedProject} isMobile={isMobile} isVisible={activeTab === 'git'} />

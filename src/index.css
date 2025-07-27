@@ -847,4 +847,34 @@
     background-color: rgb(45 55 72) !important;
     color: rgb(213 218 229) !important;
   }
+  
+  /* Fade in animation */
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+      transform: scale(0.8);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+  
+  .animate-fade-in {
+    animation: fade-in 0.2s ease-out;
+  }
+  
+  /* Subtle fade in animation for button container */
+  @keyframes fade-in-subtle {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  
+  .animate-fade-in-subtle {
+    animation: fade-in-subtle 0.15s ease-out;
+  }
 }

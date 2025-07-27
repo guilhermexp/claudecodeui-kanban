@@ -6,13 +6,12 @@ export function MicButton({ onTranscript, className = '', isChat = false, hasCha
   const [state, setState] = useState('idle'); // idle, recording, transcribing, processing
   const [error, setError] = useState(null);
   const [isSupported, setIsSupported] = useState(true);
-  const [showMenu, setShowMenu] = useState(false);
+  const [showChatButtons, setShowChatButtons] = useState(false);
   
   const mediaRecorderRef = useRef(null);
   const streamRef = useRef(null);
   const chunksRef = useRef([]);
   const lastTapRef = useRef(0);
-  const longPressTimerRef = useRef(null);
   const deleteIntervalRef = useRef(null);
   const escIntervalRef = useRef(null);
   
@@ -93,6 +92,8 @@ export function MicButton({ onTranscript, className = '', isChat = false, hasCha
           const text = await transcribeWithWhisper(blob);
           if (text && onTranscript) {
             onTranscript(text);
+            // Show buttons after transcription (both chat and terminal)
+            setShowChatButtons(true);
           }
         } catch (err) {
           console.error('Transcription error:', err);
@@ -179,65 +180,11 @@ export function MicButton({ onTranscript, className = '', isChat = false, hasCha
     // Do nothing if transcribing or processing
   };
 
-  // Handle long press for menu (only in terminal mode)
-  const handleTouchStart = (e) => {
-    // Don't do long press in chat mode
-    if (isChat) return;
-    
-    // Clear any existing timer
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-    }
-    
-    // Start long press timer (2 seconds)
-    longPressTimerRef.current = setTimeout(() => {
-      setShowMenu(true);
-      // Vibrate if supported
-      if (navigator.vibrate) {
-        navigator.vibrate(50);
-      }
-    }, 2000);
-  };
-
+  // Handle touch end
   const handleTouchEnd = (e) => {
-    // Clear long press timer
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-    
-    // If menu is showing, close it on button tap
-    if (showMenu) {
-      setShowMenu(false);
-    } else {
-      // If menu is not showing, treat as normal click
-      handleClick(e);
-    }
-  };
-
-  const handleTouchCancel = () => {
-    // Clear long press timer
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
+    handleClick(e);
   };
   
-  // Mouse events for desktop testing
-  const handleMouseDown = (e) => {
-    // Simulate touch start
-    handleTouchStart(e);
-  };
-  
-  const handleMouseUp = (e) => {
-    // Simulate touch end
-    handleTouchEnd(e);
-  };
-  
-  const handleMouseLeave = () => {
-    // Simulate touch cancel
-    handleTouchCancel();
-  };
 
   // Handle Delete button
   const handleDelete = () => {
@@ -248,7 +195,6 @@ export function MicButton({ onTranscript, className = '', isChat = false, hasCha
       // Send backspace character to terminal
       window.sendToActiveTerminal('\x7f');
     }
-    // Don't close menu - allow multiple clicks
   };
 
   // Handle Delete button press start (for repeat)
@@ -278,11 +224,11 @@ export function MicButton({ onTranscript, className = '', isChat = false, hasCha
     if (isChat && window.clearChatInput) {
       // Clear entire chat input
       window.clearChatInput();
+      setShowChatButtons(false); // Hide buttons after clearing
     } else if (!isChat && window.sendToActiveTerminal) {
       // Send ESC character to terminal
       window.sendToActiveTerminal('\x1b');
     }
-    // Don't close menu - allow multiple clicks
   };
 
   // Handle ESC button press start (for repeat)
@@ -315,6 +261,13 @@ export function MicButton({ onTranscript, className = '', isChat = false, hasCha
       }
     };
   }, []);
+
+  // Hide chat buttons if no text
+  useEffect(() => {
+    if (isChat && !hasChatText) {
+      setShowChatButtons(false);
+    }
+  }, [isChat, hasChatText]);
 
   // Button appearance based on state
   const getButtonAppearance = () => {
@@ -356,75 +309,33 @@ export function MicButton({ onTranscript, className = '', isChat = false, hasCha
 
   const { icon, className: buttonClass, disabled } = getButtonAppearance();
 
-  // Handle Enter button for chat
+  // Handle Enter button
   const handleEnter = () => {
-    if (window.sendChatMessage && typeof window.sendChatMessage === 'function') {
+    if (isChat && window.sendChatMessage && typeof window.sendChatMessage === 'function') {
       window.sendChatMessage();
+      setShowChatButtons(false); // Hide buttons after sending
+    } else if (!isChat && window.sendToActiveTerminal) {
+      // Send Enter key to terminal
+      window.sendToActiveTerminal('\r');
+      setShowChatButtons(false); // Hide buttons after sending
     }
   };
 
   return (
     <div className="relative">
-      {/* Chat mode buttons - show when there's text */}
-      {isChat && hasChatText && (
+      {/* Action buttons - show after transcription */}
+      {showChatButtons && (
         <>
-          {/* Enter button - above */}
-          <button
-            type="button"
-            onClick={handleEnter}
-            className="absolute -top-14 left-1/2 transform -translate-x-1/2 w-10 h-10 rounded-full bg-green-500 hover:bg-green-600 active:bg-green-700 text-white flex items-center justify-center shadow-md transition-all duration-200 opacity-90 hover:opacity-100 animate-fade-in"
-            title="Send message"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-            </svg>
-          </button>
-          
-          {/* Delete button - left */}
-          <button
-            type="button"
-            onMouseDown={handleDeleteStart}
-            onMouseUp={handleDeleteEnd}
-            onMouseLeave={handleDeleteEnd}
-            onTouchStart={handleDeleteStart}
-            onTouchEnd={handleDeleteEnd}
-            onTouchCancel={handleDeleteEnd}
-            className="absolute -left-14 top-1/2 transform -translate-y-1/2 w-10 h-10 rounded-full bg-red-500 hover:bg-red-600 active:bg-red-700 text-white flex items-center justify-center shadow-md transition-all duration-200 opacity-90 hover:opacity-100 animate-fade-in"
-            title="Delete (hold to repeat)"
-          >
-            <Delete className="w-4 h-4" />
-          </button>
-          
-          {/* ESC button - right */}
-          <button
-            type="button"
-            onMouseDown={handleEscStart}
-            onMouseUp={handleEscEnd}
-            onMouseLeave={handleEscEnd}
-            onTouchStart={handleEscStart}
-            onTouchEnd={handleEscEnd}
-            onTouchCancel={handleEscEnd}
-            className="absolute -right-14 top-1/2 transform -translate-y-1/2 w-10 h-10 rounded-full bg-gray-600 hover:bg-gray-700 active:bg-gray-800 text-white flex items-center justify-center shadow-md transition-all duration-200 opacity-90 hover:opacity-100 animate-fade-in"
-            title="ESC (hold to repeat)"
-          >
-            <span className="text-xs font-bold">ESC</span>
-          </button>
-        </>
-      )}
-      
-      {/* Terminal mode menu - long press */}
-      {!isChat && showMenu && (
-        <>
-          {/* Backdrop to close menu */}
+          {/* Backdrop to close buttons */}
           <div 
             className="fixed inset-0 z-40" 
-            onClick={() => setShowMenu(false)}
-            onTouchEnd={() => setShowMenu(false)}
+            onClick={() => setShowChatButtons(false)}
+            onTouchEnd={() => setShowChatButtons(false)}
           />
           
-          {/* Menu buttons */}
-          <div className="absolute bottom-16 left-1/2 transform -translate-x-1/2 flex gap-3 z-50">
-            {/* Delete button */}
+          {/* Button container - positioned to the sides and top */}
+          <div className="absolute inset-0 pointer-events-none animate-fade-in-subtle">
+            {/* Delete button - left */}
             <button
               type="button"
               onMouseDown={handleDeleteStart}
@@ -433,13 +344,25 @@ export function MicButton({ onTranscript, className = '', isChat = false, hasCha
               onTouchStart={handleDeleteStart}
               onTouchEnd={handleDeleteEnd}
               onTouchCancel={handleDeleteEnd}
-              className="w-12 h-12 rounded-full bg-red-500 hover:bg-red-600 active:bg-red-700 text-white flex items-center justify-center shadow-lg transition-all duration-200 animate-fade-in"
+              className="pointer-events-auto absolute -left-14 top-1/2 transform -translate-y-1/2 w-10 h-10 rounded-full bg-gray-700 dark:bg-gray-600 hover:bg-gray-600 dark:hover:bg-gray-500 active:bg-gray-800 dark:active:bg-gray-700 text-white flex items-center justify-center shadow-md transition-colors duration-200"
               title="Delete (hold to repeat)"
             >
-              <Delete className="w-5 h-5" />
+              <Delete className="w-4 h-4" />
             </button>
             
-            {/* ESC button */}
+            {/* Enter button - top */}
+            <button
+              type="button"
+              onClick={handleEnter}
+              className="pointer-events-auto absolute -top-14 left-1/2 transform -translate-x-1/2 w-10 h-10 rounded-full bg-gray-700 dark:bg-gray-600 hover:bg-gray-600 dark:hover:bg-gray-500 active:bg-gray-800 dark:active:bg-gray-700 text-white flex items-center justify-center shadow-md transition-colors duration-200"
+              title={isChat ? "Send message" : "Send Enter"}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+              </svg>
+            </button>
+            
+            {/* ESC button - diagonal between Delete and Enter */}
             <button
               type="button"
               onMouseDown={handleEscStart}
@@ -448,14 +371,15 @@ export function MicButton({ onTranscript, className = '', isChat = false, hasCha
               onTouchStart={handleEscStart}
               onTouchEnd={handleEscEnd}
               onTouchCancel={handleEscEnd}
-              className="w-12 h-12 rounded-full bg-gray-600 hover:bg-gray-700 active:bg-gray-800 text-white flex items-center justify-center shadow-lg transition-all duration-200 animate-fade-in"
+              className="pointer-events-auto absolute -left-10 -top-10 w-10 h-10 rounded-full bg-gray-700 dark:bg-gray-600 hover:bg-gray-600 dark:hover:bg-gray-500 active:bg-gray-800 dark:active:bg-gray-700 text-white flex items-center justify-center shadow-md transition-colors duration-200"
               title="ESC (hold to repeat)"
             >
-              <span className="text-xs font-bold">ESC</span>
+              <span className="text-[10px] font-bold">ESC</span>
             </button>
           </div>
         </>
       )}
+      
       
       <button
         type="button"
@@ -476,18 +400,8 @@ export function MicButton({ onTranscript, className = '', isChat = false, hasCha
           hover:opacity-90
           ${className}
         `}
-        onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
-        onTouchCancel={handleTouchCancel}
-        onMouseDown={handleMouseDown}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseLeave}
         onClick={(e) => {
-          // Prevent click if menu is showing
-          if (showMenu) {
-            e.preventDefault();
-            return;
-          }
           // Only handle click if not on touch device
           if (!('ontouchstart' in window)) {
             handleClick(e);

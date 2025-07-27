@@ -7,12 +7,24 @@
   "scripts": {
     "dev": "node scripts/dev.js",
     "dev:old": "concurrently --kill-others \"npm run server\" \"npm run client\" \"npm run vibe-backend\"",
+    "dev:network": "node scripts/network-access.js",
     "server": "node server/index.js",
+    "server:network": "HOST=0.0.0.0 node server/index.js",
     "client": "vite --host",
+    "client:network": "vite --host 0.0.0.0",
+    "tunnel": "./scripts/cloudflare-tunnel.sh",
+    "tunnel:quick": "cloudflared tunnel --url http://localhost:9000",
+    "ngrok": "ngrok http 9000",
+    "ngrok:all": "node scripts/ngrok-setup.js",
+    "ngrok:simple": "./scripts/ngrok-simple.sh",
+    "start:ngrok": "./start-full-ngrok.sh",
+    "start:ngrok:simple": "./start-with-ngrok.sh",
     "vibe-backend": "cd vibe-kanban && PORT=8081 cargo run --release",
     "build": "vite build",
     "preview": "vite preview",
-    "start": "npm run build && npm run server"
+    "start": "npm run build && npm run server",
+    "ngrok:start": "./run.sh",
+    "start:claude": "./claude-start.sh"
   },
   "keywords": [
     "claude",
@@ -24,6 +36,7 @@
   "author": "Claude Code UI Contributors",
   "license": "MIT",
   "dependencies": {
+    "http-proxy-middleware": "^2.0.6",
     "@codemirror/lang-css": "^6.3.1",
     "@codemirror/lang-html": "^6.4.9",
     "@codemirror/lang-javascript": "^6.2.4",
