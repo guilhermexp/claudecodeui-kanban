@@ -34,18 +34,11 @@ export default defineConfig(({ command, mode }) => {
         'localhost'
       ],
       proxy: {
-        // Claude Code UI API routes (original)
-        '^/api/(?!vibe-kanban).*': 'http://localhost:8080',
-        '/ws': {
-          target: 'ws://localhost:8080',
-          ws: true,
-          changeOrigin: true
-        },
-        // Shell WebSocket
-        '/shell': {
-          target: 'ws://localhost:8080',
-          ws: true,
-          changeOrigin: true
+        // VibeKanban API routes - proxy to Rust backend (MUST BE FIRST!)
+        '/api/vibe-kanban': {
+          target: 'http://localhost:8081',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api\/vibe-kanban/, '/api')
         },
         // VibeKanban SSE streams for real-time logs
         '/api/vibe-kanban/projects/.+/execution-processes/.+/normalized-logs/stream': {
@@ -64,18 +57,28 @@ export default defineConfig(({ command, mode }) => {
             });
           }
         },
-        // VibeKanban API routes - proxy to Rust backend
-        '/api/vibe-kanban': {
-          target: 'http://localhost:8081',
-          changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/api\/vibe-kanban/, '/api')
-        },
         // VibeKanban WebSocket for real-time updates
         '/api/vibe-kanban/stream': {
           target: 'ws://localhost:8081',
           ws: true,
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api\/vibe-kanban/, '/api')
+        },
+        // Claude Code UI API routes (original)
+        '/api': {
+          target: 'http://localhost:8080',
+          changeOrigin: true
+        },
+        '/ws': {
+          target: 'ws://localhost:8080',
+          ws: true,
+          changeOrigin: true
+        },
+        // Shell WebSocket
+        '/shell': {
+          target: 'ws://localhost:8080',
+          ws: true,
+          changeOrigin: true
         }
       }
     },

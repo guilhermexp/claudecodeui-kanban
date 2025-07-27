@@ -738,6 +738,11 @@
     animation: spin 1s linear infinite;
   }
   
+  /* Slower spin animation for gear icon */
+  .animate-spin-slow {
+    animation: spin 3s linear infinite;
+  }
+  
   /* Force hardware acceleration for smoother animation on mobile */
   .loading-spinner {
     animation: spin 1s linear infinite;

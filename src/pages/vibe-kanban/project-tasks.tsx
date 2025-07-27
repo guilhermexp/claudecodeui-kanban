@@ -209,8 +209,17 @@ export function ProjectTasks() {
         await fetchTasks();
         // Open the newly created task in the details panel
         handleViewTaskDetails(result);
-      } catch (err) {
-        setError('Failed to create and start task');
+      } catch (err: any) {
+        console.error('Failed to create and start task:', err);
+        
+        // Check if it's a backend availability error
+        if (err.message && err.message.includes('Service Unavailable')) {
+          setError('Vibe Kanban backend is not running. Please start it with "npm run dev" to use this feature.');
+        } else if (err.message && err.message.includes('backend is not running')) {
+          setError('Vibe Kanban backend is not running. Please start it with "npm run dev" to use this feature.');
+        } else {
+          setError('Failed to create and start task. ' + (err.message || ''));
+        }
       }
     },
     [projectId, fetchTasks]

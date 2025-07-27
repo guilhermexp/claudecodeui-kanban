@@ -209,6 +209,27 @@ Formato: `userId:projectPath:sessionId`
    - Melhorando feedback visual durante carregamento
    - Otimizando performance de múltiplas sessões
 
-## Estado Atual: 🔧 EM DESENVOLVIMENTO
+## Estado Atual: ✅ FUNCIONAL
 
-Sistema funcional mas com alguns problemas de estabilidade sendo resolvidos. A maioria das funcionalidades está operacional, mas existem casos edge que ainda precisam de atenção.
+Sistema de sessões de terminal totalmente funcional com isolamento correto entre sessões.
+
+### ⚠️ IMPORTANTE - Evitando Regressões
+
+**PROBLEMA CRÍTICO RESOLVIDO**: Sessões misturando conteúdo e nomes iguais
+- **Causa**: Chave de sessão não estava sendo incrementada corretamente
+- **Solução**: Usar `shellSessionCounter++` para garantir chaves únicas
+- **Arquivo**: Shell.jsx - função handleNewSession()
+
+**NÃO MODIFICAR** sem revisar:
+1. Sistema de chaves únicas: `${username}-${projectPath}-${new Date().getTime()}-${shellSessionCounter++}`
+2. Isolamento de DOM: Cada sessão tem seu próprio container
+3. WebSocket independente por sessão
+4. Estado preservado no Map global `shellSessions`
+
+### Funcionalidades Confirmadas
+- ✅ Múltiplas sessões isoladas
+- ✅ Persistência de 10 minutos
+- ✅ Reconexão automática após refresh
+- ✅ Upload de imagens via paste
+- ✅ Indicadores de status em tempo real
+- ✅ Abas só aparecem após autorização

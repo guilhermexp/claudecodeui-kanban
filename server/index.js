@@ -1018,7 +1018,7 @@ app.use('/api/vibe-kanban', express.json(), async (req, res) => {
     
     console.log(`Proxying VibeKanban request: ${req.method} ${req.originalUrl} -> ${vibeKanbanUrl}`);
     
-    // Forward the request to VibeKanban backend
+    // Forward the request to VibeKanban backend with better error handling
     const options = {
       method: req.method,
       headers: {
@@ -1032,13 +1032,57 @@ app.use('/api/vibe-kanban', express.json(), async (req, res) => {
       options.body = JSON.stringify(req.body);
     }
 
-    const response = await fetch(vibeKanbanUrl, options);
-    const data = await response.json();
-    
-    res.status(response.status).json(data);
+    let response;
+    try {
+      response = await fetch(vibeKanbanUrl, options);
+    } catch (fetchError) {
+      // Handle connection errors gracefully
+      if (fetchError.code === 'ECONNREFUSED') {
+        console.warn('VibeKanban backend is not running on port 8081');
+        return res.status(503).json({ 
+          success: false, 
+          message: 'Vibe Kanban backend is not running. Please start it with "npm run vibe-backend" or "npm run dev"',
+          error: 'Service Unavailable',
+          details: 'The Vibe Kanban backend service (Rust) needs to be running on port 8081'
+        });
+      }
+      throw fetchError;
+    }
+
+    // Check if response is JSON
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      const data = await response.json();
+      res.status(response.status).json(data);
+    } else {
+      // Handle non-JSON responses
+      const text = await response.text();
+      res.status(response.status).send(text);
+    }
   } catch (error) {
     console.error('VibeKanban proxy error:', error);
-    res.status(502).json({ success: false, message: 'VibeKanban backend unavailable' });
+    
+    // Better error handling based on error type
+    if (error.code === 'ECONNREFUSED') {
+      res.status(503).json({ 
+        success: false, 
+        message: 'Vibe Kanban backend is not running. Please start it with "npm run vibe-backend" or "npm run dev"',
+        error: 'Service Unavailable',
+        details: 'The Vibe Kanban backend service (Rust) needs to be running on port 8081'
+      });
+    } else if (error.name === 'AbortError') {
+      res.status(504).json({ 
+        success: false, 
+        message: 'Request to Vibe Kanban backend timed out',
+        error: 'Gateway Timeout'
+      });
+    } else {
+      res.status(502).json({ 
+        success: false, 
+        message: 'Error communicating with Vibe Kanban backend',
+        error: error.message || 'Bad Gateway'
+      });
+    }
   }
 });
 
