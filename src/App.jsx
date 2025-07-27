@@ -33,6 +33,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import { useVersionCheck } from './hooks/useVersionCheck';
 import { api } from './utils/api';
+import { authPersistence } from './utils/auth-persistence';
 
 
 // Main App component with routing
@@ -656,6 +657,9 @@ function AppContent() {
 
       {/* Version Upgrade Modal */}
       <VersionUpgradeModal />
+      
+      {/* Session Keep Alive Component */}
+      <SessionKeepAlive />
     </div>
   );
 }

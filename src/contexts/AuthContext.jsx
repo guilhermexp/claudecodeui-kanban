@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { api } from '../utils/api';
+import { authPersistence } from '../utils/auth-persistence';
 
 const AuthContext = createContext({
   user: null,
@@ -22,7 +23,7 @@ export const useAuth = () => {
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem('auth-token'));
+  const [token, setToken] = useState(authPersistence.getToken());
   const [isLoading, setIsLoading] = useState(true);
   const [needsSetup, setNeedsSetup] = useState(false);
   const [error, setError] = useState(null);
@@ -48,11 +49,13 @@ export const AuthProvider = ({ children }) => {
       }
       
       // If we have a token, verify it
-      const savedToken = localStorage.getItem('auth-token');
+      const savedToken = authPersistence.getToken();
       if (savedToken) {
         try {
           // Set the token in state first
           setToken(savedToken);
+          // Refresh expiry on use
+          authPersistence.refreshExpiry();
           
           const userResponse = await api.auth.user();
           
@@ -62,13 +65,13 @@ export const AuthProvider = ({ children }) => {
             setNeedsSetup(false);
           } else {
             // Token is invalid
-            localStorage.removeItem('auth-token');
+            authPersistence.clearToken();
             setToken(null);
             setUser(null);
           }
         } catch (error) {
           console.error('Token verification failed:', error);
-          localStorage.removeItem('auth-token');
+          authPersistence.clearToken();
           setToken(null);
           setUser(null);
         }
@@ -91,7 +94,7 @@ export const AuthProvider = ({ children }) => {
       if (response.ok) {
         setToken(data.token);
         setUser(data.user);
-        localStorage.setItem('auth-token', data.token);
+        authPersistence.saveToken(data.token);
         return { success: true };
       } else {
         setError(data.error || 'Login failed');
@@ -116,7 +119,7 @@ export const AuthProvider = ({ children }) => {
         setToken(data.token);
         setUser(data.user);
         setNeedsSetup(false);
-        localStorage.setItem('auth-token', data.token);
+        authPersistence.saveToken(data.token);
         return { success: true };
       } else {
         setError(data.error || 'Registration failed');
@@ -133,7 +136,7 @@ export const AuthProvider = ({ children }) => {
   const logout = () => {
     setToken(null);
     setUser(null);
-    localStorage.removeItem('auth-token');
+    authPersistence.clearToken();
     
     // Optional: Call logout endpoint for logging
     if (token) {
