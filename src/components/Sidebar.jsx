@@ -4,10 +4,11 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
 
-import { FolderOpen, Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, Edit3, Check, X, Trash2, Settings, FolderPlus, RefreshCw, Sparkles, Edit2, Star, Search, Trello } from 'lucide-react';
+import { FolderOpen, Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, Edit3, Check, X, Trash2, Settings, FolderPlus, RefreshCw, Sparkles, Edit2, Star, Search, Trello, Moon, Sun } from 'lucide-react';
 import { cn } from '../lib/utils';
 import ClaudeLogo from './ClaudeLogo';
 import { api } from '../utils/api';
+import { useTheme } from '../contexts/ThemeContext';
 
 // Helper function to detect VibeKanban projects
 const isVibeKanbanProject = (project) => {
@@ -79,6 +80,7 @@ function Sidebar({
   const [editingSessionName, setEditingSessionName] = useState('');
   const [generatingSummary, setGeneratingSummary] = useState({});
   const [searchFilter, setSearchFilter] = useState('');
+  const { isDarkMode, toggleDarkMode } = useTheme();
 
   
   // Starred projects state - persisted in localStorage
@@ -395,6 +397,23 @@ function Sidebar({
   const cancelNewProject = () => {
     setShowNewProject(false);
     setNewProjectPath('');
+  };
+
+  const updateSessionSummary = async (projectName, sessionId, newSummary) => {
+    try {
+      const response = await api.updateSession(projectName, sessionId, { summary: newSummary });
+      if (response.ok) {
+        // Refresh to show updated summary
+        if (window.refreshProjects) {
+          window.refreshProjects();
+        }
+      }
+    } catch (error) {
+      console.error('Error updating session summary:', error);
+    } finally {
+      setEditingSession(null);
+      setEditingSessionName('');
+    }
   };
 
   const loadMoreSessions = async (project) => {
@@ -1337,15 +1356,33 @@ function Sidebar({
             <span>Vibe Kanban</span>
           </Button>
           
-          {/* Tools Settings Button */}
-          <Button
-            variant="ghost"
-            className="w-full justify-start gap-2 h-9 text-sm font-normal text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors duration-200"
-            onClick={onShowSettings}
-          >
-            <Settings className="w-4 h-4" />
-            <span>Tools Settings</span>
-          </Button>
+          {/* Settings and Theme Row */}
+          <div className="flex gap-2">
+            {/* Tools Settings Button */}
+            <Button
+              variant="ghost"
+              className="flex-1 justify-start gap-2 h-9 text-sm font-normal text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors duration-200"
+              onClick={onShowSettings}
+            >
+              <Settings className="w-4 h-4" />
+              <span>Tools Settings</span>
+            </Button>
+            
+            {/* Theme Toggle Button */}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-9 w-9 px-0 hover:bg-accent/50 transition-colors duration-200"
+              onClick={toggleDarkMode}
+              title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+            >
+              {isDarkMode ? (
+                <Sun className="w-4 h-4 text-muted-foreground hover:text-foreground transition-colors" />
+              ) : (
+                <Moon className="w-4 h-4 text-muted-foreground hover:text-foreground transition-colors" />
+              )}
+            </Button>
+          </div>
         </div>
         
         {/* Mobile Footer */}
@@ -1359,14 +1396,30 @@ function Sidebar({
             <span className="text-sm font-medium text-blue-600 dark:text-blue-400">Vibe Kanban</span>
           </button>
           
-          {/* Tools Settings Button */}
-          <button
-            className="w-full h-12 bg-muted/30 hover:bg-muted/50 rounded-lg flex items-center justify-center gap-3 active:scale-[0.98] transition-all duration-150"
-            onClick={onShowSettings}
-          >
-            <Settings className="w-4 h-4 text-muted-foreground" />
-            <span className="text-sm font-medium text-muted-foreground">Tools Settings</span>
-          </button>
+          {/* Settings and Theme Row */}
+          <div className="flex gap-2">
+            {/* Tools Settings Button */}
+            <button
+              className="flex-1 h-12 bg-muted/30 hover:bg-muted/50 rounded-lg flex items-center justify-center gap-3 active:scale-[0.98] transition-all duration-150"
+              onClick={onShowSettings}
+            >
+              <Settings className="w-4 h-4 text-muted-foreground" />
+              <span className="text-sm font-medium text-muted-foreground">Tools Settings</span>
+            </button>
+            
+            {/* Theme Toggle Button */}
+            <button
+              className="h-12 w-12 bg-muted/30 hover:bg-muted/50 rounded-lg flex items-center justify-center active:scale-[0.98] transition-all duration-150"
+              onClick={toggleDarkMode}
+              title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+            >
+              {isDarkMode ? (
+                <Sun className="w-5 h-5 text-muted-foreground" />
+              ) : (
+                <Moon className="w-5 h-5 text-muted-foreground" />
+              )}
+            </button>
+          </div>
         </div>
       </div>
     </div>
