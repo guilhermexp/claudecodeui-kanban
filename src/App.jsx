@@ -546,7 +546,7 @@ function AppContent() {
           sidebarOpen ? 'opacity-100 visible' : 'opacity-0 invisible'
         }`}>
           <div 
-            className="fixed inset-0 bg-background/80 backdrop-blur-sm transition-opacity duration-150 ease-out"
+            className="fixed inset-0 bg-background transition-opacity duration-150 ease-out"
             onClick={(e) => {
               e.stopPropagation();
               setSidebarOpen(false);
