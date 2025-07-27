@@ -503,7 +503,7 @@ function ToolsSettings({ isOpen, onClose }) {
   if (!isOpen) return null;
 
   return (
-    <div className="modal-backdrop fixed inset-0 flex items-center justify-center z-[100] md:p-4 bg-background/95">
+    <div className="modal-backdrop fixed inset-0 flex items-center justify-center z-[100] md:p-4 bg-background">
       <div className="bg-background border border-border md:rounded-lg shadow-xl w-full md:max-w-4xl h-full md:h-[90vh] flex flex-col">
         <div className="flex items-center justify-between p-4 md:p-6 border-b border-border flex-shrink-0">
           <div className="flex items-center gap-3">
@@ -1010,7 +1010,7 @@ function ToolsSettings({ isOpen, onClose }) {
 
             {/* MCP Server Form Modal */}
             {showMcpForm && (
-              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[110] p-4">
+              <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[110] p-4">
                 <div className="bg-background border border-border rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
                   <div className="flex items-center justify-between p-4 border-b border-border">
                     <h3 className="text-lg font-medium text-foreground">
