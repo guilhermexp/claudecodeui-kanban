@@ -277,6 +277,23 @@ const TaskDetailsProvider: FC<{
     }
   }, [selectedAttempt, task, fetchAttemptData, fetchExecutionState]);
 
+  // Poll for execution state more frequently when attempt is starting
+  useEffect(() => {
+    if (!selectedAttempt || !task || executionState) return;
+
+    // Poll every second for the first 10 seconds to catch when execution starts
+    const startTime = Date.now();
+    const pollInterval = setInterval(() => {
+      if (Date.now() - startTime > 10000) {
+        clearInterval(pollInterval);
+        return;
+      }
+      fetchExecutionState(selectedAttempt.id, selectedAttempt.task_id);
+    }, 1000);
+
+    return () => clearInterval(pollInterval);
+  }, [selectedAttempt, task, executionState, fetchExecutionState]);
+
   const isAttemptRunning = useMemo(() => {
     if (!selectedAttempt || isStopping) {
       return false;
@@ -299,7 +316,7 @@ const TaskDetailsProvider: FC<{
         fetchAttemptData(selectedAttempt.id, selectedAttempt.task_id);
         fetchExecutionState(selectedAttempt.id, selectedAttempt.task_id);
       }
-    }, 5000);
+    }, 2000); // Reduced from 5000ms to 2000ms for faster updates
 
     return () => clearInterval(interval);
   }, [
@@ -308,6 +325,23 @@ const TaskDetailsProvider: FC<{
     selectedAttempt,
     fetchAttemptData,
     fetchExecutionState,
+  ]);
+
+  // Fetch logs immediately when execution state changes
+  useEffect(() => {
+    if (!selectedAttempt || !task || !executionState) return;
+
+    // Fetch attempt data (including logs) whenever execution state changes
+    if (executionState.execution_state === 'SetupRunning' ||
+        executionState.execution_state === 'CodingAgentRunning' ||
+        executionState.execution_state === 'SetupComplete') {
+      fetchAttemptData(selectedAttempt.id, selectedAttempt.task_id);
+    }
+  }, [
+    executionState?.execution_state,
+    selectedAttempt,
+    task,
+    fetchAttemptData
   ]);
 
   // Refresh diff when coding agent is running and making changes

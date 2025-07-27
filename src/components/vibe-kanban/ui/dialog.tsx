@@ -82,14 +82,21 @@ DialogTitle.displayName = 'DialogTitle';
 
 const DialogDescription = React.forwardRef<
   HTMLParagraphElement,
-  React.HTMLAttributes<HTMLParagraphElement>
->(({ className, ...props }, ref) => (
-  <p
-    ref={ref}
-    className={cn('text-sm text-muted-foreground', className)}
-    {...props}
-  />
-));
+  React.HTMLAttributes<HTMLParagraphElement> & { asChild?: boolean }
+>(({ className, asChild, ...props }, ref) => {
+  const Comp = asChild ? React.Fragment : 'p';
+  const childProps = asChild ? {} : {
+    ref,
+    className: cn('text-sm text-muted-foreground', className),
+    ...props
+  };
+  
+  return asChild ? (
+    <>{props.children}</>
+  ) : (
+    <Comp {...childProps} />
+  );
+});
 DialogDescription.displayName = 'DialogDescription';
 
 const DialogContent = React.forwardRef<

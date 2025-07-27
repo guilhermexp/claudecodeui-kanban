@@ -421,13 +421,20 @@ const useNormalizedConversation = ({
       (entry): entry is NormalizedEntry =>
         Boolean(entry && (entry as NormalizedEntry).entry_type)
     );
-    onDisplayEntriesChange?.(displayEntries.length);
+    
     if (visibleEntriesNum && displayEntries.length > visibleEntriesNum) {
       return displayEntries.slice(-visibleEntriesNum);
     }
 
     return displayEntries;
-  }, [conversation?.entries, onDisplayEntriesChange, visibleEntriesNum]);
+  }, [conversation?.entries, visibleEntriesNum]);
+
+  // Call onDisplayEntriesChange in a useEffect to avoid updating during render
+  useEffect(() => {
+    if (onDisplayEntriesChange && displayEntries) {
+      onDisplayEntriesChange(displayEntries.length);
+    }
+  }, [displayEntries.length, onDisplayEntriesChange]);
 
   return {
     displayEntries,
