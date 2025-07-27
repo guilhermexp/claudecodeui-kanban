@@ -1,8 +1,7 @@
 // Load environment variables from .env file
 import fs from 'fs';
-import path from 'path';
+import path, { dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { dirname } from 'path';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -30,7 +29,6 @@ import { WebSocketServer } from 'ws';
 import http from 'http';
 import cors from 'cors';
 import { promises as fsPromises } from 'fs';
-import { spawn } from 'child_process';
 import os from 'os';
 import pty from 'node-pty';
 import fetch from 'node-fetch';
@@ -43,50 +41,11 @@ import authRoutes from './routes/auth.js';
 import mcpRoutes from './routes/mcp.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
-import shellSessionManager from './shellSessions.js';
 
 // File system watcher for projects folder
 let projectsWatcher = null;
 // Enhanced client tracking with user context for session isolation
 const connectedClients = new Map(); // ws -> { userId, username, activeProject, lastActivity }
-
-// Simple shell session storage
-const activeShellSessions = new Map(); // sessionKey -> { process, projectPath, sessionId, created, lastAccess, timeoutId }
-const SHELL_SESSION_TIMEOUT = 10 * 60 * 1000; // 10 minutes
-
-// Helper functions for shell session management
-function createShellSessionKey(userId, projectPath, sessionId) {
-  return `${userId}:${projectPath}:${sessionId || 'default'}`;
-}
-
-function clearShellSessionTimeout(sessionKey) {
-  const session = activeShellSessions.get(sessionKey);
-  if (session && session.timeoutId) {
-    clearTimeout(session.timeoutId);
-    session.timeoutId = null;
-  }
-}
-
-function scheduleShellSessionTimeout(sessionKey) {
-  const session = activeShellSessions.get(sessionKey);
-  if (!session) return;
-  
-  // Clear any existing timeout
-  clearShellSessionTimeout(sessionKey);
-  
-  // Schedule new timeout
-  session.timeoutId = setTimeout(() => {
-    console.log(`⏱️ Shell session timeout reached for: ${sessionKey}`);
-    const session = activeShellSessions.get(sessionKey);
-    if (session && session.process) {
-      console.log('🗑️ Killing timed-out shell process');
-      session.process.kill();
-      activeShellSessions.delete(sessionKey);
-    }
-  }, SHELL_SESSION_TIMEOUT);
-  
-  console.log(`⏱️ Scheduled 10-minute timeout for session: ${sessionKey}`);
-}
 
 // Smart broadcast functions for session isolation
 const broadcastProjectUpdate = (message, eventType, filePath) => {
@@ -258,11 +217,6 @@ app.use('/api', validateApiKey);
 // Authentication routes (public)
 app.use('/api/auth', authRoutes);
 
-// Shell sessions debug endpoint
-app.get('/api/shell-sessions', authenticateToken, (req, res) => {
-  const sessions = shellSessionManager.getSessionInfo();
-  res.json({ sessions });
-});
 
 // Git API Routes (protected)
 app.use('/api/git', authenticateToken, gitRoutes);
@@ -611,7 +565,6 @@ function handleShellConnection(ws, request) {
   const user = request.user || { userId: 'anonymous', username: 'anonymous' };
   console.log('👤 Shell user:', user.username);
   
-  let currentSessionKey = null;
   let shellProcess = null;
   let bypassPermissions = false;
   
@@ -626,59 +579,11 @@ function handleShellConnection(ws, request) {
         const hasSession = data.hasSession;
         bypassPermissions = data.bypassPermissions || false;
         
-        // Create session key
-        currentSessionKey = createShellSessionKey(user.userId, projectPath, sessionId);
-        console.log('🔑 Session key:', currentSessionKey);
+        // Shell process will be created fresh for each connection
+        // Sessions are managed on the client side now
         
-        // Check if session already exists
-        const existingSession = activeShellSessions.get(currentSessionKey);
-        
-        if (existingSession && existingSession.process && !existingSession.process.killed) {
-          console.log('📦 Reusing existing shell session');
-          shellProcess = existingSession.process;
-          
-          // Clear timeout since session is being reused
-          clearShellSessionTimeout(currentSessionKey);
-          
-          // Update last access time
-          existingSession.lastAccess = Date.now();
-          
-          // Send reconnection message
-          ws.send(JSON.stringify({
-            type: 'output',
-            data: `\x1b[36mReconnected to existing shell session in: ${projectPath}\x1b[0m\r\n`
-          }));
-          
-          // Resize terminal to new dimensions
-          if (existingSession.process.resize) {
-            existingSession.process.resize(data.cols || 80, data.rows || 24);
-          }
-          
-          // Send a newline to trigger any pending prompt
-          setTimeout(() => {
-            if (shellProcess.write) {
-              shellProcess.write('\n');
-            }
-          }, 100);
-          
-          // Remove any existing data handlers to avoid duplicates
-          if (shellProcess.removeAllListeners) {
-            shellProcess.removeAllListeners('data');
-          }
-          
-          // Re-attach data handlers
-          shellProcess.onData((data) => {
-            if (ws.readyState === ws.OPEN) {
-              ws.send(JSON.stringify({
-                type: 'output',
-                data: data
-              }));
-            }
-          });
-          
-        } else {
-          // Create new shell session
-          console.log('🆕 Creating new shell session');
+        // Create new shell session
+        console.log('🆕 Creating new shell session');
           
           // Send welcome message
           const welcomeMsg = hasSession ? 
@@ -760,16 +665,6 @@ function handleShellConnection(ws, request) {
             
             console.log('🟢 Shell process started with PTY, PID:', shellProcess.pid);
             
-            // Store session
-            activeShellSessions.set(currentSessionKey, {
-              process: shellProcess,
-              projectPath,
-              sessionId,
-              created: Date.now(),
-              lastAccess: Date.now(),
-              timeoutId: null
-            });
-            
             // Handle data output
             shellProcess.onData((data) => {
               const output = data.toString();
@@ -799,8 +694,7 @@ function handleShellConnection(ws, request) {
                 }));
               }
               
-              // Remove session when process exits
-              activeShellSessions.delete(currentSessionKey);
+              // Clean up process reference
               shellProcess = null;
             });
             
@@ -811,7 +705,6 @@ function handleShellConnection(ws, request) {
               data: `\r\n\x1b[31mError: ${spawnError.message}\x1b[0m\r\n`
             }));
           }
-        }
         
       } else if (data.type === 'input') {
         // Send input to shell process
@@ -873,11 +766,7 @@ function handleShellConnection(ws, request) {
   ws.on('close', () => {
     console.log('🔌 Shell client disconnected');
     
-    // Don't kill the process immediately - schedule timeout instead
-    if (currentSessionKey && activeShellSessions.has(currentSessionKey)) {
-      console.log('📅 Scheduling timeout for shell session:', currentSessionKey);
-      scheduleShellSessionTimeout(currentSessionKey);
-    }
+    // Process cleanup is now handled by client-side session management
   });
   
   ws.on('error', (error) => {
@@ -916,7 +805,8 @@ app.post('/api/transcribe', authenticateToken, async (req, res) => {
         });
         formData.append('model', 'whisper-1');
         formData.append('response_format', 'json');
-        formData.append('language', 'en');
+        // Don't specify language to let Whisper auto-detect and preserve original language
+        // formData.append('language', 'en');
         
         // Make request to OpenAI
         const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
@@ -1270,27 +1160,11 @@ startServer();
 process.on('SIGINT', () => {
   console.log('\n🛑 Shutting down server...');
   
-  // Kill all active shell sessions
-  activeShellSessions.forEach((session, key) => {
-    console.log(`🔴 Killing shell session: ${key}`);
-    if (session.process && !session.process.killed) {
-      session.process.kill();
-    }
-  });
-  
   process.exit(0);
 });
 
 process.on('SIGTERM', () => {
   console.log('\n🛑 Server termination requested...');
-  
-  // Kill all active shell sessions
-  activeShellSessions.forEach((session, key) => {
-    console.log(`🔴 Killing shell session: ${key}`);
-    if (session.process && !session.process.killed) {
-      session.process.kill();
-    }
-  });
   
   process.exit(0);
 });

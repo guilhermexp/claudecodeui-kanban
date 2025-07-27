@@ -22,10 +22,17 @@ const Dialog = React.forwardRef<
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-start justify-center p-4 overflow-y-auto">
+    <div 
+      className="fixed inset-0 z-[9999] flex items-start justify-center p-4 overflow-y-auto"
+      onDragStart={(e) => e.preventDefault()}
+      onDrag={(e) => e.preventDefault()}
+      onDragOver={(e) => e.preventDefault()}
+    >
       <div
         className="fixed inset-0 bg-black/50"
         onClick={() => (uncloseable ? {} : onOpenChange?.(false))}
+        draggable={false}
+        onDragStart={(e) => e.preventDefault()}
       />
       <div
         ref={ref}
@@ -33,12 +40,15 @@ const Dialog = React.forwardRef<
           'relative z-[9999] grid w-full max-w-lg gap-4 bg-background p-6 shadow-lg duration-200 sm:rounded-lg my-8',
           className
         )}
+        draggable={false}
+        data-no-dnd="true"
         {...props}
       >
         {!uncloseable && (
           <button
             className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
             onClick={() => onOpenChange?.(false)}
+            draggable={false}
           >
             <X className="h-4 w-4" />
             <span className="sr-only">Close</span>
@@ -96,7 +106,12 @@ const DialogContent = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
 >(({ className, ...props }, ref) => (
-  <div ref={ref} className={cn('grid gap-4', className)} {...props} />
+  <div 
+    ref={ref} 
+    className={cn('grid gap-4', className)} 
+    draggable={false}
+    {...props} 
+  />
 ));
 DialogContent.displayName = 'DialogContent';
 

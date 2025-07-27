@@ -2024,6 +2024,44 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     noKeyboard: true
   });
 
+  // Expose global function for sending chat messages from voice input
+  useEffect(() => {
+    window.sendChatMessage = () => {
+      if (input.trim() && !isLoading && selectedProject) {
+        // Create a synthetic event object
+        const syntheticEvent = {
+          preventDefault: () => {},
+          type: 'submit'
+        };
+        handleSubmit(syntheticEvent);
+      }
+    };
+    
+    window.setChatInput = (text) => {
+      setInput(text);
+    };
+    
+    window.deleteChatCharacter = () => {
+      setInput(prev => prev.slice(0, -1));
+    };
+    
+    window.clearChatInput = () => {
+      setInput('');
+    };
+    
+    window.hasChatText = () => {
+      return input.trim().length > 0;
+    };
+    
+    return () => {
+      delete window.sendChatMessage;
+      delete window.setChatInput;
+      delete window.deleteChatCharacter;
+      delete window.clearChatInput;
+      delete window.hasChatText;
+    };
+  }, [input, isLoading, selectedProject]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!input.trim() || isLoading || !selectedProject) return;

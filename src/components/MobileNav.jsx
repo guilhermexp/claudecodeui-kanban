@@ -1,7 +1,31 @@
 import React from 'react';
-import { MessageSquare, Folder, Terminal, GitBranch, Globe } from 'lucide-react';
+import { MessageSquare, Folder, Terminal, GitBranch } from 'lucide-react';
+import { MicButton } from './MicButton';
 
-function MobileNav({ activeTab, setActiveTab, isInputFocused }) {
+function MobileNav({ activeTab, setActiveTab, isInputFocused, isShellConnected }) {
+  const [hasChatText, setHasChatText] = React.useState(false);
+  
+  // Check if chat has text periodically
+  React.useEffect(() => {
+    if (activeTab === 'chat') {
+      const checkText = () => {
+        if (window.hasChatText && typeof window.hasChatText === 'function') {
+          setHasChatText(window.hasChatText());
+        }
+      };
+      
+      // Check immediately
+      checkText();
+      
+      // Check periodically
+      const interval = setInterval(checkText, 100);
+      
+      return () => clearInterval(interval);
+    } else {
+      setHasChatText(false);
+    }
+  }, [activeTab]);
+  
   // Detect dark mode
   const isDarkMode = document.documentElement.classList.contains('dark');
   const navItems = [
@@ -26,6 +50,23 @@ function MobileNav({ activeTab, setActiveTab, isInputFocused }) {
       onClick: () => setActiveTab('git')
     }
   ];
+
+  // Handler for voice transcription
+  const handleVoiceTranscript = (text) => {
+    if (activeTab === 'shell') {
+      // Send the transcribed text to the terminal via the global handler
+      if (window.sendToActiveTerminal && typeof window.sendToActiveTerminal === 'function') {
+        window.sendToActiveTerminal(text);
+      } else {
+        console.warn('Terminal voice handler not available');
+      }
+    } else if (activeTab === 'chat') {
+      // For chat, we need to set the text in the input
+      if (window.setChatInput && typeof window.setChatInput === 'function') {
+        window.setChatInput(text);
+      }
+    }
+  };
 
   return (
     <>
@@ -71,6 +112,18 @@ function MobileNav({ activeTab, setActiveTab, isInputFocused }) {
             </button>
           );
         })}
+        
+        {/* Voice button - show when shell is connected OR when in chat tab */}
+        {((activeTab === 'shell' && isShellConnected) || activeTab === 'chat') && (
+          <div className="relative">
+            <MicButton 
+              onTranscript={handleVoiceTranscript}
+              className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
+              isChat={activeTab === 'chat'}
+              hasChatText={hasChatText}
+            />
+          </div>
+        )}
       </div>
     </div>
     </>

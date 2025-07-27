@@ -16,10 +16,22 @@ export async function transcribeWithWhisper(audioBlob, onStatusChange) {
         onStatusChange('transcribing');
       }
   
+      console.log('Transcribing audio:', {
+        fileName,
+        fileSize: file.size,
+        fileType: file.type,
+        mode: whisperMode
+      });
+  
       const response = await api.transcribe(formData);
   
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        console.error('Transcription error details:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorData
+        });
         throw new Error(
           errorData.error || 
           `Transcription error: ${response.status} ${response.statusText}`

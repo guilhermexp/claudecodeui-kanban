@@ -3,7 +3,6 @@ import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { ClipboardAddon } from '@xterm/addon-clipboard';
 import 'xterm/css/xterm.css';
-import { MicButton } from './MicButton';
 
 // CSS to remove xterm focus outline and scrollbar
 const xtermStyles = `
@@ -26,15 +25,26 @@ const xtermStyles = `
   /* Make xterm background transparent */
   .xterm {
     background-color: transparent !important;
+    width: 100% !important;
   }
   .xterm .xterm-viewport {
     background-color: transparent !important;
+    overflow-x: hidden !important;
   }
   .xterm .xterm-screen {
     background-color: transparent !important;
   }
   .xterm .xterm-screen canvas {
     background-color: transparent !important;
+  }
+  /* Prevent horizontal scrolling on mobile */
+  @media (max-width: 768px) {
+    .xterm {
+      font-size: 12px !important;
+    }
+    .xterm-viewport {
+      overflow-x: hidden !important;
+    }
   }
 `;
 
@@ -53,7 +63,7 @@ const sessionTimeouts = new Map();
 // Store all active terminals for tab display
 const activeTerminals = new Map();
 
-// Helper to clear session after timeout
+// Helper to disconnect session after timeout (but keep it available for reconnection)
 const clearSessionAfterTimeout = (sessionKey) => {
   // Clear any existing timeout
   if (sessionTimeouts.has(sessionKey)) {
@@ -64,18 +74,14 @@ const clearSessionAfterTimeout = (sessionKey) => {
   const timeoutId = setTimeout(() => {
     const session = shellSessions.get(sessionKey);
     if (session) {
-      // Disconnect WebSocket
+      // Only disconnect WebSocket, don't dispose terminal or delete session
       if (session.ws && session.ws.readyState === WebSocket.OPEN) {
         session.ws.close();
       }
-      // Dispose terminal
-      if (session.terminal) {
-        session.terminal.dispose();
-      }
-      // Clean up
-      shellSessions.delete(sessionKey);
+      // Mark session as disconnected but keep it in memory
+      session.isConnected = false;
       sessionTimeouts.delete(sessionKey);
-      console.log(`Shell session ${sessionKey} closed after 10 minutes of inactivity`);
+      console.log(`Shell session ${sessionKey} disconnected after 10 minutes of inactivity (session preserved for reconnection)`);
     }
   }, 10 * 60 * 1000); // 10 minutes
   
@@ -90,7 +96,7 @@ const cancelSessionTimeout = (sessionKey) => {
   }
 };
 
-function Shell({ selectedProject, selectedSession, isActive, onSessionCountChange, onTerminalsChange, onActiveTerminalChange }) {
+function Shell({ selectedProject, selectedSession, isActive, onSessionCountChange, onTerminalsChange, onActiveTerminalChange, onConnectionChange }) {
   const terminalRef = useRef(null);
   const terminal = useRef(null);
   const fitAddon = useRef(null);
@@ -115,6 +121,28 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
   useEffect(() => {
     bypassRef.current = isBypassingPermissions;
   }, [isBypassingPermissions]);
+
+  // Notify parent component when connection state changes
+  useEffect(() => {
+    if (onConnectionChange && typeof onConnectionChange === 'function') {
+      onConnectionChange(isConnected);
+    }
+  }, [isConnected, onConnectionChange]);
+
+  // Add ESC key listener to close drag overlay
+  useEffect(() => {
+    const handleEscKey = (e) => {
+      if (e.key === 'Escape' && isDraggingOver) {
+        setIsDraggingOver(false);
+        dragCounter.current = 0;
+      }
+    };
+
+    if (isDraggingOver) {
+      document.addEventListener('keydown', handleEscKey);
+      return () => document.removeEventListener('keydown', handleEscKey);
+    }
+  }, [isDraggingOver]);
 
   // Update all terminals list whenever shellSessions changes
   const updateTerminalsList = () => {
@@ -268,6 +296,15 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
       terminal.current.clear();
       terminal.current.write('\x1b[2J\x1b[H'); // Clear screen and move cursor to home
     }
+    
+    // Remove the session from shellSessions when disconnecting
+    const sessionKey = selectedSession?.id || activeTerminalKey || `project-${selectedProject.name}`;
+    if (shellSessions.has(sessionKey)) {
+      shellSessions.delete(sessionKey);
+    }
+    
+    // Update terminals list
+    updateTerminalsList();
     
     setIsConnected(false);
     setIsConnecting(false);
@@ -490,12 +527,12 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
     // Initialize new terminal
     terminal.current = new Terminal({
       cursorBlink: true,
-      fontSize: 14,
+      fontSize: isMobile ? 12 : 14,
       fontFamily: 'Menlo, Monaco, "Courier New", monospace',
       allowProposedApi: true, // Required for clipboard addon
       allowTransparency: true,  // Enable transparency
       convertEol: true,
-      scrollback: 10000,
+      scrollback: isMobile ? 5000 : 10000,
       tabStopWidth: 4,
       // Enable full color support
       windowsMode: false,
@@ -787,20 +824,6 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
     }
   };
 
-  // Handle voice transcription
-  const handleVoiceTranscript = (text) => {
-    if (!isConnected || !ws.current || ws.current.readyState !== WebSocket.OPEN) {
-      console.warn('Terminal not connected. Cannot send voice input.');
-      return;
-    }
-
-    // Send the transcribed text to the terminal
-    ws.current.send(JSON.stringify({
-      type: 'input',
-      data: text,
-      bypassPermissions: bypassRef.current
-    }));
-  };
 
   // WebSocket connection function (called manually)
   const connectWebSocket = async () => {
@@ -1022,36 +1045,52 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
       }
     };
     
+    // Add global function for sending text to active terminal (used by voice button)
+    window.sendToActiveTerminal = (text) => {
+      if (isConnected && ws.current && ws.current.readyState === WebSocket.OPEN) {
+        ws.current.send(JSON.stringify({
+          type: 'input',
+          data: text,
+          bypassPermissions: bypassRef.current
+        }));
+      } else {
+        console.warn('Terminal not connected. Cannot send voice input.');
+      }
+    };
+    
     return () => {
       delete window.switchToShellTerminal;
       delete window.closeShellTerminal;
+      delete window.sendToActiveTerminal;
     };
-  }, [activeTerminalKey, allTerminals]);
+  }, [activeTerminalKey, allTerminals, isConnected]);
 
   return (
     <div className="h-full flex flex-col bg-gray-900 w-full">
       
       {/* Header */}
-      <div className="flex-shrink-0 bg-gray-800 border-b border-gray-700 px-4 py-2">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
-            {selectedSession && (
-              <span className="text-xs text-blue-300">
-                ({selectedSession.summary.slice(0, 25)}...)
-              </span>
-            )}
-            {!selectedSession && (
-              <span className="text-xs text-gray-400">(New Session)</span>
-            )}
-            {!isInitialized && (
-              <span className="text-xs text-yellow-400">(Initializing...)</span>
-            )}
-            {isRestarting && (
-              <span className="text-xs text-blue-400">(Restarting...)</span>
-            )}
+      <div className="flex-shrink-0 bg-gray-800 border-b border-gray-700 px-2 sm:px-4 py-2">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center min-w-0 flex-1">
+            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
+            <div className="ml-2 truncate">
+              {selectedSession && (
+                <span className="text-xs text-blue-300 truncate">
+                  ({selectedSession.summary.slice(0, isMobile ? 15 : 25)}...)
+                </span>
+              )}
+              {!selectedSession && (
+                <span className="text-xs text-gray-400">(New Session)</span>
+              )}
+              {!isInitialized && (
+                <span className="text-xs text-yellow-400">(Initializing...)</span>
+              )}
+              {isRestarting && (
+                <span className="text-xs text-blue-400">(Restarting...)</span>
+              )}
+            </div>
           </div>
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
             {isConnected && (
               <>
                 <button
@@ -1067,31 +1106,31 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
                       }));
                     }
                   }}
-                  className={`px-3 py-1 text-xs rounded flex items-center space-x-1 transition-all duration-200 ${
+                  className={`px-2 sm:px-3 py-1 text-xs rounded flex items-center gap-1 transition-all duration-200 ${
                     isBypassingPermissions 
                       ? 'bg-orange-600 text-white hover:bg-orange-700' 
                       : 'bg-gray-600 text-white hover:bg-gray-700'
                   }`}
                   title={isBypassingPermissions ? "Disable permission bypass" : "Enable permission bypass"}
                 >
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     {isBypassingPermissions ? (
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
                     ) : (
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                     )}
                   </svg>
-                  <span>{isBypassingPermissions ? 'Bypass ON' : 'Bypass OFF'}</span>
+                  <span className={isMobile ? 'hidden' : ''}>{isBypassingPermissions ? 'Bypass ON' : 'Bypass OFF'}</span>
                 </button>
                 <button
                   onClick={disconnectFromShell}
-                  className="px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 flex items-center space-x-1"
+                  className="p-1 sm:px-3 sm:py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 flex items-center gap-1"
                   title="Disconnect from shell"
                 >
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
-                  <span>Disconnect</span>
+                  <span className={isMobile ? 'hidden' : ''}>Disconnect</span>
                 </button>
               </>
             )}
@@ -1099,13 +1138,13 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
             <button
               onClick={restartShell}
               disabled={isRestarting}
-              className="text-xs text-gray-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1"
+              className="p-1 sm:px-2 text-xs text-gray-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
               title="Restart Shell"
             >
               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
-              <span>Restart</span>
+              <span className={isMobile ? 'hidden' : ''}>Restart</span>
             </button>
           </div>
         </div>
@@ -1119,17 +1158,38 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        <div ref={terminalRef} className="h-full w-full focus:outline-none" style={{ outline: 'none' }} />
+        <div ref={terminalRef} className={`h-full w-full focus:outline-none ${isMobile ? 'pb-20' : 'pb-10'}`} style={{ outline: 'none' }} />
         
         {/* Drag and drop overlay */}
         {isDraggingOver && (
-          <div className="absolute inset-0 z-50 pointer-events-none">
+          <div 
+            className="absolute inset-0 z-50"
+            onClick={() => {
+              setIsDraggingOver(false);
+              dragCounter.current = 0;
+            }}
+          >
             <div className={`h-full w-full border-4 border-dashed rounded-lg flex items-center justify-center backdrop-blur-sm ${
               isConnected 
                 ? 'border-green-500 bg-green-500/20' 
                 : 'border-red-500 bg-red-500/20'
             }`}>
-              <div className="bg-gray-800/95 rounded-xl p-6 text-center shadow-2xl">
+              <div className="bg-gray-800/95 rounded-xl p-6 text-center shadow-2xl relative">
+                {/* Close button */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsDraggingOver(false);
+                    dragCounter.current = 0;
+                  }}
+                  className="absolute top-2 right-2 text-gray-400 hover:text-white transition-colors p-1"
+                  aria-label="Close drag overlay"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+                
                 <div className={`w-20 h-20 mx-auto mb-4 rounded-full flex items-center justify-center ${
                   isConnected ? 'bg-green-500/20' : 'bg-red-500/20'
                 }`}>
@@ -1152,6 +1212,9 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
                 <p className="text-xs text-gray-500 mt-2">
                   Or press <kbd className="px-2 py-1 bg-gray-700 rounded text-gray-300">⌘V</kbd> to paste from clipboard
                 </p>
+                <p className="text-xs text-gray-400 mt-3">
+                  Click anywhere or press ESC to close
+                </p>
               </div>
             </div>
           </div>
@@ -1168,6 +1231,26 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
         {isInitialized && !isConnected && !isConnecting && (
           <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-90 p-4">
             <div className="text-center max-w-md w-full">
+              {/* Check if this is a disconnected session that can be resumed */}
+              {(() => {
+                const session = shellSessions.get(activeTerminalKey);
+                const wasDisconnectedByTimeout = session && !session.isConnected && session.terminal;
+                
+                return wasDisconnectedByTimeout ? (
+                  <div className="mb-4 p-3 bg-yellow-900/30 border border-yellow-700 rounded-lg">
+                    <div className="flex items-center justify-center text-yellow-500 mb-2">
+                      <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span className="text-sm font-medium">Session disconnected due to inactivity</span>
+                    </div>
+                    <p className="text-xs text-gray-400">
+                      Your session is preserved. Click below to reconnect.
+                    </p>
+                  </div>
+                ) : null;
+              })()}
+              
               <div className="flex flex-col sm:flex-row gap-3 justify-center">
                 <button
                   onClick={() => {
@@ -1228,20 +1311,6 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
           </div>
         )}
         
-        {/* Mobile voice button - only show when connected and on mobile */}
-        {isMobile && isConnected && (
-          <div className="fixed bottom-20 right-4 z-50" style={{ position: 'fixed' }}>
-            <div className="relative">
-              <MicButton 
-                onTranscript={handleVoiceTranscript}
-                className="shadow-2xl scale-110"
-              />
-              <div className="absolute -top-14 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-3 py-2 rounded-lg whitespace-nowrap opacity-0 pointer-events-none animate-pulse">
-                Tap to speak
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

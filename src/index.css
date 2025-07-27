@@ -226,6 +226,22 @@
     }
   }
   
+  /* Fade in animation */
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  .animate-fade-in {
+    animation: fade-in 0.2s ease-out forwards;
+  }
+  
   /* Typing indicator animation */
   @keyframes typing {
     0%, 60%, 100% { opacity: 0.3; }
@@ -660,6 +676,21 @@
   @media screen and (max-width: 768px) {
     .chat-input-mobile {
       padding-bottom: calc(60px + max(env(safe-area-inset-bottom), 12px));
+    }
+    
+    /* Prevent overflow on mobile */
+    body {
+      overflow-x: hidden !important;
+    }
+    
+    /* Ensure all content stays within viewport */
+    * {
+      max-width: 100vw !important;
+    }
+    
+    /* Fix terminal overflow */
+    .xterm {
+      max-width: calc(100vw - 1rem) !important;
     }
   }
 

@@ -51,6 +51,7 @@ function AppContent() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
   const [isInputFocused, setIsInputFocused] = useState(false);
+  const [isShellConnected, setIsShellConnected] = useState(false);
   const [showToolsSettings, setShowToolsSettings] = useState(false);
   const [showQuickSettings, setShowQuickSettings] = useState(false);
   const [autoExpandTools, setAutoExpandTools] = useState(() => {
@@ -605,6 +606,7 @@ function AppContent() {
           showRawParameters={showRawParameters}
           autoScrollToBottom={autoScrollToBottom}
           sendByCtrlEnter={sendByCtrlEnter}
+          onShellConnectionChange={setIsShellConnected}
         />
       </div>
 
@@ -614,6 +616,7 @@ function AppContent() {
           activeTab={activeTab}
           setActiveTab={setActiveTab}
           isInputFocused={isInputFocused}
+          isShellConnected={isShellConnected}
         />
       )}
       {/* Quick Settings Panel - Only show on chat tab */}
