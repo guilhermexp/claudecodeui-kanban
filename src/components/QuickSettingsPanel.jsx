@@ -251,7 +251,7 @@ const QuickSettingsPanel = ({
       {/* Backdrop */}
       {localIsOpen && (
         <div
-          className="fixed inset-0 bg-background/80 backdrop-blur-sm z-30 transition-opacity duration-150 ease-out"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-30 transition-opacity duration-150 ease-out"
           onClick={handleToggle}
         />
       )}

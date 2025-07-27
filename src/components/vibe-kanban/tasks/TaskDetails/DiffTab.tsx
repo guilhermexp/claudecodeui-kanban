@@ -23,8 +23,8 @@ function DiffTab() {
   }
 
   return (
-    <div className="h-full px-4 pb-4">
-      <DiffCard diff={diff} deletable compact={false} className="h-full" />
+    <div className="flex-1 overflow-hidden flex flex-col px-4 pb-4">
+      <DiffCard diff={diff} deletable compact={false} className="flex-1 overflow-auto" />
     </div>
   );
 }

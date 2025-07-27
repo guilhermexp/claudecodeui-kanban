@@ -1,245 +1,329 @@
 <div align="center">
   <img src="public/logo.svg" alt="Claude Code UI" width="64" height="64">
-  <h1>Claude Code UI</h1>
+  <h1>Claude Code UI + Vibe Kanban</h1>
+  <p><strong>Interface completa para Claude Code CLI com sistema de gerenciamento de tarefas integrado</strong></p>
 </div>
 
+---
 
-A desktop and mobile UI for [Claude Code](https://docs.anthropic.com/en/docs/claude-code), Anthropic's official CLI for AI-assisted coding. You can use it locally or remotely to view your active projects and sessions in claude code and make changes to them the same way you would do it in claude code CLI. This gives you a proper interface that works everywhere. 
+## 🚀 Visão Geral
 
-## Screenshots
+Claude Code UI é uma interface web moderna e responsiva para o [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code), agora com **Vibe Kanban** integrado - um poderoso sistema de gerenciamento de tarefas baseado em Rust. 
+
+### Principais Características
+
+- **🏗️ Arquitetura Dual Backend** - Node.js (Express) + Rust (Vibe Kanban)
+- **📱 100% Responsivo** - Desktop, tablet e mobile com PWA support
+- **🎯 Vibe Kanban Integrado** - Sistema completo de gestão de tarefas
+- **💬 Chat Inteligente** - Interface aprimorada com suporte a voz
+- **🔧 Terminal Melhorado** - Shell integrado com novas funcionalidades
+- **📁 Explorador de Arquivos** - Edição ao vivo com syntax highlighting
+- **🔀 Git Completo** - Gestão visual de branches, commits e PRs
+
+## 📸 Screenshots
 
 <div align="center">
-  
 <table>
 <tr>
 <td align="center">
-<h3>Desktop View</h3>
+<h3>Desktop - Interface Principal</h3>
 <img src="public/screenshots/desktop-main.png" alt="Desktop Interface" width="400">
 <br>
-<em>Main interface showing project overview and chat</em>
+<em>Chat integrado com Vibe Kanban visível</em>
 </td>
 <td align="center">
-<h3>Mobile Experience</h3>
+<h3>Mobile - Experiência Otimizada</h3>
 <img src="public/screenshots/mobile-chat.png" alt="Mobile Interface" width="250">
 <br>
-<em>Responsive mobile design with touch navigation</em>
+<em>Interface touch-friendly com navegação bottom-tab</em>
+</td>
+</tr>
+<tr>
+<td align="center">
+<h3>Vibe Kanban - Gestão de Tarefas</h3>
+<img src="public/screenshots/vibe-kanban.png" alt="Vibe Kanban" width="400">
+<br>
+<em>Sistema kanban completo com drag-and-drop</em>
+</td>
+<td align="center">
+<h3>Terminal Integrado</h3>
+<img src="public/screenshots/terminal.png" alt="Terminal" width="400">
+<br>
+<em>Terminal com suporte completo ao Claude CLI</em>
 </td>
 </tr>
 </table>
-
-
-
 </div>
 
-## Features
+## 🛠️ Arquitetura
 
-- **Responsive Design** - Works seamlessly across desktop, tablet, and mobile so you can also use Claude Code from mobile 
-- **Interactive Chat Interface** - Built-in chat interface for seamless communication with Claude Code
-- **Integrated Shell Terminal** - Direct access to Claude Code CLI through built-in shell functionality
-- **File Explorer** - Interactive file tree with syntax highlighting and live editing
-- **Git Explorer** - View, stage and commit your changes. You can also switch branches 
-- **Session Management** - Resume conversations, manage multiple sessions, and track history
+### Sistema com Dual Backend
 
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Frontend      │    │   Backend 1     │    │  Claude CLI     │
+│   React/Vite    │◄──►│ Express/Node.js │◄──►│  Integration    │
+│   Port: 9000    │    │   Port: 8080    │    │                 │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+         │                      │
+         │                      │
+         ▼                      ▼
+┌─────────────────┐    ┌─────────────────┐
+│  Vibe Kanban    │    │   Shared        │
+│  Rust Backend   │◄──►│   Database      │
+│   Port: 8081    │    │   SQLite        │
+└─────────────────┘    └─────────────────┘
+```
 
-## Quick Start
+### Stack Tecnológico
 
-### Prerequisites
+#### Frontend (Port 9000)
+- **React 18** com hooks e componentes modernos
+- **Vite** para build rápido e HMR
+- **Tailwind CSS** + CSS Modules
+- **TypeScript** (migração gradual)
+- **CodeMirror 6** para edição de código
+- **XTerm.js** para terminal
+- **Lucide Icons** para ícones
 
-- [Node.js](https://nodejs.org/) v20 or higher
-- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed and configured
+#### Backend Principal (Port 8080)
+- **Node.js** + **Express**
+- **WebSocket (ws)** para comunicação real-time
+- **SQLite** via better-sqlite3
+- **node-pty** para gerenciamento de processos
+- **JWT** para autenticação
+- **Multer** para upload de arquivos
 
-### Installation
+#### Vibe Kanban Backend (Port 8081)
+- **Rust** com Cargo
+- **Actix-web** para servidor HTTP
+- **SQLite** compartilhado
+- **Git2** para integração Git
+- **Serde** para serialização
 
-1. **Clone the repository:**
+## 📦 Instalação
+
+### Pré-requisitos
+
+- **Node.js** v20 ou superior
+- **Rust** e Cargo (para Vibe Kanban)
+- **Claude Code CLI** instalado e configurado
+- **Git** para funcionalidades de versionamento
+
+### Passo a Passo
+
+1. **Clone o repositório**
 ```bash
 git clone https://github.com/siteboon/claudecodeui.git
 cd claudecodeui
 ```
 
-2. **Install dependencies:**
+2. **Instale as dependências**
 ```bash
+# Dependências Node.js
 npm install
+
+# Build do Vibe Kanban (Rust)
+cd vibe-kanban/backend
+cargo build --release
+cd ../..
 ```
 
-3. **Configure environment:**
+3. **Configure o ambiente**
 ```bash
 cp .env.example .env
-# Edit .env with your preferred settings
+# Edite o .env com suas configurações
 ```
 
-4. **Start the application:**
+4. **Inicie a aplicação**
 ```bash
-# Development mode (with hot reload)
+# Modo desenvolvimento (todos os serviços)
 npm run dev
 
-```
-The application will start at the port you specified in your .env
-
-5. **Open your browser:**
-   - Development: `http://localhost:3001`
-
-## Security & Tools Configuration
-
-**🔒 Important Notice**: All Claude Code tools are **disabled by default**. This prevents potentially harmful operations from running automatically.
-
-### Enabling Tools
-
-To use Claude Code's full functionality, you'll need to manually enable tools:
-
-1. **Open Tools Settings** - Click the gear icon in the sidebar
-3. **Enable Selectively** - Turn on only the tools you need
-4. **Apply Settings** - Your preferences are saved locally
-
-<div align="center">
-
-![Tools Settings Modal](public/screenshots/tools-modal.png)
-*Tools Settings interface - enable only what you need*
-
-</div>
-
-**Recommended approach**: Start with basic tools enabled and add more as needed. You can always adjust these settings later.
-
-## Usage Guide
-
-### Core Features
-
-#### Project Management
-The UI automatically discovers Claude Code projects from `~/.claude/projects/` and provides:
-- **Visual Project Browser** - All available projects with metadata and session counts
-- **Project Actions** - Rename, delete, and organize projects
-- **Smart Navigation** - Quick access to recent projects and sessions
-
-#### Chat Interface
-- **Use responsive chat or Claude Code CLI** - You can either use the adapted chat interface or use the shell button to connect to Claude Code CLI. 
-- **Real-time Communication** - Stream responses from Claude with WebSocket connection
-- **Session Management** - Resume previous conversations or start fresh sessions
-- **Message History** - Complete conversation history with timestamps and metadata
-- **Multi-format Support** - Text, code blocks, and file references
-
-#### File Explorer & Editor
-- **Interactive File Tree** - Browse project structure with expand/collapse navigation
-- **Live File Editing** - Read, modify, and save files directly in the interface
-- **Syntax Highlighting** - Support for multiple programming languages
-- **File Operations** - Create, rename, delete files and directories
-
-#### Git Explorer
-
-
-#### Session Management
-- **Session Persistence** - All conversations automatically saved
-- **Session Organization** - Group sessions by project and timestamp
-- **Session Actions** - Rename, delete, and export conversation history
-- **Cross-device Sync** - Access sessions from any device
-
-### Mobile App
-- **Responsive Design** - Optimized for all screen sizes
-- **Touch-friendly Interface** - Swipe gestures and touch navigation
-- **Mobile Navigation** - Bottom tab bar for easy thumb navigation
-- **Adaptive Layout** - Collapsible sidebar and smart content prioritization
-- **Add shortcut to Home Screen** - Add a shortcut to your home screen and the app will behave like a PWA
-
-## Architecture
-
-### System Overview
-
-```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Frontend      │    │   Backend       │    │  Claude CLI     │
-│   (React/Vite)  │◄──►│ (Express/WS)    │◄──►│  Integration    │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
+# Ou inicie individualmente:
+npm run server        # Backend Node.js
+npm run client        # Frontend Vite
+npm run vibe-backend  # Backend Rust
 ```
 
-### Backend (Node.js + Express)
-- **Express Server** - RESTful API with static file serving
-- **WebSocket Server** - Communication for chats and project refresh
-- **Claude CLI Integration** - Process spawning and management
-- **Session Management** - JSONL parsing and conversation persistence
-- **File System API** - Exposing file browser for projects
+5. **Acesse a aplicação**
+- Frontend: `http://localhost:9000`
+- Backend API: `http://localhost:8080`
+- Vibe Kanban API: `http://localhost:8081`
 
-### Frontend (React + Vite)
-- **React 18** - Modern component architecture with hooks
-- **CodeMirror** - Advanced code editor with syntax highlighting
+## 🎯 Principais Funcionalidades
 
+### 1. Vibe Kanban - Sistema de Tarefas
 
+- **Quadro Kanban Visual** - Colunas customizáveis (Todo, In Progress, Done)
+- **Drag and Drop** - Arraste tarefas entre colunas
+- **Detalhes de Tarefa** - Descrição rica, logs, processos, diffs
+- **Integração Git** - Crie branches e PRs direto das tarefas
+- **Templates** - Crie e reutilize templates de tarefas
+- **Mobile Otimizado** - Interface touch-friendly
 
+### 2. Chat Aprimorado
 
+- **Streaming em Tempo Real** - Respostas incrementais do Claude
+- **Suporte a Voz** - Gravação e transcrição de áudio
+- **Histórico Persistente** - Todas as conversas salvas
+- **Anexos** - Envie arquivos e imagens
+- **Syntax Highlighting** - Blocos de código formatados
 
-### Contributing
+### 3. Terminal Integrado
 
-We welcome contributions! Please follow these guidelines:
+- **Shell Completo** - Acesso total ao sistema
+- **Múltiplas Sessões** - Abas de terminal
+- **Resize Dinâmico** - Ajuste automático
+- **Clipboard** - Copiar/colar integrado
+- **Mobile Support** - Teclado virtual otimizado
 
-#### Getting Started
-1. **Fork** the repository
-2. **Clone** your fork: `git clone <your-fork-url>`
-3. **Install** dependencies: `npm install`
-4. **Create** a feature branch: `git checkout -b feature/amazing-feature`
+### 4. Explorador de Arquivos
 
-#### Development Process
-1. **Make your changes** following the existing code style
-2. **Test thoroughly** - ensure all features work correctly
-3. **Run quality checks**: `npm run lint && npm run format`
-4. **Commit** with descriptive messages following [Conventional Commits](https://conventionalcommits.org/)
-5. **Push** to your branch: `git push origin feature/amazing-feature`
-6. **Submit** a Pull Request with:
-   - Clear description of changes
-   - Screenshots for UI changes
-   - Test results if applicable
+- **Árvore Interativa** - Navegação com expand/collapse
+- **Editor Integrado** - CodeMirror com syntax highlighting
+- **Operações CRUD** - Criar, editar, renomear, deletar
+- **Preview** - Visualização de imagens
+- **Pesquisa** - Busca rápida de arquivos
 
-#### What to Contribute
-- **Bug fixes** - Help us improve stability
-- **New features** - Enhance functionality (discuss in issues first)
-- **Documentation** - Improve guides and API docs
-- **UI/UX improvements** - Better user experience
-- **Performance optimizations** - Make it faster
+### 5. Git Visual
 
-## Troubleshooting
+- **Status em Tempo Real** - Mudanças destacadas
+- **Gestão de Branches** - Criar, trocar, deletar
+- **Commit Visual** - Stage/unstage com interface gráfica
+- **Histórico** - Visualize commits anteriores
+- **Pull Requests** - Integração com GitHub
 
-### Common Issues & Solutions
+### 6. Mobile Experience
 
-#### "No Claude projects found"
-**Problem**: The UI shows no projects or empty project list
-**Solutions**:
-- Ensure [Claude CLI](https://docs.anthropic.com/en/docs/claude-code) is properly installed
-- Run `claude` command in at least one project directory to initialize
-- Verify `~/.claude/projects/` directory exists and has proper permissions
-d
+- **PWA Support** - Instale como app nativo
+- **Touch Gestures** - Swipe e tap otimizados
+- **Bottom Navigation** - Navegação thumb-friendly
+- **Responsive Layouts** - Adaptação automática
+- **Offline Support** - Funciona sem conexão
 
-#### File Explorer Issues
-**Problem**: Files not loading, permission errors, empty directories
-**Solutions**:
-- Check project directory permissions (`ls -la` in terminal)
-- Verify the project path exists and is accessible
-- Review server console logs for detailed error messages
-- Ensure you're not trying to access system directories outside project scope
+## 🔒 Segurança
 
+### Sistema de Permissões
 
-## License
+Por padrão, todas as ferramentas estão **desabilitadas** por segurança:
 
-GNU General Public License v3.0 - see [LICENSE](LICENSE) file for details.
+1. Acesse **Settings** (ícone de engrenagem)
+2. Vá para a aba **Tools**
+3. Habilite apenas as ferramentas necessárias
+4. Salve as configurações
 
-This project is open source and free to use, modify, and distribute under the GPL v3 license.
+### Ferramentas Disponíveis
 
-## Acknowledgments
+- **File Operations** - Leitura/escrita de arquivos
+- **Terminal Access** - Execução de comandos
+- **Git Operations** - Controle de versão
+- **MCP Servers** - Servidores de contexto
 
-### Built With
-- **[Claude Code](https://docs.anthropic.com/en/docs/claude-code)** - Anthropic's official CLI
-- **[React](https://react.dev/)** - User interface library
-- **[Vite](https://vitejs.dev/)** - Fast build tool and dev server
-- **[Tailwind CSS](https://tailwindcss.com/)** - Utility-first CSS framework
-- **[CodeMirror](https://codemirror.net/)** - Advanced code editor
+## ⚙️ Configuração
 
+### Variáveis de Ambiente (.env)
 
-## Support & Community
+```bash
+# Portas dos Serviços
+PORT=8080                    # Backend Node.js
+VITE_PORT=9000              # Frontend
+VIBE_PORT=8081              # Vibe Kanban
 
-### Stay Updated
-- **Star** this repository to show support
-- **Watch** for updates and new releases
-- **Follow** the project for announcements
+# URLs
+VITE_SERVER_URL=http://localhost:8080
+VITE_WS_URL=ws://localhost:8080
+VITE_VIBE_URL=http://localhost:8081
 
-### Sponsors
+# Segurança
+SESSION_SECRET=your-secret-key
+JWT_SECRET=your-jwt-secret
+
+# Features
+ENABLE_AUTH=true
+ENABLE_MCP=true
+ENABLE_VOICE=true
+
+# Vibe Kanban
+VIBE_NO_BROWSER=true
+VIBE_DATABASE_URL=sqlite://./data/vibe.db
+```
+
+### MCP (Model Context Protocol)
+
+Suporte completo para servidores MCP:
+
+```json
+{
+  "servers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["@modelcontextprotocol/server-filesystem"],
+      "config": {
+        "directories": ["/path/to/project"]
+      }
+    }
+  }
+}
+```
+
+## 🚀 Scripts Disponíveis
+
+```bash
+# Desenvolvimento
+npm run dev              # Inicia todos os serviços
+npm run dev:network      # Desenvolvimento com acesso rede
+npm run server           # Apenas backend Node.js
+npm run client           # Apenas frontend
+npm run vibe-backend     # Apenas Vibe Kanban
+
+# Produção
+npm run build            # Build de produção
+npm run start            # Inicia em produção
+npm run preview          # Preview do build
+
+# Utilitários
+npm run tunnel           # Cloudflare tunnel
+npm run ngrok            # Ngrok tunnel
+npm run lint             # Linting
+npm run format           # Formatação
+```
+
+## 🤝 Contribuindo
+
+Contribuições são bem-vindas! Por favor:
+
+1. Fork o projeto
+2. Crie uma feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit suas mudanças (`git commit -m 'Add: Amazing Feature'`)
+4. Push para a branch (`git push origin feature/AmazingFeature`)
+5. Abra um Pull Request
+
+### Padrões de Código
+
+- Use ESLint e Prettier
+- Siga as convenções do projeto
+- Adicione testes quando possível
+- Documente novas funcionalidades
+
+## 📝 Licença
+
+Este projeto está sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para detalhes.
+
+## 🙏 Agradecimentos
+
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) - CLI oficial da Anthropic
+- [Vibe Kanban](https://github.com/vibe-kanban) - Sistema de tarefas em Rust
+- [React](https://react.dev/) - Biblioteca UI
+- [Vite](https://vitejs.dev/) - Build tool
+- [Tailwind CSS](https://tailwindcss.com/) - Framework CSS
+
+## 💖 Patrocinadores
+
 - [Siteboon - AI powered website builder](https://siteboon.ai)
+
 ---
 
 <div align="center">
-  <strong>Made with care for the Claude Code community.</strong>
+  <strong>Feito com ❤️ para a comunidade Claude Code</strong>
 </div>

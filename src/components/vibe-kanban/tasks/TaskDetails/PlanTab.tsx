@@ -143,7 +143,7 @@ function PlanTab() {
   }
 
   return (
-    <div className="p-4 space-y-6 h-full flex flex-col">
+    <div className="flex-1 overflow-hidden flex flex-col p-4">
       <div className="flex items-center justify-between flex-shrink-0">
         <h3 className="text-lg font-semibold">Plans ({plans.length})</h3>
         {latestProcessHasNoPlan && (

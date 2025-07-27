@@ -1,13 +1,19 @@
 {
   "name": "Claude Code UI",
   "short_name": "Claude UI",
-  "description": "Claude Code UI web application",
+  "description": "Claude Code UI - A modern interface for Claude AI development tools",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#ffffff",
-  "orientation": "portrait-primary",
+  "orientation": "any",
   "scope": "/",
+  "id": "claude-code-ui",
+  "categories": ["developer", "productivity", "utilities"],
+  "dir": "ltr",
+  "lang": "en-US",
+  "prefer_related_applications": false,
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
   "icons": [
     {
       "src": "/icons/icon-72x72.png",

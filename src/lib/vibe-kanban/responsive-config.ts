@@ -37,12 +37,12 @@ export const getTaskPanelClasses = () => {
     `${PANEL_SIDE_BY_SIDE_BREAKPOINT}:w-[800px]`,
   ].join(' ');
 
-  return `${overlayClasses} ${sideBySideClasses} bg-background border-l shadow-lg overflow-hidden`;
+  return `${overlayClasses} ${sideBySideClasses} bg-background border-l shadow-lg flex flex-col`;
 };
 
 // Generate classes for backdrop (only show in overlay mode)
 export const getBackdropClasses = () => {
-  return `fixed inset-0 z-40 bg-background/80 backdrop-blur-sm ${PANEL_SIDE_BY_SIDE_BREAKPOINT}:hidden`;
+  return `fixed inset-0 z-40 bg-black/60 backdrop-blur-sm ${PANEL_SIDE_BY_SIDE_BREAKPOINT}:hidden`;
 };
 
 // Generate classes for main container (enable flex layout in side-by-side mode)

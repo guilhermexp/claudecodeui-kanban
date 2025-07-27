@@ -81,39 +81,37 @@ export function TaskDetailsPanel({
 
           {/* Panel */}
           <div className={getTaskPanelClasses()}>
-            <div className="flex flex-col h-full">
-              <TaskDetailsHeader
-                onClose={onClose}
-                onEditTask={onEditTask}
-                onDeleteTask={onDeleteTask}
-              />
+            <TaskDetailsHeader
+              onClose={onClose}
+              onEditTask={onEditTask}
+              onDeleteTask={onDeleteTask}
+            />
 
-              <CollapsibleToolbar />
+            <CollapsibleToolbar />
 
-              <TabNavigation
-                activeTab={activeTab}
-                setActiveTab={setActiveTab}
-              />
+            <TabNavigation
+              activeTab={activeTab}
+              setActiveTab={setActiveTab}
+            />
 
-              {/* Tab Content */}
-              <div
-                className={`flex-1 flex flex-col min-h-0 ${activeTab === 'logs' ? 'p-4' : 'pt-4'}`}
-              >
-                {activeTab === 'diffs' ? (
-                  <DiffTab />
-                ) : activeTab === 'related' ? (
-                  <RelatedTasksTab />
-                ) : activeTab === 'processes' ? (
-                  <ProcessesTab />
-                ) : activeTab === 'plan' ? (
-                  <PlanTab />
-                ) : (
-                  <LogsTab />
-                )}
-              </div>
-
-              <TaskFollowUpSection />
+            {/* Tab Content */}
+            <div
+              className={`flex-1 overflow-hidden flex flex-col ${activeTab === 'logs' ? 'p-4' : 'pt-4'}`}
+            >
+              {activeTab === 'diffs' ? (
+                <DiffTab />
+              ) : activeTab === 'related' ? (
+                <RelatedTasksTab />
+              ) : activeTab === 'processes' ? (
+                <ProcessesTab />
+              ) : activeTab === 'plan' ? (
+                <PlanTab />
+              ) : (
+                <LogsTab />
+              )}
             </div>
+
+            <TaskFollowUpSection />
           </div>
 
           <EditorSelectionDialog
