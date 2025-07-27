@@ -1,0 +1,34 @@
+FROM node:20-alpine
+
+# Install dependencies for node-pty
+RUN apk add --no-cache \
+    python3 \
+    make \
+    g++ \
+    git \
+    bash \
+    curl
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+COPY vibe-kanban/package*.json ./vibe-kanban/
+
+# Install dependencies
+RUN npm ci --only=production
+RUN cd vibe-kanban && npm ci --only=production
+
+# Copy application files
+COPY . .
+
+# Build frontend
+RUN npm run build
+
+# Create necessary directories
+RUN mkdir -p /root/.claude/projects
+
+EXPOSE 8080 9000
+
+# Use the process manager for better control
+CMD ["node", "scripts/process-manager.js", "monitor"]
