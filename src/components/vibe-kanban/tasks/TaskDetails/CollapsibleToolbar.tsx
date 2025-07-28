@@ -4,7 +4,7 @@ import { ChevronDown, ChevronUp } from 'lucide-react';
 import TaskDetailsToolbar from '../TaskDetailsToolbar';
 
 function CollapsibleToolbar() {
-  const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(true);
+  const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
 
   return (
     <div className="border-b">

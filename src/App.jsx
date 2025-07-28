@@ -35,6 +35,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import { useVersionCheck } from './hooks/useVersionCheck';
 import { api } from './utils/api';
 import { authPersistence } from './utils/auth-persistence';
+import { appStatePersistence } from './utils/app-state-persistence';
 
 
 // Main App component with routing
@@ -45,12 +46,27 @@ function AppContent() {
   const { updateAvailable, latestVersion, currentVersion } = useVersionCheck('siteboon', 'claudecodeui');
   const [showVersionModal, setShowVersionModal] = useState(false);
   
+  // Load persisted state on mount
+  const loadPersistedState = () => {
+    const savedState = appStatePersistence.loadState();
+    return {
+      selectedProject: savedState[appStatePersistence.KEYS.SELECTED_PROJECT] || null,
+      selectedSession: savedState[appStatePersistence.KEYS.SELECTED_SESSION] || null,
+      activeTab: savedState[appStatePersistence.KEYS.ACTIVE_TAB] || 'shell',
+      sidebarOpen: savedState[appStatePersistence.KEYS.SIDEBAR_OPEN] !== undefined 
+        ? savedState[appStatePersistence.KEYS.SIDEBAR_OPEN] 
+        : false,
+    };
+  };
+
+  const persistedState = loadPersistedState();
+
   const [projects, setProjects] = useState([]);
-  const [selectedProject, setSelectedProject] = useState(null);
-  const [selectedSession, setSelectedSession] = useState(null);
-  const [activeTab, setActiveTab] = useState('shell'); // 'shell', 'chat', 'files', 'git'
+  const [selectedProject, setSelectedProject] = useState(persistedState.selectedProject);
+  const [selectedSession, setSelectedSession] = useState(persistedState.selectedSession);
+  const [activeTab, setActiveTab] = useState(persistedState.activeTab); // 'shell', 'chat', 'files', 'git'
   const [isMobile, setIsMobile] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(persistedState.sidebarOpen);
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [isShellConnected, setIsShellConnected] = useState(false);
@@ -98,6 +114,50 @@ function AppContent() {
     window.addEventListener('storage', handleStorageChange);
     return () => window.removeEventListener('storage', handleStorageChange);
   }, [reconnect]);
+
+  // Persist state changes
+  useEffect(() => {
+    const stateToSave = {
+      [appStatePersistence.KEYS.SELECTED_PROJECT]: selectedProject,
+      [appStatePersistence.KEYS.SELECTED_SESSION]: selectedSession,
+      [appStatePersistence.KEYS.ACTIVE_TAB]: activeTab,
+      [appStatePersistence.KEYS.SIDEBAR_OPEN]: sidebarOpen,
+    };
+    appStatePersistence.saveState(stateToSave);
+  }, [selectedProject, selectedSession, activeTab, sidebarOpen]);
+
+  // Save navigation context when navigating away
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      appStatePersistence.saveNavigationContext({
+        project: selectedProject,
+        session: selectedSession,
+        tab: activeTab,
+        route: window.location.pathname,
+      });
+    };
+
+    // Save context when clicking on links that navigate away
+    const handleClick = (e) => {
+      const link = e.target.closest('a');
+      if (link && link.href && !link.href.includes(window.location.origin + '/chat')) {
+        appStatePersistence.saveNavigationContext({
+          project: selectedProject,
+          session: selectedSession,
+          tab: activeTab,
+          route: window.location.pathname,
+        });
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    document.addEventListener('click', handleClick);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      document.removeEventListener('click', handleClick);
+    };
+  }, [selectedProject, selectedSession, activeTab]);
 
   useEffect(() => {
     const checkMobile = () => {

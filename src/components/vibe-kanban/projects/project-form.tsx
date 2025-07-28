@@ -23,6 +23,7 @@ import {
   Environment,
 } from '../../../lib/vibe-kanban/shared-types';
 import { projectsApi, configApi, githubApi, RepositoryInfo } from '../../../lib/vibe-kanban/api';
+import { cn } from '../../../lib/vibe-kanban/utils';
 
 interface ProjectFormProps {
   open: boolean;
@@ -217,9 +218,12 @@ export function ProjectForm({
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent
-        className={isEditing ? 'sm:max-w-[600px] max-h-[90vh] overflow-y-auto' : 'sm:max-w-[425px] max-h-[85vh] overflow-y-auto'}
+        className={cn(
+          'flex flex-col h-full',
+          isEditing ? 'sm:max-w-[600px] sm:max-h-[90vh]' : 'sm:max-w-[425px] sm:max-h-[85vh]'
+        )}
       >
-        <DialogHeader>
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle>
             {isEditing ? 'Edit Project' : 'Create New Project'}
           </DialogTitle>
@@ -231,66 +235,71 @@ export function ProjectForm({
         </DialogHeader>
 
         {isEditing ? (
-          <Tabs defaultValue="general" className="w-full -mt-2">
-            <TabsList className="grid w-full grid-cols-2 mb-4">
-              <TabsTrigger value="general">General</TabsTrigger>
-              <TabsTrigger value="templates">Task Templates</TabsTrigger>
-            </TabsList>
-            <TabsContent value="general" className="space-y-4">
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <ProjectFormFields
-                  isEditing={isEditing}
-                  repoMode={repoMode}
-                  setRepoMode={setRepoMode}
-                  gitRepoPath={gitRepoPath}
-                  handleGitRepoPathChange={handleGitRepoPathChange}
-                  setShowFolderPicker={setShowFolderPicker}
-                  parentPath={parentPath}
-                  setParentPath={setParentPath}
-                  folderName={folderName}
-                  setFolderName={setFolderName}
-                  setName={setName}
-                  name={name}
-                  setupScript={setupScript}
-                  setSetupScript={setSetupScript}
-                  devScript={devScript}
-                  setDevScript={setDevScript}
-                  cleanupScript={cleanupScript}
-                  setCleanupScript={setCleanupScript}
-                  error={error}
-                />
-                <DialogFooter>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleClose}
-                    disabled={loading}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    type="submit"
-                    disabled={loading || !name.trim() || !gitRepoPath.trim()}
-                  >
-                    {loading ? 'Saving...' : 'Save Changes'}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </TabsContent>
-            <TabsContent value="templates" className="mt-0 pt-0">
-              <TaskTemplateManager projectId={project?.id} />
-            </TabsContent>
-          </Tabs>
+          <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
+            <Tabs defaultValue="general" className="flex flex-col flex-1 overflow-hidden">
+              <TabsList className="grid w-full grid-cols-2 mb-4 flex-shrink-0">
+                <TabsTrigger value="general">General</TabsTrigger>
+                <TabsTrigger value="templates">Task Templates</TabsTrigger>
+              </TabsList>
+              <TabsContent value="general" className="flex-1 overflow-hidden">
+                <div className="overflow-y-auto h-full space-y-4 pr-6 -mr-6">
+                  <ProjectFormFields
+                    isEditing={isEditing}
+                    repoMode={repoMode}
+                    setRepoMode={setRepoMode}
+                    gitRepoPath={gitRepoPath}
+                    handleGitRepoPathChange={handleGitRepoPathChange}
+                    setShowFolderPicker={setShowFolderPicker}
+                    parentPath={parentPath}
+                    setParentPath={setParentPath}
+                    folderName={folderName}
+                    setFolderName={setFolderName}
+                    setName={setName}
+                    name={name}
+                    setupScript={setupScript}
+                    setSetupScript={setSetupScript}
+                    devScript={devScript}
+                    setDevScript={setDevScript}
+                    cleanupScript={cleanupScript}
+                    setCleanupScript={setCleanupScript}
+                    error={error}
+                  />
+                </div>
+              </TabsContent>
+              <TabsContent value="templates" className="flex-1 overflow-hidden">
+                <div className="h-full overflow-y-auto pr-6 -mr-6">
+                  <TaskTemplateManager projectId={project?.id} />
+                </div>
+              </TabsContent>
+            </Tabs>
+            <DialogFooter className="mt-4 pt-4 border-t flex-shrink-0">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleClose}
+                disabled={loading}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={loading || !name.trim() || !gitRepoPath.trim()}
+              >
+                {loading ? 'Saving...' : 'Save Changes'}
+              </Button>
+            </DialogFooter>
+          </form>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {modeLoading ? (
-              <div className="flex items-center justify-center py-4">
-                <Loader2 className="h-6 w-6 animate-spin" />
-                <span className="ml-2">Loading...</span>
-              </div>
-            ) : environment === 'cloud' ? (
-              // Cloud mode: Show only GitHub repositories
-              <>
+          <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
+            <div className="overflow-y-auto flex-1 space-y-4 pr-6 -mr-6">
+              {modeLoading ? (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                  <span className="ml-2">Loading...</span>
+                </div>
+              ) : environment === 'cloud' ? (
+                // Cloud mode: Show only GitHub repositories
+                <>
                 <GitHubRepositoryPicker
                   selectedRepository={selectedRepository}
                   onRepositorySelect={setSelectedRepository}
@@ -375,7 +384,8 @@ export function ProjectForm({
                 error={error}
               />
             )}
-            <DialogFooter>
+            </div>
+            <DialogFooter className="mt-4 pt-4 border-t flex-shrink-0">
               <Button
                 type="button"
                 variant="outline"

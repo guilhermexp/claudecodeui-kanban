@@ -22,19 +22,20 @@ const Dialog = React.forwardRef<
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-start justify-center sm:p-4 overflow-y-auto">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center sm:items-start">
       <div
         className="fixed inset-0 bg-black/50"
         onClick={() => (uncloseable ? {} : onOpenChange?.(false))}
       />
-      <div
-        ref={ref}
-        className={cn(
-          'relative z-[9999] grid w-full max-w-lg gap-4 bg-background p-4 sm:p-6 shadow-lg duration-200 sm:rounded-lg sm:my-8 min-h-screen sm:min-h-0',
-          className
-        )}
-        {...props}
-      >
+      <div className="overflow-y-auto max-h-screen w-full sm:max-w-fit sm:py-8 flex items-center justify-center">
+        <div
+          ref={ref}
+          className={cn(
+            'relative z-[9999] grid w-full max-w-lg gap-4 bg-background p-4 sm:p-6 shadow-lg duration-200 sm:rounded-2xl min-h-screen sm:min-h-0 overflow-hidden',
+            className
+          )}
+          {...props}
+        >
         {!uncloseable && (
           <button
             className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
@@ -45,6 +46,7 @@ const Dialog = React.forwardRef<
           </button>
         )}
         {children}
+        </div>
       </div>
     </div>
   );
