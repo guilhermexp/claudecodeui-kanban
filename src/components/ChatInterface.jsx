@@ -1142,6 +1142,24 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   // Performance optimization states
   const [performanceMode, setPerformanceMode] = useState('normal'); // normal, optimized, aggressive
   const renderTimeRef = useRef([]);
+  
+  // Improved scroll system states
+  const [scrollBehavior, setScrollBehavior] = useState({
+    shouldAutoScroll: true,
+    hasNewMessages: false,
+    lastScrollPosition: 0,
+    lastMessageCount: 0
+  });
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0);
+  const scrollThrottleRef = useRef(null);
+  const lastScrollPositionRef = useRef(0);
+  
+  // Mobile detection
+  const isMobile = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth <= 768 || 
+           /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  }, []);
 
 
   // Memoized diff calculation to prevent recalculating on every render
@@ -1363,7 +1381,12 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           const messages = await loadSessionMessages(selectedProject.name, selectedSession.id);
           setSessionMessages(messages);
           // convertedMessages will be automatically updated via useMemo
-          // Don't auto-scroll when loading sessions - let user control
+          // Reset scroll behavior for new session
+          setScrollBehavior(prev => ({
+            ...prev,
+            lastMessageCount: 0,
+            shouldAutoScroll: true
+          }));
         } else {
           // Reset the flag after handling system session change
           setIsSystemSessionChange(false);
@@ -1375,7 +1398,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     };
     
     loadMessages();
-  }, [selectedSession, selectedProject, loadSessionMessages, scrollToBottom, isSystemSessionChange]);
+  }, [selectedSession, selectedProject, loadSessionMessages, isSystemSessionChange]);
 
   // Update chatMessages when convertedMessages changes
   useEffect(() => {
@@ -1877,30 +1900,76 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   }, [chatMessages.length, performanceMode]);
 
 
-  // Scroll event handling - just to track if user scrolled up
+  // Optimized scroll event handling with throttling
   useEffect(() => {
-    const scrollContainer = scrollContainerRef.current;
-    if (scrollContainer) {
-      const checkScrollPosition = () => {
-        const nearBottom = isNearBottom();
-        setIsUserScrolledUp(!nearBottom);
-      };
-      
-      scrollContainer.addEventListener('scroll', checkScrollPosition, { passive: true });
-      
-      return () => {
-        scrollContainer.removeEventListener('scroll', checkScrollPosition);
-      };
-    }
-  }, [isNearBottom]);
+    const container = scrollContainerRef.current;
+    if (!container) return;
 
-  // Auto-scroll apenas quando o assistente estiver respondendo
+    let ticking = false;
+    const handleScroll = () => {
+      if (!ticking) {
+        requestAnimationFrame(() => {
+          const { scrollTop, scrollHeight, clientHeight } = container;
+          const nearBottom = scrollHeight - scrollTop - clientHeight < 50;
+          const wasScrolledUp = isUserScrolledUp;
+          
+          setIsUserScrolledUp(!nearBottom);
+          lastScrollPositionRef.current = scrollTop;
+          
+          // Track if user saw new messages
+          if (nearBottom && unreadMessageCount > 0) {
+            setUnreadMessageCount(0);
+          }
+          
+          // Update scroll behavior
+          setScrollBehavior(prev => ({
+            ...prev,
+            shouldAutoScroll: nearBottom,
+            lastScrollPosition: scrollTop
+          }));
+          
+          ticking = false;
+        });
+        ticking = true;
+      }
+    };
+
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, []); // No dependencies - stable listener
+
+  // Intelligent auto-scroll system
   useEffect(() => {
-    if (isLoading && messagesEndRef.current && !isUserScrolledUp) {
-      // Scroll suave para a última mensagem
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    const shouldScroll = 
+      // User sent a new message
+      (chatMessages.length > scrollBehavior.lastMessageCount && 
+       chatMessages[chatMessages.length - 1]?.type === 'user') ||
+      // Assistant is responding and user was near bottom
+      (isLoading && scrollBehavior.shouldAutoScroll) ||
+      // New assistant message and user was near bottom
+      (chatMessages.length > scrollBehavior.lastMessageCount && 
+       chatMessages[chatMessages.length - 1]?.type === 'assistant' && 
+       scrollBehavior.shouldAutoScroll) ||
+      // First load of session
+      (chatMessages.length > 0 && scrollBehavior.lastMessageCount === 0);
+    
+    if (shouldScroll && !isUserScrolledUp) {
+      scrollToBottom(true);
     }
-  }, [chatMessages, isLoading, isUserScrolledUp]);
+    
+    // Track new messages for unread counter
+    if (chatMessages.length > scrollBehavior.lastMessageCount && isUserScrolledUp) {
+      const newMessages = chatMessages.length - scrollBehavior.lastMessageCount;
+      setUnreadMessageCount(prev => prev + newMessages);
+    }
+    
+    // Update last message count
+    setScrollBehavior(prev => ({
+      ...prev,
+      lastMessageCount: chatMessages.length,
+      hasNewMessages: chatMessages.length > prev.lastMessageCount
+    }));
+  }, [chatMessages.length, isLoading, scrollBehavior.shouldAutoScroll, isUserScrolledUp, scrollToBottom]);
 
 
   // Initial textarea setup
@@ -1923,6 +1992,20 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       setIsTextareaExpanded(false);
     }
   }, [input]);
+  
+  // Mobile optimizations - adjust scroll when keyboard appears
+  useEffect(() => {
+    if (isInputFocused && isMobile) {
+      // Wait for keyboard to open
+      const timer = setTimeout(() => {
+        if (scrollBehavior.shouldAutoScroll) {
+          scrollToBottom(true);
+        }
+      }, 300);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [isInputFocused, isMobile, scrollBehavior.shouldAutoScroll, scrollToBottom]);
 
   const handleTranscript = useCallback((text) => {
     if (text.trim()) {
@@ -1947,9 +2030,26 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
   }, []);
 
-  // Load earlier messages by increasing the visible message count
+  // Load earlier messages with scroll position preservation
   const loadEarlierMessages = useCallback(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    
+    // Save current scroll height
+    const oldScrollHeight = container.scrollHeight;
+    const oldScrollTop = container.scrollTop;
+    
+    // Load more messages
     setVisibleMessageCount(prevCount => prevCount + 100);
+    
+    // Preserve scroll position after render
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const newScrollHeight = container.scrollHeight;
+        const scrollDiff = newScrollHeight - oldScrollHeight;
+        container.scrollTop = oldScrollTop + scrollDiff;
+      });
+    });
   }, []);
 
   // Handle image files from drag & drop or file picker
@@ -2121,8 +2221,13 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       can_interrupt: true
     });
     
-    // Reset scroll state when user sends a message, but don't force scroll
+    // Reset scroll state when user sends a message
     setIsUserScrolledUp(false);
+    setUnreadMessageCount(0);
+    setScrollBehavior(prev => ({
+      ...prev,
+      shouldAutoScroll: true
+    }));
 
     // Session Protection: Mark session as active to prevent automatic project updates during conversation
     // This is crucial for maintaining chat state integrity. We handle two cases:
@@ -2354,7 +2459,14 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         {/* Messages Area - Scrollable Middle Section */}
       <div 
         ref={scrollContainerRef}
-        className="flex-1 overflow-y-auto overflow-x-hidden px-0 py-3 sm:p-4 space-y-2 sm:space-y-3 relative"
+        className="flex-1 overflow-y-auto overflow-x-hidden px-0 py-3 sm:p-4 space-y-2 sm:space-y-3 relative scrollbar-thin"
+        style={{
+          scrollBehavior: 'smooth',
+          overscrollBehaviorY: 'contain',
+          WebkitOverflowScrolling: 'touch',
+          willChange: 'transform',
+          transform: 'translateZ(0)'
+        }}
       >
         {isLoadingSessionMessages && chatMessages.length === 0 ? (
           <div className="text-center text-gray-500 dark:text-gray-400 mt-8">
@@ -2498,20 +2610,26 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               </div>
             </button>
             
-            {/* Scroll to bottom button - positioned next to mode indicator */}
-            {isUserScrolledUp && chatMessages.length > 0 && (
+            {/* Scroll to bottom button with unread counter */}
+            {(isUserScrolledUp || unreadMessageCount > 0) && chatMessages.length > 0 && (
               <button
                 onClick={() => {
                   scrollToBottom();
                   setIsUserScrolledUp(false);
+                  setUnreadMessageCount(0);
                 }}
-                className="w-8 h-8 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg flex items-center justify-center transition-all duration-200 hover:scale-105 focus:outline-none"
-                title="Scroll to bottom"
+                className="relative bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg flex items-center gap-2 px-3 py-2 transition-all duration-200 hover:scale-105 focus:outline-none"
+                title={unreadMessageCount > 0 ? `${unreadMessageCount} new messages` : "Scroll to bottom"}
                 tabIndex={-1}
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
                 </svg>
+                {unreadMessageCount > 0 && (
+                  <span className="text-xs font-bold bg-red-500 text-white rounded-full px-2 py-0.5 min-w-[20px] text-center animate-fade-in">
+                    {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
+                  </span>
+                )}
               </button>
             )}
           </div>
