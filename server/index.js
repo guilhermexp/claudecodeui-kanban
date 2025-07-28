@@ -218,6 +218,21 @@ app.use('/api', validateApiKey);
 app.use('/api/auth', authRoutes);
 
 
+// Health check endpoint (public)
+app.get('/api/health', (req, res) => {
+  const healthStatus = {
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    services: {
+      server: 'running',
+      database: 'connected',
+      vibeKanban: vibeProxy.circuitOpen ? 'unavailable' : 'available'
+    }
+  };
+  
+  res.json(healthStatus);
+});
+
 // Git API Routes (protected)
 app.use('/api/git', authenticateToken, gitRoutes);
 
@@ -1009,72 +1024,81 @@ app.post('/api/projects/:projectName/upload-images', authenticateToken, async (r
   }
 });
 
+// Import the robust Vibe proxy
+const VibeKanbanProxy = require('./lib/vibe-proxy.js');
+
+// Initialize Vibe Kanban proxy with configuration
+const vibeProxy = new VibeKanbanProxy({
+  baseUrl: 'http://localhost:8081',
+  timeout: 30000, // 30 seconds
+  retries: 3,
+  retryDelay: 1000, // 1 second
+  healthCheckInterval: 30000, // 30 seconds
+  circuitBreakerThreshold: 5,
+  circuitBreakerTimeout: 60000 // 1 minute
+});
+
 // Proxy VibeKanban API requests to Rust backend
 app.use('/api/vibe-kanban', express.json(), async (req, res) => {
   try {
     const vibeKanbanPath = req.path.replace('/api/vibe-kanban', '');
     const queryString = req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : '';
-    const vibeKanbanUrl = `http://localhost:8081/api${vibeKanbanPath}${queryString}`;
+    const fullPath = `${vibeKanbanPath}${queryString}`;
     
-    console.log(`Proxying VibeKanban request: ${req.method} ${req.originalUrl} -> ${vibeKanbanUrl}`);
+    console.log(`Proxying VibeKanban request: ${req.method} ${req.originalUrl}`);
     
-    // Forward the request to VibeKanban backend with better error handling
-    const options = {
+    // Use the robust proxy
+    const response = await vibeProxy.makeRequest(fullPath, {
       method: req.method,
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-    };
-
-    // Forward body for POST/PUT requests
-    if (req.method !== 'GET' && req.method !== 'HEAD' && req.body) {
-      options.body = JSON.stringify(req.body);
-    }
-
-    let response;
-    try {
-      response = await fetch(vibeKanbanUrl, options);
-    } catch (fetchError) {
-      // Handle connection errors gracefully
-      if (fetchError.code === 'ECONNREFUSED') {
-        console.warn('VibeKanban backend is not running on port 8081');
-        return res.status(503).json({ 
-          success: false, 
-          message: 'Vibe Kanban backend is not running. Please start it with "npm run vibe-backend" or "npm run dev"',
-          error: 'Service Unavailable',
-          details: 'The Vibe Kanban backend service (Rust) needs to be running on port 8081'
-        });
+      headers: req.headers,
+      body: req.body
+    });
+    
+    // Set response headers
+    Object.entries(response.headers.raw()).forEach(([key, value]) => {
+      if (key.toLowerCase() !== 'content-encoding') {
+        res.setHeader(key, value);
       }
-      throw fetchError;
-    }
-
-    // Check if response is JSON
-    const contentType = response.headers.get('content-type');
-    if (contentType && contentType.includes('application/json')) {
-      const data = await response.json();
-      res.status(response.status).json(data);
+    });
+    
+    // Send response
+    res.status(response.status);
+    
+    if (typeof response.data === 'object') {
+      res.json(response.data);
     } else {
-      // Handle non-JSON responses
-      const text = await response.text();
-      res.status(response.status).send(text);
+      res.send(response.data);
     }
   } catch (error) {
     console.error('VibeKanban proxy error:', error);
     
-    // Better error handling based on error type
-    if (error.code === 'ECONNREFUSED') {
+    // Handle specific error types
+    if (error.message.includes('Circuit breaker')) {
+      res.status(503).json({ 
+        success: false, 
+        message: 'Vibe Kanban service is temporarily unavailable due to repeated failures',
+        error: 'Service Unavailable',
+        details: 'The service will automatically retry in a few moments'
+      });
+    } else if (error.message.includes('not running')) {
       res.status(503).json({ 
         success: false, 
         message: 'Vibe Kanban backend is not running. Please start it with "npm run vibe-backend" or "npm run dev"',
         error: 'Service Unavailable',
         details: 'The Vibe Kanban backend service (Rust) needs to be running on port 8081'
       });
-    } else if (error.name === 'AbortError') {
+    } else if (error.message.includes('timeout')) {
       res.status(504).json({ 
         success: false, 
         message: 'Request to Vibe Kanban backend timed out',
         error: 'Gateway Timeout'
+      });
+    } else if (error.statusCode) {
+      // Forward HTTP errors from Vibe Kanban
+      res.status(error.statusCode).json(error.data || {
+        success: false,
+        message: error.message,
+        error: `HTTP ${error.statusCode}`
       });
     } else {
       res.status(502).json({ 
@@ -1216,15 +1240,76 @@ async function startServer() {
 
 startServer();
 
-// Clean up on server shutdown
-process.on('SIGINT', () => {
-  console.log('\n🛑 Shutting down server...');
+// Graceful shutdown handling
+let isShuttingDown = false;
+
+async function gracefulShutdown(signal) {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
   
-  process.exit(0);
+  console.log(`\n🛑 ${signal} received. Starting graceful shutdown...`);
+  
+  // Stop accepting new connections
+  server.close(() => {
+    console.log('✅ HTTP server closed');
+  });
+  
+  // Close WebSocket connections gracefully
+  wss.clients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify({ 
+        type: 'server_shutdown',
+        message: 'Server is shutting down gracefully' 
+      }));
+      client.close(1001, 'Server shutting down');
+    }
+  });
+  console.log('✅ WebSocket connections closed');
+  
+  // Stop Vibe Kanban proxy health checks
+  if (vibeProxy) {
+    vibeProxy.destroy();
+    console.log('✅ Vibe Kanban proxy stopped');
+  }
+  
+  // Close shell sessions
+  if (global.shellSessions) {
+    Object.values(global.shellSessions).forEach(session => {
+      if (session && session.pty) {
+        session.pty.kill();
+      }
+    });
+    console.log('✅ Shell sessions closed');
+  }
+  
+  // Close database connections
+  if (global.db) {
+    try {
+      global.db.close();
+      console.log('✅ Database connections closed');
+    } catch (error) {
+      console.error('❌ Error closing database:', error);
+    }
+  }
+  
+  // Give processes time to clean up
+  setTimeout(() => {
+    console.log('✅ Graceful shutdown completed');
+    process.exit(0);
+  }, 1000);
+}
+
+// Register shutdown handlers
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+
+// Handle uncaught errors
+process.on('uncaughtException', (error) => {
+  console.error('❌ Uncaught Exception:', error);
+  gracefulShutdown('uncaughtException');
 });
 
-process.on('SIGTERM', () => {
-  console.log('\n🛑 Server termination requested...');
-  
-  process.exit(0);
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+  // Don't shutdown on unhandled rejections, just log them
 });

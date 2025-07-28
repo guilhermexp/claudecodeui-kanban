@@ -7,11 +7,41 @@ echo "🚀 Claude Code UI - Acesso Remoto Simplificado"
 echo "=============================================="
 echo ""
 
-# Limpa processos antigos
+# Função para graceful shutdown
+graceful_shutdown() {
+    local port=$1
+    local pids=$(lsof -ti:$port 2>/dev/null)
+    
+    if [ ! -z "$pids" ]; then
+        echo "   Enviando SIGTERM para processos na porta $port..."
+        echo "$pids" | xargs kill -TERM 2>/dev/null || true
+        
+        # Aguarda até 5 segundos para processo encerrar
+        local count=0
+        while [ $count -lt 5 ] && lsof -ti:$port >/dev/null 2>&1; do
+            sleep 1
+            count=$((count + 1))
+        done
+        
+        # Se ainda estiver rodando, força com SIGKILL
+        if lsof -ti:$port >/dev/null 2>&1; then
+            echo "   Forçando encerramento na porta $port..."
+            lsof -ti:$port | xargs kill -9 2>/dev/null || true
+        fi
+    fi
+}
+
+# Limpa processos antigos com graceful shutdown
 echo "🧹 Limpando processos..."
-pkill -f "npm run dev" 2>/dev/null
-pkill -f ngrok 2>/dev/null
-lsof -ti:9000,8080,8081 | xargs kill -9 2>/dev/null || true
+echo "   Encerrando npm run dev..."
+pkill -TERM -f "npm run dev" 2>/dev/null
+echo "   Encerrando ngrok..."
+pkill -TERM -f ngrok 2>/dev/null
+
+# Graceful shutdown para cada porta
+graceful_shutdown 9000
+graceful_shutdown 8080
+graceful_shutdown 8081
 
 sleep 2
 
