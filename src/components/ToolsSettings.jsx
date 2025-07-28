@@ -503,11 +503,11 @@ function ToolsSettings({ isOpen, onClose }) {
   if (!isOpen) return null;
 
   return (
-    <div className="modal-backdrop fixed inset-0 flex items-center justify-center z-[100] md:p-4 bg-white dark:bg-gray-900">
-      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 md:rounded-lg shadow-2xl w-full md:max-w-4xl h-full md:h-[90vh] flex flex-col">
+    <div className="modal-backdrop fixed inset-0 flex items-center justify-center z-[100] md:p-4 bg-background/80 backdrop-blur-sm">
+      <div className="bg-card border border-border md:rounded-2xl shadow-sm w-full md:max-w-4xl h-full md:h-[90vh] flex flex-col">
         <div className="flex items-center justify-between p-4 md:p-6 border-b border-border flex-shrink-0">
           <div className="flex items-center gap-3">
-            <Settings className="w-5 h-5 md:w-6 md:h-6 text-blue-600" />
+            <Settings className="w-5 h-5 md:w-6 md:h-6 text-muted-foreground" />
             <h2 className="text-lg md:text-xl font-semibold text-foreground">
               Settings
             </h2>
@@ -530,7 +530,7 @@ function ToolsSettings({ isOpen, onClose }) {
                 onClick={() => setActiveTab('tools')}
                 className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
                   activeTab === 'tools'
-                    ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                    ? 'border-foreground text-foreground'
                     : 'border-transparent text-muted-foreground hover:text-foreground'
                 }`}
               >
@@ -540,7 +540,7 @@ function ToolsSettings({ isOpen, onClose }) {
                 onClick={() => setActiveTab('appearance')}
                 className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
                   activeTab === 'appearance'
-                    ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                    ? 'border-foreground text-foreground'
                     : 'border-transparent text-muted-foreground hover:text-foreground'
                 }`}
               >
@@ -558,7 +558,7 @@ function ToolsSettings({ isOpen, onClose }) {
   <div className="space-y-6 md:space-y-8">
     {/* Theme Settings */}
     <div className="space-y-4">
-      <div className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+      <div className="bg-muted/50 border border-border rounded-2xl p-4">
         <div className="flex items-center justify-between">
           <div>
             <div className="font-medium text-foreground">
@@ -570,7 +570,7 @@ function ToolsSettings({ isOpen, onClose }) {
           </div>
           <button
             onClick={toggleDarkMode}
-            className="relative inline-flex h-8 w-14 items-center rounded-full bg-gray-200 dark:bg-gray-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900"
+            className="relative inline-flex h-8 w-14 items-center rounded-full bg-muted transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 dark:focus:ring-offset-background"
             role="switch"
             aria-checked={isDarkMode}
             aria-label="Toggle dark mode"
@@ -579,12 +579,12 @@ function ToolsSettings({ isOpen, onClose }) {
             <span
               className={`${
                 isDarkMode ? 'translate-x-7' : 'translate-x-1'
-              } inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-transform duration-200 flex items-center justify-center`}
+              } inline-block h-6 w-6 transform rounded-full bg-background shadow-sm transition-transform duration-200 flex items-center justify-center`}
             >
               {isDarkMode ? (
-                <Moon className="w-3.5 h-3.5 text-gray-700" />
+                <Moon className="w-3.5 h-3.5 text-muted-foreground" />
               ) : (
-                <Sun className="w-3.5 h-3.5 text-yellow-500" />
+                <Sun className="w-3.5 h-3.5 text-muted-foreground" />
               )}
             </span>
           </button>
@@ -594,7 +594,7 @@ function ToolsSettings({ isOpen, onClose }) {
 
     {/* Project Sorting */}
     <div className="space-y-4">
-      <div className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+      <div className="bg-muted/50 border border-border rounded-2xl p-4">
         <div className="flex items-center justify-between">
           <div>
             <div className="font-medium text-foreground">
@@ -607,7 +607,7 @@ function ToolsSettings({ isOpen, onClose }) {
           <select
             value={projectSortOrder}
             onChange={(e) => setProjectSortOrder(e.target.value)}
-            className="text-sm bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 w-32"
+            className="text-sm bg-background border border-input text-foreground rounded-2xl focus:ring-ring focus:border-ring p-2 w-32"
           >
             <option value="name">Alphabetical</option>
             <option value="date">Recent Activity</option>
@@ -628,24 +628,24 @@ function ToolsSettings({ isOpen, onClose }) {
             {/* Skip Permissions */}
             <div className="space-y-4">
               <div className="flex items-center gap-3">
-                <AlertTriangle className="w-5 h-5 text-orange-500" />
+                <AlertTriangle className="w-5 h-5 text-muted-foreground" />
                 <h3 className="text-lg font-medium text-foreground">
                   Permission Settings
                 </h3>
               </div>
-              <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-4">
+              <div className="bg-muted/50 border border-border rounded-2xl p-4">
                 <label className="flex items-center gap-3">
                   <input
                     type="checkbox"
                     checked={skipPermissions}
                     onChange={(e) => setSkipPermissions(e.target.checked)}
-                    className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                    className="w-4 h-4 text-foreground bg-background border-input rounded focus:ring-ring"
                   />
                   <div>
-                    <div className="font-medium text-orange-900 dark:text-orange-100">
+                    <div className="font-medium text-foreground">
                       Skip permission prompts (use with caution)
                     </div>
-                    <div className="text-sm text-orange-700 dark:text-orange-300">
+                    <div className="text-sm text-muted-foreground">
                       Equivalent to --dangerously-skip-permissions flag
                     </div>
                   </div>
@@ -656,7 +656,7 @@ function ToolsSettings({ isOpen, onClose }) {
             {/* Allowed Tools */}
             <div className="space-y-4">
               <div className="flex items-center gap-3">
-                <Shield className="w-5 h-5 text-green-500" />
+                <Shield className="w-5 h-5 text-muted-foreground" />
                 <h3 className="text-lg font-medium text-foreground">
                   Allowed Tools
                 </h3>
@@ -691,7 +691,7 @@ function ToolsSettings({ isOpen, onClose }) {
 
               {/* Common tools quick add */}
               <div className="space-y-2">
-                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                <p className="text-sm font-medium text-muted-foreground">
                   Quick add common tools:
                 </p>
                 <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
@@ -712,22 +712,22 @@ function ToolsSettings({ isOpen, onClose }) {
 
               <div className="space-y-2">
                 {allowedTools.map(tool => (
-                  <div key={tool} className="flex items-center justify-between bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3">
-                    <span className="font-mono text-sm text-green-800 dark:text-green-200">
+                  <div key={tool} className="flex items-center justify-between bg-muted/50 border border-border rounded-2xl p-3">
+                    <span className="font-mono text-sm text-foreground">
                       {tool}
                     </span>
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => removeAllowedTool(tool)}
-                      className="text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300"
+                      className="text-muted-foreground hover:text-foreground"
                     >
                       <X className="w-4 h-4" />
                     </Button>
                   </div>
                 ))}
                 {allowedTools.length === 0 && (
-                  <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                  <div className="text-center py-8 text-muted-foreground">
                     No allowed tools configured
                   </div>
                 )}
@@ -737,7 +737,7 @@ function ToolsSettings({ isOpen, onClose }) {
             {/* Disallowed Tools */}
             <div className="space-y-4">
               <div className="flex items-center gap-3">
-                <AlertTriangle className="w-5 h-5 text-red-500" />
+                <AlertTriangle className="w-5 h-5 text-muted-foreground" />
                 <h3 className="text-lg font-medium text-foreground">
                   Disallowed Tools
                 </h3>
@@ -772,22 +772,22 @@ function ToolsSettings({ isOpen, onClose }) {
 
               <div className="space-y-2">
                 {disallowedTools.map(tool => (
-                  <div key={tool} className="flex items-center justify-between bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
-                    <span className="font-mono text-sm text-red-800 dark:text-red-200">
+                  <div key={tool} className="flex items-center justify-between bg-muted/50 border border-border rounded-2xl p-3">
+                    <span className="font-mono text-sm text-muted-foreground">
                       {tool}
                     </span>
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => removeDisallowedTool(tool)}
-                      className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                      className="text-muted-foreground hover:text-foreground"
                     >
                       <X className="w-4 h-4" />
                     </Button>
                   </div>
                 ))}
                 {disallowedTools.length === 0 && (
-                  <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                  <div className="text-center py-8 text-muted-foreground">
                     No disallowed tools configured
                   </div>
                 )}
@@ -795,23 +795,23 @@ function ToolsSettings({ isOpen, onClose }) {
             </div>
 
             {/* Help Section */}
-            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-              <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-2">
+            <div className="bg-muted/50 border border-border rounded-2xl p-4">
+              <h4 className="font-medium text-foreground mb-2">
                 Tool Pattern Examples:
               </h4>
-              <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
-                <li><code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">"Bash(git log:*)"</code> - Allow all git log commands</li>
-                <li><code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">"Bash(git diff:*)"</code> - Allow all git diff commands</li>
-                <li><code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">"Write"</code> - Allow all Write tool usage</li>
-                <li><code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">"Read"</code> - Allow all Read tool usage</li>
-                <li><code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">"Bash(rm:*)"</code> - Block all rm commands (dangerous)</li>
+              <ul className="text-sm text-muted-foreground space-y-1">
+                <li><code className="bg-muted px-1 rounded-xl">"Bash(git log:*)"</code> - Allow all git log commands</li>
+                <li><code className="bg-muted px-1 rounded-xl">"Bash(git diff:*)"</code> - Allow all git diff commands</li>
+                <li><code className="bg-muted px-1 rounded-xl">"Write"</code> - Allow all Write tool usage</li>
+                <li><code className="bg-muted px-1 rounded-xl">"Read"</code> - Allow all Read tool usage</li>
+                <li><code className="bg-muted px-1 rounded-xl">"Bash(rm:*)"</code> - Block all rm commands (dangerous)</li>
               </ul>
             </div>
 
             {/* MCP Server Management */}
             <div className="space-y-4">
               <div className="flex items-center gap-3">
-                <Server className="w-5 h-5 text-purple-500" />
+                <Server className="w-5 h-5 text-muted-foreground" />
                 <h3 className="text-lg font-medium text-foreground">
                   MCP Servers
                 </h3>
@@ -825,7 +825,7 @@ function ToolsSettings({ isOpen, onClose }) {
               <div className="flex justify-between items-center">
                 <Button
                   onClick={() => openMcpForm()}
-                  className="bg-purple-600 hover:bg-purple-700 text-white"
+                  className="bg-muted hover:bg-muted/80 text-foreground"
                   size="sm"
                 >
                   <Plus className="w-4 h-4 mr-2" />
@@ -836,7 +836,7 @@ function ToolsSettings({ isOpen, onClose }) {
               {/* MCP Servers List */}
               <div className="space-y-2">
                 {mcpServers.map(server => (
-                  <div key={server.id} className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                  <div key={server.id} className="bg-muted/50 border border-border rounded-2xl p-4">
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-2">
@@ -852,13 +852,13 @@ function ToolsSettings({ isOpen, onClose }) {
                         
                         <div className="text-sm text-muted-foreground space-y-1">
                           {server.type === 'stdio' && server.config.command && (
-                            <div>Command: <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded text-xs">{server.config.command}</code></div>
+                            <div>Command: <code className="bg-muted px-1 rounded-xl text-xs">{server.config.command}</code></div>
                           )}
                           {(server.type === 'sse' || server.type === 'http') && server.config.url && (
-                            <div>URL: <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded text-xs">{server.config.url}</code></div>
+                            <div>URL: <code className="bg-muted px-1 rounded-xl text-xs">{server.config.url}</code></div>
                           )}
                           {server.config.args && server.config.args.length > 0 && (
-                            <div>Args: <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded text-xs">{server.config.args.join(' ')}</code></div>
+                            <div>Args: <code className="bg-muted px-1 rounded-xl text-xs">{server.config.args.join(' ')}</code></div>
                           )}
                         </div>
 
@@ -866,8 +866,8 @@ function ToolsSettings({ isOpen, onClose }) {
                         {mcpTestResults[server.id] && (
                           <div className={`mt-2 p-2 rounded text-xs ${
                             mcpTestResults[server.id].success 
-                              ? 'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200' 
-                              : 'bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200'
+                              ? 'bg-muted/50 text-muted-foreground border border-border' 
+                              : 'bg-muted/50 text-muted-foreground border border-border'
                           }`}>
                             <div className="font-medium">{mcpTestResults[server.id].message}</div>
                             {mcpTestResults[server.id].details && mcpTestResults[server.id].details.length > 0 && (
@@ -882,7 +882,7 @@ function ToolsSettings({ isOpen, onClose }) {
 
                         {/* Tools Discovery Results */}
                         {mcpServerTools[server.id] && (
-                          <div className="mt-2 p-2 rounded text-xs bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-200 border border-blue-200 dark:border-blue-800">
+                          <div className="mt-2 p-2 rounded-xl text-xs bg-muted/50 text-muted-foreground border border-border">
                             <div className="font-medium mb-2">Available Tools & Resources</div>
                             
                             {mcpServerTools[server.id].tools && mcpServerTools[server.id].tools.length > 0 && (
@@ -891,9 +891,9 @@ function ToolsSettings({ isOpen, onClose }) {
                                 <ul className="space-y-0.5">
                                   {mcpServerTools[server.id].tools.map((tool, i) => (
                                     <li key={i} className="flex items-start gap-1">
-                                      <span className="text-blue-400 mt-0.5">•</span>
+                                      <span className="text-muted-foreground mt-0.5">•</span>
                                       <div>
-                                        <code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">{tool.name}</code>
+                                        <code className="bg-muted px-1 rounded-xl">{tool.name}</code>
                                         {tool.description && tool.description !== 'No description provided' && (
                                           <span className="ml-1 text-xs opacity-75">- {tool.description}</span>
                                         )}
@@ -910,9 +910,9 @@ function ToolsSettings({ isOpen, onClose }) {
                                 <ul className="space-y-0.5">
                                   {mcpServerTools[server.id].resources.map((resource, i) => (
                                     <li key={i} className="flex items-start gap-1">
-                                      <span className="text-blue-400 mt-0.5">•</span>
+                                      <span className="text-muted-foreground mt-0.5">•</span>
                                       <div>
-                                        <code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">{resource.name}</code>
+                                        <code className="bg-muted px-1 rounded-xl">{resource.name}</code>
                                         {resource.description && resource.description !== 'No description provided' && (
                                           <span className="ml-1 text-xs opacity-75">- {resource.description}</span>
                                         )}
@@ -929,9 +929,9 @@ function ToolsSettings({ isOpen, onClose }) {
                                 <ul className="space-y-0.5">
                                   {mcpServerTools[server.id].prompts.map((prompt, i) => (
                                     <li key={i} className="flex items-start gap-1">
-                                      <span className="text-blue-400 mt-0.5">•</span>
+                                      <span className="text-muted-foreground mt-0.5">•</span>
                                       <div>
-                                        <code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">{prompt.name}</code>
+                                        <code className="bg-muted px-1 rounded-xl">{prompt.name}</code>
                                         {prompt.description && prompt.description !== 'No description provided' && (
                                           <span className="ml-1 text-xs opacity-75">- {prompt.description}</span>
                                         )}
@@ -957,11 +957,11 @@ function ToolsSettings({ isOpen, onClose }) {
                           variant="ghost"
                           size="sm"
                           disabled={mcpTestResults[server.id]?.loading}
-                          className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                          className="text-muted-foreground hover:text-foreground"
                           title="Test connection"
                         >
                           {mcpTestResults[server.id]?.loading ? (
-                            <div className="w-4 h-4 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+                            <div className="w-4 h-4 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
                           ) : (
                             <Play className="w-4 h-4" />
                           )}
@@ -971,11 +971,11 @@ function ToolsSettings({ isOpen, onClose }) {
                           variant="ghost"
                           size="sm"
                           disabled={mcpToolsLoading[server.id]}
-                          className="text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300"
+                          className="text-muted-foreground hover:text-foreground"
                           title="Discover tools"
                         >
                           {mcpToolsLoading[server.id] ? (
-                            <div className="w-4 h-4 animate-spin rounded-full border-2 border-purple-600 border-t-transparent" />
+                            <div className="w-4 h-4 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent" />
                           ) : (
                             <Settings className="w-4 h-4" />
                           )}
@@ -984,7 +984,7 @@ function ToolsSettings({ isOpen, onClose }) {
                           onClick={() => openMcpForm(server)}
                           variant="ghost"
                           size="sm"
-                          className="text-gray-600 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+                          className="text-muted-foreground hover:text-foreground"
                         >
                           <Edit3 className="w-4 h-4" />
                         </Button>
@@ -992,7 +992,7 @@ function ToolsSettings({ isOpen, onClose }) {
                           onClick={() => handleMcpDelete(server.id, server.scope)}
                           variant="ghost"
                           size="sm"
-                          className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                          className="text-muted-foreground hover:text-foreground"
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
@@ -1001,7 +1001,7 @@ function ToolsSettings({ isOpen, onClose }) {
                   </div>
                 ))}
                 {mcpServers.length === 0 && (
-                  <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                  <div className="text-center py-8 text-muted-foreground">
                     No MCP servers configured
                   </div>
                 )}
@@ -1011,7 +1011,7 @@ function ToolsSettings({ isOpen, onClose }) {
             {/* MCP Server Form Modal */}
             {showMcpForm && (
               <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[110] p-4">
-                <div className="bg-background border border-border rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+                <div className="bg-card border border-border rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
                   <div className="flex items-center justify-between p-4 border-b border-border">
                     <h3 className="text-lg font-medium text-foreground">
                       {editingMcpServer ? 'Edit MCP Server' : 'Add MCP Server'}
@@ -1051,7 +1051,7 @@ function ToolsSettings({ isOpen, onClose }) {
                             setMcpConfigTestResult(null);
                             setMcpConfigTested(false);
                           }}
-                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                          className="w-full px-3 py-2 border border-input bg-background text-foreground rounded-2xl focus:ring-ring focus:border-ring"
                         >
                           <option value="stdio">stdio</option>
                           <option value="sse">SSE</option>
@@ -1084,7 +1084,7 @@ function ToolsSettings({ isOpen, onClose }) {
                           <textarea
                             value={Array.isArray(mcpFormData.config.args) ? mcpFormData.config.args.join('\n') : ''}
                             onChange={(e) => updateMcpConfig('args', e.target.value.split('\n').filter(arg => arg.trim()))}
-                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                            className="w-full px-3 py-2 border border-input bg-background text-foreground rounded-2xl focus:ring-ring focus:border-ring"
                             rows="3"
                             placeholder="--api-key&#10;abc123"
                           />
@@ -1124,7 +1124,7 @@ function ToolsSettings({ isOpen, onClose }) {
                           });
                           updateMcpConfig('env', env);
                         }}
-                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                        className="w-full px-3 py-2 border border-input bg-background text-foreground rounded-2xl focus:ring-ring focus:border-ring"
                         rows="3"
                         placeholder="API_KEY=your-key&#10;DEBUG=true"
                       />
@@ -1147,7 +1147,7 @@ function ToolsSettings({ isOpen, onClose }) {
                             });
                             updateMcpConfig('headers', headers);
                           }}
-                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                          className="w-full px-3 py-2 border border-input bg-background text-foreground rounded-2xl focus:ring-ring focus:border-ring"
                           rows="3"
                           placeholder="Authorization=Bearer token&#10;X-API-Key=your-key"
                         />
@@ -1155,7 +1155,7 @@ function ToolsSettings({ isOpen, onClose }) {
                     )}
 
                     {/* Test Configuration Section */}
-                    <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+                    <div className="border-t border-border pt-4">
                       <div className="flex items-center justify-between mb-3">
                         <h4 className="font-medium text-foreground">Configuration Test</h4>
                         <Button
@@ -1164,11 +1164,11 @@ function ToolsSettings({ isOpen, onClose }) {
                           disabled={mcpConfigTesting || !mcpFormData.name.trim()}
                           variant="outline"
                           size="sm"
-                          className="text-blue-600 border-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                          className="text-foreground border-foreground hover:bg-accent"
                         >
                           {mcpConfigTesting ? (
                             <>
-                              <div className="w-4 h-4 animate-spin rounded-full border-2 border-blue-600 border-t-transparent mr-2" />
+                              <div className="w-4 h-4 animate-spin rounded-full border-2 border-foreground border-t-transparent mr-2" />
                               Testing...
                             </>
                           ) : (
@@ -1187,8 +1187,8 @@ function ToolsSettings({ isOpen, onClose }) {
                       {mcpConfigTestResult && (
                         <div className={`p-3 rounded-lg text-sm ${
                           mcpConfigTestResult.success 
-                            ? 'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200 border border-green-200 dark:border-green-800' 
-                            : 'bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200 border border-red-200 dark:border-red-800'
+                            ? 'bg-muted/50 text-muted-foreground border border-border' 
+                            : 'bg-muted/50 text-muted-foreground border border-border'
                         }`}>
                           <div className="font-medium flex items-center gap-2">
                             {mcpConfigTestResult.success ? (
@@ -1206,7 +1206,7 @@ function ToolsSettings({ isOpen, onClose }) {
                             <ul className="mt-2 space-y-1 text-xs">
                               {mcpConfigTestResult.details.map((detail, i) => (
                                 <li key={i} className="flex items-start gap-1">
-                                  <span className="text-gray-400 mt-0.5">•</span>
+                                  <span className="text-muted-foreground mt-0.5">•</span>
                                   <span>{detail}</span>
                                 </li>
                               ))}
@@ -1223,7 +1223,7 @@ function ToolsSettings({ isOpen, onClose }) {
                       <Button 
                         type="submit" 
                         disabled={mcpLoading} 
-                        className="bg-purple-600 hover:bg-purple-700 disabled:opacity-50"
+                        className="bg-muted hover:bg-muted/80 disabled:opacity-50"
                       >
                         {mcpLoading ? 'Saving...' : (editingMcpServer ? 'Update Server' : 'Add Server')}
                       </Button>
@@ -1240,7 +1240,7 @@ function ToolsSettings({ isOpen, onClose }) {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 md:p-6 border-t border-border flex-shrink-0 gap-3 pb-safe-area-inset-bottom">
           <div className="flex items-center justify-center sm:justify-start gap-2 order-2 sm:order-1">
             {saveStatus === 'success' && (
-              <div className="text-green-600 dark:text-green-400 text-sm flex items-center gap-1">
+              <div className="text-muted-foreground text-sm flex items-center gap-1">
                 <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                 </svg>
@@ -1248,7 +1248,7 @@ function ToolsSettings({ isOpen, onClose }) {
               </div>
             )}
             {saveStatus === 'error' && (
-              <div className="text-red-600 dark:text-red-400 text-sm flex items-center gap-1">
+              <div className="text-muted-foreground text-sm flex items-center gap-1">
                 <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                 </svg>
@@ -1268,7 +1268,7 @@ function ToolsSettings({ isOpen, onClose }) {
             <Button 
               onClick={saveSettings} 
               disabled={isSaving}
-              className="flex-1 sm:flex-none h-10 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 touch-manipulation"
+              className="flex-1 sm:flex-none h-10 disabled:opacity-50 touch-manipulation"
             >
               {isSaving ? (
                 <div className="flex items-center gap-2">

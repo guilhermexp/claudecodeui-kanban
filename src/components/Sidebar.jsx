@@ -472,25 +472,25 @@ function Sidebar({
   });
 
   return (
-    <div className="h-full flex flex-col bg-card md:select-none">
+    <div className="h-full flex flex-col bg-card border-r border-border md:select-none">
       {/* Header */}
-      <div className="md:p-4 md:border-b md:border-border">
+      <div className="p-3 md:p-4 border-b border-border">
         {/* Desktop Header */}
         <div className="hidden md:flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center shadow-sm">
-              <MessageSquare className="w-4 h-4 text-primary-foreground" />
+            <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
+              <MessageSquare className="w-4 h-4 text-primary" />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-foreground">Claude Code UI</h1>
-              <p className="text-sm text-muted-foreground">AI coding assistant interface</p>
+              <h1 className="text-base font-semibold text-foreground">Claude Code UI</h1>
+              <p className="text-xs text-muted-foreground">AI coding assistant</p>
             </div>
           </div>
           <div className="flex gap-2">
             <Button
               variant="ghost"
-              size="sm"
-              className="h-9 w-9 px-0 hover:bg-accent transition-colors duration-200 group rounded-md"
+              size="icon"
+              className="h-8 w-8 hover:bg-accent hover:text-accent-foreground"
               onClick={async () => {
                 setIsRefreshing(true);
                 try {
@@ -502,12 +502,12 @@ function Sidebar({
               disabled={isRefreshing}
               title="Refresh projects and sessions (Ctrl+R)"
             >
-              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''} group-hover:rotate-180 transition-transform duration-300`} />
+              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
             </Button>
             <Button
               variant="default"
-              size="sm"
-              className="h-9 w-9 px-0 bg-primary hover:bg-primary/90 transition-all duration-200 shadow-sm hover:shadow-md rounded-md"
+              size="icon"
+              className="h-8 w-8"
               onClick={() => setShowNewProject(true)}
               title="Create new project (Ctrl+N)"
             >
@@ -517,11 +517,11 @@ function Sidebar({
         </div>
         
         {/* Mobile Header */}
-        <div className="md:hidden p-3 border-b border-border">
+        <div className="md:hidden">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 bg-primary rounded-lg flex items-center justify-center">
-                <MessageSquare className="w-5 h-5 text-primary-foreground" />
+              <div className="w-9 h-9 bg-primary/10 rounded-lg flex items-center justify-center">
+                <MessageSquare className="w-5 h-5 text-primary" />
               </div>
               <div>
                 <h1 className="text-base font-semibold text-foreground">Claude Code UI</h1>
@@ -529,8 +529,10 @@ function Sidebar({
               </div>
             </div>
             <div className="flex gap-2">
-              <button
-                className="w-9 h-9 rounded-md bg-background border border-border flex items-center justify-center hover:bg-accent active:scale-95 transition-all duration-150"
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9"
                 onClick={async () => {
                   setIsRefreshing(true);
                   try {
@@ -542,15 +544,17 @@ function Sidebar({
                 disabled={isRefreshing}
                 title="Refresh projects"
               >
-                <RefreshCw className={`w-4 h-4 text-foreground ${isRefreshing ? 'animate-spin' : ''}`} />
-              </button>
-              <button
-                className="w-9 h-9 rounded-md bg-primary text-primary-foreground flex items-center justify-center hover:bg-primary/90 active:scale-95 transition-all duration-150"
+                <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+              </Button>
+              <Button
+                variant="default"
+                size="icon"
+                className="h-9 w-9"
                 onClick={() => setShowNewProject(true)}
                 title="New project"
               >
                 <FolderPlus className="w-4 h-4" />
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -558,7 +562,7 @@ function Sidebar({
       
       {/* New Project Form */}
       {showNewProject && (
-        <div className="md:px-3 md:py-2 md:border-b md:border-border md:bg-muted/30">
+        <div className="px-3 py-2 border-b border-border bg-muted/30">
           {/* Desktop Form */}
           <div className="hidden md:block space-y-2">
             <div className="flex items-center gap-2 text-sm font-medium text-foreground">
@@ -602,8 +606,8 @@ function Sidebar({
             <div className="absolute bottom-0 left-0 right-0 bg-card rounded-t-lg border-t border-border p-4 space-y-4 animate-in slide-in-from-bottom duration-300">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 bg-primary/10 rounded-md flex items-center justify-center">
-                    <FolderPlus className="w-3 h-3 text-primary" />
+                  <div className="w-6 h-6 bg-muted rounded-xl flex items-center justify-center">
+                    <FolderPlus className="w-3 h-3 text-muted-foreground" />
                   </div>
                   <div>
                     <h2 className="text-base font-semibold text-foreground">New Project</h2>
@@ -623,7 +627,7 @@ function Sidebar({
                   value={newProjectPath}
                   onChange={(e) => setNewProjectPath(e.target.value)}
                   placeholder="/path/to/project or relative/path"
-                  className="text-sm h-10 rounded-md focus:border-primary transition-colors"
+                  className="text-sm h-10 rounded-xl"
                   autoFocus
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') createNewProject();
@@ -636,14 +640,14 @@ function Sidebar({
                     onClick={cancelNewProject}
                     disabled={creatingProject}
                     variant="outline"
-                    className="flex-1 h-9 text-sm rounded-md active:scale-95 transition-transform"
+                    className="flex-1 h-9 text-sm rounded-xl active:scale-95 transition-transform"
                   >
                     Cancel
                   </Button>
                   <Button
                     onClick={createNewProject}
                     disabled={!newProjectPath.trim() || creatingProject}
-                    className="flex-1 h-9 text-sm rounded-md bg-primary hover:bg-primary/90 active:scale-95 transition-all"
+                    className="flex-1 h-9 text-sm rounded-xl active:scale-95 transition-all"
                   >
                     {creatingProject ? 'Creating...' : 'Create'}
                   </Button>
@@ -659,7 +663,7 @@ function Sidebar({
       
       {/* Search Filter */}
       {projects.length > 0 && !isLoading && (
-        <div className="px-3 md:px-3 py-2 border-b border-border">
+        <div className="px-3 py-2 border-b border-border">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
@@ -667,7 +671,7 @@ function Sidebar({
               placeholder="Search projects..."
               value={searchFilter}
               onChange={(e) => setSearchFilter(e.target.value)}
-              className="pl-9 h-9 text-sm bg-muted/50 border-0 focus:bg-background focus:ring-1 focus:ring-primary/20"
+              className="pl-9 h-8 text-sm bg-background border-input"
             />
             {searchFilter && (
               <button
@@ -682,8 +686,8 @@ function Sidebar({
       )}
       
       {/* Projects List */}
-      <ScrollArea className="flex-1 md:px-3 md:py-2 overflow-y-auto overscroll-contain">
-        <div className="md:space-y-1 pb-safe-area-inset-bottom">
+      <ScrollArea className="flex-1 px-3 py-2 overflow-y-auto overscroll-contain">
+        <div className="space-y-1 pb-safe-area-inset-bottom">
           {isLoading ? (
             <div className="text-center py-12 md:py-8 px-4">
               <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center mx-auto mb-4">
@@ -729,10 +733,9 @@ function Sidebar({
                     <div className="md:hidden">
                       <div
                         className={cn(
-                          "p-3 mx-3 my-1 rounded-lg bg-card border border-border/50 active:scale-[0.98] transition-all duration-150 relative shadow-sm",
-                          isSelected && "bg-primary/5 border-primary/20 shadow-primary/10",
-                          isStarred && !isSelected && "bg-yellow-50/50 dark:bg-yellow-900/5 border-yellow-200/30 dark:border-yellow-800/30 shadow-yellow/10",
-                          !isSelected && !isStarred && "shadow-gray-200/50 dark:shadow-gray-800/50"
+                          "p-3 mx-3 my-1 rounded-lg bg-card border border-border active:scale-[0.98] transition-all duration-150 relative",
+                          isSelected && "bg-accent",
+                          isStarred && !isSelected && "bg-yellow-50/50 dark:bg-yellow-900/10"
                         )}
                         onClick={() => {
                           // On mobile, just toggle the folder - don't select the project
@@ -743,17 +746,17 @@ function Sidebar({
                         {/* Active session indicator for mobile */}
                         {hasActive && (
                           <div className="absolute top-2 right-2">
-                            <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
+                            <Loader2 className="h-3 w-3 animate-spin text-green-500" />
                           </div>
                         )}
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3 min-w-0 flex-1">
                             <div className={cn(
-                              "w-8 h-8 rounded-lg flex items-center justify-center transition-colors",
-                              isExpanded ? "bg-primary/10" : "bg-muted"
+                              "w-8 h-8 rounded-2xl flex items-center justify-center transition-colors",
+                              isExpanded ? "bg-muted" : "bg-muted/50"
                             )}>
                               {isVibeKanbanProject(project) ? (
-                                <Trello className="w-4 h-4 text-blue-500" />
+                                <Trello className="w-4 h-4 text-muted-foreground" />
                               ) : isExpanded ? (
                                 <FolderOpen className="w-4 h-4 text-primary" />
                               ) : (
@@ -884,7 +887,7 @@ function Sidebar({
                     <Button
                       variant="ghost"
                       className={cn(
-                        "hidden md:flex w-full justify-between px-3 py-2 h-auto font-normal hover:bg-accent/50 relative rounded-md",
+                        "hidden md:flex w-full justify-between px-3 py-2 h-auto font-normal hover:bg-accent hover:text-accent-foreground relative rounded-lg",
                         isSelected && "bg-accent text-accent-foreground",
                         isStarred && !isSelected && "bg-yellow-50/50 dark:bg-yellow-900/10 hover:bg-yellow-100/50 dark:hover:bg-yellow-900/20"
                       )}
@@ -910,7 +913,7 @@ function Sidebar({
                       )}
                       <div className="flex items-center gap-3 min-w-0 flex-1">
                         {isVibeKanbanProject(project) ? (
-                          <Trello className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                          <Trello className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                         ) : isExpanded ? (
                           <FolderOpen className="w-4 h-4 text-primary flex-shrink-0" />
                         ) : (
@@ -1251,7 +1254,7 @@ function Sidebar({
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="w-full justify-center gap-2 mt-2 text-muted-foreground h-8 rounded-md"
+                            className="w-full justify-center gap-2 mt-2 h-8"
                             onClick={() => loadMoreSessions(project)}
                             disabled={loadingSessions[project.name]}
                           >
@@ -1272,8 +1275,10 @@ function Sidebar({
                       
                       {/* New Session Button */}
                       <div className="md:hidden px-3 pb-2">
-                        <button
-                          className="w-full h-8 bg-primary hover:bg-primary/90 text-primary-foreground rounded-md flex items-center justify-center gap-2 font-medium text-xs active:scale-[0.98] transition-all duration-150"
+                        <Button
+                          variant="default"
+                          size="sm"
+                          className="w-full h-8 text-xs"
                           onClick={() => {
                             onProjectSelect(project);
                             onNewSession(project);
@@ -1281,13 +1286,13 @@ function Sidebar({
                         >
                           <Plus className="w-3 h-3" />
                           New Session
-                        </button>
+                        </Button>
                       </div>
                       
                       <Button
                         variant="default"
                         size="sm"
-                        className="hidden md:flex w-full justify-start gap-2 mt-2 h-9 text-sm font-medium bg-primary hover:bg-primary/90 text-primary-foreground transition-colors rounded-md"
+                        className="hidden md:flex w-full justify-start gap-2 mt-2 h-8 text-sm"
                         onClick={() => onNewSession(project)}
                       >
                         <Plus className="w-3 h-3" />
@@ -1309,18 +1314,18 @@ function Sidebar({
           <div className="hidden md:block">
             <Button
               variant="ghost"
-              className="w-full justify-start gap-3 px-3 py-2 h-auto font-normal text-left hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors duration-200 border border-blue-200 dark:border-blue-700 rounded-lg"
+              className="w-full justify-start gap-3 px-3 py-2 h-auto font-normal text-left hover:bg-accent transition-colors duration-200 border border-border rounded-2xl"
               onClick={onShowVersionModal}
             >
               <div className="relative">
-                <svg className="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
                 </svg>
-                <div className="absolute -top-1 -right-1 w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+                <div className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full animate-pulse" />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="text-sm font-medium text-blue-700 dark:text-blue-300">Update Available</div>
-                <div className="text-xs text-blue-600 dark:text-blue-400">Version {latestVersion} is ready</div>
+                <div className="text-sm font-medium text-foreground">Update Available</div>
+                <div className="text-xs text-muted-foreground">Version {latestVersion} is ready</div>
               </div>
             </Button>
           </div>
@@ -1328,18 +1333,18 @@ function Sidebar({
           {/* Mobile Version Notification */}
           <div className="md:hidden p-3 pb-2">
             <button
-              className="w-full h-12 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-xl flex items-center justify-start gap-3 px-4 active:scale-[0.98] transition-all duration-150"
+              className="w-full h-12 bg-accent border border-border rounded-2xl flex items-center justify-start gap-3 px-4 active:scale-[0.98] transition-all duration-150"
               onClick={onShowVersionModal}
             >
               <div className="relative">
-                <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
                 </svg>
-                <div className="absolute -top-1 -right-1 w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+                <div className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full animate-pulse" />
               </div>
               <div className="min-w-0 flex-1 text-left">
-                <div className="text-sm font-medium text-blue-700 dark:text-blue-300">Update Available</div>
-                <div className="text-xs text-blue-600 dark:text-blue-400">Version {latestVersion} is ready</div>
+                <div className="text-sm font-medium text-foreground">Update Available</div>
+                <div className="text-xs text-muted-foreground">Version {latestVersion} is ready</div>
               </div>
             </button>
           </div>
@@ -1353,10 +1358,11 @@ function Sidebar({
           {/* VibeKanban Button */}
           <Button
             variant="outline"
-            className="w-full justify-start gap-2 h-9 text-sm font-medium bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 hover:from-blue-100 hover:to-indigo-100 dark:hover:from-blue-900/30 dark:hover:to-indigo-900/30 border-blue-200 dark:border-blue-800 transition-all duration-200"
+            size="sm"
+            className="w-full justify-start gap-2 h-8"
             onClick={() => navigate('/vibe-kanban')}
           >
-            <Trello className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+            <Trello className="w-4 h-4" />
             <span>Vibe Kanban</span>
           </Button>
           
@@ -1365,7 +1371,8 @@ function Sidebar({
             {/* Tools Settings Button */}
             <Button
               variant="ghost"
-              className="flex-1 justify-start gap-2 h-9 text-sm font-normal text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors duration-200"
+              size="sm"
+              className="flex-1 justify-start gap-2 h-8"
               onClick={onShowSettings}
             >
               <Settings className="w-4 h-4" />
@@ -1375,15 +1382,15 @@ function Sidebar({
             {/* Theme Toggle Button */}
             <Button
               variant="ghost"
-              size="sm"
-              className="h-9 w-9 px-0 hover:bg-accent/50 transition-colors duration-200"
+              size="icon"
+              className="h-8 w-8"
               onClick={toggleDarkMode}
               title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
             >
               {isDarkMode ? (
-                <Sun className="w-4 h-4 text-muted-foreground hover:text-foreground transition-colors" />
+                <Sun className="w-4 h-4" />
               ) : (
-                <Moon className="w-4 h-4 text-muted-foreground hover:text-foreground transition-colors" />
+                <Moon className="w-4 h-4" />
               )}
             </Button>
           </div>
@@ -1392,37 +1399,41 @@ function Sidebar({
         {/* Mobile Footer */}
         <div className="md:hidden p-3 pb-safe-area-inset-bottom space-y-2">
           {/* VibeKanban Button */}
-          <button
-            className="w-full h-12 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 hover:from-blue-100 hover:to-indigo-100 dark:hover:from-blue-900/30 dark:hover:to-indigo-900/30 rounded-lg flex items-center justify-center gap-3 active:scale-[0.98] transition-all duration-150 border border-blue-200 dark:border-blue-800"
+          <Button
+            variant="outline"
+            className="w-full h-10 justify-center gap-2"
             onClick={() => navigate('/vibe-kanban')}
           >
-            <Trello className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-            <span className="text-sm font-medium text-blue-600 dark:text-blue-400">Vibe Kanban</span>
-          </button>
+            <Trello className="w-4 h-4" />
+            <span>Vibe Kanban</span>
+          </Button>
           
           {/* Settings and Theme Row */}
           <div className="flex gap-2">
             {/* Tools Settings Button */}
-            <button
-              className="flex-1 h-12 bg-muted/30 hover:bg-muted/50 rounded-lg flex items-center justify-center gap-3 active:scale-[0.98] transition-all duration-150"
+            <Button
+              variant="ghost"
+              className="flex-1 h-10 justify-center gap-2"
               onClick={onShowSettings}
             >
-              <Settings className="w-4 h-4 text-muted-foreground" />
-              <span className="text-sm font-medium text-muted-foreground">Tools Settings</span>
-            </button>
+              <Settings className="w-4 h-4" />
+              <span>Tools Settings</span>
+            </Button>
             
             {/* Theme Toggle Button */}
-            <button
-              className="h-12 w-12 bg-muted/30 hover:bg-muted/50 rounded-lg flex items-center justify-center active:scale-[0.98] transition-all duration-150"
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-10 w-10"
               onClick={toggleDarkMode}
               title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
             >
               {isDarkMode ? (
-                <Sun className="w-5 h-5 text-muted-foreground" />
+                <Sun className="w-4 h-4" />
               ) : (
-                <Moon className="w-5 h-5 text-muted-foreground" />
+                <Moon className="w-4 h-4" />
               )}
-            </button>
+            </Button>
           </div>
         </div>
       </div>

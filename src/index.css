@@ -40,7 +40,7 @@
     --card-foreground: 222.2 84% 4.9%;
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
-    --primary: 221.2 83.2% 53.3%;
+    --primary: 215.4 16.3% 46.9%;
     --primary-foreground: 210 40% 98%;
     --secondary: 210 40% 96.1%;
     --secondary-foreground: 222.2 47.4% 11.2%;
@@ -48,11 +48,11 @@
     --muted-foreground: 215.4 16.3% 46.9%;
     --accent: 210 40% 96.1%;
     --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
+    --destructive: 0 0% 45%;
     --destructive-foreground: 210 40% 98%;
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
+    --ring: 215.4 16.3% 46.9%;
     --radius: 0.5rem;
   }
 
@@ -64,7 +64,7 @@
     --card-foreground: 213 27% 84%;   /* Light grey text on cards */
     --popover: 210 11% 15%;           /* Same as card for consistency */
     --popover-foreground: 213 27% 84%; /* Light grey text */
-    --primary: 212 100% 47%;          /* Blue accent similar to ChatGPT */
+    --primary: 215 13.8% 50.2%;       /* Medium grey instead of blue */
     --primary-foreground: 0 0% 100%;  /* White text on primary */
     --secondary: 210 11% 21%;         /* Medium grey for secondary elements */
     --secondary-foreground: 213 27% 84%; /* Light grey text */
@@ -72,11 +72,11 @@
     --muted-foreground: 215 13.8% 50.2%; /* Medium grey text */
     --accent: 210 11% 21%;            /* Medium grey accent */
     --accent-foreground: 213 27% 84%; /* Light grey text */
-    --destructive: 0 62.8% 50%;       /* Red for destructive actions */
+    --destructive: 210 11% 35%;       /* Dark grey for destructive actions */
     --destructive-foreground: 0 0% 100%; /* White text on destructive */
     --border: 210 11% 21%;            /* Medium grey borders */
     --input: 210 11% 15%;             /* Dark grey inputs */
-    --ring: 212 100% 47%;             /* Blue focus ring */
+    --ring: 215 13.8% 50.2%;          /* Grey focus ring */
 
     /* VibeKanban specific status colors */
     --success: 138.5 76.5% 47.7%;
@@ -337,7 +337,7 @@
   
   /* Ensure checkbox styling is preserved */
   input[type="checkbox"] {
-    @apply accent-blue-600;
+    @apply accent-muted-foreground;
     opacity: 1;
   }
   
@@ -351,17 +351,17 @@
   .dark input[type="checkbox"] {
     background-color: rgb(45 55 72); /* darker grey background */
     border-color: rgb(75 85 99); /* grey border */
-    color: rgb(59 130 246); /* blue accent */
+    color: hsl(var(--muted-foreground));
     color-scheme: dark;
   }
   
   .dark input[type="checkbox"]:checked {
-    background-color: rgb(59 130 246); /* blue accent */
-    border-color: rgb(59 130 246); /* blue accent */
+    background-color: hsl(var(--muted-foreground));
+    border-color: hsl(var(--muted-foreground));
   }
   
   .dark input[type="checkbox"]:focus {
-    --tw-ring-color: rgb(59 130 246); /* blue accent */
+    --tw-ring-color: hsl(var(--ring));
     --tw-ring-offset-color: rgb(45 55 72); /* darker grey background */
   }
   
@@ -369,17 +369,17 @@
   .dark input[type="radio"] {
     background-color: rgb(45 55 72); /* darker grey background */
     border-color: rgb(75 85 99); /* grey border */
-    color: rgb(59 130 246); /* blue accent */
+    color: hsl(var(--muted-foreground));
     color-scheme: dark;
   }
   
   .dark input[type="radio"]:checked {
-    background-color: rgb(59 130 246); /* blue accent */
-    border-color: rgb(59 130 246); /* blue accent */
+    background-color: hsl(var(--muted-foreground));
+    border-color: hsl(var(--muted-foreground));
   }
   
   .dark input[type="radio"]:focus {
-    --tw-ring-color: rgb(59 130 246); /* blue accent */
+    --tw-ring-color: hsl(var(--ring));
     --tw-ring-offset-color: rgb(45 55 72); /* darker grey background */
   }
   
