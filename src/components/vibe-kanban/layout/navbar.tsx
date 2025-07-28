@@ -23,10 +23,10 @@ export function Navbar() {
                 variant="outline"
                 size="sm"
               >
-                <a href="/">
+                <Link to="/">
                   <ArrowLeft className="h-4 w-4" />
                   <span className="ml-2">Voltar</span>
-                </a>
+                </Link>
               </Button>
               <Logo />
               <div className="hidden sm:flex items-center space-x-1">
@@ -89,13 +89,13 @@ export function Navbar() {
         {/* Mobile navigation dropdown */}
         <div className="mobile-nav-items hidden sm:hidden border-t border-gray-200 dark:border-gray-700 py-2">
           <div className="space-y-1 px-3">
-            <a
-              href="/"
+            <Link
+              to="/"
               className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700"
             >
               <ArrowLeft className="h-4 w-4" />
               Voltar ao Claude Code UI
-            </a>
+            </Link>
             <Link
               to="/vibe-kanban/projects"
               className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${

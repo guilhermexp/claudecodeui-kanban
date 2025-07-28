@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ScrollArea } from './ui/scroll-area';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -66,6 +67,7 @@ function Sidebar({
   currentVersion,
   onShowVersionModal
 }) {
+  const navigate = useNavigate();
   const [expandedProjects, setExpandedProjects] = useState(new Set());
   const [editingProject, setEditingProject] = useState(null);
   const [showNewProject, setShowNewProject] = useState(false);
@@ -1352,7 +1354,7 @@ function Sidebar({
           <Button
             variant="outline"
             className="w-full justify-start gap-2 h-9 text-sm font-medium bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 hover:from-blue-100 hover:to-indigo-100 dark:hover:from-blue-900/30 dark:hover:to-indigo-900/30 border-blue-200 dark:border-blue-800 transition-all duration-200"
-            onClick={() => window.location.href = '/vibe-kanban'}
+            onClick={() => navigate('/vibe-kanban')}
           >
             <Trello className="w-4 h-4 text-blue-600 dark:text-blue-400" />
             <span>Vibe Kanban</span>
@@ -1392,7 +1394,7 @@ function Sidebar({
           {/* VibeKanban Button */}
           <button
             className="w-full h-12 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 hover:from-blue-100 hover:to-indigo-100 dark:hover:from-blue-900/30 dark:hover:to-indigo-900/30 rounded-lg flex items-center justify-center gap-3 active:scale-[0.98] transition-all duration-150 border border-blue-200 dark:border-blue-800"
-            onClick={() => window.location.href = '/vibe-kanban'}
+            onClick={() => navigate('/vibe-kanban')}
           >
             <Trello className="w-4 h-4 text-blue-600 dark:text-blue-400" />
             <span className="text-sm font-medium text-blue-600 dark:text-blue-400">Vibe Kanban</span>

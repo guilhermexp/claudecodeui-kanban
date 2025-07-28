@@ -53,19 +53,19 @@ function TaskDetailsHeader({
   return (
     <div>
       {/* Title and Task Actions */}
-      <div className="p-4 pb-2">
+      <div className="p-3 sm:p-4 pb-2">
         <div className="flex items-start justify-between">
           <div className="flex-1 min-w-0">
-            <h2 className="text-lg font-bold mb-1 line-clamp-2">
+            <h2 className="text-base sm:text-lg font-bold mb-1 line-clamp-2">
               {task.title}
             </h2>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground">
               <Chip dotColor={getTaskStatusDotColor(task.status)}>
                 {statusLabels[task.status]}
               </Chip>
             </div>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 ml-2 flex-shrink-0">
             {onEditTask && (
               <TooltipProvider>
                 <Tooltip>

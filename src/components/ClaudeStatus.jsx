@@ -3,13 +3,11 @@ import { cn } from '../lib/utils';
 
 function ClaudeStatus({ status, onAbort, isLoading }) {
   const [elapsedTime, setElapsedTime] = useState(0);
-  const [fakeTokens, setFakeTokens] = useState(0);
   
   // Update elapsed time every second
   useEffect(() => {
     if (!isLoading) {
       setElapsedTime(0);
-      setFakeTokens(0);
       return;
     }
     
@@ -17,8 +15,6 @@ function ClaudeStatus({ status, onAbort, isLoading }) {
     const timer = setInterval(() => {
       const elapsed = Math.floor((Date.now() - startTime) / 1000);
       setElapsedTime(elapsed);
-      // Simulate token count increasing over time (roughly 30-50 tokens per second)
-      setFakeTokens(Math.floor(elapsed * (30 + Math.random() * 20)));
     }, 1000);
     
     return () => clearInterval(timer);
@@ -26,13 +22,9 @@ function ClaudeStatus({ status, onAbort, isLoading }) {
   
   if (!isLoading) return null;
   
-  // Clever action words that cycle
-  const actionWords = ['Thinking', 'Processing', 'Analyzing', 'Working', 'Computing', 'Reasoning'];
-  const actionIndex = Math.floor(elapsedTime / 3) % actionWords.length;
-  
-  // Parse status data
-  const statusText = status?.text || actionWords[actionIndex];
-  const tokens = status?.tokens || fakeTokens;
+  // Parse status data - use real data when available
+  const statusText = status?.text || 'Working';
+  const tokens = status?.tokens || null;
   const canInterrupt = status?.can_interrupt !== false;
   
   // Single spinner character with CSS animation
@@ -52,8 +44,10 @@ function ClaudeStatus({ status, onAbort, isLoading }) {
             <div className="flex-1">
               <div className="flex items-center gap-2">
                 <span className="font-medium text-sm">{statusText}...</span>
-                <span className="text-gray-400 text-sm">({elapsedTime}s)</span>
-                {tokens > 0 && (
+                {elapsedTime > 0 && (
+                  <span className="text-gray-400 text-sm">({elapsedTime}s)</span>
+                )}
+                {tokens !== null && tokens > 0 && (
                   <>
                     <span className="text-gray-400">·</span>
                     <span className="text-gray-300 text-sm hidden sm:inline">⚒ {tokens.toLocaleString()} tokens</span>

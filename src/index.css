@@ -242,12 +242,6 @@
     animation: fade-in 0.2s ease-out forwards;
   }
   
-  /* Typing indicator animation */
-  @keyframes typing {
-    0%, 60%, 100% { opacity: 0.3; }
-    30% { opacity: 1; }
-  }
-  
   /* New message animation class */
   .message-enter {
     animation: messageEnter 0.3s ease-out forwards;
@@ -256,19 +250,6 @@
   /* Assistant message specific animation */
   .message-enter-assistant {
     animation: messageEnter 0.4s ease-out forwards;
-  }
-  
-  /* Typing dots */
-  .typing-dot {
-    animation: typing 1.4s infinite;
-  }
-  
-  .typing-dot:nth-child(2) {
-    animation-delay: 0.2s;
-  }
-  
-  .typing-dot:nth-child(3) {
-    animation-delay: 0.4s;
   }
   
   /* Height transitions for expanding elements */
@@ -881,5 +862,26 @@
   
   .animate-fade-in-subtle {
     animation: fade-in-subtle 0.15s ease-out;
+  }
+  
+  /* Prevent drag flickering in chat interface */
+  form[data-dropzone] * {
+    pointer-events: auto;
+  }
+  
+  /* Ensure drag overlay doesn't interfere with input */
+  .drag-overlay {
+    pointer-events: none;
+  }
+  
+  /* Stabilize layout during drag operations */
+  textarea:focus,
+  textarea:active {
+    outline: none;
+  }
+  
+  /* Prevent layout shift on drag */
+  [data-dropzone-active="true"] textarea {
+    pointer-events: auto !important;
   }
 }
