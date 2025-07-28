@@ -189,7 +189,7 @@ class VibeKanbanProxy {
   
   async healthCheck() {
     try {
-      const response = await this.executeRequest(`${this.baseUrl}/health`, {
+      const response = await this.executeRequest(`${this.baseUrl}/api/health`, {
         method: 'GET'
       });
       
