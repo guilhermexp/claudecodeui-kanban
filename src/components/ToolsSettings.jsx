@@ -503,8 +503,8 @@ function ToolsSettings({ isOpen, onClose }) {
   if (!isOpen) return null;
 
   return (
-    <div className="modal-backdrop fixed inset-0 flex items-center justify-center z-[100] md:p-4 bg-background">
-      <div className="bg-background border border-border md:rounded-lg shadow-xl w-full md:max-w-4xl h-full md:h-[90vh] flex flex-col">
+    <div className="modal-backdrop fixed inset-0 flex items-center justify-center z-[100] md:p-4 bg-white dark:bg-gray-900">
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 md:rounded-lg shadow-2xl w-full md:max-w-4xl h-full md:h-[90vh] flex flex-col">
         <div className="flex items-center justify-between p-4 md:p-6 border-b border-border flex-shrink-0">
           <div className="flex items-center gap-3">
             <Settings className="w-5 h-5 md:w-6 md:h-6 text-blue-600" />
@@ -558,7 +558,7 @@ function ToolsSettings({ isOpen, onClose }) {
   <div className="space-y-6 md:space-y-8">
     {/* Theme Settings */}
     <div className="space-y-4">
-      <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+      <div className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
         <div className="flex items-center justify-between">
           <div>
             <div className="font-medium text-foreground">
@@ -594,7 +594,7 @@ function ToolsSettings({ isOpen, onClose }) {
 
     {/* Project Sorting */}
     <div className="space-y-4">
-      <div className="bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+      <div className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
         <div className="flex items-center justify-between">
           <div>
             <div className="font-medium text-foreground">

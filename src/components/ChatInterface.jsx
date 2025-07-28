@@ -2058,7 +2058,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   }, [handleImageFiles]);
 
   // Setup dropzone
-  const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
+  const { getRootProps, getInputProps, isDragActive, open, isDragReject } = useDropzone({
     accept: {
       'image/*': ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg']
     },
@@ -2066,7 +2066,14 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     maxFiles: 5,
     onDrop: handleImageFiles,
     noClick: true, // We'll use our own button
-    noKeyboard: true
+    noKeyboard: true,
+    noDragEventsBubbling: true,
+    onDragEnter: (e) => {
+      e.stopPropagation();
+    },
+    onDragLeave: (e) => {
+      e.stopPropagation();
+    }
   });
 
   // Expose global function for sending chat messages from voice input
@@ -2451,48 +2458,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 />
               );
             })}
-            
-            {/* Typing Activity Indicator */}
-            {isLoading && (
-              <div className="px-3 sm:px-0 mb-4">
-                <div className="flex items-start space-x-3">
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-sm flex-shrink-0">
-                    <ClaudeLogo className="w-5 h-5 text-white" />
-                  </div>
-                  <div className="bg-gray-100 dark:bg-gray-800 rounded-2xl rounded-tl-md px-4 py-3 shadow-sm">
-                    <div className="flex items-center space-x-1">
-                      <div className="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                      <div className="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                      <div className="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
-                    </div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                      Claude is typing...
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
           </>
-        )}
-        
-        {isLoading && (
-          <div className="chat-message assistant">
-            <div className="w-full">
-              <div className="flex items-center space-x-3 mb-2">
-                <div className="w-8 h-8 bg-gray-600 rounded-full flex items-center justify-center text-white text-sm flex-shrink-0">
-                  C
-                </div>
-                <div className="text-sm font-medium text-gray-900 dark:text-white">Claude</div>
-                {/* Abort button removed - functionality not yet implemented at backend */}
-              </div>
-              <div className="w-full text-sm text-gray-500 dark:text-gray-400 pl-3 sm:pl-0 flex items-center gap-1">
-                <span className="inline-block w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full typing-dot"></span>
-                <span className="inline-block w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full typing-dot"></span>
-                <span className="inline-block w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full typing-dot"></span>
-                <span className="ml-2">Thinking...</span>
-              </div>
-            </div>
-          </div>
         )}
         
         <div ref={messagesEndRef} />
@@ -2571,11 +2537,12 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           </div>
         </div>
         
-        <form onSubmit={handleSubmit} className="relative max-w-4xl mx-auto">
+        <form onSubmit={handleSubmit} className="relative max-w-4xl mx-auto" {...getRootProps({onClick: e => e.stopPropagation()})}>
+          <input {...getInputProps()} />
           {/* Drag overlay */}
           {isDragActive && (
-            <div className="absolute inset-0 bg-blue-500/20 border-2 border-dashed border-blue-500 rounded-lg flex items-center justify-center z-50">
-              <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-lg">
+            <div className="absolute inset-0 bg-blue-500/20 border-2 border-dashed border-blue-500 rounded-2xl flex items-center justify-center z-50 pointer-events-none">
+              <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-lg pointer-events-none">
                 <svg className="w-8 h-8 text-blue-500 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                 </svg>
@@ -2634,8 +2601,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             </div>
           )}
           
-          <div {...getRootProps()} className={`relative bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-600 focus-within:ring-2 focus-within:ring-blue-500 dark:focus-within:ring-blue-500 focus-within:border-blue-500 transition-all duration-200 ${isTextareaExpanded ? 'chat-input-expanded' : ''}`}>
-            <input {...getInputProps()} />
+          <div className={`relative bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-600 focus-within:ring-2 focus-within:ring-blue-500 dark:focus-within:ring-blue-500 focus-within:border-blue-500 transition-all duration-200 ${isTextareaExpanded ? 'chat-input-expanded' : ''}`}>
             <textarea
               ref={textareaRef}
               value={input}
