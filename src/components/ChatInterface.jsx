@@ -25,6 +25,7 @@ import ClaudeLogo from './ClaudeLogo.jsx';
 import ClaudeStatus from './ClaudeStatus';
 import { MicButton } from './MicButton.jsx';
 import { api } from '../utils/api';
+import { appStatePersistence } from '../utils/app-state-persistence';
 
 // Safe localStorage utility to handle quota exceeded errors
 const safeLocalStorage = {
@@ -1381,6 +1382,12 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             lastMessageCount: 0,
             shouldAutoScroll: true
           }));
+          
+          // Try to restore saved chat state
+          const savedState = appStatePersistence.loadChatState(selectedSession.id);
+          if (savedState && savedState.inputValue) {
+            setInput(savedState.inputValue);
+          }
         } else {
           // Reset the flag after handling system session change
           setIsSystemSessionChange(false);
@@ -1405,6 +1412,13 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       setChatMessages([]);
     }
   }, [convertedMessages, sessionMessages, selectedSession]);
+
+  // Save chat state when messages or input changes
+  useEffect(() => {
+    if (selectedSession?.id && (chatMessages.length > 0 || input.trim())) {
+      appStatePersistence.saveChatState(selectedSession.id, chatMessages, input);
+    }
+  }, [chatMessages, input, selectedSession]);
 
   // Notify parent when input focus changes
   useEffect(() => {

@@ -6,15 +6,15 @@ import {
   Settings,
   Server,
   ArrowLeft,
+  MessageSquare,
 } from 'lucide-react';
-import { Logo } from '../logo';
 
 export function Navbar() {
   const location = useLocation();
 
   return (
     <>
-      <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+      <div className="bg-card border-b border-border">
         <div className="w-full px-3 sm:px-4 lg:px-6">
           <div className="flex items-center justify-between h-14 sm:h-16">
             <div className="flex items-center space-x-3 sm:space-x-6">
@@ -28,12 +28,23 @@ export function Navbar() {
                   <span className="ml-2">Voltar</span>
                 </Link>
               </Button>
-              <Logo />
               <div className="hidden sm:flex items-center space-x-1">
                 <Button
                   asChild
                   variant={
-                    location.pathname === '/vibe-kanban' || location.pathname === '/vibe-kanban/projects' || location.pathname.startsWith('/vibe-kanban/projects/') ? 'default' : 'ghost'
+                    location.pathname === '/vibe-kanban' || location.pathname === '/vibe-kanban/chat' ? 'default' : 'ghost'
+                  }
+                  size="sm"
+                >
+                  <Link to="/vibe-kanban/chat">
+                    <MessageSquare className="h-4 w-4" />
+                    <span className="ml-2">Chat</span>
+                  </Link>
+                </Button>
+                <Button
+                  asChild
+                  variant={
+                    location.pathname === '/vibe-kanban/projects' || location.pathname.startsWith('/vibe-kanban/projects/') ? 'default' : 'ghost'
                   }
                   size="sm"
                 >
@@ -73,7 +84,7 @@ export function Navbar() {
               <Button
                 variant="ghost"
                 size="icon"
-                className="text-gray-600 dark:text-gray-400"
+                className="text-muted-foreground"
                 onClick={() => {
                   const nav = document.querySelector('.mobile-nav-items');
                   nav?.classList.toggle('hidden');
@@ -87,21 +98,32 @@ export function Navbar() {
           </div>
         </div>
         {/* Mobile navigation dropdown */}
-        <div className="mobile-nav-items hidden sm:hidden border-t border-gray-200 dark:border-gray-700 py-2">
+        <div className="mobile-nav-items hidden sm:hidden border-t border-border py-2">
           <div className="space-y-1 px-3">
             <Link
               to="/"
-              className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700"
+              className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent"
             >
               <ArrowLeft className="h-4 w-4" />
               Voltar ao Claude Code UI
             </Link>
             <Link
+              to="/vibe-kanban/chat"
+              className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                location.pathname === '/vibe-kanban' || location.pathname === '/vibe-kanban/chat'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+              }`}
+            >
+              <MessageSquare className="h-4 w-4" />
+              Chat
+            </Link>
+            <Link
               to="/vibe-kanban/projects"
               className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                location.pathname === '/vibe-kanban' || location.pathname === '/vibe-kanban/projects' || location.pathname.startsWith('/vibe-kanban/projects/')
+                location.pathname === '/vibe-kanban/projects' || location.pathname.startsWith('/vibe-kanban/projects/')
                   ? 'bg-primary text-primary-foreground'
-                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent'
               }`}
             >
               <FolderOpen className="h-4 w-4" />
@@ -112,7 +134,7 @@ export function Navbar() {
               className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
                 location.pathname === '/vibe-kanban/mcp-servers'
                   ? 'bg-primary text-primary-foreground'
-                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent'
               }`}
             >
               <Server className="h-4 w-4" />
@@ -123,7 +145,7 @@ export function Navbar() {
               className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
                 location.pathname === '/vibe-kanban/settings'
                   ? 'bg-primary text-primary-foreground'
-                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent'
               }`}
             >
               <Settings className="h-4 w-4" />
