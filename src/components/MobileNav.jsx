@@ -82,15 +82,15 @@ function MobileNav({ activeTab, setActiveTab, isInputFocused, isShellConnected }
       <style>
         {`
           .mobile-nav-container {
-            background-color: ${isDarkMode ? '#1f2937' : '#ffffff'} !important;
+            background-color: var(--background) !important;
           }
           .mobile-nav-container:hover {
-            background-color: ${isDarkMode ? '#1f2937' : '#ffffff'} !important;
+            background-color: var(--background) !important;
           }
         `}
       </style>
       <div 
-        className={`mobile-nav-container fixed bottom-0 left-0 right-0 border-t border-gray-200 dark:border-gray-700 z-50 ios-bottom-safe transform transition-transform duration-300 ease-in-out shadow-lg ${
+        className={`mobile-nav-container fixed bottom-0 left-0 right-0 border-t border-border z-50 ios-bottom-safe transform transition-transform duration-300 ease-in-out shadow-sm ${
           isInputFocused ? 'translate-y-full' : 'translate-y-0'
         }`}
       >
@@ -107,16 +107,16 @@ function MobileNav({ activeTab, setActiveTab, isInputFocused, isShellConnected }
                 e.preventDefault();
                 item.onClick();
               }}
-              className={`flex items-center justify-center p-2 rounded-lg min-h-[40px] min-w-[40px] relative touch-manipulation ${
+              className={`flex items-center justify-center p-2 rounded-2xl min-h-[40px] min-w-[40px] relative touch-manipulation ${
                 isActive
-                  ? 'text-blue-600 dark:text-blue-400'
-                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+                  ? 'text-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
               }`}
               aria-label={item.id}
             >
               <Icon className="w-5 h-5" />
               {isActive && (
-                <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-6 h-0.5 bg-blue-600 dark:bg-blue-400 rounded-full" />
+                <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-6 h-0.5 bg-foreground rounded-full" />
               )}
             </button>
           );
@@ -127,7 +127,7 @@ function MobileNav({ activeTab, setActiveTab, isInputFocused, isShellConnected }
           <div className="relative">
             <MicButton 
               onTranscript={handleVoiceTranscript}
-              className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
+              className="bg-muted hover:bg-muted/80"
               isChat={activeTab === 'chat'}
               hasChatText={hasChatText}
             />
