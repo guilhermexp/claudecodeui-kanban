@@ -117,33 +117,34 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                    !prevMessage.isToolUse && !message.isToolUse;
   const messageRef = React.useRef(null);
   const [isExpanded, setIsExpanded] = React.useState(false);
-  React.useEffect(() => {
-    if (!autoExpandTools || !messageRef.current || !message.isToolUse) return;
+  // Disabled IntersectionObserver to prevent scroll issues
+  // React.useEffect(() => {
+  //   if (!autoExpandTools || !messageRef.current || !message.isToolUse) return;
     
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting && !isExpanded) {
-            setIsExpanded(true);
-            // Find all details elements and open them
-            const details = messageRef.current.querySelectorAll('details');
-            details.forEach(detail => {
-              detail.open = true;
-            });
-          }
-        });
-      },
-      { threshold: 0.1 }
-    );
+  //   const observer = new IntersectionObserver(
+  //     (entries) => {
+  //       entries.forEach((entry) => {
+  //         if (entry.isIntersecting && !isExpanded) {
+  //           setIsExpanded(true);
+  //           // Find all details elements and open them
+  //           const details = messageRef.current.querySelectorAll('details');
+  //           details.forEach(detail => {
+  //             detail.open = true;
+  //           });
+  //         }
+  //       });
+  //     },
+  //     { threshold: 0.1 }
+  //   );
     
-    observer.observe(messageRef.current);
+  //   observer.observe(messageRef.current);
     
-    return () => {
-      if (messageRef.current) {
-        observer.unobserve(messageRef.current);
-      }
-    };
-  }, [autoExpandTools, isExpanded, message.isToolUse]);
+  //   return () => {
+  //     if (messageRef.current) {
+  //       observer.unobserve(messageRef.current);
+  //     }
+  //   };
+  // }, [autoExpandTools, isExpanded, message.isToolUse]);
 
   return (
     <div
@@ -1905,44 +1906,44 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   // Users should have full control over their scroll position
 
 
-  // Initial textarea setup
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = textareaRef.current.scrollHeight + 'px';
+  // Initial textarea setup - DISABLED to prevent layout shifts
+  // useEffect(() => {
+  //   if (textareaRef.current) {
+  //     textareaRef.current.style.height = 'auto';
+  //     textareaRef.current.style.height = textareaRef.current.scrollHeight + 'px';
 
-      // Check if initially expanded
-      const lineHeight = parseInt(window.getComputedStyle(textareaRef.current).lineHeight);
-      const isExpanded = textareaRef.current.scrollHeight > lineHeight * 2;
-      setIsTextareaExpanded(isExpanded);
-    }
-  }, []); // Only run once on mount
+  //     // Check if initially expanded
+  //     const lineHeight = parseInt(window.getComputedStyle(textareaRef.current).lineHeight);
+  //     const isExpanded = textareaRef.current.scrollHeight > lineHeight * 2;
+  //     setIsTextareaExpanded(isExpanded);
+  //   }
+  // }, []); // Only run once on mount
 
-  // Reset textarea height when input is cleared programmatically
-  useEffect(() => {
-    if (textareaRef.current && !input.trim()) {
-      textareaRef.current.style.height = 'auto';
-      setIsTextareaExpanded(false);
-    }
-  }, [input]);
+  // Reset textarea height when input is cleared programmatically - DISABLED
+  // useEffect(() => {
+  //   if (textareaRef.current && !input.trim()) {
+  //     textareaRef.current.style.height = 'auto';
+  //     setIsTextareaExpanded(false);
+  //   }
+  // }, [input]);
 
   const handleTranscript = useCallback((text) => {
     if (text.trim()) {
       setInput(prevInput => {
         const newInput = prevInput.trim() ? `${prevInput} ${text}` : text;
         
-        // Update textarea height after setting new content
-        requestAnimationFrame(() => {
-          if (textareaRef.current) {
-            textareaRef.current.style.height = 'auto';
-            textareaRef.current.style.height = textareaRef.current.scrollHeight + 'px';
+        // Disabled auto-resize to prevent layout shifts
+        // requestAnimationFrame(() => {
+        //   if (textareaRef.current) {
+        //     textareaRef.current.style.height = 'auto';
+        //     textareaRef.current.style.height = textareaRef.current.scrollHeight + 'px';
             
-            // Check if expanded after transcript
-            const lineHeight = parseInt(window.getComputedStyle(textareaRef.current).lineHeight);
-            const isExpanded = textareaRef.current.scrollHeight > lineHeight * 2;
-            setIsTextareaExpanded(isExpanded);
-          }
-        }, 0);
+        //     // Check if expanded after transcript
+        //     const lineHeight = parseInt(window.getComputedStyle(textareaRef.current).lineHeight);
+        //     const isExpanded = textareaRef.current.scrollHeight > lineHeight * 2;
+        //     setIsTextareaExpanded(isExpanded);
+        //   }
+        // }, 0);
         
         return newInput;
       });
@@ -2175,12 +2176,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     setImageErrors(new Map());
     setIsTextareaExpanded(false);
     
-    // Reset textarea height
-
-
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-    }
+    // Disabled textarea height reset to prevent layout shifts
     
     // Clear the saved draft since message was sent
     if (selectedProject) {
@@ -2295,11 +2291,11 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     setInput(newValue);
     setCursorPosition(e.target.selectionStart);
     
-    // Handle height reset when input becomes empty
-    if (!newValue.trim()) {
-      e.target.style.height = 'auto';
-      setIsTextareaExpanded(false);
-    }
+    // Disabled height reset to prevent layout shifts
+    // if (!newValue.trim()) {
+    //   e.target.style.height = 'auto';
+    //   setIsTextareaExpanded(false);
+    // }
   };
 
   const handleTextareaClick = (e) => {
@@ -2593,21 +2589,13 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               onFocus={() => setIsInputFocused(true)}
               onBlur={() => setIsInputFocused(false)}
               onInput={(e) => {
-                // Immediate resize on input for better UX
-                e.target.style.height = 'auto';
-                e.target.style.height = e.target.scrollHeight + 'px';
+                // Disabled auto-resize to prevent layout shifts affecting scroll
                 setCursorPosition(e.target.selectionStart);
-                
-                // Check if textarea is expanded (more than 2 lines worth of height)
-                const lineHeight = parseInt(window.getComputedStyle(e.target).lineHeight);
-                const isExpanded = e.target.scrollHeight > lineHeight * 2;
-                setIsTextareaExpanded(isExpanded);
               }}
               placeholder="(@ to reference files)"
               disabled={isLoading}
               rows={1}
               className="chat-input-placeholder w-full pl-12 pr-28 sm:pr-40 py-3 sm:py-4 bg-transparent rounded-2xl focus:outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 disabled:opacity-50 resize-none min-h-[40px] sm:min-h-[56px] max-h-[40vh] sm:max-h-[300px] overflow-y-auto text-sm sm:text-base transition-all duration-200"
-              style={{ height: 'auto' }}
             />
             {/* Clear button - shown when there's text */}
             {input.trim() && (
@@ -2618,7 +2606,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                   e.stopPropagation();
                   setInput('');
                   if (textareaRef.current) {
-                    textareaRef.current.style.height = 'auto';
+                    // Disabled height reset
                     textareaRef.current.focus();
                   }
                   setIsTextareaExpanded(false);
@@ -2628,7 +2616,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                   e.stopPropagation();
                   setInput('');
                   if (textareaRef.current) {
-                    textareaRef.current.style.height = 'auto';
+                    // Disabled height reset
                     textareaRef.current.focus();
                   }
                   setIsTextareaExpanded(false);

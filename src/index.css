@@ -248,14 +248,16 @@
     30% { opacity: 1; }
   }
   
-  /* New message animation class */
+  /* New message animation class - DISABLED to fix scroll issues */
   .message-enter {
-    animation: messageEnter 0.3s ease-out forwards;
+    /* animation: messageEnter 0.3s ease-out forwards; */
+    opacity: 1;
   }
   
-  /* Assistant message specific animation */
+  /* Assistant message specific animation - DISABLED to fix scroll issues */
   .message-enter-assistant {
-    animation: messageEnter 0.4s ease-out forwards;
+    /* animation: messageEnter 0.4s ease-out forwards; */
+    opacity: 1;
   }
   
   /* Typing dots */
