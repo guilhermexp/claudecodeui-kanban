@@ -1136,7 +1136,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const [isTextareaExpanded, setIsTextareaExpanded] = useState(false);
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(-1);
   const [slashPosition, setSlashPosition] = useState(-1);
-  const [visibleMessageCount, setVisibleMessageCount] = useState(100);
+  // Removed visibleMessageCount - showing all messages now
   const [claudeStatus, setClaudeStatus] = useState(null);
   
   // Performance optimization states
@@ -1361,13 +1361,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   }, []);
 
 
-  // Simple scroll position tracking
-  const handleScroll = useCallback(() => {
-    if (scrollContainerRef.current) {
-      const nearBottom = isNearBottom();
-      setIsUserScrolledUp(!nearBottom);
-    }
-  }, [isNearBottom]);
+  // Removed duplicate scroll handler - using the throttled one below
 
   useEffect(() => {
     // Load session messages when session changes
@@ -1840,33 +1834,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     return () => clearTimeout(timer);
   }, [input]);
 
-  // Intelligent message virtualization for better performance
-  const visibleMessages = useMemo(() => {
-    const totalMessages = chatMessages.length;
-    
-    // No virtualization needed for small message counts
-    if (totalMessages <= 50) {
-      return chatMessages;
-    }
-    
-    // Dynamic virtualization based on message count and performance
-    let effectiveVisibleCount = visibleMessageCount;
-    
-    // Reduce visible messages for very large conversations
-    if (totalMessages > 500) {
-      effectiveVisibleCount = Math.min(visibleMessageCount, 75);
-    } else if (totalMessages > 200) {
-      effectiveVisibleCount = Math.min(visibleMessageCount, 100);
-    }
-    
-    // Always show recent messages, but provide earlier context if user scrolled up
-    if (isUserScrolledUp) {
-      // When user scrolled up, show more context to avoid jarring experience
-      effectiveVisibleCount = Math.min(effectiveVisibleCount * 1.5, totalMessages);
-    }
-    
-    return chatMessages.slice(-effectiveVisibleCount);
-  }, [chatMessages, visibleMessageCount, isUserScrolledUp]);
+  // Show all messages - removed problematic virtualization
+  const visibleMessages = chatMessages;
 
   // Performance monitoring and adaptive optimization
   useEffect(() => {
@@ -1888,13 +1857,10 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       // Automatically adjust performance mode based on render performance
       if (avgRenderTime > 100 && performanceMode === 'normal') {
         setPerformanceMode('optimized');
-        setVisibleMessageCount(75);
       } else if (avgRenderTime > 200 && performanceMode === 'optimized') {
         setPerformanceMode('aggressive');
-        setVisibleMessageCount(50);
       } else if (avgRenderTime < 50 && performanceMode !== 'normal') {
         setPerformanceMode('normal');
-        setVisibleMessageCount(100);
       }
     };
   }, [chatMessages.length, performanceMode]);
@@ -1910,14 +1876,14 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       if (!ticking) {
         requestAnimationFrame(() => {
           const { scrollTop, scrollHeight, clientHeight } = container;
-          const nearBottom = scrollHeight - scrollTop - clientHeight < 50;
+          const nearBottom = scrollHeight - scrollTop - clientHeight < 150;
           const wasScrolledUp = isUserScrolledUp;
           
           setIsUserScrolledUp(!nearBottom);
           lastScrollPositionRef.current = scrollTop;
           
-          // Track if user saw new messages
-          if (nearBottom && unreadMessageCount > 0) {
+          // Reset unread count when user is at bottom
+          if (nearBottom) {
             setUnreadMessageCount(0);
           }
           
@@ -1938,29 +1904,25 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     return () => container.removeEventListener('scroll', handleScroll);
   }, []); // No dependencies - stable listener
 
-  // Intelligent auto-scroll system
+  // Track message count and auto-scroll during Claude responses
   useEffect(() => {
-    const shouldScroll = 
-      // User sent a new message
-      (chatMessages.length > scrollBehavior.lastMessageCount && 
-       chatMessages[chatMessages.length - 1]?.type === 'user') ||
-      // Assistant is responding and user was near bottom
-      (isLoading && scrollBehavior.shouldAutoScroll) ||
-      // New assistant message and user was near bottom
-      (chatMessages.length > scrollBehavior.lastMessageCount && 
-       chatMessages[chatMessages.length - 1]?.type === 'assistant' && 
-       scrollBehavior.shouldAutoScroll) ||
-      // First load of session
-      (chatMessages.length > 0 && scrollBehavior.lastMessageCount === 0);
-    
-    if (shouldScroll && !isUserScrolledUp) {
-      scrollToBottom(true);
-    }
-    
-    // Track new messages for unread counter
+    // Track new messages for unread counter only if scrolled up
     if (chatMessages.length > scrollBehavior.lastMessageCount && isUserScrolledUp) {
       const newMessages = chatMessages.length - scrollBehavior.lastMessageCount;
       setUnreadMessageCount(prev => prev + newMessages);
+    }
+    
+    // Auto-scroll ONLY while Claude is actively responding AND user is near bottom
+    if (isLoading && !isUserScrolledUp && chatMessages.length > 0) {
+      const lastMessage = chatMessages[chatMessages.length - 1];
+      if (lastMessage?.type === 'assistant' || lastMessage?.type === 'tool-use') {
+        // Small delay to ensure DOM is updated
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            scrollToBottom(true);
+          });
+        });
+      }
     }
     
     // Update last message count
@@ -1969,8 +1931,18 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       lastMessageCount: chatMessages.length,
       hasNewMessages: chatMessages.length > prev.lastMessageCount
     }));
-  }, [chatMessages.length, isLoading, scrollBehavior.shouldAutoScroll, isUserScrolledUp, scrollToBottom]);
+  }, [chatMessages.length, isUserScrolledUp, isLoading, scrollToBottom]);
 
+  // Additional effect to handle streaming messages
+  useEffect(() => {
+    // Scroll when messages update during streaming
+    if (isLoading && !isUserScrolledUp && chatMessages.length > 0) {
+      const lastMessage = chatMessages[chatMessages.length - 1];
+      if (lastMessage?.content && (lastMessage.type === 'assistant' || lastMessage.type === 'tool-use')) {
+        scrollToBottom(false); // Instant scroll for streaming
+      }
+    }
+  }, [chatMessages, isLoading, isUserScrolledUp, scrollToBottom]);
 
   // Initial textarea setup
   useEffect(() => {
@@ -1993,19 +1965,12 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
   }, [input]);
   
-  // Mobile optimizations - adjust scroll when keyboard appears
+  // Mobile optimizations - removed auto-scroll when keyboard appears
   useEffect(() => {
     if (isInputFocused && isMobile) {
-      // Wait for keyboard to open
-      const timer = setTimeout(() => {
-        if (scrollBehavior.shouldAutoScroll) {
-          scrollToBottom(true);
-        }
-      }, 300);
-      
-      return () => clearTimeout(timer);
+      // Do nothing - no auto-scroll
     }
-  }, [isInputFocused, isMobile, scrollBehavior.shouldAutoScroll, scrollToBottom]);
+  }, [isInputFocused, isMobile]);
 
   const handleTranscript = useCallback((text) => {
     if (text.trim()) {
@@ -2030,27 +1995,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
   }, []);
 
-  // Load earlier messages with scroll position preservation
-  const loadEarlierMessages = useCallback(() => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
-    
-    // Save current scroll height
-    const oldScrollHeight = container.scrollHeight;
-    const oldScrollTop = container.scrollTop;
-    
-    // Load more messages
-    setVisibleMessageCount(prevCount => prevCount + 100);
-    
-    // Preserve scroll position after render
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        const newScrollHeight = container.scrollHeight;
-        const scrollDiff = newScrollHeight - oldScrollHeight;
-        container.scrollTop = oldScrollTop + scrollDiff;
-      });
-    });
-  }, []);
+  // Removed loadEarlierMessages - showing all messages now
 
   // Handle image files from drag & drop or file picker
   const handleImageFiles = useCallback((files) => {
@@ -2221,13 +2166,18 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       can_interrupt: true
     });
     
-    // Reset scroll state when user sends a message
+    // Reset scroll state when user sends a message and scroll to bottom
     setIsUserScrolledUp(false);
     setUnreadMessageCount(0);
     setScrollBehavior(prev => ({
       ...prev,
       shouldAutoScroll: true
     }));
+    
+    // Scroll to bottom when user sends message
+    requestAnimationFrame(() => {
+      scrollToBottom(true);
+    });
 
     // Session Protection: Mark session as active to prevent automatic project updates during conversation
     // This is crucial for maintaining chat state integrity. We handle two cases:
@@ -2461,11 +2411,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         ref={scrollContainerRef}
         className="flex-1 overflow-y-auto overflow-x-hidden px-0 py-3 sm:p-4 space-y-2 sm:space-y-3 relative scrollbar-thin"
         style={{
-          scrollBehavior: 'smooth',
           overscrollBehaviorY: 'contain',
-          WebkitOverflowScrolling: 'touch',
-          willChange: 'transform',
-          transform: 'translateZ(0)'
+          WebkitOverflowScrolling: 'touch'
         }}
       >
         {isLoadingSessionMessages && chatMessages.length === 0 ? (
@@ -2486,17 +2433,6 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           </div>
         ) : (
           <>
-            {chatMessages.length > visibleMessageCount && (
-              <div className="text-center text-gray-500 dark:text-gray-400 text-sm py-2 border-b border-gray-200 dark:border-gray-700">
-                Showing last {visibleMessageCount} messages ({chatMessages.length} total) • 
-                <button 
-                  className="ml-1 text-blue-600 hover:text-blue-700 underline"
-                  onClick={loadEarlierMessages}
-                >
-                  Load earlier messages
-                </button>
-              </div>
-            )}
             
             {visibleMessages.map((message, index) => {
               const prevMessage = index > 0 ? visibleMessages[index - 1] : null;

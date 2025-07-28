@@ -2,7 +2,7 @@
  * Centralized logging system with levels and formatting
  */
 
-const util = require('util');
+import util from 'util';
 
 class Logger {
   constructor(name = 'app') {
@@ -61,4 +61,4 @@ class Logger {
 // Create singleton instance
 const logger = new Logger();
 
-module.exports = logger;
+export { logger };

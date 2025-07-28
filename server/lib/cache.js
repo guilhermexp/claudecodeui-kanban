@@ -2,7 +2,8 @@
  * Simple in-memory cache with TTL support
  */
 
-const logger = require('./logger').child('cache');
+import { logger as baseLogger } from './logger.js';
+const logger = baseLogger.child('cache');
 
 class Cache {
   constructor(options = {}) {
@@ -129,4 +130,4 @@ process.on('SIGTERM', () => {
   Object.values(caches).forEach(cache => cache.destroy());
 });
 
-module.exports = { Cache, caches };
+export { Cache, caches };
