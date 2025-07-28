@@ -104,4 +104,23 @@ temp/
 # Database files
 *.db
 *.sqlite
-*.sqlite3 
+*.sqlite3
+
+# Project data (should not be in version control)
+data/
+
+# Backup files
+*.backup
+*.bak
+
+# Lock files (managed by npm/yarn)
+package-lock.json
+yarn.lock
+
+# Test files
+*.test.js
+*.spec.js
+vibe-kanban-*.js
+
+# Generated icons
+public/icons/

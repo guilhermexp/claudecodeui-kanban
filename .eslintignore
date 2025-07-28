@@ -1,0 +1,11 @@
+node_modules/
+dist/
+build/
+vite.config.js
+postcss.config.js
+tailwind.config.js
+public/
+data/
+vibe-kanban/backend/
+*.min.js
+*.bundle.js

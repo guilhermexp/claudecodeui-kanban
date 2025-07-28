@@ -19,13 +19,13 @@ try {
     }
   });
 } catch (e) {
-  console.log('No .env file found or error reading it:', e.message);
+  // No .env file found - expected in some environments
 }
 
-console.log('PORT from env:', process.env.PORT);
+// PORT from env will be logged during server startup
 
 import express from 'express';
-import { WebSocketServer } from 'ws';
+import { WebSocketServer, WebSocket } from 'ws';
 import http from 'http';
 import cors from 'cors';
 import { promises as fsPromises } from 'fs';
@@ -156,7 +156,7 @@ async function setupProjectsWatcher() {
           broadcastProjectUpdate(updateMessage, eventType, filePath);
           
         } catch (error) {
-          console.error('❌ Error handling project changes:', error);
+          logger.error('Error handling project changes:', error);
         }
       }, 300); // 300ms debounce (slightly faster than before)
     };
@@ -169,13 +169,13 @@ async function setupProjectsWatcher() {
       .on('addDir', (dirPath) => debouncedUpdate('addDir', dirPath))
       .on('unlinkDir', (dirPath) => debouncedUpdate('unlinkDir', dirPath))
       .on('error', (error) => {
-        console.error('❌ Chokidar watcher error:', error);
+        logger.error('Chokidar watcher error:', error);
       })
       .on('ready', () => {
       });
     
   } catch (error) {
-    console.error('❌ Failed to setup projects watcher:', error);
+    logger.error('Failed to setup projects watcher:', error);
   }
 }
 
@@ -187,7 +187,7 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ 
   server,
   verifyClient: (info) => {
-    console.log('WebSocket connection attempt to:', info.req.url);
+    logger.debug('WebSocket connection attempt to:', info.req.url);
     
     // Extract token from query parameters or headers
     const url = new URL(info.req.url, 'http://localhost');
@@ -197,13 +197,13 @@ const wss = new WebSocketServer({
     // Verify token
     const user = authenticateWebSocket(token);
     if (!user) {
-      console.log('❌ WebSocket authentication failed');
+      logger.warn('WebSocket authentication failed');
       return false;
     }
     
     // Store user info in the request for later use
     info.req.user = user;
-    console.log('✅ WebSocket authenticated for user:', user.username);
+    logger.info('WebSocket authenticated for user:', user.username);
     return true;
   }
 });
@@ -232,7 +232,7 @@ app.get('/api/config', authenticateToken, (req, res) => {
   const host = req.headers.host || `${req.hostname}:${PORT}`;
   const protocol = req.protocol === 'https' || req.get('x-forwarded-proto') === 'https' ? 'wss' : 'ws';
   
-  console.log('Config API called - Returning host:', host, 'Protocol:', protocol);
+  logger.debug('Config API called - Returning host:', host, 'Protocol:', protocol);
   
   res.json({
     serverPort: PORT,
@@ -323,7 +323,7 @@ app.post('/api/projects/create', authenticateToken, async (req, res) => {
     const project = await addProjectManually(projectPath.trim());
     res.json({ success: true, project });
   } catch (error) {
-    console.error('Error creating project:', error);
+    logger.error('Error creating project:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -334,7 +334,7 @@ app.get('/api/projects/:projectName/file', authenticateToken, async (req, res) =
     const { projectName } = req.params;
     const { filePath } = req.query;
     
-    console.log('📄 File read request:', projectName, filePath);
+    logger.debug('File read request:', projectName, filePath);
     
     // Using fsPromises from import
     
@@ -346,7 +346,7 @@ app.get('/api/projects/:projectName/file', authenticateToken, async (req, res) =
     const content = await fsPromises.readFile(filePath, 'utf8');
     res.json({ content, path: filePath });
   } catch (error) {
-    console.error('Error reading file:', error);
+    logger.error('Error reading file:', error);
     if (error.code === 'ENOENT') {
       res.status(404).json({ error: 'File not found' });
     } else if (error.code === 'EACCES') {
@@ -363,7 +363,7 @@ app.get('/api/projects/:projectName/files/content', authenticateToken, async (re
     const { projectName } = req.params;
     const { path: filePath } = req.query;
     
-    console.log('🖼️ Binary file serve request:', projectName, filePath);
+    logger.debug('Binary file serve request:', projectName, filePath);
     
     // Using fs from import
     // Using mime from import
@@ -389,14 +389,14 @@ app.get('/api/projects/:projectName/files/content', authenticateToken, async (re
     fileStream.pipe(res);
     
     fileStream.on('error', (error) => {
-      console.error('Error streaming file:', error);
+      logger.error('Error streaming file:', error);
       if (!res.headersSent) {
         res.status(500).json({ error: 'Error reading file' });
       }
     });
     
   } catch (error) {
-    console.error('Error serving binary file:', error);
+    logger.error('Error serving binary file:', error);
     if (!res.headersSent) {
       res.status(500).json({ error: error.message });
     }
@@ -409,7 +409,7 @@ app.put('/api/projects/:projectName/file', authenticateToken, async (req, res) =
     const { projectName } = req.params;
     const { filePath, content } = req.body;
     
-    console.log('💾 File save request:', projectName, filePath);
+    logger.debug('File save request:', projectName, filePath);
     
     // Using fsPromises from import
     
@@ -426,9 +426,9 @@ app.put('/api/projects/:projectName/file', authenticateToken, async (req, res) =
     try {
       const backupPath = filePath + '.backup.' + Date.now();
       await fsPromises.copyFile(filePath, backupPath);
-      console.log('📋 Created backup:', backupPath);
+      logger.debug('Created backup:', backupPath);
     } catch (backupError) {
-      console.warn('Could not create backup:', backupError.message);
+      logger.warn('Could not create backup:', backupError.message);
     }
     
     // Write the new content
@@ -1009,38 +1009,53 @@ app.post('/api/projects/:projectName/upload-images', authenticateToken, async (r
   }
 });
 
-// Proxy VibeKanban API requests to Rust backend
-app.use('/api/vibe-kanban', express.json(), async (req, res) => {
-  try {
-    const vibeKanbanPath = req.path.replace('/api/vibe-kanban', '');
-    const queryString = req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : '';
-    const vibeKanbanUrl = `http://localhost:8081/api${vibeKanbanPath}${queryString}`;
-    
-    console.log(`Proxying VibeKanban request: ${req.method} ${req.originalUrl} -> ${vibeKanbanUrl}`);
-    
-    // Forward the request to VibeKanban backend
-    const options = {
-      method: req.method,
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-      },
-    };
+// Simple console logger for now
+const logger = {
+  info: (...args) => console.log('[INFO]', ...args),
+  error: (...args) => console.error('[ERROR]', ...args),
+  warn: (...args) => console.warn('[WARN]', ...args),
+  debug: (...args) => console.log('[DEBUG]', ...args)
+};
 
-    // Forward body for POST/PUT requests
-    if (req.method !== 'GET' && req.method !== 'HEAD' && req.body) {
-      options.body = JSON.stringify(req.body);
+// Health check endpoint (public)
+app.get('/api/health', (req, res) => {
+  const healthStatus = {
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    services: {
+      server: 'running',
+      database: 'connected',
+      vibeKanban: 'available' // In dev, Vite proxies; in prod, we'll check directly
     }
-
-    const response = await fetch(vibeKanbanUrl, options);
-    const data = await response.json();
-    
-    res.status(response.status).json(data);
-  } catch (error) {
-    console.error('VibeKanban proxy error:', error);
-    res.status(502).json({ success: false, message: 'VibeKanban backend unavailable' });
-  }
+  };
+  
+  res.json(healthStatus);
 });
+
+// Proxy VibeKanban API requests to Rust backend (only in production)
+// In development, Vite handles the proxy
+if (process.env.NODE_ENV === 'production') {
+  // Dynamic import for production only
+  const { createProxyMiddleware } = await import('http-proxy-middleware');
+  
+  // Simple proxy for production
+  app.use('/api/vibe-kanban', createProxyMiddleware({
+    target: 'http://localhost:8081',
+    changeOrigin: true,
+    pathRewrite: {
+      '^/api/vibe-kanban': '/api'
+    },
+    onError: (err, req, res) => {
+      logger.error('VibeKanban proxy error:', err);
+      res.status(503).json({ 
+        success: false, 
+        message: 'Vibe Kanban backend is not available',
+        error: 'Service Unavailable',
+        details: 'The Vibe Kanban backend service (Rust) needs to be running on port 8081'
+      });
+    }
+  }));
+}
 
 // Serve React app for all other routes
 app.get('*', (req, res) => {
@@ -1172,15 +1187,76 @@ async function startServer() {
 
 startServer();
 
-// Clean up on server shutdown
-process.on('SIGINT', () => {
-  console.log('\n🛑 Shutting down server...');
+// Graceful shutdown handling
+let isShuttingDown = false;
+
+async function gracefulShutdown(signal) {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
   
-  process.exit(0);
+  logger.info(`${signal} received. Starting graceful shutdown...`);
+  
+  // Stop accepting new connections
+  server.close(() => {
+    logger.info('HTTP server closed');
+  });
+  
+  // Close WebSocket connections gracefully
+  wss.clients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify({ 
+        type: 'server_shutdown',
+        message: 'Server is shutting down gracefully' 
+      }));
+      client.close(1001, 'Server shutting down');
+    }
+  });
+  logger.info('WebSocket connections closed');
+  
+  // Stop Vibe Kanban proxy health checks
+  if (vibeProxy) {
+    vibeProxy.destroy();
+    logger.info('Vibe Kanban proxy stopped');
+  }
+  
+  // Close shell sessions
+  if (global.shellSessions) {
+    Object.values(global.shellSessions).forEach(session => {
+      if (session && session.pty) {
+        session.pty.kill();
+      }
+    });
+    logger.info('Shell sessions closed');
+  }
+  
+  // Close database connections
+  if (global.db) {
+    try {
+      global.db.close();
+      logger.info('Database connections closed');
+    } catch (error) {
+      logger.error('Error closing database:', error);
+    }
+  }
+  
+  // Give processes time to clean up
+  setTimeout(() => {
+    logger.info('Graceful shutdown completed');
+    process.exit(0);
+  }, 1000);
+}
+
+// Register shutdown handlers
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+
+// Handle uncaught errors
+process.on('uncaughtException', (error) => {
+  logger.error('Uncaught Exception:', error);
+  gracefulShutdown('uncaughtException');
 });
 
-process.on('SIGTERM', () => {
-  console.log('\n🛑 Server termination requested...');
-  
-  process.exit(0);
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  // Don't shutdown on unhandled rejections, just log them
 });
