@@ -209,8 +209,17 @@ export function ProjectTasks() {
         await fetchTasks();
         // Open the newly created task in the details panel
         handleViewTaskDetails(result);
-      } catch (err) {
-        setError('Failed to create and start task');
+      } catch (err: any) {
+        console.error('Failed to create and start task:', err);
+        
+        // Check if it's a backend availability error
+        if (err.message && err.message.includes('Service Unavailable')) {
+          setError('Vibe Kanban backend is not running. Please start it with "npm run dev" to use this feature.');
+        } else if (err.message && err.message.includes('backend is not running')) {
+          setError('Vibe Kanban backend is not running. Please start it with "npm run dev" to use this feature.');
+        } else {
+          setError('Failed to create and start task. ' + (err.message || ''));
+        }
       }
     },
     [projectId, fetchTasks]
@@ -379,109 +388,220 @@ export function ProjectTasks() {
       {/* Left Column - Kanban Section */}
       <div className={getKanbanSectionClasses(isPanelOpen)}>
         {/* Header */}
-
-        <div className="px-8 my-12 flex flex-row">
-          <div className="w-full flex items-center gap-3">
-            <h1 className="text-2xl font-bold">{project?.name || 'Project'}</h1>
-            {project?.current_branch && (
-              <span className="text-sm text-muted-foreground bg-muted px-2 py-1 rounded-md">
-                {project.current_branch}
-              </span>
-            )}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleOpenInIDE}
-              className="h-8 w-8 p-0"
-              title="Open in IDE"
-            >
-              <FolderOpen className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setIsProjectSettingsOpen(true)}
-              className="h-8 w-8 p-0"
-              title="Project Settings"
-            >
-              <Settings className="h-4 w-4" />
-            </Button>
-          </div>
-          <div className="flex items-center gap-3">
-            <Input
-              type="text"
-              placeholder="Search tasks..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-64"
-            />
-            <Button onClick={handleCreateNewTask}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Task
-            </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon">
-                  <LibraryBig className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-[250px]">
-                <DropdownMenuItem onClick={handleOpenTemplateManager}>
-                  <Plus className="h-3 w-3 mr-2" />
-                  Manage Templates
-                </DropdownMenuItem>
-                {templates.length > 0 && <DropdownMenuSeparator />}
-
-                {/* Project Templates */}
-                {templates.filter((t) => t.project_id !== null).length > 0 && (
-                  <>
-                    <div className="px-2 py-1.5 text-sm font-semibold text-muted-foreground">
-                      Project Templates
-                    </div>
-                    {templates
-                      .filter((t) => t.project_id !== null)
-                      .map((template) => (
-                        <DropdownMenuItem
-                          key={template.id}
-                          onClick={() => handleTemplateSelect(template)}
-                        >
-                          <span className="truncate">
-                            {template.template_name}
-                          </span>
-                        </DropdownMenuItem>
-                      ))}
-                  </>
+        <div className="px-4 sm:px-8 my-4 sm:my-12">
+          {/* Mobile layout */}
+          <div className="flex flex-col sm:hidden gap-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                <h1 className="text-lg font-semibold truncate">{project?.name || 'Project'}</h1>
+                {project?.current_branch && (
+                  <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded whitespace-nowrap">
+                    {project.current_branch}
+                  </span>
                 )}
+              </div>
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleOpenInIDE}
+                  className="h-7 w-7 p-0"
+                  title="Open in IDE"
+                >
+                  <FolderOpen className="h-3.5 w-3.5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsProjectSettingsOpen(true)}
+                  className="h-7 w-7 p-0"
+                  title="Project Settings"
+                >
+                  <Settings className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Input
+                type="text"
+                placeholder="Search tasks..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="flex-1 h-8 text-sm"
+              />
+              <Button size="icon" onClick={handleCreateNewTask} className="h-8 w-8">
+                <Plus className="h-3.5 w-3.5" />
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="icon" className="h-8 w-8">
+                    <LibraryBig className="h-3.5 w-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-[250px]">
+                  <DropdownMenuItem onClick={handleOpenTemplateManager}>
+                    <Plus className="h-3 w-3 mr-2" />
+                    Manage Templates
+                  </DropdownMenuItem>
+                  {templates.length > 0 && <DropdownMenuSeparator />}
 
-                {/* Separator if both types exist */}
-                {templates.filter((t) => t.project_id !== null).length > 0 &&
-                  templates.filter((t) => t.project_id === null).length > 0 && (
-                    <DropdownMenuSeparator />
+                  {/* Project Templates */}
+                  {templates.filter((t) => t.project_id !== null).length > 0 && (
+                    <>
+                      <div className="px-2 py-1.5 text-sm font-semibold text-muted-foreground">
+                        Project Templates
+                      </div>
+                      {templates
+                        .filter((t) => t.project_id !== null)
+                        .map((template) => (
+                          <DropdownMenuItem
+                            key={template.id}
+                            onClick={() => handleTemplateSelect(template)}
+                          >
+                            <span className="truncate">
+                              {template.template_name}
+                            </span>
+                          </DropdownMenuItem>
+                        ))}
+                    </>
                   )}
 
-                {/* Global Templates */}
-                {templates.filter((t) => t.project_id === null).length > 0 && (
-                  <>
-                    <div className="px-2 py-1.5 text-sm font-semibold text-muted-foreground">
-                      Global Templates
-                    </div>
-                    {templates
-                      .filter((t) => t.project_id === null)
-                      .map((template) => (
-                        <DropdownMenuItem
-                          key={template.id}
-                          onClick={() => handleTemplateSelect(template)}
-                        >
-                          <Globe2 className="h-3 w-3 mr-2 text-muted-foreground" />
-                          <span className="truncate">
-                            {template.template_name}
-                          </span>
-                        </DropdownMenuItem>
-                      ))}
-                  </>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
+                  {/* Separator if both types exist */}
+                  {templates.filter((t) => t.project_id !== null).length > 0 &&
+                    templates.filter((t) => t.project_id === null).length > 0 && (
+                      <DropdownMenuSeparator />
+                    )}
+
+                  {/* Global Templates */}
+                  {templates.filter((t) => t.project_id === null).length > 0 && (
+                    <>
+                      <div className="px-2 py-1.5 text-sm font-semibold text-muted-foreground">
+                        Global Templates
+                      </div>
+                      {templates
+                        .filter((t) => t.project_id === null)
+                        .map((template) => (
+                          <DropdownMenuItem
+                            key={template.id}
+                            onClick={() => handleTemplateSelect(template)}
+                          >
+                            <Globe2 className="h-3 w-3 mr-2 text-muted-foreground" />
+                            <span className="truncate">
+                              {template.template_name}
+                            </span>
+                          </DropdownMenuItem>
+                        ))}
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
+
+          {/* Desktop layout */}
+          <div className="hidden sm:flex flex-row">
+            <div className="w-full flex items-center gap-3">
+              <h1 className="text-2xl font-bold">{project?.name || 'Project'}</h1>
+              {project?.current_branch && (
+                <span className="text-sm text-muted-foreground bg-muted px-2 py-1 rounded-md">
+                  {project.current_branch}
+                </span>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleOpenInIDE}
+                className="h-8 w-8 p-0"
+                title="Open in IDE"
+              >
+                <FolderOpen className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsProjectSettingsOpen(true)}
+                className="h-8 w-8 p-0"
+                title="Project Settings"
+              >
+                <Settings className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="flex items-center gap-3">
+              <Input
+                type="text"
+                placeholder="Search tasks..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-64"
+              />
+              <Button onClick={handleCreateNewTask}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Task
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="icon">
+                    <LibraryBig className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-[250px]">
+                  <DropdownMenuItem onClick={handleOpenTemplateManager}>
+                    <Plus className="h-3 w-3 mr-2" />
+                    Manage Templates
+                  </DropdownMenuItem>
+                  {templates.length > 0 && <DropdownMenuSeparator />}
+
+                  {/* Project Templates */}
+                  {templates.filter((t) => t.project_id !== null).length > 0 && (
+                    <>
+                      <div className="px-2 py-1.5 text-sm font-semibold text-muted-foreground">
+                        Project Templates
+                      </div>
+                      {templates
+                        .filter((t) => t.project_id !== null)
+                        .map((template) => (
+                          <DropdownMenuItem
+                            key={template.id}
+                            onClick={() => handleTemplateSelect(template)}
+                          >
+                            <span className="truncate">
+                              {template.template_name}
+                            </span>
+                          </DropdownMenuItem>
+                        ))}
+                    </>
+                  )}
+
+                  {/* Separator if both types exist */}
+                  {templates.filter((t) => t.project_id !== null).length > 0 &&
+                    templates.filter((t) => t.project_id === null).length > 0 && (
+                      <DropdownMenuSeparator />
+                    )}
+
+                  {/* Global Templates */}
+                  {templates.filter((t) => t.project_id === null).length > 0 && (
+                    <>
+                      <div className="px-2 py-1.5 text-sm font-semibold text-muted-foreground">
+                        Global Templates
+                      </div>
+                      {templates
+                        .filter((t) => t.project_id === null)
+                        .map((template) => (
+                          <DropdownMenuItem
+                            key={template.id}
+                            onClick={() => handleTemplateSelect(template)}
+                          >
+                            <Globe2 className="h-3 w-3 mr-2 text-muted-foreground" />
+                            <span className="truncate">
+                              {template.template_name}
+                            </span>
+                          </DropdownMenuItem>
+                        ))}
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
         </div>
 
@@ -501,8 +621,8 @@ export function ProjectTasks() {
             </Card>
           </div>
         ) : (
-          <div className="px-8 overflow-x-scroll my-4">
-            <div className="min-w-[900px] max-w-[2000px] relative py-1">
+          <div className="px-0 sm:px-8 overflow-x-auto sm:overflow-x-scroll my-0 sm:my-4">
+            <div className="sm:min-w-[900px] sm:max-w-[2000px] relative sm:py-1">
               <TaskKanbanBoard
                 tasks={tasks}
                 searchQuery={searchQuery}
