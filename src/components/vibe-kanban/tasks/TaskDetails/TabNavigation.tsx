@@ -27,12 +27,12 @@ function TabNavigation({ activeTab, setActiveTab }: Props) {
   const { isPlanningMode, planCount } = useTaskPlan();
   return (
     <div className="border-b bg-muted/30">
-      <div className="flex px-4">
+      <div className="flex px-4 overflow-x-auto scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
         <button
           onClick={() => {
             setActiveTab('logs');
           }}
-          className={`flex items-center px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+          className={`flex items-center px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
             activeTab === 'logs'
               ? 'border-primary text-primary bg-background'
               : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50'
@@ -46,7 +46,7 @@ function TabNavigation({ activeTab, setActiveTab }: Props) {
             onClick={() => {
               setActiveTab('plan');
             }}
-            className={`flex items-center px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            className={`flex items-center px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
               activeTab === 'plan'
                 ? 'border-primary text-primary bg-background'
                 : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50'
@@ -63,7 +63,7 @@ function TabNavigation({ activeTab, setActiveTab }: Props) {
           onClick={() => {
             setActiveTab('diffs');
           }}
-          className={`flex items-center px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+          className={`flex items-center px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
             activeTab === 'diffs'
               ? 'border-primary text-primary bg-background'
               : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50'
@@ -81,7 +81,7 @@ function TabNavigation({ activeTab, setActiveTab }: Props) {
           onClick={() => {
             setActiveTab('related');
           }}
-          className={`flex items-center px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+          className={`flex items-center px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
             activeTab === 'related'
               ? 'border-primary text-primary bg-background'
               : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50'
@@ -99,7 +99,7 @@ function TabNavigation({ activeTab, setActiveTab }: Props) {
           onClick={() => {
             setActiveTab('processes');
           }}
-          className={`flex items-center px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+          className={`flex items-center px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
             activeTab === 'processes'
               ? 'border-primary text-primary bg-background'
               : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50'

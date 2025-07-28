@@ -53,10 +53,10 @@ function TaskDetailsHeader({
   return (
     <div>
       {/* Title and Task Actions */}
-      <div className="p-4 pb-2">
-        <div className="flex items-start justify-between">
+      <div className="p-2 sm:p-4 pb-2">
+        <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
-            <h2 className="text-lg font-bold mb-1 line-clamp-2">
+            <h2 className="text-base sm:text-lg font-bold mb-1 line-clamp-2">
               {task.title}
             </h2>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -65,7 +65,7 @@ function TaskDetailsHeader({
               </Chip>
             </div>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-0.5 sm:gap-1">
             {onEditTask && (
               <TooltipProvider>
                 <Tooltip>
@@ -74,8 +74,9 @@ function TaskDetailsHeader({
                       variant="ghost"
                       size="icon"
                       onClick={() => onEditTask(task)}
+                      className="h-8 w-8 sm:h-10 sm:w-10"
                     >
-                      <Edit className="h-4 w-4" />
+                      <Edit className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
@@ -92,8 +93,9 @@ function TaskDetailsHeader({
                       variant="ghost"
                       size="icon"
                       onClick={() => onDeleteTask(task.id)}
+                      className="h-8 w-8 sm:h-10 sm:w-10"
                     >
-                      <Trash2 className="h-4 w-4 text-red-500" />
+                      <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-red-500" />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
@@ -105,8 +107,13 @@ function TaskDetailsHeader({
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon" onClick={onClose}>
-                    <X className="h-4 w-4" />
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    onClick={onClose}
+                    className="h-8 w-8 sm:h-10 sm:w-10"
+                  >
+                    <X className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>

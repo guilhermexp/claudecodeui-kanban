@@ -32,6 +32,7 @@ import {
 } from '../../lib/vibe-kanban/responsive-config';
 
 import TaskKanbanBoard from '../../components/vibe-kanban/tasks/TaskKanbanBoard';
+import MobileTaskKanban from '../../components/vibe-kanban/tasks/MobileTaskKanban';
 import { TaskDetailsPanel } from '../../components/vibe-kanban/tasks/TaskDetailsPanel';
 import type {
   CreateTaskAndStart,
@@ -45,6 +46,31 @@ import type { DragEndEvent } from '../../components/vibe-kanban/ui/shadcn-io/kan
 
 type Task = TaskWithAttemptStatus;
 
+// Task status configuration
+const allTaskStatuses: readonly TaskStatus[] = [
+  'todo',
+  'inprogress',
+  'inreview',
+  'done',
+  'cancelled',
+] as const;
+
+const statusLabels: Record<TaskStatus, string> = {
+  todo: 'To Do',
+  inprogress: 'In Progress',
+  inreview: 'In Review',
+  done: 'Done',
+  cancelled: 'Cancelled',
+};
+
+const statusBoardColors: Record<TaskStatus, string> = {
+  todo: 'hsl(var(--neutral))',
+  inprogress: 'hsl(var(--info))',
+  inreview: 'hsl(var(--warning))',
+  done: 'hsl(var(--success))',
+  cancelled: 'hsl(var(--destructive))',
+};
+
 export function ProjectTasks() {
   const { projectId, taskId } = useParams<{
     projectId: string;
@@ -56,6 +82,7 @@ export function ProjectTasks() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isTaskDialogOpen, setIsTaskDialogOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 640);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [isProjectSettingsOpen, setIsProjectSettingsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -351,6 +378,16 @@ export function ProjectTasks() {
     }
   }, [projectId]);
 
+  // Handle window resize for mobile detection
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 640);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   // Handle direct navigation to task URLs
   useEffect(() => {
     if (taskId && tasks.length > 0) {
@@ -382,6 +419,23 @@ export function ProjectTasks() {
   if (error) {
     return <div className="text-center py-8 text-destructive">{error}</div>;
   }
+
+  // Filter tasks based on search query
+  const filteredTasks = searchQuery.trim()
+    ? tasks.filter(
+        (task) =>
+          task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (task.description && task.description.toLowerCase().includes(searchQuery.toLowerCase()))
+      )
+    : tasks;
+
+  // Group tasks by status for mobile view
+  const groupedTasks = allTaskStatuses.reduce((groups, status) => {
+    groups[status] = filteredTasks.filter((task) => 
+      task.status.toLowerCase() === status
+    );
+    return groups;
+  }, {} as Record<TaskStatus, Task[]>);
 
   return (
     <div className={getMainContainerClasses(isPanelOpen)}>
@@ -623,15 +677,31 @@ export function ProjectTasks() {
         ) : (
           <div className="px-0 sm:px-8 overflow-x-auto sm:overflow-x-scroll my-0 sm:my-4">
             <div className="sm:min-w-[900px] sm:max-w-[2000px] relative sm:py-1">
-              <TaskKanbanBoard
-                tasks={tasks}
-                searchQuery={searchQuery}
-                onDragEnd={handleDragEnd}
-                onEditTask={handleEditTask}
-                onDeleteTask={handleDeleteTask}
-                onViewTaskDetails={handleViewTaskDetails}
-                isPanelOpen={isPanelOpen}
-              />
+              {isMobile ? (
+                <MobileTaskKanban
+                  tasks={tasks}
+                  searchQuery={searchQuery}
+                  onDragEnd={handleDragEnd}
+                  onEditTask={handleEditTask}
+                  onDeleteTask={handleDeleteTask}
+                  onViewTaskDetails={handleViewTaskDetails}
+                  groupedTasks={groupedTasks}
+                  allTaskStatuses={allTaskStatuses}
+                  statusLabels={statusLabels}
+                  statusBoardColors={statusBoardColors}
+                  focusedTaskId={taskId || null}
+                />
+              ) : (
+                <TaskKanbanBoard
+                  tasks={tasks}
+                  searchQuery={searchQuery}
+                  onDragEnd={handleDragEnd}
+                  onEditTask={handleEditTask}
+                  onDeleteTask={handleDeleteTask}
+                  onViewTaskDetails={handleViewTaskDetails}
+                  isPanelOpen={isPanelOpen}
+                />
+              )}
             </div>
           </div>
         )}

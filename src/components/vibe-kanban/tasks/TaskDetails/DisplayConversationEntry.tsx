@@ -87,17 +87,17 @@ const getEntryIcon = (entryType: NormalizedEntryType) => {
 };
 
 const getContentClassName = (entryType: NormalizedEntryType) => {
-  const baseClasses = 'text-sm whitespace-pre-wrap break-words';
+  const baseClasses = 'text-sm whitespace-pre-wrap break-words overflow-wrap-anywhere';
 
   if (
     entryType.type === 'tool_use' &&
     entryType.action_type.action === 'command_run'
   ) {
-    return `${baseClasses} font-mono`;
+    return `${baseClasses} font-mono text-xs sm:text-sm`;
   }
 
   if (entryType.type === 'error_message') {
-    return `${baseClasses} text-red-600 font-mono bg-red-50 dark:bg-red-950/20 px-2 py-1 rounded`;
+    return `${baseClasses} text-red-600 font-mono bg-red-50 dark:bg-red-950/20 px-2 py-1 rounded text-xs sm:text-sm`;
   }
 
   // Special styling for TODO lists
@@ -109,7 +109,7 @@ const getContentClassName = (entryType: NormalizedEntryType) => {
       entryType.tool_name.toLowerCase() === 'todo_write' ||
       entryType.tool_name.toLowerCase() === 'todo_read')
   ) {
-    return `${baseClasses} font-mono text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/20 px-2 py-1 rounded`;
+    return `${baseClasses} font-mono text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/20 px-2 py-1 rounded text-xs sm:text-sm`;
   }
 
   // Special styling for plan presentations
@@ -117,7 +117,7 @@ const getContentClassName = (entryType: NormalizedEntryType) => {
     entryType.type === 'tool_use' &&
     entryType.action_type.action === 'plan_presentation'
   ) {
-    return `${baseClasses} text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/20 px-3 py-2 rounded-md border-l-4 border-blue-400`;
+    return `${baseClasses} text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/20 px-2 sm:px-3 py-2 rounded-md border-l-4 border-blue-400`;
   }
 
   return baseClasses;
@@ -312,7 +312,7 @@ function DisplayConversationEntry({ entry, index, diffDeletable }: Props) {
 
   return (
     <div key={index}>
-      <div className="flex items-start gap-3">
+      <div className="flex items-start gap-2 sm:gap-3">
         <div className="flex-shrink-0 mt-1">
           {isErrorMessage && hasMultipleLines ? (
             <button
@@ -325,7 +325,7 @@ function DisplayConversationEntry({ entry, index, diffDeletable }: Props) {
             getEntryIcon(entry.entry_type)
           )}
         </div>
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 overflow-hidden">
           {isErrorMessage && hasMultipleLines ? (
             <div className={isExpanded ? 'space-y-2' : ''}>
               <div className={getContentClassName(entry.entry_type)}>

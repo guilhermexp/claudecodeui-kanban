@@ -8,7 +8,7 @@ function CollapsibleToolbar() {
 
   return (
     <div className="border-b">
-      <div className="px-4 pb-2 flex items-center justify-between">
+      <div className="px-2 sm:px-4 pb-2 flex items-center justify-between">
         <h3 className="text-sm font-medium text-muted-foreground">
           Task Details
         </h3>
@@ -26,7 +26,7 @@ function CollapsibleToolbar() {
         </Button>
       </div>
       {!isHeaderCollapsed && (
-        <div className="px-4 pb-2">
+        <div className="px-2 sm:px-4 pb-2">
           <TaskDetailsToolbar />
         </div>
       )}

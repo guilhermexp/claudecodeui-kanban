@@ -9,7 +9,7 @@ import {
   ArrowLeft,
 } from 'lucide-react';
 import { TaskAttemptDataContext } from '../../context/taskDetailsContext.ts';
-import { executionProcessesApi } from '../../../../lib/vibe-kanban/api.js';
+import { executionProcessesApi } from '../../../../lib/vibe-kanban/api.ts';
 import type {
   ExecutionProcessStatus,
   ExecutionProcessSummary,

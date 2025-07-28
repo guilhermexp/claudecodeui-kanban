@@ -199,7 +199,7 @@ function Conversation() {
     <div
       ref={scrollContainerRef}
       onScroll={handleLogsScroll}
-      className="h-full overflow-y-auto"
+      className="h-full overflow-y-auto px-2 sm:px-4"
     >
       {visibleCount - visibleRunningEntriesCount < allEntries.length && (
         <div className="flex justify-center mb-4">

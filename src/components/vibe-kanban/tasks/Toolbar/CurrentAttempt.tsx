@@ -472,7 +472,7 @@ function CurrentAttempt({
 
   return (
     <div className="space-y-2">
-      <div className="grid grid-cols-4 gap-3 items-start">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-start">
         <div>
           <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
             Started
@@ -612,8 +612,8 @@ function CurrentAttempt({
         </div>
       </div>
 
-      <div className="col-span-4 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2 flex-wrap">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+        <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -673,7 +673,7 @@ function CurrentAttempt({
           </TooltipProvider>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto justify-start sm:justify-end">
           {taskAttempts.length > 1 && (
             <DropdownMenu>
               <TooltipProvider>
