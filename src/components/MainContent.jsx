@@ -297,8 +297,8 @@ function MainContent({
                   <span className="flex items-center gap-2">
                     <div className={`w-2 h-2 rounded-full ${term.isConnected ? 'bg-green-500' : 'bg-gray-500'}`} />
                     <span className="flex flex-col items-start truncate max-w-[180px]">
-                      <span className="text-[10px] leading-tight text-gray-500 dark:text-gray-400 truncate w-full">{term.projectDisplayName}</span>
-                      <span className="text-xs leading-tight font-medium truncate w-full">{term.sessionSummary}</span>
+                      <span className="text-[10px] leading-tight text-gray-500 dark:text-gray-400 truncate w-full">{term.projectDisplayName || term.projectName || 'Project'}</span>
+                      <span className="text-xs leading-tight font-medium truncate w-full">{term.sessionSummary || 'New Session'}</span>
                     </span>
                     <span
                       onClick={(e) => {

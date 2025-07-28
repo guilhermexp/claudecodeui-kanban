@@ -226,29 +226,41 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
         const wsConnected = session.ws && session.ws.readyState === WebSocket.OPEN;
         // Only show tabs for connected terminals
         if (wsConnected) {
-          // Extract session number from key for display
+          // Extract project name and session info from key
+          let projectName = key;
+          let sessionId = null;
           let sessionNumber = 1;
-          const sessionMatch = key.match(/session-(\d+)/);
-          if (sessionMatch) {
-            sessionNumber = sessionMatch[1];
+          
+          if (key.startsWith('project-')) {
+            // Extract project name from project-{projectname} or project-{projectname}-session-{number}
+            projectName = key.replace(/^project-/, '').replace(/-session-\d+$/, '');
+            // Extract session number if present
+            const sessionMatch = key.match(/session-(\d+)/);
+            if (sessionMatch) {
+              sessionNumber = sessionMatch[1];
+            }
+          } else if (key.includes(':')) {
+            // Extract from {projectname}:{sessionid} format
+            const parts = key.split(':');
+            projectName = parts[0];
+            sessionId = parts[1];
           }
           
-          // Use the session summary if available, otherwise create a unique name based on the key
-          let displayName = session.sessionSummary;
-          if (!displayName || displayName === 'New Session') {
-            if (key.includes('session-')) {
-              displayName = `New Session ${sessionNumber}`;
-            } else {
-              displayName = session.sessionSummary || 'Session';
-            }
+          // Use stored session info to preserve original project/session names
+          const displayProjectName = session.originalProjectName || session.projectDisplayName || projectName || 'Project';
+          let displaySessionSummary = session.sessionSummary || 'New Session';
+          
+          // For new sessions without a proper summary, use session number
+          if (displaySessionSummary === 'New Session' && key.includes('session-')) {
+            displaySessionSummary = `New Session ${sessionNumber}`;
           }
           
           terminals.push({
             key,
-            projectName: key,
-            projectDisplayName: session.projectDisplayName || 'Project',
-            sessionId: key.includes(':') && !key.includes('project-') ? key.split(':')[1] : null,
-            sessionSummary: displayName,
+            projectName: projectName,
+            projectDisplayName: displayProjectName,
+            sessionId: sessionId,
+            sessionSummary: displaySessionSummary,
             isConnected: wsConnected
           });
         }
@@ -397,7 +409,8 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
     }
     
     // Remove the session from shellSessions when disconnecting
-    const sessionKey = selectedSession?.id || activeTerminalKey || `project-${selectedProject.name}`;
+    // Use activeTerminalKey to ensure we disconnect the right session
+    const sessionKey = activeTerminalKey || selectedSession?.id || `project-${selectedProject.name}`;
     if (shellSessions.has(sessionKey)) {
       shellSessions.delete(sessionKey);
     }
@@ -484,14 +497,21 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
           }
         }
         
+        // Preserve original project/session info when storing
+        const existingSession = shellSessions.get(oldKey);
+        const sessionSummary = existingSession?.sessionSummary || (lastSessionId ? selectedSession?.summary : 'New Session');
+        const projectDisplayName = existingSession?.projectDisplayName || selectedProject?.displayName || selectedProject?.name || 'Project';
+        
         shellSessions.set(oldKey, {
           terminal: terminal.current,
           fitAddon: fitAddon.current,
           ws: ws.current,
           isConnected: wsConnected,
           isBypassingPermissions: isBypassingPermissions,
-          sessionSummary: lastSessionId ? selectedSession?.summary : `New Session ${sessionCounter}`,
-          projectDisplayName: lastProjectName || 'Project',
+          sessionSummary: sessionSummary,
+          projectDisplayName: projectDisplayName,
+          originalProjectName: existingSession?.originalProjectName || lastProjectName,
+          originalSessionId: existingSession?.originalSessionId || lastSessionId,
           bufferContent: bufferContent.trim()
         });
         
@@ -575,13 +595,8 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
     }
 
     // Create session key for this project/session combination
-    const sessionKey = selectedSession?.id || activeTerminalKey || `project-${selectedProject.name}`;
-    
-    
-    // Check if this session is already being created
-    if (sessionsBeingCreated.has(sessionKey)) {
-      return;
-    }
+    // Use activeTerminalKey if available to maintain consistency with unique keys
+    const sessionKey = selectedSession?.id || activeTerminalKey || `project-${selectedProject.name}-${Date.now()}`;
     
     // Check if we have an existing session
     let existingSession = shellSessions.get(sessionKey);
@@ -863,7 +878,11 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
     setIsConnected(false);
     
     // Update active terminal key
-    setActiveTerminalKey(sessionKey);
+    // For new sessions without ID, create a unique key with timestamp
+    const currentKey = selectedSession?.id || (activeTerminalKey && activeTerminalKey.startsWith(`project-${selectedProject?.name}`)) 
+      ? activeTerminalKey 
+      : `project-${selectedProject?.name}-${Date.now()}`;
+    setActiveTerminalKey(currentKey);
     
     // Check if we should auto-reconnect (after page refresh)
     if (existingSession && existingSession.shouldReconnect) {
@@ -928,7 +947,7 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
       
       // Store session for reuse instead of disposing - but only if connected
       if (terminal.current && selectedProject) {
-        const cleanupKey = activeTerminalKey || sessionKey;
+        const sessionKey = activeTerminalKey || selectedSession?.id || `project-${selectedProject.name}`;
         
         try {
           // Check if WebSocket is really connected before storing
@@ -948,19 +967,26 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
               }
             }
             
-            shellSessions.set(cleanupKey, {
+            // Get existing session info or create new one
+            const existingSession = shellSessions.get(sessionKey);
+            const sessionSummary = existingSession?.sessionSummary || selectedSession?.summary || 'New Session';
+            const projectDisplayName = existingSession?.projectDisplayName || selectedProject?.displayName || selectedProject?.name || 'Project';
+            
+            shellSessions.set(sessionKey, {
               terminal: terminal.current,
               fitAddon: fitAddon.current,
               ws: ws.current,
               isConnected: wsConnected,
               isBypassingPermissions: isBypassingPermissions,
-              sessionSummary: selectedSession?.summary || (sessionKey.includes('session-') ? `New Session ${sessionKey.split('session-')[1]}` : `New Session`),
-              projectDisplayName: selectedProject?.displayName || selectedProject?.name || 'Project',
+              sessionSummary: sessionSummary,
+              projectDisplayName: projectDisplayName,
+              originalProjectName: selectedProject?.name,
+              originalSessionId: selectedSession?.id,
               bufferContent: bufferContent.trim()
             });
             
             // Start timeout to clean up after 10 minutes
-            clearSessionAfterTimeout(cleanupKey);
+            clearSessionAfterTimeout(sessionKey);
           }
           
         } catch (error) {
@@ -1103,15 +1129,24 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
         setIsConnecting(false);
         
         // Add current session to shellSessions when connected
-        const sessionKey = selectedSession?.id || activeTerminalKey || `project-${selectedProject.name}`;
+        // Use activeTerminalKey to maintain consistency
+        const sessionKey = activeTerminalKey || selectedSession?.id || `project-${selectedProject.name}`;
+        
+        // Store project and session info at connection time
+        const projectName = selectedProject?.name || 'Unknown';
+        const projectDisplayName = selectedProject?.displayName || projectName;
+        const sessionSummary = selectedSession?.summary || 'New Session';
+        
         shellSessions.set(sessionKey, {
           terminal: terminal.current,
           fitAddon: fitAddon.current,
           ws: ws.current,
           isConnected: true,
           isBypassingPermissions: bypassRef.current,
-          sessionSummary: selectedSession?.summary || (sessionKey.includes('session-') ? `New Session ${sessionKey.split('session-')[1]}` : `New Session`),
-          projectDisplayName: selectedProject?.displayName || selectedProject?.name || 'Project',
+          sessionSummary: sessionSummary,
+          projectDisplayName: projectDisplayName,
+          originalProjectName: projectName,
+          originalSessionId: selectedSession?.id,
           bufferContent: '' // New session, no buffer yet
         });
         
