@@ -83,7 +83,7 @@ const QuickSettingsPanel = ({
           </div>
 
           {/* Settings Content */}
-          <div className={`flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-6 bg-white dark:bg-gray-900 ${isMobile ? 'pb-20' : ''}`}>
+          <div className={`flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-6 ${isMobile ? 'pb-20' : ''}`}>
             {/* Appearance Settings */}
             <div className="space-y-2">
               <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">Appearance</h4>
@@ -249,9 +249,9 @@ const QuickSettingsPanel = ({
       </div>
 
       {/* Backdrop */}
-      {localIsOpen && (
+      {localIsOpen && !isMobile && (
         <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-30 transition-opacity duration-150 ease-out"
+          className="fixed inset-0 z-30"
           onClick={handleToggle}
         />
       )}
