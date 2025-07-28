@@ -595,8 +595,18 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
     }
 
     // Create session key for this project/session combination
+<<<<<<< Updated upstream
+    const sessionKey = selectedSession?.id || activeTerminalKey || `project-${selectedProject.name}`;
+    
+    
+    // Check if this session is already being created
+    if (sessionsBeingCreated.has(sessionKey)) {
+      return;
+    }
+=======
     // Use activeTerminalKey if available to maintain consistency with unique keys
     const sessionKey = selectedSession?.id || activeTerminalKey || `project-${selectedProject.name}-${Date.now()}`;
+>>>>>>> Stashed changes
     
     // Check if we have an existing session
     let existingSession = shellSessions.get(sessionKey);
@@ -878,11 +888,15 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
     setIsConnected(false);
     
     // Update active terminal key
+<<<<<<< Updated upstream
+    setActiveTerminalKey(sessionKey);
+=======
     // For new sessions without ID, create a unique key with timestamp
     const currentKey = selectedSession?.id || (activeTerminalKey && activeTerminalKey.startsWith(`project-${selectedProject?.name}`)) 
       ? activeTerminalKey 
       : `project-${selectedProject?.name}-${Date.now()}`;
     setActiveTerminalKey(currentKey);
+>>>>>>> Stashed changes
     
     // Check if we should auto-reconnect (after page refresh)
     if (existingSession && existingSession.shouldReconnect) {
@@ -947,7 +961,11 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
       
       // Store session for reuse instead of disposing - but only if connected
       if (terminal.current && selectedProject) {
+<<<<<<< Updated upstream
+        const cleanupKey = activeTerminalKey || sessionKey;
+=======
         const sessionKey = activeTerminalKey || selectedSession?.id || `project-${selectedProject.name}`;
+>>>>>>> Stashed changes
         
         try {
           // Check if WebSocket is really connected before storing
@@ -967,26 +985,35 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
               }
             }
             
+<<<<<<< Updated upstream
+            shellSessions.set(cleanupKey, {
+=======
             // Get existing session info or create new one
             const existingSession = shellSessions.get(sessionKey);
             const sessionSummary = existingSession?.sessionSummary || selectedSession?.summary || 'New Session';
             const projectDisplayName = existingSession?.projectDisplayName || selectedProject?.displayName || selectedProject?.name || 'Project';
             
             shellSessions.set(sessionKey, {
+>>>>>>> Stashed changes
               terminal: terminal.current,
               fitAddon: fitAddon.current,
               ws: ws.current,
               isConnected: wsConnected,
               isBypassingPermissions: isBypassingPermissions,
+<<<<<<< Updated upstream
+              sessionSummary: selectedSession?.summary || (sessionKey.includes('session-') ? `New Session ${sessionKey.split('session-')[1]}` : `New Session`),
+              projectDisplayName: selectedProject?.displayName || selectedProject?.name || 'Project',
+=======
               sessionSummary: sessionSummary,
               projectDisplayName: projectDisplayName,
               originalProjectName: selectedProject?.name,
               originalSessionId: selectedSession?.id,
+>>>>>>> Stashed changes
               bufferContent: bufferContent.trim()
             });
             
             // Start timeout to clean up after 10 minutes
-            clearSessionAfterTimeout(sessionKey);
+            clearSessionAfterTimeout(cleanupKey);
           }
           
         } catch (error) {
@@ -1143,10 +1170,15 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
           ws: ws.current,
           isConnected: true,
           isBypassingPermissions: bypassRef.current,
+<<<<<<< Updated upstream
+          sessionSummary: selectedSession?.summary || (sessionKey.includes('session-') ? `New Session ${sessionKey.split('session-')[1]}` : `New Session`),
+          projectDisplayName: selectedProject?.displayName || selectedProject?.name || 'Project',
+=======
           sessionSummary: sessionSummary,
           projectDisplayName: projectDisplayName,
           originalProjectName: projectName,
           originalSessionId: selectedSession?.id,
+>>>>>>> Stashed changes
           bufferContent: '' // New session, no buffer yet
         });
         
