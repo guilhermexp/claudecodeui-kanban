@@ -56,85 +56,19 @@ if (typeof document !== 'undefined') {
   document.head.appendChild(styleSheet);
 }
 
-// Global store for shell sessions to persist across tab switches
-const shellSessions = new Map();
-const sessionTimeouts = new Map();
+// Import centralized session manager
+import shellSessionManager from '../lib/shellSessionManager';
 
-// Store all active terminals for tab display
-const activeTerminals = new Map();
+// Local maps for DOM elements only
+const terminalElementsRef = new Map();
 
-// Counter for unique session IDs
-let sessionCounter = 0;
+// Session storage is now handled by shellSessionManager
 
-// Track sessions being created to prevent duplicates
-const sessionsBeingCreated = new Set();
-
-// Save session info to localStorage for reconnection after page reload
-const saveSessionsToStorage = () => {
-  const sessionsData = [];
-  shellSessions.forEach((session, key) => {
-    if (session.isConnected) {
-      sessionsData.push({
-        key,
-        sessionSummary: session.sessionSummary,
-        projectDisplayName: session.projectDisplayName,
-        isBypassingPermissions: session.isBypassingPermissions,
-        bufferContent: session.bufferContent || ''
-      });
-    }
-  });
-  localStorage.setItem('activeShellSessions', JSON.stringify(sessionsData));
-};
-
-// Load sessions from storage
-const loadSessionsFromStorage = () => {
-  try {
-    const stored = localStorage.getItem('activeShellSessions');
-    if (stored) {
-      return JSON.parse(stored);
-    }
-  } catch (error) {
-    console.error('Error loading sessions from storage:', error);
-  }
-  return [];
-};
-
-// Helper to disconnect session after timeout (but keep it available for reconnection)
-const clearSessionAfterTimeout = (sessionKey) => {
-  // Clear any existing timeout
-  if (sessionTimeouts.has(sessionKey)) {
-    clearTimeout(sessionTimeouts.get(sessionKey));
-  }
-  
-  // Set new 1-hour timeout
-  const timeoutId = setTimeout(() => {
-    const session = shellSessions.get(sessionKey);
-    if (session) {
-      // Only disconnect WebSocket, don't dispose terminal or delete session
-      if (session.ws && session.ws.readyState === WebSocket.OPEN) {
-        session.ws.close();
-      }
-      // Mark session as disconnected but keep it in memory
-      session.isConnected = false;
-      sessionTimeouts.delete(sessionKey);
-      console.log(`Shell session ${sessionKey} disconnected after 10 minutes of inactivity (session preserved for reconnection)`);
-    }
-  }, 10 * 60 * 1000); // 10 minutes
-  
-  sessionTimeouts.set(sessionKey, timeoutId);
-};
-
-// Helper to cancel timeout when returning to session
-const cancelSessionTimeout = (sessionKey) => {
-  if (sessionTimeouts.has(sessionKey)) {
-    clearTimeout(sessionTimeouts.get(sessionKey));
-    sessionTimeouts.delete(sessionKey);
-  }
-};
+// Timeout management is now handled by shellSessionManager
 
 function Shell({ selectedProject, selectedSession, isActive, onSessionCountChange, onTerminalsChange, onActiveTerminalChange, onConnectionChange }) {
   const terminalContainerRef = useRef(null);
-  const terminalElementsRef = useRef(new Map()); // Map to store DOM elements for each terminal
+  const terminalElementsMapRef = useRef(terminalElementsRef); // Reference to global map
   const terminal = useRef(null);
   const fitAddon = useRef(null);
   const ws = useRef(null);
@@ -153,41 +87,46 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
   const [allTerminals, setAllTerminals] = useState([]);
   const [activeTerminalKey, setActiveTerminalKey] = useState(null);
   const statusCheckInterval = useRef(null);
+  const initTimeoutRef = useRef(null);
 
   // Get or create a terminal DOM element for a specific session
   const getTerminalElement = (sessionKey) => {
-    if (!terminalElementsRef.current.has(sessionKey)) {
+    if (!terminalElementsMapRef.current.has(sessionKey)) {
       const element = document.createElement('div');
       element.className = 'terminal-instance';
       element.style.width = '100%';
       element.style.height = '100%';
       element.style.display = 'none'; // Hidden by default
-      terminalElementsRef.current.set(sessionKey, element);
+      terminalElementsMapRef.current.set(sessionKey, element);
       
       // Append to container if it exists
       if (terminalContainerRef.current) {
         terminalContainerRef.current.appendChild(element);
       }
     }
-    return terminalElementsRef.current.get(sessionKey);
+    return terminalElementsMapRef.current.get(sessionKey);
   };
 
   // Show only the active terminal element
   const showTerminalElement = (sessionKey) => {
-    terminalElementsRef.current.forEach((element, key) => {
+    terminalElementsMapRef.current.forEach((element, key) => {
       element.style.display = key === sessionKey ? 'block' : 'none';
     });
   };
 
-  // Load saved sessions on component mount
+  // Subscribe to session manager events
   useEffect(() => {
-    // Only run once on mount
-    if (shellSessions.size === 0) {
-      const savedSessions = loadSessionsFromStorage();
-      
-      // The sessions will be auto-reconnected when the terminal initializes
-      // based on the shouldReconnect flag
-    }
+    const handleSessionsChanged = () => {
+      updateTerminalsList();
+    };
+
+    shellSessionManager.on('sessionsChanged', handleSessionsChanged);
+    shellSessionManager.on('sessionUpdated', handleSessionsChanged);
+
+    return () => {
+      shellSessionManager.off('sessionsChanged', handleSessionsChanged);
+      shellSessionManager.off('sessionUpdated', handleSessionsChanged);
+    };
   }, []);
 
   // Keep bypassRef in sync with state
@@ -217,52 +156,28 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
     }
   }, [isDraggingOver]);
 
-  // Update all terminals list whenever shellSessions changes
+  // Update all terminals list from session manager
   const updateTerminalsList = () => {
     const terminals = [];
-    shellSessions.forEach((session, key) => {
+    const sessions = shellSessionManager.getAllSessions();
+    
+    sessions.forEach((session) => {
       if (session.terminal && !session.terminal.disposed) {
         // Check real WebSocket state
         const wsConnected = session.ws && session.ws.readyState === WebSocket.OPEN;
         // Only show tabs for connected terminals
         if (wsConnected) {
-          // Extract project name and session info from key
-          let projectName = key;
-          let sessionId = null;
-          let sessionNumber = 1;
-          
-          if (key.startsWith('project-')) {
-            // Extract project name from project-{projectname} or project-{projectname}-session-{number}
-            projectName = key.replace(/^project-/, '').replace(/-session-\d+$/, '');
-            // Extract session number if present
-            const sessionMatch = key.match(/session-(\d+)/);
-            if (sessionMatch) {
-              sessionNumber = sessionMatch[1];
-            }
-          } else if (key.includes(':')) {
-            // Extract from {projectname}:{sessionid} format
-            const parts = key.split(':');
-            projectName = parts[0];
-            sessionId = parts[1];
+          const displayInfo = shellSessionManager.getSessionDisplayInfo(session.key);
+          if (displayInfo) {
+            terminals.push({
+              key: session.key,
+              projectName: displayInfo.projectName,
+              projectDisplayName: displayInfo.projectDisplayName,
+              sessionId: session.sessionId,
+              sessionSummary: displayInfo.sessionSummary,
+              isConnected: displayInfo.isConnected
+            });
           }
-          
-          // Use stored session info to preserve original project/session names
-          const displayProjectName = session.originalProjectName || session.projectDisplayName || projectName || 'Project';
-          let displaySessionSummary = session.sessionSummary || 'New Session';
-          
-          // For new sessions without a proper summary, use session number
-          if (displaySessionSummary === 'New Session' && key.includes('session-')) {
-            displaySessionSummary = `New Session ${sessionNumber}`;
-          }
-          
-          terminals.push({
-            key,
-            projectName: projectName,
-            projectDisplayName: displayProjectName,
-            sessionId: sessionId,
-            sessionSummary: displaySessionSummary,
-            isConnected: wsConnected
-          });
         }
       }
     });
@@ -271,7 +186,7 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
   
   // Handle tab switching
   const switchToTerminal = (terminalKey) => {
-    const session = shellSessions.get(terminalKey);
+    const session = shellSessionManager.getSession(terminalKey);
     if (session && session.terminal && !session.terminal.disposed) {
       // Store current terminal state if different
       if (terminal.current && activeTerminalKey && activeTerminalKey !== terminalKey) {
@@ -287,14 +202,12 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
           }
         }
         
-        shellSessions.set(activeTerminalKey, {
+        shellSessionManager.updateSession(activeTerminalKey, {
           terminal: terminal.current,
           fitAddon: fitAddon.current,
           ws: ws.current,
           isConnected,
           isBypassingPermissions,
-          sessionSummary: selectedSession?.summary || (sessionKey.includes('session-') ? `New Session ${sessionKey.split('session-')[1]}` : `New Session`),
-          projectDisplayName: selectedProject?.displayName || selectedProject?.name || 'Project',
           bufferContent: bufferContent.trim()
         });
       }
@@ -309,6 +222,7 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
       setIsConnected(wsConnected);
       setIsBypassingPermissions(session.isBypassingPermissions || false);
       setActiveTerminalKey(terminalKey);
+      shellSessionManager.setActiveSession(terminalKey);
       
       // Get the terminal element for this session
       const terminalElement = getTerminalElement(terminalKey);
@@ -408,18 +322,12 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
       terminal.current.write('\x1b[2J\x1b[H'); // Clear screen and move cursor to home
     }
     
-    // Remove the session from shellSessions when disconnecting
-    // Use activeTerminalKey to ensure we disconnect the right session
+    // Remove the session using session manager
     const sessionKey = activeTerminalKey || selectedSession?.id || `project-${selectedProject.name}`;
-    if (shellSessions.has(sessionKey)) {
-      shellSessions.delete(sessionKey);
-    }
+    shellSessionManager.removeSession(sessionKey);
     
     // Update terminals list
     updateTerminalsList();
-    
-    // Update localStorage
-    saveSessionsToStorage();
     
     setIsConnected(false);
     setIsConnecting(false);
@@ -430,11 +338,9 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
     setIsRestarting(true);
     
     // Clear ALL session storage for this project to force fresh start
-    const sessionKeys = Array.from(shellSessions.keys()).filter(key => 
-      key.includes(selectedProject.name)
-    );
-    sessionKeys.forEach(key => shellSessions.delete(key));
-    
+    const sessions = shellSessionManager.getAllSessions();
+    const projectSessions = sessions.filter(s => s.key.includes(selectedProject.name));
+    projectSessions.forEach(s => shellSessionManager.removeSession(s.key));
     
     // Close existing WebSocket
     if (ws.current) {
@@ -444,7 +350,6 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
     
     // Clear and dispose existing terminal
     if (terminal.current) {
-      
       // Dispose terminal immediately without writing text
       terminal.current.dispose();
       terminal.current = null;
@@ -454,7 +359,6 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
     // Reset states
     setIsConnected(false);
     setIsInitialized(false);
-    
     
     // Force re-initialization after cleanup
     setTimeout(() => {
@@ -474,13 +378,16 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
     // Check if user clicked "New Session" (was a session, now null)
     const isNewSession = lastSessionId !== null && currentSessionId === null && currentProjectName === lastProjectName;
     
+    // Always ensure initialization for new sessions
+    if (currentSessionId === null && !activeTerminalKey && !isInitialized) {
+      setIsInitialized(true);
+    }
+    
     // Only react to session changes, not project changes alone
     if (sessionChanged && (lastSessionId !== null || currentSessionId !== null)) {
       // Store current shell state before switching (if connected)
       if (isConnected && terminal.current) {
         const oldKey = activeTerminalKey || lastSessionId || `project-${lastProjectName}`;
-        // Cancel any existing timeout for this session
-        cancelSessionTimeout(oldKey);
         
         // Check if WebSocket is really connected before storing
         const wsConnected = ws.current && ws.current.readyState === WebSocket.OPEN;
@@ -497,66 +404,43 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
           }
         }
         
-        // Preserve original project/session info when storing
-        const existingSession = shellSessions.get(oldKey);
-        const sessionSummary = existingSession?.sessionSummary || (lastSessionId ? selectedSession?.summary : 'New Session');
-        const projectDisplayName = existingSession?.projectDisplayName || selectedProject?.displayName || selectedProject?.name || 'Project';
-        
-        shellSessions.set(oldKey, {
+        // Update session in session manager
+        shellSessionManager.updateSession(oldKey, {
           terminal: terminal.current,
           fitAddon: fitAddon.current,
           ws: ws.current,
           isConnected: wsConnected,
           isBypassingPermissions: isBypassingPermissions,
-          sessionSummary: sessionSummary,
-          projectDisplayName: projectDisplayName,
-          originalProjectName: existingSession?.originalProjectName || lastProjectName,
-          originalSessionId: existingSession?.originalSessionId || lastSessionId,
+          sessionSummary: selectedSession?.summary || 'New Session',
+          projectDisplayName: selectedProject?.displayName || selectedProject?.name || 'Project',
+          projectName: lastProjectName,
+          sessionId: lastSessionId,
           bufferContent: bufferContent.trim()
         });
-        
-        // Restart the 10-minute timeout
-        clearSessionAfterTimeout(oldKey);
-        
         
         // Update terminals list
         updateTerminalsList();
       }
       
-      // Create key for new context - add unique ID for new sessions
+      // Create key for new context
       let newKey;
       if (currentSessionId) {
         newKey = currentSessionId;
       } else if (isNewSession) {
-        // Increment counter BEFORE using it for new sessions
-        sessionCounter++;
-        newKey = `project-${currentProjectName}-session-${sessionCounter}`;
+        // Use session manager to generate unique key
+        newKey = shellSessionManager.generateSessionKey(selectedProject, null, true);
       } else {
-        newKey = `project-${currentProjectName}`;
+        newKey = shellSessionManager.generateSessionKey(selectedProject, selectedSession);
       }
       setActiveTerminalKey(newKey);
+      shellSessionManager.setActiveSession(newKey);
       
-      // If it's a new session, DON'T remove existing terminals
-      // Each session should be independent
+      // If it's a new session, ensure we create a fresh terminal
       if (isNewSession) {
         // Force creation of a new terminal by clearing the current one
-        if (terminal.current) {
-          terminal.current = null;
-          fitAddon.current = null;
-          ws.current = null;
-        }
-        if (existingSession) {
-          // Close and dispose existing terminal
-          if (existingSession.ws && existingSession.ws.readyState === WebSocket.OPEN) {
-            existingSession.ws.close();
-          }
-          if (existingSession.terminal && !existingSession.terminal.disposed) {
-            existingSession.terminal.dispose();
-          }
-          shellSessions.delete(projectKey);
-          cancelSessionTimeout(projectKey);
-          updateTerminalsList();
-        }
+        terminal.current = null;
+        fitAddon.current = null;
+        ws.current = null;
       }
       
       // Mark that we're switching context
@@ -589,38 +473,34 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
       return;
     }
     
-    // Don't initialize terminal if no session is selected
-    if (!selectedSession && !activeTerminalKey) {
-      return;
+    // Always allow initialization, even for new sessions
+    // This fixes the infinite loading issue
+    
+    // Set a timeout to force initialization if it takes too long
+    if (initTimeoutRef.current) {
+      clearTimeout(initTimeoutRef.current);
     }
+    
+    initTimeoutRef.current = setTimeout(() => {
+      if (!isInitialized && !terminal.current) {
+        console.log('Forcing terminal initialization after timeout');
+        setIsInitialized(true);
+      }
+    }, 2000);
 
-    // Create session key for this project/session combination
-    // Use activeTerminalKey if available to maintain consistency with unique keys
-    const sessionKey = selectedSession?.id || activeTerminalKey || `project-${selectedProject.name}-${Date.now()}`;
+    // Get or generate session key
+    const sessionKey = activeTerminalKey || shellSessionManager.generateSessionKey(selectedProject, selectedSession);
     
     // Check if we have an existing session
-    let existingSession = shellSessions.get(sessionKey);
+    let existingSession = shellSessionManager.getSession(sessionKey);
     
-    // If no existing session but we have saved sessions in storage (page refresh)
-    if (!existingSession && shellSessions.size === 0) {
-      const savedSessions = loadSessionsFromStorage();
-      const savedSession = savedSessions.find(s => s.key === sessionKey);
-      if (savedSession) {
-        // Mark that we should try to reconnect after creating the terminal
-        existingSession = { shouldReconnect: true, ...savedSession };
-      }
-    }
-    // For new sessions, make sure we don't reuse existing terminals
-    if (sessionKey.includes('session-') && existingSession) {
+    // For new sessions (containing 'session-' in key), ensure we create fresh terminals
+    if (sessionKey.includes('session-') && sessionKey.includes(Date.now().toString())) {
       existingSession = null;
     }
     
-    if (existingSession && !terminal.current) {
-      
+    if (existingSession && existingSession.terminal && !terminal.current) {
       try {
-        // Cancel timeout since we're back to this session
-        cancelSessionTimeout(sessionKey);
-        
         // Reuse existing terminal
         terminal.current = existingSession.terminal;
         fitAddon.current = existingSession.fitAddon;
@@ -663,8 +543,9 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
         setIsInitialized(true);
         return;
       } catch (error) {
+        console.error('Error reusing terminal:', error);
         // Clear the broken session and continue to create a new one
-        shellSessions.delete(sessionKey);
+        shellSessionManager.removeSession(sessionKey);
         terminal.current = null;
         fitAddon.current = null;
         ws.current = null;
@@ -675,8 +556,10 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
       return;
     }
 
-    // Mark this session as being created
-    sessionsBeingCreated.add(sessionKey);
+    // Prevent duplicate terminal creation
+    if (terminal.current) {
+      return;
+    }
 
     // Initialize new terminal
     terminal.current = new Terminal({
@@ -871,18 +754,13 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
     
     setIsInitialized(true);
     
-    // Remove from creating set
-    sessionsBeingCreated.delete(sessionKey);
     
     // For new terminals, ensure we start disconnected
     setIsConnected(false);
     
-    // Update active terminal key
-    // For new sessions without ID, create a unique key with timestamp
-    const currentKey = selectedSession?.id || (activeTerminalKey && activeTerminalKey.startsWith(`project-${selectedProject?.name}`)) 
-      ? activeTerminalKey 
-      : `project-${selectedProject?.name}-${Date.now()}`;
-    setActiveTerminalKey(currentKey);
+    // Set active terminal key
+    setActiveTerminalKey(sessionKey);
+    shellSessionManager.setActiveSession(sessionKey);
     
     // Check if we should auto-reconnect (after page refresh)
     if (existingSession && existingSession.shouldReconnect) {
@@ -891,11 +769,7 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
       
       // Delay to ensure component is fully mounted
       setTimeout(() => {
-        if (existingSession.isBypassingPermissions) {
-          connectToShellWithBypass();
-        } else {
-          connectToShell();
-        }
+        connectToShell();
       }, 100); // Reduced delay for faster reconnection
     }
     
@@ -937,18 +811,18 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
     return () => {
       resizeObserver.disconnect();
       
+      // Clear init timeout
+      if (initTimeoutRef.current) {
+        clearTimeout(initTimeoutRef.current);
+      }
+      
       // Remove paste event listener
       if (terminalElement) {
         terminalElement.removeEventListener('paste', handlePaste);
       }
       
-      // Remove from creating set if still there
-      sessionsBeingCreated.delete(sessionKey);
-      
       // Store session for reuse instead of disposing - but only if connected
       if (terminal.current && selectedProject) {
-        const sessionKey = activeTerminalKey || selectedSession?.id || `project-${selectedProject.name}`;
-        
         try {
           // Check if WebSocket is really connected before storing
           const wsConnected = ws.current && ws.current.readyState === WebSocket.OPEN;
@@ -967,28 +841,15 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
               }
             }
             
-            // Get existing session info or create new one
-            const existingSession = shellSessions.get(sessionKey);
-            const sessionSummary = existingSession?.sessionSummary || selectedSession?.summary || 'New Session';
-            const projectDisplayName = existingSession?.projectDisplayName || selectedProject?.displayName || selectedProject?.name || 'Project';
-            
-            shellSessions.set(sessionKey, {
+            shellSessionManager.updateSession(sessionKey, {
               terminal: terminal.current,
               fitAddon: fitAddon.current,
               ws: ws.current,
               isConnected: wsConnected,
               isBypassingPermissions: isBypassingPermissions,
-              sessionSummary: sessionSummary,
-              projectDisplayName: projectDisplayName,
-              originalProjectName: selectedProject?.name,
-              originalSessionId: selectedSession?.id,
               bufferContent: bufferContent.trim()
             });
-            
-            // Start timeout to clean up after 10 minutes
-            clearSessionAfterTimeout(sessionKey);
           }
-          
         } catch (error) {
           console.error('Error storing shell session:', error);
         }
@@ -1128,16 +989,15 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
         setIsConnected(true);
         setIsConnecting(false);
         
-        // Add current session to shellSessions when connected
-        // Use activeTerminalKey to maintain consistency
-        const sessionKey = activeTerminalKey || selectedSession?.id || `project-${selectedProject.name}`;
+        // Update session in session manager when connected
+        const sessionKey = activeTerminalKey || shellSessionManager.generateSessionKey(selectedProject, selectedSession);
         
         // Store project and session info at connection time
         const projectName = selectedProject?.name || 'Unknown';
         const projectDisplayName = selectedProject?.displayName || projectName;
         const sessionSummary = selectedSession?.summary || 'New Session';
         
-        shellSessions.set(sessionKey, {
+        shellSessionManager.setSession(sessionKey, {
           terminal: terminal.current,
           fitAddon: fitAddon.current,
           ws: ws.current,
@@ -1145,16 +1005,13 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
           isBypassingPermissions: bypassRef.current,
           sessionSummary: sessionSummary,
           projectDisplayName: projectDisplayName,
-          originalProjectName: projectName,
-          originalSessionId: selectedSession?.id,
+          projectName: projectName,
+          sessionId: selectedSession?.id,
           bufferContent: '' // New session, no buffer yet
         });
         
         // Update terminals list to reflect connected state
         updateTerminalsList();
-        
-        // Save sessions to localStorage
-        saveSessionsToStorage();
         
         // Wait for terminal to be ready, then fit and send dimensions
         setTimeout(() => {
@@ -1245,10 +1102,9 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
         }
         
         // Update the session state to disconnected but keep it in memory
-        const sessionKey = selectedSession?.id || activeTerminalKey || `project-${selectedProject.name}`;
-        const session = shellSessions.get(sessionKey);
+        const sessionKey = activeTerminalKey || shellSessionManager.generateSessionKey(selectedProject, selectedSession);
+        const session = shellSessionManager.getSession(sessionKey);
         if (session) {
-          session.isConnected = false;
           // Save the current buffer content for reconnection
           let bufferContent = '';
           if (terminal.current && terminal.current.buffer && terminal.current.buffer.active) {
@@ -1260,14 +1116,15 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
               }
             }
           }
-          session.bufferContent = bufferContent.trim();
+          
+          shellSessionManager.updateSession(sessionKey, {
+            isConnected: false,
+            bufferContent: bufferContent.trim()
+          });
         }
         
         // Update terminals list to reflect disconnected state
         updateTerminalsList();
-        
-        // Save the disconnected state to localStorage
-        saveSessionsToStorage();
         
         // Don't auto-reconnect anymore - user must manually connect
       };
@@ -1303,29 +1160,17 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
   useEffect(() => {
     window.switchToShellTerminal = switchToTerminal;
     window.closeShellTerminal = (terminalKey) => {
-      const session = shellSessions.get(terminalKey);
+      const session = shellSessionManager.getSession(terminalKey);
       if (session) {
-        // Close WebSocket
-        if (session.ws && session.ws.readyState === WebSocket.OPEN) {
-          session.ws.close();
-        }
-        // Dispose terminal
-        if (session.terminal && !session.terminal.disposed) {
-          session.terminal.dispose();
-        }
-        // Remove from maps
-        shellSessions.delete(terminalKey);
-        cancelSessionTimeout(terminalKey);
+        // Remove session from manager (handles cleanup)
+        shellSessionManager.removeSession(terminalKey);
         
         // Remove the DOM element
-        const element = terminalElementsRef.current.get(terminalKey);
+        const element = terminalElementsMapRef.current.get(terminalKey);
         if (element && element.parentNode) {
           element.parentNode.removeChild(element);
         }
-        terminalElementsRef.current.delete(terminalKey);
-        
-        // Update localStorage
-        saveSessionsToStorage();
+        terminalElementsMapRef.current.delete(terminalKey);
         
         // If this was the active terminal, switch to another
         if (terminalKey === activeTerminalKey) {
@@ -1521,7 +1366,7 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
         )}
         
         {/* Loading state */}
-        {!isInitialized && (
+        {!isInitialized && !isRestarting && (
           <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-90">
             <div className="text-white">Loading terminal...</div>
           </div>
@@ -1533,7 +1378,7 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
             <div className="text-center max-w-md w-full">
               {/* Check if this is a disconnected session that can be resumed */}
               {(() => {
-                const session = shellSessions.get(activeTerminalKey);
+                const session = shellSessionManager.getSession(activeTerminalKey);
                 const wasDisconnectedByTimeout = session && !session.isConnected && session.terminal;
                 
                 return wasDisconnectedByTimeout ? (
