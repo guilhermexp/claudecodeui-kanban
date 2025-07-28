@@ -65,7 +65,7 @@ class GatewayTimeoutError extends AppError {
   }
 }
 
-module.exports = {
+export {
   AppError,
   ValidationError,
   AuthenticationError,

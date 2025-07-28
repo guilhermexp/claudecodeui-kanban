@@ -7,11 +7,13 @@
  * - Circuit breaker pattern
  */
 
-const http = require('http');
-const https = require('https');
-const logger = require('./logger').child('vibe-proxy');
-const { ServiceUnavailableError, GatewayTimeoutError, AppError } = require('./errors');
-const { caches } = require('./cache');
+import http from 'http';
+import https from 'https';
+import { logger as baseLogger } from './logger.js';
+import { ServiceUnavailableError, GatewayTimeoutError, AppError } from './errors.js';
+import { caches } from './cache.js';
+
+const logger = baseLogger.child('vibe-proxy');
 
 class VibeKanbanProxy {
   constructor(options = {}) {
@@ -242,4 +244,4 @@ class VibeKanbanProxy {
   }
 }
 
-module.exports = VibeKanbanProxy;
+export default VibeKanbanProxy;

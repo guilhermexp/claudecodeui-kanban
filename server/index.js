@@ -1025,7 +1025,7 @@ app.post('/api/projects/:projectName/upload-images', authenticateToken, async (r
 });
 
 // Import the robust Vibe proxy
-const VibeKanbanProxy = require('./lib/vibe-proxy.js');
+import VibeKanbanProxy from './lib/vibe-proxy.js';
 
 // Initialize Vibe Kanban proxy with configuration
 const vibeProxy = new VibeKanbanProxy({
