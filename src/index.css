@@ -105,6 +105,10 @@
     --console-foreground: 138.5 76.5% 47.7%;
     --console-success: 138.5 76.5% 47.7%;
     --console-error: 0 84.2% 60.2%;
+    
+    /* Firefox scrollbar styles */
+    scrollbar-width: thin;
+    scrollbar-color: rgba(107, 114, 128, 0.4) rgba(55, 65, 81, 0.3);
   }
 }
 
@@ -330,10 +334,7 @@
   }
   
   /* Firefox scrollbar styles */
-  .dark {
-    scrollbar-width: thin;
-    scrollbar-color: rgba(107, 114, 128, 0.4) rgba(55, 65, 81, 0.3);
-  }
+  /* Moved scrollbar styling to be merged with main .dark class definition */
   
   /* Ensure checkbox styling is preserved */
   input[type="checkbox"] {
@@ -857,9 +858,6 @@
     }
   }
   
-  .animate-fade-in {
-    animation: fade-in 0.2s ease-out;
-  }
   
   /* Subtle fade in animation for button container */
   @keyframes fade-in-subtle {

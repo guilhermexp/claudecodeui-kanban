@@ -4,7 +4,6 @@ import { Button } from '../ui/button';
 import {
   FolderOpen,
   Settings,
-  Server,
   ArrowLeft,
   MessageSquare,
 } from 'lucide-react';
@@ -51,18 +50,6 @@ export function Navbar() {
                   <Link to="/vibe-kanban/projects">
                     <FolderOpen className="h-4 w-4" />
                     <span className="ml-2">Projects</span>
-                  </Link>
-                </Button>
-                <Button
-                  asChild
-                  variant={
-                    location.pathname === '/vibe-kanban/mcp-servers' ? 'default' : 'ghost'
-                  }
-                  size="sm"
-                >
-                  <Link to="/vibe-kanban/mcp-servers">
-                    <Server className="h-4 w-4" />
-                    <span className="ml-2">MCP Servers</span>
                   </Link>
                 </Button>
                 <Button
@@ -128,17 +115,6 @@ export function Navbar() {
             >
               <FolderOpen className="h-4 w-4" />
               Projects
-            </Link>
-            <Link
-              to="/vibe-kanban/mcp-servers"
-              className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                location.pathname === '/vibe-kanban/mcp-servers'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-              }`}
-            >
-              <Server className="h-4 w-4" />
-              MCP Servers
             </Link>
             <Link
               to="/vibe-kanban/settings"

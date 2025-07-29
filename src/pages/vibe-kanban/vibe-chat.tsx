@@ -143,7 +143,6 @@ export function VibeChat() {
     try {
       setIsLoadingProjects(true);
       const data = await projectsApi.getAll();
-      console.log('Loaded projects:', data);
       setProjects(data);
       
       // Auto-select first project
@@ -542,8 +541,8 @@ export function VibeChat() {
 
                 {/* Mic Button */}
                 <MicButton
-                  onTranscriptionComplete={handleTranscriptionComplete}
-                  mode="vibe"
+                  onTranscript={handleTranscriptionComplete}
+                  className="bg-muted hover:bg-muted/80"
                 />
               </div>
             </div>
