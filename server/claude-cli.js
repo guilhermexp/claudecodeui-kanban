@@ -29,50 +29,33 @@ async function spawnClaude(command, options = {}, ws) {
     // Use cwd (actual project directory) instead of projectPath (Claude's metadata directory)
     const workingDir = cwd || process.cwd();
     
-    // Handle images by saving them to temporary files and passing paths to Claude
-    const tempImagePaths = [];
+    // Handle images - Claude Code CLI doesn't support direct image input
+    // We'll include a note about the images in the command text
+    let tempImagePaths = [];
     let tempDir = null;
+    
     if (images && images.length > 0) {
-      try {
-        // Create temp directory in the project directory so Claude can access it
-        tempDir = path.join(workingDir, '.tmp', 'images', Date.now().toString());
-        await fs.mkdir(tempDir, { recursive: true });
-        
-        // Save each image to a temp file
-        for (const [index, image] of images.entries()) {
-          // Extract base64 data and mime type
-          const matches = image.data.match(/^data:([^;]+);base64,(.+)$/);
-          if (!matches) {
-            console.error('Invalid image data format');
-            continue;
-          }
-          
-          const [, mimeType, base64Data] = matches;
-          const extension = mimeType.split('/')[1] || 'png';
-          const filename = `image_${index}.${extension}`;
-          const filepath = path.join(tempDir, filename);
-          
-          // Write base64 data to file
-          await fs.writeFile(filepath, Buffer.from(base64Data, 'base64'));
-          tempImagePaths.push(filepath);
+      console.log(`📸 User provided ${images.length} image(s) with their message`);
+      
+      // Send a warning to the UI that images aren't supported in CLI mode
+      ws.send(JSON.stringify({
+        type: 'claude-response',
+        data: {
+          type: 'info',
+          content: '⚠️ Note: Claude Code CLI does not currently support image input. The images you attached cannot be processed. To analyze images, please use the Claude web interface or API directly.'
         }
+      }));
+      
+      // If there's a command, add a note about the images
+      if (command && command.trim()) {
+        const imageNote = `\n\n[Note: ${images.length} image(s) were attached to this message, but Claude Code CLI doesn't support image input. The images cannot be analyzed.]`;
+        const modifiedCommand = command + imageNote;
         
-        // Include the full image paths in the prompt for Claude to reference
-        // Only modify the command if we actually have images and a command
-        if (tempImagePaths.length > 0 && command && command.trim()) {
-          const imageNote = `\n\n[Images provided at the following paths:]\n${tempImagePaths.map((p, i) => `${i + 1}. ${p}`).join('\n')}`;
-          const modifiedCommand = command + imageNote;
-          
-          // Update the command in args
-          const printIndex = args.indexOf('--print');
-          if (printIndex !== -1 && args[printIndex + 1] === command) {
-            args[printIndex + 1] = modifiedCommand;
-          }
+        // Update the command in args
+        const printIndex = args.indexOf('--print');
+        if (printIndex !== -1 && args[printIndex + 1] === command) {
+          args[printIndex + 1] = modifiedCommand;
         }
-        
-        
-      } catch (error) {
-        console.error('Error processing images for Claude:', error);
       }
     }
     
@@ -233,9 +216,7 @@ async function spawnClaude(command, options = {}, ws) {
       env: { ...process.env } // Inherit all environment variables
     });
     
-    // Attach temp file info to process for cleanup later
-    claudeProcess.tempImagePaths = tempImagePaths;
-    claudeProcess.tempDir = tempDir;
+    // No temp files to attach anymore since we don't save images
     
     // Store process reference for potential abort
     const processKey = capturedSessionId || sessionId || Date.now().toString();
@@ -313,19 +294,7 @@ async function spawnClaude(command, options = {}, ws) {
         isNewSession: !sessionId && !!command // Flag to indicate this was a new session
       }));
       
-      // Clean up temporary image files if any
-      if (claudeProcess.tempImagePaths && claudeProcess.tempImagePaths.length > 0) {
-        for (const imagePath of claudeProcess.tempImagePaths) {
-          await fs.unlink(imagePath).catch(err => 
-            console.error(`Failed to delete temp image ${imagePath}:`, err)
-          );
-        }
-        if (claudeProcess.tempDir) {
-          await fs.rm(claudeProcess.tempDir, { recursive: true, force: true }).catch(err => 
-            console.error(`Failed to delete temp directory ${claudeProcess.tempDir}:`, err)
-          );
-        }
-      }
+      // No cleanup needed for images anymore
       
       if (code === 0) {
         resolve();

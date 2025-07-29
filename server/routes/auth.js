@@ -15,7 +15,12 @@ router.get('/status', async (req, res) => {
     });
   } catch (error) {
     console.error('Auth status error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    // Ensure we always return valid JSON
+    res.status(500).json({ 
+      error: 'Internal server error',
+      needsSetup: true,
+      isAuthenticated: false
+    });
   }
 });
 

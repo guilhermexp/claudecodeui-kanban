@@ -10,9 +10,15 @@ const __dirname = dirname(__filename);
 const DB_PATH = path.join(__dirname, 'auth.db');
 const INIT_SQL_PATH = path.join(__dirname, 'init.sql');
 
-// Create database connection
-const db = new Database(DB_PATH);
-console.log('Connected to SQLite database');
+// Create database connection with error handling
+let db;
+try {
+  db = new Database(DB_PATH);
+  console.log('Connected to SQLite database');
+} catch (error) {
+  console.error('Failed to connect to SQLite database:', error);
+  throw error;
+}
 
 // Initialize database with schema
 const initializeDatabase = async () => {

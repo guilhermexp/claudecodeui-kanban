@@ -978,7 +978,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                   const input = JSON.parse(message.toolInput);
                   if (input.todos && Array.isArray(input.todos)) {
                     return (
-                      <div className="bg-blue-50 dark:bg-blue-900/20 border-l-2 border-blue-300 dark:border-blue-600 pl-3 py-1 mb-2">
+                      <div className="border-l-2 border-blue-300 dark:border-blue-600 pl-3 py-1 mb-2">
                         <div className="text-sm text-blue-700 dark:text-blue-300 mb-2">
                           📝 Update todo list
                         </div>
@@ -988,7 +988,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                   }
                 } catch (e) {
                   return (
-                    <div className="bg-blue-50 dark:bg-blue-900/20 border-l-2 border-blue-300 dark:border-blue-600 pl-3 py-1 mb-2 text-sm text-blue-700 dark:text-blue-300">
+                    <div className="border-l-2 border-blue-300 dark:border-blue-600 pl-3 py-1 mb-2 text-sm text-blue-700 dark:text-blue-300">
                       📝 Update todo list
                     </div>
                   );
@@ -996,7 +996,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
               })()
             ) : message.isToolUse && message.toolName === 'TodoRead' ? (
               // Simple TodoRead tool indicator
-              <div className="bg-blue-50 dark:bg-blue-900/20 border-l-2 border-blue-300 dark:border-blue-600 pl-3 py-1 mb-2 text-sm text-blue-700 dark:text-blue-300">
+              <div className="border-l-2 border-blue-300 dark:border-blue-600 pl-3 py-1 mb-2 text-sm text-blue-700 dark:text-blue-300">
                 📋 Read todo list
               </div>
             ) : (
@@ -2568,6 +2568,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           {/* Image attachments preview */}
           {attachedImages.length > 0 && (
             <div className="mb-2 p-2 bg-gray-50 dark:bg-gray-800 rounded-lg">
+              <div className="mb-2 p-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded text-sm text-yellow-800 dark:text-yellow-200">
+                ⚠️ Note: Claude Code CLI does not support image analysis. The attached images will not be processed. To analyze images, please use the Claude web interface.
+              </div>
               <div className="flex flex-wrap gap-2">
                 {attachedImages.map((file, index) => (
                   <ImageAttachment

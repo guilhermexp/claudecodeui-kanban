@@ -1110,6 +1110,23 @@ app.use('/api/vibe-kanban', express.json(), async (req, res) => {
   }
 });
 
+// General error handler middleware
+app.use((err, req, res, next) => {
+  console.error('Server error:', err);
+  
+  // Always send JSON for API routes
+  if (req.path.startsWith('/api')) {
+    return res.status(err.status || 500).json({
+      error: err.message || 'Internal server error',
+      needsSetup: true,
+      isAuthenticated: false
+    });
+  }
+  
+  // For non-API routes, send generic error
+  res.status(err.status || 500).send('Internal Server Error');
+});
+
 // Serve React app for all other routes
 app.get('*', (req, res) => {
   if (process.env.NODE_ENV === 'production') {
