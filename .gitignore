@@ -110,4 +110,20 @@ temp/
 # Database files
 *.db
 *.sqlite
-*.sqlite3 
+*.sqlite3
+
+# Test and documentation obsolescence prevention
+test-results/
+*backup*/
+shell-backup/
+*STATUS*.md
+*ESTADO*.md
+*VIBE_KANBAN_CRASH*.md
+*VITE_PROXY*.md
+
+# Script obsolescence prevention
+run.sh
+push-to-github.sh
+start-vibe-backend.sh
+*-old.sh
+*-backup.sh 
