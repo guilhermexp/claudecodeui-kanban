@@ -37,7 +37,6 @@ import { api } from './utils/api';
 import { authPersistence } from './utils/auth-persistence';
 import { appStatePersistence } from './utils/app-state-persistence';
 
-
 // Main App component with routing
 function AppContent() {
   const navigate = useNavigate();
@@ -50,8 +49,8 @@ function AppContent() {
   const loadPersistedState = () => {
     const savedState = appStatePersistence.loadState();
     return {
-      selectedProject: savedState[appStatePersistence.KEYS.SELECTED_PROJECT] || null,
-      selectedSession: savedState[appStatePersistence.KEYS.SELECTED_SESSION] || null,
+      selectedProject: null, // Always start fresh - no persisted project
+      selectedSession: null, // Always start fresh - no persisted session
       activeTab: savedState[appStatePersistence.KEYS.ACTIVE_TAB] || 'shell',
       sidebarOpen: savedState[appStatePersistence.KEYS.SIDEBAR_OPEN] !== undefined 
         ? savedState[appStatePersistence.KEYS.SIDEBAR_OPEN] 
@@ -171,6 +170,15 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
+    // Clear any invalid persisted state on mount to ensure clean start
+    appStatePersistence.clearState();
+    
+    // Also clear any saved chat messages that might be causing resume issues
+    const chatMessagesKeys = Object.keys(localStorage).filter(key => 
+      key.startsWith('chat_messages_') || key.includes('session')
+    );
+    chatMessagesKeys.forEach(key => localStorage.removeItem(key));
+    
     // Fetch projects on component mount
     fetchProjects();
   }, []);
@@ -303,7 +311,7 @@ function AppContent() {
       
       // Don't auto-select any project - user should choose manually
     } catch (error) {
-      console.error('Error fetching projects:', error);
+      // Error: 'Error fetching projects:', error
     } finally {
       setIsLoadingProjects(false);
     }
@@ -356,7 +364,8 @@ function AppContent() {
   const handleNewSession = (project) => {
     setSelectedProject(project);
     setSelectedSession(null);
-    // Keep current tab when selecting project
+    setMessages([]); // Clear messages for new session
+    setActiveTab('chat'); // Switch to chat tab for new session
     navigate('/');
     if (isMobile) {
       setSidebarOpen(false);
@@ -382,8 +391,6 @@ function AppContent() {
       }))
     );
   };
-
-
 
   const handleSidebarRefresh = async () => {
     // Refresh only the sessions for all projects, don't change selected state
@@ -429,7 +436,7 @@ function AppContent() {
         }
       }
     } catch (error) {
-      console.error('Error refreshing sidebar:', error);
+      // Error: 'Error refreshing sidebar:', error
     }
   };
 
@@ -646,7 +653,7 @@ function AppContent() {
       )}
 
       {/* Main Content Area - Flexible */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 relative">
         <MainContent
           selectedProject={selectedProject}
           selectedSession={selectedSession}

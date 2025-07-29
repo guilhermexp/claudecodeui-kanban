@@ -32,36 +32,25 @@ function ClaudeStatus({ status, onAbort, isLoading }) {
   
   return (
     <div className="flex-1 animate-in slide-in-from-left duration-300">
-      <div className="flex items-center justify-between bg-gray-900 dark:bg-gray-950 text-white rounded-lg shadow-lg px-4 py-2">
-        <div className="flex-1">
-          <div className="flex items-center gap-3">
-            {/* Animated spinner */}
-            <span className="text-xl text-blue-400 animate-spin">
-              {spinner}
-            </span>
-            
-            {/* Status text - first line */}
-            <div className="flex-1">
-              <div className="flex items-center gap-2">
-                <span className="font-medium text-sm">{statusText}...</span>
-                {elapsedTime > 0 && (
-                  <span className="text-gray-400 text-sm">({elapsedTime}s)</span>
-                )}
-                {tokens !== null && tokens > 0 && (
-                  <>
-                    <span className="text-gray-400">·</span>
-                    <span className="text-gray-300 text-sm hidden sm:inline">⚒ {tokens.toLocaleString()} tokens</span>
-                    <span className="text-gray-300 text-sm sm:hidden">⚒ {tokens.toLocaleString()}</span>
-                  </>
-                )}
+      <div className="flex items-center justify-between bg-gray-900 dark:bg-gray-950 text-white rounded-lg shadow-lg px-3 py-1.5">
+        <div className="flex items-center gap-2 flex-1">
+          {/* Animated spinner */}
+          <span className="text-base text-blue-400 animate-spin">
+            {spinner}
+          </span>
+          
+          {/* Status text - compact version */}
+          <div className="flex items-center gap-2 text-sm">
+            <span className="font-medium">{statusText}...</span>
+            {elapsedTime > 0 && (
+              <span className="text-gray-400">({elapsedTime}s)</span>
+            )}
+            {tokens !== null && tokens > 0 && (
+              <>
                 <span className="text-gray-400 hidden sm:inline">·</span>
-                <span className="text-gray-300 text-sm hidden sm:inline">esc to interrupt</span>
-              </div>
-              {/* Second line for mobile */}
-              <div className="text-xs text-gray-400 sm:hidden mt-1">
-                esc to interrupt
-              </div>
-            </div>
+                <span className="text-gray-300 hidden sm:inline">{tokens.toLocaleString()}</span>
+              </>
+            )}
           </div>
         </div>
         
@@ -69,12 +58,12 @@ function ClaudeStatus({ status, onAbort, isLoading }) {
         {canInterrupt && onAbort && (
           <button
             onClick={onAbort}
-            className="ml-3 text-xs bg-red-600 hover:bg-red-700 text-white px-2 py-1 rounded-md transition-colors flex items-center gap-1.5 flex-shrink-0"
+            className="ml-2 text-xs bg-red-600 hover:bg-red-700 text-white px-2 py-1 rounded-md transition-colors flex-shrink-0"
+            title="Stop"
           >
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
-            <span className="hidden sm:inline">Stop</span>
           </button>
         )}
       </div>

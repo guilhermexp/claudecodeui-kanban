@@ -150,5 +150,5 @@ echo ""
 echo "🔗 URL do Ngrok aparecerá abaixo:"
 echo ""
 
-# Inicia ngrok apontando para o frontend
-ngrok http 9000
+# Inicia ngrok com domínio fixo configurado
+ngrok start claudecodeui

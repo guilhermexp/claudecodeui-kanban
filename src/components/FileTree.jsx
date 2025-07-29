@@ -36,7 +36,7 @@ function FileTree({ selectedProject }) {
       
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('❌ File fetch failed:', response.status, errorText);
+        // Error: '❌ File fetch failed:', response.status, errorText
         setFiles([]);
         return;
       }
@@ -44,7 +44,7 @@ function FileTree({ selectedProject }) {
       const data = await response.json();
       setFiles(data);
     } catch (error) {
-      console.error('❌ Error fetching files:', error);
+      // Error: '❌ Error fetching files:', error
       setFiles([]);
     } finally {
       setLoading(false);

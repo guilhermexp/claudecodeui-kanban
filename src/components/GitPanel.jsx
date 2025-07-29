@@ -95,7 +95,7 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
         if (data.error.includes('not a git repository')) {
           // Not a git repository
         } else {
-          console.error('Git status error:', data.error);
+          // Error: 'Git status error:', data.error
         }
         setGitStatus({ error: data.error, details: data.details });
       } else {
@@ -120,7 +120,7 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
         }
       }
     } catch (error) {
-      console.error('Error fetching git status:', error);
+      // Error: 'Error fetching git status:', error
     } finally {
       setIsLoading(false);
     }
@@ -137,7 +137,7 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
         setBranches(data.branches);
       }
     } catch (error) {
-      console.error('Error fetching branches:', error);
+      // Error: 'Error fetching branches:', error
     }
   };
 
@@ -154,7 +154,7 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
         setRemoteStatus(null);
       }
     } catch (error) {
-      console.error('Error fetching remote status:', error);
+      // Error: 'Error fetching remote status:', error
       setRemoteStatus(null);
     }
   };
@@ -176,11 +176,11 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
         setShowBranchDropdown(false);
         fetchGitStatus(); // Refresh status after branch switch
       } else {
-        console.error('Failed to switch branch:', data.error);
+        // Error: 'Failed to switch branch:', data.error
         showError(`Failed to switch branch: ${data.error}`);
       }
     } catch (error) {
-      console.error('Error switching branch:', error);
+      // Error: 'Error switching branch:', error
     }
   };
 
@@ -207,11 +207,11 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
         fetchBranches(); // Refresh branch list
         fetchGitStatus(); // Refresh status
       } else {
-        console.error('Failed to create branch:', data.error);
+        // Error: 'Failed to create branch:', data.error
         showError(`Failed to create branch: ${data.error}`);
       }
     } catch (error) {
-      console.error('Error creating branch:', error);
+      // Error: 'Error creating branch:', error
     } finally {
       setIsCreatingBranch(false);
     }
@@ -234,11 +234,11 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
         fetchGitStatus();
         fetchRemoteStatus();
       } else {
-        console.error('Fetch failed:', data.error);
+        // Error: 'Fetch failed:', data.error
         showError(`Fetch failed: ${data.error}`);
       }
     } catch (error) {
-      console.error('Error fetching from remote:', error);
+      // Error: 'Error fetching from remote:', error
     } finally {
       setIsFetching(false);
     }
@@ -261,11 +261,11 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
         fetchGitStatus();
         fetchRemoteStatus();
       } else {
-        console.error('Pull failed:', data.error);
+        // Error: 'Pull failed:', data.error
         showError(`Pull failed: ${data.error}`);
       }
     } catch (error) {
-      console.error('Error pulling from remote:', error);
+      // Error: 'Error pulling from remote:', error
     } finally {
       setIsPulling(false);
     }
@@ -288,11 +288,11 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
         fetchGitStatus();
         fetchRemoteStatus();
       } else {
-        console.error('Push failed:', data.error);
+        // Error: 'Push failed:', data.error
         showError(`Push failed: ${data.error}`);
       }
     } catch (error) {
-      console.error('Error pushing to remote:', error);
+      // Error: 'Error pushing to remote:', error
     } finally {
       setIsPushing(false);
     }
@@ -316,11 +316,11 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
         fetchGitStatus();
         fetchRemoteStatus();
       } else {
-        console.error('Publish failed:', data.error);
+        // Error: 'Publish failed:', data.error
         showError(`Publish failed: ${data.error}`);
       }
     } catch (error) {
-      console.error('Error publishing branch:', error);
+      // Error: 'Error publishing branch:', error
     } finally {
       setIsPublishing(false);
     }
@@ -347,11 +347,11 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
         });
         fetchGitStatus();
       } else {
-        console.error('Discard failed:', data.error);
+        // Error: 'Discard failed:', data.error
         showError(`Failed to discard changes: ${data.error}`);
       }
     } catch (error) {
-      console.error('Error discarding changes:', error);
+      // Error: 'Error discarding changes:', error
     }
   };
 
@@ -376,11 +376,11 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
         });
         fetchGitStatus();
       } else {
-        console.error('Delete failed:', data.error);
+        // Error: 'Delete failed:', data.error
         showError(`Failed to delete file: ${data.error}`);
       }
     } catch (error) {
-      console.error('Error deleting untracked file:', error);
+      // Error: 'Error deleting untracked file:', error
     }
   };
 
@@ -412,7 +412,7 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
           break;
       }
     } catch (error) {
-      console.error(`Error executing ${type}:`, error);
+      // Error: `Error executing ${type}:`, error
     }
   };
 
@@ -428,7 +428,7 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
         }));
       }
     } catch (error) {
-      console.error('Error fetching file diff:', error);
+      // Error: 'Error fetching file diff:', error
     }
   };
 
@@ -443,7 +443,7 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
         setRecentCommits(data.commits);
       }
     } catch (error) {
-      console.error('Error fetching commits:', error);
+      // Error: 'Error fetching commits:', error
     }
   };
 
@@ -459,7 +459,7 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
         }));
       }
     } catch (error) {
-      console.error('Error fetching commit diff:', error);
+      // Error: 'Error fetching commit diff:', error
     }
   };
 
@@ -479,11 +479,11 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
       if (data.message) {
         setCommitMessage(data.message);
       } else {
-        console.error('Failed to generate commit message:', data.error);
+        // Error: 'Failed to generate commit message:', data.error
         showError(`Failed to generate commit message: ${data.error}`);
       }
     } catch (error) {
-      console.error('Error generating commit message:', error);
+      // Error: 'Error generating commit message:', error
     } finally {
       setIsGeneratingMessage(false);
     }
@@ -552,11 +552,11 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
         fetchGitStatus();
         fetchRemoteStatus();
       } else {
-        console.error('Commit failed:', data.error);
+        // Error: 'Commit failed:', data.error
         showError(`Commit failed: ${data.error}`);
       }
     } catch (error) {
-      console.error('Error committing changes:', error);
+      // Error: 'Error committing changes:', error
     } finally {
       setIsCommitting(false);
     }

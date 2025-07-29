@@ -41,7 +41,7 @@ export function MicButton({ onTranscript, className = '', isChat = false, hasCha
   // Start recording
   const startRecording = async () => {
     try {
-      console.log('Starting recording...');
+
       setError(null);
       chunksRef.current = [];
 
@@ -64,7 +64,7 @@ export function MicButton({ onTranscript, className = '', isChat = false, hasCha
       };
 
       recorder.onstop = async () => {
-        console.log('Recording stopped, creating blob...');
+
         const blob = new Blob(chunksRef.current, { type: mimeType });
         
         // Clean up stream
@@ -96,7 +96,7 @@ export function MicButton({ onTranscript, className = '', isChat = false, hasCha
             setShowChatButtons(true);
           }
         } catch (err) {
-          console.error('Transcription error:', err);
+          // Error: 'Transcription error:', err
           setError(err.message);
         } finally {
           if (processingTimer) {
@@ -108,9 +108,9 @@ export function MicButton({ onTranscript, className = '', isChat = false, hasCha
 
       recorder.start();
       setState('recording');
-      console.log('Recording started successfully');
+
     } catch (err) {
-      console.error('Failed to start recording:', err);
+      // Error: 'Failed to start recording:', err
       
       // Provide specific error messages based on error type
       let errorMessage = 'Microphone access failed';
@@ -134,13 +134,13 @@ export function MicButton({ onTranscript, className = '', isChat = false, hasCha
 
   // Stop recording
   const stopRecording = () => {
-    console.log('Stopping recording...');
+
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
       mediaRecorderRef.current.stop();
       // Don't set state here - let the onstop handler do it
     } else {
       // If recorder isn't in recording state, force cleanup
-      console.log('Recorder not in recording state, forcing cleanup');
+
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
         streamRef.current = null;
@@ -165,13 +165,11 @@ export function MicButton({ onTranscript, className = '', isChat = false, hasCha
     // Debounce for mobile double-tap issue
     const now = Date.now();
     if (now - lastTapRef.current < 300) {
-      console.log('Ignoring rapid tap');
+
       return;
     }
     lastTapRef.current = now;
-    
-    console.log('Button clicked, current state:', state);
-    
+
     if (state === 'idle') {
       startRecording();
     } else if (state === 'recording') {
@@ -184,7 +182,6 @@ export function MicButton({ onTranscript, className = '', isChat = false, hasCha
   const handleTouchEnd = (e) => {
     handleClick(e);
   };
-  
 
   // Handle Delete button
   const handleDelete = () => {
@@ -379,8 +376,7 @@ export function MicButton({ onTranscript, className = '', isChat = false, hasCha
           </div>
         </>
       )}
-      
-      
+
       <button
         type="button"
         style={{

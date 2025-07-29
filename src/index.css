@@ -143,15 +143,24 @@
     transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
   }
   
-  /* Color transitions for theme switching - exclude interactive elements */
-  body, div, section, article, aside, header, footer, nav, main,
-  h1, h2, h3, h4, h5, h6, p, span, blockquote,
-  ul, ol, li, dl, dt, dd,
-  table, thead, tbody, tfoot, tr, td, th,
-  form, fieldset, legend, label {
-    transition: background-color 200ms ease-in-out, 
-                border-color 200ms ease-in-out,
-                color 200ms ease-in-out;
+  /* Color transitions for theme switching - only on body for smooth theme change */
+  body {
+    transition: background-color 150ms ease-in-out, 
+                color 150ms ease-in-out;
+  }
+  
+  /* Specific elements that benefit from color transitions */
+  .bg-card, .bg-background, .bg-muted, .bg-accent,
+  .text-foreground, .text-muted-foreground,
+  .border-border {
+    transition: background-color 150ms ease-in-out, 
+                border-color 150ms ease-in-out,
+                color 150ms ease-in-out;
+  }
+  
+  /* Disable transitions during theme change to prevent lag */
+  .theme-transitioning * {
+    transition: none !important;
   }
   
   /* Transform transitions */
@@ -665,6 +674,7 @@
   .ios-bottom-safe {
     padding-bottom: max(env(safe-area-inset-bottom), 12px);
   }
+  
   
   @media screen and (max-width: 768px) {
     .chat-input-mobile {

@@ -79,22 +79,16 @@ function MobileNav({ activeTab, setActiveTab, isInputFocused, isShellConnected }
 
   return (
     <>
-      <style>
-        {`
-          .mobile-nav-container {
-            background-color: var(--background) !important;
-          }
-          .mobile-nav-container:hover {
-            background-color: var(--background) !important;
-          }
-        `}
-      </style>
       <div 
-        className={`mobile-nav-container fixed bottom-0 left-0 right-0 border-t border-border z-50 ios-bottom-safe transform transition-transform duration-300 ease-in-out shadow-sm ${
+        className={`fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 z-40 transform transition-transform duration-300 ease-in-out shadow-lg ${
           isInputFocused ? 'translate-y-full' : 'translate-y-0'
         }`}
+        style={{
+          paddingBottom: 'env(safe-area-inset-bottom)',
+          backgroundColor: isDarkMode ? '#111827' : '#ffffff'
+        }}
       >
-      <div className="flex items-center justify-around py-1">
+      <div className="flex items-center justify-around py-2 min-h-[56px]">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
@@ -107,16 +101,16 @@ function MobileNav({ activeTab, setActiveTab, isInputFocused, isShellConnected }
                 e.preventDefault();
                 item.onClick();
               }}
-              className={`flex items-center justify-center p-2 rounded-2xl min-h-[40px] min-w-[40px] relative touch-manipulation ${
+              className={`flex items-center justify-center p-3 rounded-2xl min-h-[44px] min-w-[44px] relative touch-manipulation ${
                 isActive
-                  ? 'text-foreground'
-                  : 'text-muted-foreground hover:text-foreground'
+                  ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
               }`}
               aria-label={item.id}
             >
-              <Icon className="w-5 h-5" />
+              <Icon className="w-6 h-6" />
               {isActive && (
-                <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-6 h-0.5 bg-foreground rounded-full" />
+                <div className="absolute -top-1 left-1/2 transform -translate-x-1/2 w-6 h-1 bg-blue-600 dark:bg-blue-400 rounded-full" />
               )}
             </button>
           );
@@ -124,14 +118,12 @@ function MobileNav({ activeTab, setActiveTab, isInputFocused, isShellConnected }
         
         {/* Voice button - show when shell is connected OR when in chat tab */}
         {((activeTab === 'shell' && isShellConnected) || activeTab === 'chat') && (
-          <div className="relative">
-            <MicButton 
-              onTranscript={handleVoiceTranscript}
-              className="bg-muted hover:bg-muted/80"
-              isChat={activeTab === 'chat'}
-              hasChatText={hasChatText}
-            />
-          </div>
+          <MicButton 
+            onTranscript={handleVoiceTranscript}
+            className="p-3 rounded-2xl min-h-[44px] min-w-[44px] bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700"
+            isChat={activeTab === 'chat'}
+            hasChatText={hasChatText}
+          />
         )}
       </div>
     </div>

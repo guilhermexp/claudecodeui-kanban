@@ -321,8 +321,7 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
       // Force re-initialization which will check for existing session
       setIsInitialized(false);
       setIsConnected(false); // Reset connection state when switching
-      
-      
+
       // Reset switching flag after a moment
       setTimeout(() => {
         isSwitchingContext.current = false;
@@ -332,7 +331,6 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
     setLastSessionId(currentSessionId);
     setLastProjectName(currentProjectName);
   }, [selectedSession?.id, selectedProject?.name, lastSessionId, lastProjectName, isConnected, isBypassingPermissions]);
-
 
   // Initialize terminal when component mounts
   useEffect(() => {
@@ -350,7 +348,7 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
     
     initTimeoutRef.current = setTimeout(() => {
       if (!isInitialized && !terminal.current) {
-        console.log('Forcing terminal initialization after timeout');
+
         setIsInitialized(true);
       }
     }, 2000);
@@ -410,7 +408,7 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
         setIsInitialized(true);
         return;
       } catch (error) {
-        console.error('Error reusing terminal:', error);
+        // Error: 'Error reusing terminal:', error
         // Clear the broken session and continue to create a new one
         shellSessionManager.removeSession(currentSessionKey);
         terminal.current = null;
@@ -539,7 +537,7 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
       e.preventDefault();
       
       if (!ws.current || ws.current.readyState !== WebSocket.OPEN) {
-        console.warn('WebSocket not connected');
+        // Warning: 'WebSocket not connected'
         return;
       }
       
@@ -581,7 +579,7 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
               // Show success message in terminal
               terminal.current.write(`\r\n\x1b[32m✓ Image uploaded: ${result.path}\x1b[0m\r\n`);
             } catch (error) {
-              console.error('Error uploading image:', error);
+              // Error: 'Error uploading image:', error
               terminal.current.write(`\r\n\x1b[31m✗ Failed to upload image\x1b[0m\r\n`);
             }
           }
@@ -620,8 +618,7 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
     }, 100);
     
     setIsInitialized(true);
-    
-    
+
     // For new terminals, ensure we start disconnected
     setIsConnected(false);
     
@@ -718,7 +715,7 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
             });
           }
         } catch (error) {
-          console.error('Error storing shell session:', error);
+          // Error: 'Error storing shell session:', error
         }
       }
     };
@@ -778,7 +775,7 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
 
     // Only process drop if terminal is connected
     if (!isConnected || !ws.current || ws.current.readyState !== WebSocket.OPEN) {
-      console.warn('Terminal not connected. Cannot process dropped files.');
+      // Warning: 'Terminal not connected. Cannot process dropped files.'
       return;
     }
 
@@ -809,7 +806,6 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
     }
   };
 
-
   // WebSocket connection function (called manually)
   const connectWebSocket = async () => {
     if (isConnecting || isConnected) return;
@@ -818,7 +814,7 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
       // Get authentication token
       const token = localStorage.getItem('auth-token');
       if (!token) {
-        console.error('No authentication token found for Shell WebSocket connection');
+        // Error: 'No authentication token found for Shell WebSocket connection'
         return;
       }
       
@@ -838,13 +834,13 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
           const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
           // When using ngrok or similar proxy, WebSocket should use the same host and port
           wsBaseUrl = `${protocol}//${window.location.host}`;
-          console.log('Config returned localhost, using current host instead:', wsBaseUrl);
+
         }
       } catch (error) {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         // When using ngrok or similar proxy, use the same host and port
         wsBaseUrl = `${protocol}//${window.location.host}`;
-        console.log('Using fallback WebSocket URL:', wsBaseUrl);
+
       }
       
       // Include token in WebSocket URL as query parameter
@@ -948,14 +944,14 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
             if (terminal.current && !terminal.current.disposed) {
               terminal.current.write(output);
             } else {
-              console.error('Terminal not available for writing');
+              // Error: 'Terminal not available for writing'
             }
           } else if (data.type === 'url_open') {
             // Handle explicit URL opening requests from server
             window.open(data.url, '_blank');
           }
         } catch (error) {
-          console.error('Error processing shell message:', error);
+          // Error: 'Error processing shell message:', error
         }
       };
 
@@ -1006,7 +1002,6 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
     }
   };
 
-
   if (!selectedProject) {
     return (
       <div className="h-full flex items-center justify-center">
@@ -1034,7 +1029,7 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
           bypassPermissions: bypassRef.current
         }));
       } else {
-        console.warn('Terminal not connected. Cannot send voice input.');
+        // Warning: 'Terminal not connected. Cannot send voice input.'
       }
     };
     

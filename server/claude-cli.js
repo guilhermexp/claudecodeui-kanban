@@ -7,7 +7,7 @@ let activeClaudeProcesses = new Map(); // Track active processes by session ID
 
 async function spawnClaude(command, options = {}, ws) {
   return new Promise(async (resolve, reject) => {
-    const { sessionId, projectPath, cwd, resume, toolsSettings, permissionMode, images } = options;
+    const { sessionId, projectPath, cwd, resume, toolsSettings, permissionMode, images, model } = options;
     let capturedSessionId = sessionId; // Track session ID throughout the process
     let sessionCreatedSent = false; // Track if we've already sent session-created event
     
@@ -147,7 +147,10 @@ async function spawnClaude(command, options = {}, ws) {
     
     // Add model for new sessions
     if (!resume) {
-      args.push('--model', 'sonnet');
+      // Get model from message or default to sonnet
+      const model = message.model || 'sonnet';
+      args.push('--model', model);
+      console.log('🤖 Using model:', model);
     }
     
     // Add permission mode if specified (works for both new and resumed sessions)
