@@ -84,16 +84,33 @@ fi
 # Inicia os servidores
 echo ""
 echo "🚀 Iniciando servidores..."
-npm run dev > /dev/null 2>&1 &
+
+# Inicia o script dev.js que gerencia todos os serviços
+npm run dev &
 DEV_PID=$!
 
-# Aguarda servidores iniciarem
+# Aguarda servidores iniciarem com feedback
 echo "⏳ Aguardando inicialização..."
-for i in {1..15}; do
-    if lsof -ti:9000 >/dev/null 2>&1 && lsof -ti:8080 >/dev/null 2>&1; then
+sleep 3  # Tempo inicial para processos começarem
+
+# Verifica servidores em loop com timeout maior
+for i in {1..30}; do
+    SERVER_UP=$(lsof -ti:8080 >/dev/null 2>&1 && echo "true" || echo "false")
+    CLIENT_UP=$(lsof -ti:9000 >/dev/null 2>&1 && echo "true" || echo "false")
+    
+    if [ "$SERVER_UP" = "true" ] && [ "$CLIENT_UP" = "true" ]; then
         echo "✅ Servidores principais rodando!"
+        echo "   - Backend (Node.js): ✅ Porta 8080"
+        echo "   - Frontend (Vite): ✅ Porta 9000"
         break
+    elif [ "$SERVER_UP" = "true" ]; then
+        echo "   Backend iniciado, aguardando frontend... ($i/30)"
+    elif [ "$CLIENT_UP" = "true" ]; then
+        echo "   Frontend iniciado, aguardando backend... ($i/30)"
+    else
+        echo "   Aguardando serviços... ($i/30)"
     fi
+    
     sleep 1
 done
 
@@ -111,11 +128,27 @@ fi
 # Função de limpeza
 cleanup() {
     echo -e "\n\n👋 Encerrando Claude Code UI..."
-    kill $DEV_PID 2>/dev/null
+    
+    # Para o processo dev.js principal
+    if [ ! -z "$DEV_PID" ]; then
+        kill $DEV_PID 2>/dev/null
+        echo "   Parando processo principal..."
+    fi
+    
+    # Para o ngrok
     pkill -f ngrok 2>/dev/null
+    echo "   Parando ngrok..."
+    
+    # Para processos específicos das portas
     graceful_shutdown 9000
-    graceful_shutdown 8080
+    graceful_shutdown 8080  
     graceful_shutdown 8081
+    
+    # Para processos npm/node/cargo que possam ter ficado
+    pkill -f "npm run dev" 2>/dev/null
+    pkill -f "node scripts/dev.js" 2>/dev/null
+    pkill -f "cargo run" 2>/dev/null
+    
     echo "✅ Tudo encerrado com sucesso!"
     exit 0
 }
