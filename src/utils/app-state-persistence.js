@@ -21,7 +21,7 @@ export const appStatePersistence = {
         }
       });
     } catch (error) {
-      console.error('Failed to save app state:', error);
+      // Error: 'Failed to save app state:', error
     }
   },
 
@@ -36,7 +36,7 @@ export const appStatePersistence = {
         }
       });
     } catch (error) {
-      console.error('Failed to load app state:', error);
+      // Error: 'Failed to load app state:', error
     }
     return state;
   },
@@ -70,7 +70,7 @@ export const appStatePersistence = {
       }
       localStorage.setItem(appStatePersistence.KEYS.NAVIGATION_STACK, JSON.stringify(stack));
     } catch (error) {
-      console.error('Failed to save navigation context:', error);
+      // Error: 'Failed to save navigation context:', error
     }
   },
 
@@ -80,7 +80,7 @@ export const appStatePersistence = {
       const stack = JSON.parse(localStorage.getItem(appStatePersistence.KEYS.NAVIGATION_STACK) || '[]');
       return stack[stack.length - 1] || null;
     } catch (error) {
-      console.error('Failed to get navigation context:', error);
+      // Error: 'Failed to get navigation context:', error
       return null;
     }
   },
@@ -96,7 +96,7 @@ export const appStatePersistence = {
       };
       localStorage.setItem(appStatePersistence.KEYS.CHAT_MESSAGES, JSON.stringify(chatState));
     } catch (error) {
-      console.error('Failed to save chat state:', error);
+      // Error: 'Failed to save chat state:', error
     }
   },
 
@@ -113,7 +113,7 @@ export const appStatePersistence = {
         }
       }
     } catch (error) {
-      console.error('Failed to load chat state:', error);
+      // Error: 'Failed to load chat state:', error
     }
     return null;
   }

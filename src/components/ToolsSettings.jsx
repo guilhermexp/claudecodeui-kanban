@@ -110,10 +110,10 @@ function ToolsSettings({ isOpen, onClose }) {
         const data = await response.json();
         setMcpServers(data.servers || []);
       } else {
-        console.error('Failed to fetch MCP servers');
+        // Error: 'Failed to fetch MCP servers'
       }
     } catch (error) {
-      console.error('Error fetching MCP servers:', error);
+      // Error: 'Error fetching MCP servers:', error
     }
   };
 
@@ -157,7 +157,7 @@ function ToolsSettings({ isOpen, onClose }) {
         throw new Error(error.error || 'Failed to save server');
       }
     } catch (error) {
-      console.error('Error saving MCP server:', error);
+      // Error: 'Error saving MCP server:', error
       throw error;
     }
   };
@@ -188,7 +188,7 @@ function ToolsSettings({ isOpen, onClose }) {
         throw new Error(error.error || 'Failed to delete server');
       }
     } catch (error) {
-      console.error('Error deleting MCP server:', error);
+      // Error: 'Error deleting MCP server:', error
       throw error;
     }
   };
@@ -212,7 +212,7 @@ function ToolsSettings({ isOpen, onClose }) {
         throw new Error(error.error || 'Failed to test server');
       }
     } catch (error) {
-      console.error('Error testing MCP server:', error);
+      // Error: 'Error testing MCP server:', error
       throw error;
     }
   };
@@ -237,7 +237,7 @@ function ToolsSettings({ isOpen, onClose }) {
         throw new Error(error.error || 'Failed to test configuration');
       }
     } catch (error) {
-      console.error('Error testing MCP configuration:', error);
+      // Error: 'Error testing MCP configuration:', error
       throw error;
     }
   };
@@ -261,7 +261,7 @@ function ToolsSettings({ isOpen, onClose }) {
         throw new Error(error.error || 'Failed to discover tools');
       }
     } catch (error) {
-      console.error('Error discovering MCP tools:', error);
+      // Error: 'Error discovering MCP tools:', error
       throw error;
     }
   };
@@ -271,6 +271,43 @@ function ToolsSettings({ isOpen, onClose }) {
       loadSettings();
     }
   }, [isOpen]);
+
+  // Listen for localStorage changes to sync with ChatInterface
+  useEffect(() => {
+    const handleStorageChange = (e) => {
+      if (e.key === 'claude-tools-settings' && e.newValue) {
+        try {
+          const settings = JSON.parse(e.newValue);
+          setSkipPermissions(settings.skipPermissions || false);
+        } catch (error) {
+          // Error: 'Error parsing storage change:', error
+        }
+      }
+    };
+
+    // Listen for storage events from other tabs
+    window.addEventListener('storage', handleStorageChange);
+
+    // Also check periodically for same-tab changes
+    const intervalId = setInterval(() => {
+      const savedSettings = localStorage.getItem('claude-tools-settings');
+      if (savedSettings) {
+        try {
+          const settings = JSON.parse(savedSettings);
+          if (settings.skipPermissions !== skipPermissions) {
+            setSkipPermissions(settings.skipPermissions || false);
+          }
+        } catch (error) {
+          // Error: 'Error checking storage:', error
+        }
+      }
+    }, 1000);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      clearInterval(intervalId);
+    };
+  }, [skipPermissions]);
 
   const loadSettings = async () => {
     try {
@@ -295,7 +332,7 @@ function ToolsSettings({ isOpen, onClose }) {
       // Load MCP servers from API
       await fetchMcpServers();
     } catch (error) {
-      console.error('Error loading tool settings:', error);
+      // Error: 'Error loading tool settings:', error
       // Set defaults on error
       setAllowedTools([]);
       setDisallowedTools([]);
@@ -316,8 +353,7 @@ function ToolsSettings({ isOpen, onClose }) {
         projectSortOrder,
         lastUpdated: new Date().toISOString()
       };
-      
-      
+
       // Save to localStorage
       localStorage.setItem('claude-tools-settings', JSON.stringify(settings));
       
@@ -327,7 +363,7 @@ function ToolsSettings({ isOpen, onClose }) {
         onClose();
       }, 1000);
     } catch (error) {
-      console.error('Error saving tool settings:', error);
+      // Error: 'Error saving tool settings:', error
       setSaveStatus('error');
     } finally {
       setIsSaving(false);

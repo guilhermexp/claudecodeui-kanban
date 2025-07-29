@@ -86,14 +86,13 @@ function Sidebar({
   const [searchFilter, setSearchFilter] = useState('');
   const { isDarkMode, toggleDarkMode } = useTheme();
 
-  
   // Starred projects state - persisted in localStorage
   const [starredProjects, setStarredProjects] = useState(() => {
     try {
       const saved = localStorage.getItem('starredProjects');
       return saved ? new Set(JSON.parse(saved)) : new Set();
     } catch (error) {
-      console.error('Error loading starred projects:', error);
+      // Error: 'Error loading starred projects:', error
       return new Set();
     }
   });
@@ -156,7 +155,7 @@ function Sidebar({
           setProjectSortOrder(settings.projectSortOrder || 'name');
         }
       } catch (error) {
-        console.error('Error loading sort order:', error);
+        // Error: 'Error loading sort order:', error
       }
     };
 
@@ -209,7 +208,7 @@ function Sidebar({
     try {
       localStorage.setItem('starredProjects', JSON.stringify([...newStarred]));
     } catch (error) {
-      console.error('Error saving starred projects:', error);
+      // Error: 'Error saving starred projects:', error
     }
   };
 
@@ -307,10 +306,10 @@ function Sidebar({
           window.location.reload();
         }
       } else {
-        console.error('Failed to rename project');
+        // Error: 'Failed to rename project'
       }
     } catch (error) {
-      console.error('Error renaming project:', error);
+      // Error: 'Error renaming project:', error
     }
     
     setEditingProject(null);
@@ -331,11 +330,11 @@ function Sidebar({
           onSessionDelete(sessionId);
         }
       } else {
-        console.error('Failed to delete session');
+        // Error: 'Failed to delete session'
         alert('Failed to delete session. Please try again.');
       }
     } catch (error) {
-      console.error('Error deleting session:', error);
+      // Error: 'Error deleting session:', error
       alert('Error deleting session. Please try again.');
     }
   };
@@ -355,11 +354,11 @@ function Sidebar({
         }
       } else {
         const error = await response.json();
-        console.error('Failed to delete project');
+        // Error: 'Failed to delete project'
         alert(error.error || 'Failed to delete project. Please try again.');
       }
     } catch (error) {
-      console.error('Error deleting project:', error);
+      // Error: 'Error deleting project:', error
       alert('Error deleting project. Please try again.');
     }
   };
@@ -391,7 +390,7 @@ function Sidebar({
         alert(error.error || 'Failed to create project. Please try again.');
       }
     } catch (error) {
-      console.error('Error creating project:', error);
+      // Error: 'Error creating project:', error
       alert('Error creating project. Please try again.');
     } finally {
       setCreatingProject(false);
@@ -413,7 +412,7 @@ function Sidebar({
         }
       }
     } catch (error) {
-      console.error('Error updating session summary:', error);
+      // Error: 'Error updating session summary:', error
     } finally {
       setEditingSession(null);
       setEditingSessionName('');
@@ -453,7 +452,7 @@ function Sidebar({
         }
       }
     } catch (error) {
-      console.error('Error loading more sessions:', error);
+      // Error: 'Error loading more sessions:', error
     } finally {
       setLoadingSessions(prev => ({ ...prev, [project.name]: false }));
     }

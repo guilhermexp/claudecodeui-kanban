@@ -145,6 +145,39 @@ const QuickSettingsPanel = ({
               </label>
             </div>
 
+            {/* Model Selection */}
+            <div className="space-y-2">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">AI Model</h4>
+              
+              <div className="p-3 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors border border-gray-200 dark:border-gray-600">
+                <div className="flex items-center gap-2 mb-2">
+                  <Brain className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                  <span className="text-sm text-gray-900 dark:text-white">Claude Model</span>
+                </div>
+                <select
+                  value={localStorage.getItem('claude-model') || 'sonnet'}
+                  onChange={(e) => {
+                    const newModel = e.target.value;
+                    localStorage.setItem('claude-model', newModel);
+                    
+                    // Send /model command to change model in current session
+                    window.dispatchEvent(new CustomEvent('send-model-command', { 
+                      detail: { model: newModel }
+                    }));
+                    
+                    window.dispatchEvent(new CustomEvent('claude-model-changed', { detail: newModel }));
+                  }}
+                  className="w-full px-3 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-blue-500 dark:focus:border-blue-400 text-gray-900 dark:text-white"
+                >
+                  <option value="sonnet">Sonnet 4 (Fast & Efficient)</option>
+                  <option value="opus">Opus 4 (Most Powerful)</option>
+                </select>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                  Sonnet 4 is faster and great for most tasks. Opus 4 is more powerful for complex reasoning.
+                </p>
+              </div>
+            </div>
+
             {/* Input Settings */}
             <div className="space-y-2">
               <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">Input Settings</h4>

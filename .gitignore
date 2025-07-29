@@ -92,6 +92,12 @@ tmp/
 temp/
 .tmp/
 
+# Backup files
+*.backup
+*.bak
+*.old
+*.tmp
+
 # Vite
 .vite/
 

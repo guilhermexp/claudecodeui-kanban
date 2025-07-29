@@ -181,7 +181,7 @@ class ShellSessionManager extends EventEmitter {
       if (session && session.ws && session.ws.readyState === WebSocket.OPEN) {
         session.ws.close();
         this.setSession(key, { isConnected: false });
-        console.log(`Session ${key} disconnected due to inactivity`);
+
       }
       this.sessionTimeouts.delete(key);
     }, timeoutMs);
@@ -224,7 +224,7 @@ class ShellSessionManager extends EventEmitter {
         activeSessionKey: this.activeSessionKey
       }));
     } catch (error) {
-      console.error('Error saving sessions to storage:', error);
+      // Error: 'Error saving sessions to storage:', error
     }
   }
 
@@ -250,10 +250,9 @@ class ShellSessionManager extends EventEmitter {
       });
       
       // Don't restore active session key - let the UI decide
-      
-      console.log(`Loaded ${data.sessions.length} sessions from storage`);
+
     } catch (error) {
-      console.error('Error loading sessions from storage:', error);
+      // Error: 'Error loading sessions from storage:', error
     }
   }
 

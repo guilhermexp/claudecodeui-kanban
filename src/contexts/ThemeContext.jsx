@@ -74,7 +74,15 @@ export const ThemeProvider = ({ children }) => {
   }, []);
 
   const toggleDarkMode = () => {
+    // Add class to disable transitions temporarily
+    document.documentElement.classList.add('theme-transitioning');
+    
     setIsDarkMode(prev => !prev);
+    
+    // Remove the class after a short delay
+    setTimeout(() => {
+      document.documentElement.classList.remove('theme-transitioning');
+    }, 50);
   };
 
   const value = {

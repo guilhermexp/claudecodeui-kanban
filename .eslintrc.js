@@ -32,7 +32,7 @@ module.exports = {
     'react/jsx-uses-react': 'off',
     
     // General rules
-    'no-console': ['warn', { allow: ['warn', 'error'] }],
+    'no-console': ['error', { allow: [] }], // Disallow all console statements in production
     'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
     'prefer-const': 'error',
     'no-var': 'error',

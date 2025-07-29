@@ -46,6 +46,7 @@ function MainContent({
 }) {
   const [editingFile, setEditingFile] = useState(null);
   const [openShellSessions, setOpenShellSessions] = useState(0);
+  const [contextWindowPercentage, setContextWindowPercentage] = useState(null);
   // Shell terminals state removed - single terminal mode only
 
   const handleFileOpen = (filePath, diffInfo = null) => {
@@ -141,7 +142,7 @@ function MainContent({
       {/* Header with tabs */}
       <div className="bg-card border-b border-border p-3 sm:p-4 flex-shrink-0">
         <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2 sm:space-x-3">
+          <div className="flex items-center space-x-2 sm:space-x-3 flex-1">
             {isMobile && (
               <button
                 onClick={onMenuClick}
@@ -188,9 +189,35 @@ function MainContent({
             </div>
           </div>
           
+          {/* Context Window Display - shows on all screen sizes */}
+          {contextWindowPercentage !== null && (
+            <div className={`px-2 py-1 rounded text-xs sm:text-sm ${
+              contextWindowPercentage >= 90 ? 'bg-red-500/20 text-red-400' :
+              contextWindowPercentage >= 70 ? 'bg-yellow-500/20 text-yellow-400' :
+              'bg-green-500/20 text-green-400'
+            }`}>
+              Context: {contextWindowPercentage}%
+            </div>
+          )}
+          
           {/* Modern Tab Navigation - Right Side */}
           <div className="flex-shrink-0 hidden sm:block">
             <div className="relative flex bg-muted rounded-lg p-1">
+              <button
+                onClick={() => setActiveTab('chat')}
+                className={`relative px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md ${
+                  activeTab === 'chat'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                }`}
+              >
+                <span className="flex items-center gap-1 sm:gap-1.5">
+                  <svg className="w-3 sm:w-3.5 h-3 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                  </svg>
+                  <span className="hidden sm:inline">Chat</span>
+                </span>
+              </button>
               <button
                 onClick={() => setActiveTab('shell')}
                 className={`relative px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
@@ -209,21 +236,6 @@ function MainContent({
                       {openShellSessions}
                     </span>
                   )}
-                </span>
-              </button>
-              <button
-                onClick={() => setActiveTab('chat')}
-                className={`relative px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md ${
-                  activeTab === 'chat'
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-                }`}
-              >
-                <span className="flex items-center gap-1 sm:gap-1.5">
-                  <svg className="w-3 sm:w-3.5 h-3 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                  </svg>
-                  <span className="hidden sm:inline">Chat</span>
                 </span>
               </button>
               <button
@@ -280,7 +292,7 @@ function MainContent({
 
       {/* Content Area */}
       <div className="flex-1 flex flex-col min-h-0">
-        <div className={`h-full ${activeTab === 'chat' ? 'block' : 'hidden'}`}>
+        <div className={`h-full ${activeTab === 'chat' ? 'block' : 'hidden'} ${isMobile && activeTab === 'chat' ? 'pb-14' : ''}`}>
           <ErrorBoundary showDetails={true}>
             <ChatInterface
               selectedProject={selectedProject}
@@ -299,13 +311,14 @@ function MainContent({
               showRawParameters={showRawParameters}
               autoScrollToBottom={autoScrollToBottom}
               sendByCtrlEnter={sendByCtrlEnter}
+              onContextWindowUpdate={setContextWindowPercentage}
             />
           </ErrorBoundary>
         </div>
         <div className={`h-full overflow-hidden ${activeTab === 'files' ? 'block' : 'hidden'}`}>
           <FileTree selectedProject={selectedProject} />
         </div>
-        <div className={`h-full overflow-hidden ${activeTab === 'shell' ? 'block' : 'hidden'} ${isMobile && activeTab === 'shell' ? 'pb-16' : ''}`}>
+        <div className={`h-full overflow-hidden ${activeTab === 'shell' ? 'block' : 'hidden'} ${isMobile && activeTab === 'shell' ? 'pb-14' : ''}`}>
           <Shell 
             selectedProject={selectedProject} 
             selectedSession={selectedSession}

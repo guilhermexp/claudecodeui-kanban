@@ -37,19 +37,19 @@ const safeLocalStorage = {
           const parsed = JSON.parse(value);
           // Limit to last 50 messages to prevent storage bloat
           if (Array.isArray(parsed) && parsed.length > 50) {
-            console.info(`Chat history truncated: ${parsed.length} → 50 messages`);
+
             const truncated = parsed.slice(-50);
             value = JSON.stringify(truncated);
           }
         } catch (parseError) {
-          console.warn('Could not parse chat messages for truncation:', parseError);
+          // Warning: 'Could not parse chat messages for truncation:', parseError
         }
       }
       
       localStorage.setItem(key, value);
     } catch (error) {
       if (error.name === 'QuotaExceededError') {
-        console.warn('localStorage quota exceeded, clearing old data');
+        // Warning: 'localStorage quota exceeded, clearing old data'
         // Clear old chat messages to free up space
         const keys = Object.keys(localStorage);
         const chatKeys = keys.filter(k => k.startsWith('chat_messages_')).sort();
@@ -58,7 +58,7 @@ const safeLocalStorage = {
         if (chatKeys.length > 3) {
           chatKeys.slice(0, chatKeys.length - 3).forEach(k => {
             localStorage.removeItem(k);
-            console.log(`Removed old chat data: ${k}`);
+
           });
         }
         
@@ -72,7 +72,7 @@ const safeLocalStorage = {
         try {
           localStorage.setItem(key, value);
         } catch (retryError) {
-          console.error('Failed to save to localStorage even after cleanup:', retryError);
+          // Error: 'Failed to save to localStorage even after cleanup:', retryError
           // Last resort: Try to save just the last 10 messages
           if (key.startsWith('chat_messages_') && typeof value === 'string') {
             try {
@@ -80,15 +80,15 @@ const safeLocalStorage = {
               if (Array.isArray(parsed) && parsed.length > 10) {
                 const minimal = parsed.slice(-10);
                 localStorage.setItem(key, JSON.stringify(minimal));
-                console.warn('Saved only last 10 messages due to quota constraints');
+                // Warning: 'Saved only last 10 messages due to quota constraints'
               }
             } catch (finalError) {
-              console.error('Final save attempt failed:', finalError);
+              // Error: 'Final save attempt failed:', finalError
             }
           }
         }
       } else {
-        console.error('localStorage error:', error);
+        // Error: 'localStorage error:', error
       }
     }
   },
@@ -96,7 +96,7 @@ const safeLocalStorage = {
     try {
       return localStorage.getItem(key);
     } catch (error) {
-      console.error('localStorage getItem error:', error);
+      // Error: 'localStorage getItem error:', error
       return null;
     }
   },
@@ -104,7 +104,7 @@ const safeLocalStorage = {
     try {
       localStorage.removeItem(key);
     } catch (error) {
-      console.error('localStorage removeItem error:', error);
+      // Error: 'localStorage removeItem error:', error
     }
   }
 };
@@ -328,11 +328,10 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                 })()}
                 {message.toolInput && message.toolName !== 'Edit' && (() => {
                   // Debug log to see what we're dealing with
-                  console.log('Tool display - name:', message.toolName, 'input type:', typeof message.toolInput);
-                  
+
                   // Special handling for Write tool
                   if (message.toolName === 'Write') {
-                    console.log('Write tool detected, toolInput:', message.toolInput);
+
                     try {
                       let input;
                       // Handle both JSON string and already parsed object
@@ -341,9 +340,7 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                       } else {
                         input = message.toolInput;
                       }
-                      
-                      console.log('Parsed Write input:', input);
-                      
+
                       if (input.file_path && input.content !== undefined) {
                         return (
                           <details className="mt-1" open={autoExpandTools}>
@@ -1101,7 +1098,7 @@ const ImageAttachment = ({ file, onRemove, uploadProgress, error }) => {
 // - onReplaceTemporarySession: Called to replace temporary session ID with real WebSocket session ID
 //
 // This ensures uninterrupted chat experience by pausing sidebar refreshes during conversations.
-function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, messages, onFileOpen, onInputFocusChange, onSessionActive, onSessionInactive, onReplaceTemporarySession, onNavigateToSession, onShowSettings, autoExpandTools, showRawParameters, autoScrollToBottom, sendByCtrlEnter }) {
+function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, messages, onFileOpen, onInputFocusChange, onSessionActive, onSessionInactive, onReplaceTemporarySession, onNavigateToSession, onShowSettings, autoExpandTools, showRawParameters, autoScrollToBottom, sendByCtrlEnter, onContextWindowUpdate }) {
   const [input, setInput] = useState(() => {
     if (typeof window !== 'undefined' && selectedProject) {
       return safeLocalStorage.getItem(`draft_input_${selectedProject.name}`) || '';
@@ -1115,7 +1112,23 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   const [sessionMessages, setSessionMessages] = useState([]);
   const [isLoadingSessionMessages, setIsLoadingSessionMessages] = useState(false);
   const [isSystemSessionChange, setIsSystemSessionChange] = useState(false);
-  const [permissionMode, setPermissionMode] = useState('default');
+  const [contextWindowPercentage, setContextWindowPercentage] = useState(null);
+  const [autoCompactNotification, setAutoCompactNotification] = useState(null);
+  const [permissionMode, setPermissionMode] = useState(() => {
+    // Check if skipPermissions is enabled in settings
+    try {
+      const savedSettings = safeLocalStorage.getItem('claude-tools-settings');
+      if (savedSettings) {
+        const settings = JSON.parse(savedSettings);
+        if (settings.skipPermissions) {
+          return 'bypassPermissions';
+        }
+      }
+    } catch (error) {
+      // Error: 'Error loading permission settings:', error
+    }
+    return 'default';
+  });
   const [attachedImages, setAttachedImages] = useState([]);
   const [uploadingImages, setUploadingImages] = useState(new Map());
   const [imageErrors, setImageErrors] = useState(new Map());
@@ -1162,6 +1175,50 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
            /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
   }, []);
 
+  // Listen for changes in tools settings
+  useEffect(() => {
+    const handleStorageChange = (e) => {
+      if (e.key === 'claude-tools-settings') {
+        try {
+          const settings = JSON.parse(e.newValue);
+          if (settings.skipPermissions) {
+            setPermissionMode('bypassPermissions');
+          } else if (permissionMode === 'bypassPermissions') {
+            // Only reset to default if currently in bypass mode
+            setPermissionMode('default');
+          }
+        } catch (error) {
+          // Error: 'Error parsing settings:', error
+        }
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    
+    // Also check periodically for same-tab changes
+    const checkSettings = () => {
+      try {
+        const savedSettings = safeLocalStorage.getItem('claude-tools-settings');
+        if (savedSettings) {
+          const settings = JSON.parse(savedSettings);
+          if (settings.skipPermissions && permissionMode !== 'bypassPermissions') {
+            setPermissionMode('bypassPermissions');
+          } else if (!settings.skipPermissions && permissionMode === 'bypassPermissions') {
+            setPermissionMode('default');
+          }
+        }
+      } catch (error) {
+        // Error: 'Error checking settings:', error
+      }
+    };
+
+    const interval = setInterval(checkSettings, 1000);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      clearInterval(interval);
+    };
+  }, [permissionMode]);
 
   // Memoized diff calculation to prevent recalculating on every render
   const createDiff = useMemo(() => {
@@ -1195,7 +1252,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       const data = await response.json();
       return data.messages || [];
     } catch (error) {
-      console.error('Error loading session messages:', error);
+      // Error: 'Error loading session messages:', error
       return [];
     } finally {
       setIsLoadingSessionMessages(false);
@@ -1361,7 +1418,6 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     return scrollHeight - scrollTop - clientHeight < 50; // Reduced threshold
   }, []);
 
-
   // Removed duplicate scroll handler - using the throttled one below
 
   useEffect(() => {
@@ -1369,6 +1425,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     const loadMessages = async () => {
       if (selectedSession && selectedProject) {
         setCurrentSessionId(selectedSession.id);
+        // Reset context window when switching sessions
+        setContextWindowPercentage(null);
+        setAutoCompactNotification(null);
         
         // Only load messages from API if this is a user-initiated session change
         // For system-initiated changes, preserve existing messages and rely on WebSocket
@@ -1395,6 +1454,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       } else {
         // Don't clear messages immediately to avoid flashing
         setCurrentSessionId(null);
+        // Reset context window when no session
+        setContextWindowPercentage(null);
+        setAutoCompactNotification(null);
       }
     };
     
@@ -1450,7 +1512,6 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
   }, [selectedProject?.name]);
 
-
   // Smart message filtering to prevent session bleeding while preserving continuity
   const isMessageRelevant = useCallback((message) => {
     // CRITICAL: Always allow session-related messages to preserve conversation continuity
@@ -1488,6 +1549,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         case 'session-created':
           // New session created by Claude CLI - we receive the real session ID here
           // Store it temporarily until conversation completes (prevents premature session association)
+          // Reset context window for new session
+          setContextWindowPercentage(null);
+          setAutoCompactNotification(null);
           if (latestMessage.sessionId && !currentSessionId) {
             sessionStorage.setItem('pendingSessionId', latestMessage.sessionId);
             
@@ -1512,8 +1576,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               latestMessage.data.session_id && 
               currentSessionId && 
               latestMessage.data.session_id !== currentSessionId) {
-            
-            
+
             // Mark this as a system-initiated session change to preserve messages
             setIsSystemSessionChange(true);
             
@@ -1530,8 +1593,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               latestMessage.data.subtype === 'init' && 
               latestMessage.data.session_id && 
               !currentSessionId) {
-            
-            
+
             // Mark this as a system-initiated session change to preserve messages
             setIsSystemSessionChange(true);
             
@@ -1659,12 +1721,32 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           break;
           
         case 'claude-output':
-          // Add message directly to avoid ordering issues
-          setChatMessages(prev => [...prev, {
-            type: 'assistant',
-            content: latestMessage.data,
-            timestamp: new Date()
-          }]);
+          // Check if this is context window information
+          const contextWindowMatch = latestMessage.data.match(/Context window:\s*(\d+)%/);
+          const autoCompactMatch = latestMessage.data.match(/Auto-compact/i);
+          
+          if (contextWindowMatch) {
+            // Update context window percentage
+            const percentage = parseInt(contextWindowMatch[1]);
+            setContextWindowPercentage(percentage);
+            // Notify parent component
+            if (onContextWindowUpdate) {
+              onContextWindowUpdate(percentage);
+            }
+            // Don't add this as a regular message
+          } else if (autoCompactMatch) {
+            // Show auto-compact notification
+            setAutoCompactNotification(latestMessage.data);
+            // Clear notification after 5 seconds
+            setTimeout(() => setAutoCompactNotification(null), 5000);
+          } else {
+            // Add regular message
+            setChatMessages(prev => [...prev, {
+              type: 'assistant',
+              content: latestMessage.data,
+              timestamp: new Date()
+            }]);
+          }
           break;
         case 'claude-interactive-prompt':
           // Handle interactive prompts from CLI
@@ -1688,8 +1770,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           setIsLoading(false);
           setCanAbortSession(false);
           setClaudeStatus(null);
+          // Clear auto-compact notification on completion
+          setAutoCompactNotification(null);
 
-          
           // Session Protection: Mark session as inactive to re-enable automatic project updates
           // Conversation is complete, safe to allow project updates again
           // Use real session ID if available, otherwise use pending session ID
@@ -1788,7 +1871,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         setFileList(flatFiles);
       }
     } catch (error) {
-      console.error('Error fetching files:', error);
+      // Error: 'Error fetching files:', error
     }
   };
 
@@ -1878,7 +1961,6 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       }
     };
   }, [chatMessages.length, performanceMode]);
-
 
   // Optimized scroll event handling with throttling
   useEffect(() => {
@@ -2017,7 +2099,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       try {
         // Validate file object and properties
         if (!file || typeof file !== 'object') {
-          console.warn('Invalid file object:', file);
+          // Warning: 'Invalid file object:', file
           return false;
         }
 
@@ -2038,7 +2120,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
 
         return true;
       } catch (error) {
-        console.error('Error validating file:', error, file);
+        // Error: 'Error validating file:', error, file
         return false;
       }
     });
@@ -2128,6 +2210,38 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     };
   }, [input, isLoading, selectedProject]);
 
+  // Listen for model change commands from QuickSettings
+  useEffect(() => {
+    const handleModelCommand = (e) => {
+      const { model } = e.detail;
+      if (selectedProject && currentSessionId && !isLoading) {
+        // Send /model command to change model in current session
+        sendMessage({
+          type: 'claude-command',
+          command: `/model ${model}`,
+          options: {
+            projectPath: selectedProject.path,
+            cwd: selectedProject.fullPath,
+            sessionId: currentSessionId,
+            resume: true,
+            toolsSettings: {
+              allowedTools: [],
+              disallowedTools: [],
+              skipPermissions: false
+            },
+            permissionMode: permissionMode
+          }
+        });
+      }
+    };
+
+    window.addEventListener('send-model-command', handleModelCommand);
+
+    return () => {
+      window.removeEventListener('send-model-command', handleModelCommand);
+    };
+  }, [selectedProject, currentSessionId, sendMessage, permissionMode, isLoading]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!input.trim() || isLoading || !selectedProject) return;
@@ -2160,7 +2274,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         const result = await response.json();
         uploadedImages = result.images;
       } catch (error) {
-        console.error('Image upload failed:', error);
+        // Error: 'Image upload failed:', error
         setChatMessages(prev => [...prev, {
           type: 'error',
           content: `Failed to upload images: ${error.message}`,
@@ -2218,7 +2332,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           return JSON.parse(savedSettings);
         }
       } catch (error) {
-        console.error('Error loading tools settings:', error);
+        // Error: 'Error loading tools settings:', error
       }
       return {
         allowedTools: [],
@@ -2228,6 +2342,9 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     };
 
     const toolsSettings = getToolsSettings();
+
+    // Get selected model from localStorage
+    const selectedModel = localStorage.getItem('claude-model') || 'sonnet';
 
     // Send command to Claude CLI via WebSocket with images
     sendMessage({
@@ -2240,7 +2357,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         resume: !!currentSessionId,
         toolsSettings: toolsSettings,
         permissionMode: permissionMode,
-        images: uploadedImages // Pass images to backend
+        images: uploadedImages, // Pass images to backend
+        model: selectedModel // Pass selected model
       }
     });
 
@@ -2251,7 +2369,6 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     setIsTextareaExpanded(false);
     
     // Reset textarea height
-
 
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -2302,7 +2419,27 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       const modes = ['default', 'acceptEdits', 'bypassPermissions', 'plan'];
       const currentIndex = modes.indexOf(permissionMode);
       const nextIndex = (currentIndex + 1) % modes.length;
-      setPermissionMode(modes[nextIndex]);
+      const newMode = modes[nextIndex];
+      setPermissionMode(newMode);
+      
+      // Update settings if switching to/from bypassPermissions
+      if (newMode === 'bypassPermissions' || permissionMode === 'bypassPermissions') {
+        try {
+          const savedSettings = safeLocalStorage.getItem('claude-tools-settings');
+          const settings = savedSettings ? JSON.parse(savedSettings) : {
+            allowedTools: [],
+            disallowedTools: [],
+            skipPermissions: false
+          };
+          
+          settings.skipPermissions = (newMode === 'bypassPermissions');
+          settings.lastUpdated = new Date().toISOString();
+          
+          safeLocalStorage.setItem('claude-tools-settings', JSON.stringify(settings));
+        } catch (error) {
+          // Error: 'Error updating permission settings:', error
+        }
+      }
       return;
     }
     
@@ -2381,8 +2518,6 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     setCursorPosition(e.target.selectionStart);
   };
 
-
-
   const handleNewSession = () => {
     setChatMessages([]);
     setInput('');
@@ -2403,7 +2538,28 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     const modes = ['default', 'acceptEdits', 'bypassPermissions', 'plan'];
     const currentIndex = modes.indexOf(permissionMode);
     const nextIndex = (currentIndex + 1) % modes.length;
-    setPermissionMode(modes[nextIndex]);
+    const newMode = modes[nextIndex];
+    setPermissionMode(newMode);
+    
+    // Update settings if switching to/from bypassPermissions
+    if (newMode === 'bypassPermissions' || permissionMode === 'bypassPermissions') {
+      try {
+        const savedSettings = safeLocalStorage.getItem('claude-tools-settings');
+        const settings = savedSettings ? JSON.parse(savedSettings) : {
+          allowedTools: [],
+          disallowedTools: [],
+          skipPermissions: false
+        };
+        
+        // Update skipPermissions based on new mode
+        settings.skipPermissions = (newMode === 'bypassPermissions');
+        settings.lastUpdated = new Date().toISOString();
+        
+        safeLocalStorage.setItem('claude-tools-settings', JSON.stringify(settings));
+      } catch (error) {
+        // Error: 'Error updating permission settings:', error
+      }
+    }
   };
 
   // Don't render if no project is selected
@@ -2478,15 +2634,14 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
         <div ref={messagesEndRef} />
       </div>
 
-
       {/* Input Area - Fixed Bottom */}
-      <div className={`p-2 sm:p-3 md:p-4 flex-shrink-0 ${
-        isInputFocused ? 'pb-2 sm:pb-3 md:pb-4' : 'pb-16 sm:pb-3 md:pb-4'
+      <div className={`px-2 pt-2 pb-1 sm:p-3 md:p-4 flex-shrink-0 ${
+        isInputFocused ? 'pb-1 sm:pb-3 md:pb-4' : 'pb-1 sm:pb-3 md:pb-4'
       }`}>
-        {/* Status and Permission Mode Container - now side by side */}
-        <div className="max-w-4xl mx-auto mb-1.5">
-          <div className="flex items-center justify-between gap-3">
-            {/* Claude Working Status - now inline */}
+        {/* Status and Permission Mode Container */}
+        <div className="max-w-4xl mx-auto mb-1">
+          <div className="flex items-center justify-between gap-2">
+            {/* Claude Working Status - compact inline */}
             {isLoading && (
               <ClaudeStatus 
                 status={claudeStatus}
@@ -2495,12 +2650,12 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               />
             )}
             
-            {/* Permission Mode Selector with scroll to bottom button */}
-            <div className={`flex items-center justify-center gap-3 ${isLoading ? '' : 'w-full'}`}>
+            {/* Permission Mode and Scroll Button - flex container */}
+            <div className={`flex items-center gap-2 ${!isLoading ? 'flex-1 justify-end' : 'flex-shrink-0'}`}>
             <button
               type="button"
               onClick={handleModeSwitch}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all duration-200 ${
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all duration-200 ${!isLoading ? 'flex-1 sm:flex-initial' : ''} ${
                 permissionMode === 'default' 
                   ? 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-600'
                   : permissionMode === 'acceptEdits'
@@ -2530,26 +2685,20 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               </div>
             </button>
             
-            {/* Scroll to bottom button with unread counter */}
-            {(isUserScrolledUp || unreadMessageCount > 0) && chatMessages.length > 0 && (
+            {/* Scroll to bottom button */}
+            {isUserScrolledUp && chatMessages.length > 0 && (
               <button
                 onClick={() => {
                   scrollToBottom();
                   setIsUserScrolledUp(false);
-                  setUnreadMessageCount(0);
                 }}
-                className="relative bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg flex items-center gap-2 px-3 py-1 transition-all duration-200 hover:scale-105 focus:outline-none"
-                title={unreadMessageCount > 0 ? `${unreadMessageCount} new messages` : "Scroll to bottom"}
+                className="bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg p-2 transition-all duration-200 hover:scale-105 focus:outline-none"
+                title="Scroll to bottom"
                 tabIndex={-1}
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
                 </svg>
-                {unreadMessageCount > 0 && (
-                  <span className="text-xs font-bold bg-red-500 text-white rounded-full px-2 py-0.5 min-w-[20px] text-center animate-fade-in">
-                    {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
-                  </span>
-                )}
               </button>
             )}
             </div>
