@@ -44,9 +44,9 @@ const TodoList = ({ todos, isResult = false }) => {
   };
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-1">
       {isResult && (
-        <div className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-3 px-1">
+        <div className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-1.5 px-1">
           Todo List ({todos.length} {todos.length === 1 ? 'item' : 'items'})
         </div>
       )}
@@ -54,28 +54,28 @@ const TodoList = ({ todos, isResult = false }) => {
       {todos.map((todo) => (
         <div
           key={todo.id}
-          className="flex items-start gap-3 p-4 bg-white dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700/60 rounded-lg shadow-sm hover:shadow-md dark:shadow-black/20 hover:bg-gray-50 dark:hover:bg-gray-800/60 transition-all duration-200"
+          className="flex items-start gap-2 p-2 bg-white dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700/60 rounded-lg shadow-sm hover:shadow-md dark:shadow-black/20 hover:bg-gray-50 dark:hover:bg-gray-800/60 transition-all duration-200"
         >
           <div className="flex-shrink-0 mt-0.5">
             {getStatusIcon(todo.status)}
           </div>
           
           <div className="flex-1 min-w-0">
-            <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start justify-between gap-2">
               <p className={`text-sm font-medium ${todo.status === 'completed' ? 'line-through text-gray-500 dark:text-gray-500' : 'text-gray-900 dark:text-gray-200'}`}>
                 {todo.content}
               </p>
               
-              <div className="flex gap-1.5 flex-shrink-0">
+              <div className="flex gap-1 flex-shrink-0">
                 <Badge
                   variant="outline"
-                  className={`text-xs px-2 py-1 font-medium rounded-md ${getPriorityColor(todo.priority)}`}
+                  className={`text-xs px-1.5 py-0.5 font-medium rounded-md ${getPriorityColor(todo.priority)}`}
                 >
                   {todo.priority}
                 </Badge>
                 <Badge
                   variant="outline"
-                  className={`text-xs px-2 py-1 font-medium rounded-md ${getStatusColor(todo.status)}`}
+                  className={`text-xs px-1.5 py-0.5 font-medium rounded-md ${getStatusColor(todo.status)}`}
                 >
                   {todo.status.replace('_', ' ')}
                 </Badge>

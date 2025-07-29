@@ -9,7 +9,7 @@ import { markdown } from '@codemirror/lang-markdown';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { EditorView, Decoration } from '@codemirror/view';
 import { StateField, StateEffect, RangeSetBuilder } from '@codemirror/state';
-import { X, Save, Download, Maximize2, Minimize2, Eye, EyeOff } from 'lucide-react';
+import { X, Save, Download, Maximize2, Minimize2, Eye, EyeOff, Copy } from 'lucide-react';
 import { api } from '../utils/api';
 
 function CodeEditor({ file, onClose, projectPath }) {
@@ -21,6 +21,7 @@ function CodeEditor({ file, onClose, projectPath }) {
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [showDiff, setShowDiff] = useState(!!file.diffInfo);
   const [wordWrap, setWordWrap] = useState(false);
+  const [copySuccess, setCopySuccess] = useState(false);
 
   // Create diff highlighting
   const diffEffect = StateEffect.define();
@@ -210,6 +211,32 @@ function CodeEditor({ file, onClose, projectPath }) {
     URL.revokeObjectURL(url);
   };
 
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 2000); // Hide after 2 seconds
+    } catch (error) {
+      console.error('Failed to copy:', error);
+      // Fallback for older browsers
+      const textArea = document.createElement('textarea');
+      textArea.value = content;
+      textArea.style.position = 'fixed';
+      textArea.style.opacity = '0';
+      document.body.appendChild(textArea);
+      textArea.select();
+      try {
+        document.execCommand('copy');
+        setCopySuccess(true);
+        setTimeout(() => setCopySuccess(false), 2000);
+      } catch (err) {
+        console.error('Fallback copy failed:', err);
+        alert('Failed to copy to clipboard');
+      }
+      document.body.removeChild(textArea);
+    }
+  };
+
   const toggleFullscreen = () => {
     setIsFullscreen(!isFullscreen);
   };
@@ -317,6 +344,24 @@ function CodeEditor({ file, onClose, projectPath }) {
               title="Toggle theme"
             >
               <span className="text-lg md:text-base">{isDarkMode ? '☀️' : '🌙'}</span>
+            </button>
+            
+            <button
+              onClick={handleCopy}
+              className={`p-2 md:p-2 rounded-md min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center transition-colors ${
+                copySuccess 
+                  ? 'text-green-600 bg-green-50 dark:text-green-400 dark:bg-green-900/20' 
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800'
+              }`}
+              title="Copy to clipboard"
+            >
+              {copySuccess ? (
+                <svg className="w-5 h-5 md:w-4 md:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              ) : (
+                <Copy className="w-5 h-5 md:w-4 md:h-4" />
+              )}
             </button>
             
             <button
