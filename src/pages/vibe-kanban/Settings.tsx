@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import {
   Card,
   CardContent,
@@ -18,7 +18,7 @@ import { Label } from '../../components/vibe-kanban/ui/label';
 import { Alert, AlertDescription } from '../../components/vibe-kanban/ui/alert';
 import { Checkbox } from '../../components/vibe-kanban/ui/checkbox';
 import { Input } from '../../components/vibe-kanban/ui/input';
-import { Key, Loader2, Volume2 } from 'lucide-react';
+import { Key, Loader2, Volume2, Server, Plus, Play, Settings as SettingsIcon, Edit3, Trash2, X, Terminal, Globe, Zap } from 'lucide-react';
 import type { EditorType, SoundFile } from '../../lib/vibe-kanban/shared-types';
 import { cn } from '../../lib/vibe-kanban/utils';
 import {
@@ -40,6 +40,26 @@ export function Settings() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [showGitHubLogin, setShowGitHubLogin] = useState(false);
+  
+  // MCP Server states
+  const [mcpServers, setMcpServers] = useState<any[]>([]);
+  const [showMcpForm, setShowMcpForm] = useState(false);
+  const [editingMcpServer, setEditingMcpServer] = useState<any>(null);
+  const [mcpFormData, setMcpFormData] = useState({
+    name: '',
+    type: 'stdio',
+    scope: 'user',
+    config: {
+      command: '',
+      args: [] as string[],
+      env: {} as Record<string, string>,
+      url: '',
+      headers: {} as Record<string, string>,
+      timeout: 30000
+    }
+  });
+  const [mcpLoading, setMcpLoading] = useState(false);
+  const [mcpTestResults, setMcpTestResults] = useState<Record<string, any>>({});
 
   const playSound = async (soundFile: SoundFile) => {
     const audio = new Audio(`/api/sounds/${soundFile}.wav`);
@@ -86,6 +106,80 @@ export function Settings() {
 
     updateConfig({ onboarding_acknowledged: false });
   };
+
+  // MCP Server functions
+  const fetchMcpServers = async () => {
+    try {
+      const token = localStorage.getItem('auth-token');
+      const response = await fetch('/api/mcp/servers?scope=user', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setMcpServers(data.servers || []);
+      }
+    } catch (error) {
+      console.error('Error fetching MCP servers:', error);
+    }
+  };
+
+  const handleMcpTest = async (serverId: string) => {
+    try {
+      const token = localStorage.getItem('auth-token');
+      setMcpTestResults({ ...mcpTestResults, [serverId]: { loading: true } });
+      
+      const response = await fetch(`/api/mcp/servers/${serverId}/test?scope=user`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setMcpTestResults({ ...mcpTestResults, [serverId]: data.testResult });
+      }
+    } catch (error) {
+      setMcpTestResults({ 
+        ...mcpTestResults, 
+        [serverId]: { 
+          success: false, 
+          message: 'Test failed',
+          details: []
+        } 
+      });
+    }
+  };
+
+  const handleMcpDelete = async (serverId: string) => {
+    if (!confirm('Are you sure you want to delete this MCP server?')) return;
+    
+    try {
+      const token = localStorage.getItem('auth-token');
+      const response = await fetch(`/api/mcp/cli/remove/${serverId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (response.ok) {
+        await fetchMcpServers();
+      }
+    } catch (error) {
+      console.error('Error deleting MCP server:', error);
+    }
+  };
+
+  useEffect(() => {
+    fetchMcpServers();
+  }, []);
 
   const isAuthenticated = !!(config?.github?.username && config?.github?.token);
 
@@ -476,6 +570,109 @@ export function Settings() {
 
           <Card>
             <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
+                <Server className="w-5 h-5" />
+                MCP Servers
+              </CardTitle>
+              <CardDescription className="text-sm">
+                Model Context Protocol servers provide additional tools and data sources
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex justify-end">
+                <Button
+                  onClick={() => {
+                    setEditingMcpServer(null);
+                    setShowMcpForm(true);
+                  }}
+                  size="sm"
+                  className="bg-muted hover:bg-muted/80"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add MCP Server
+                </Button>
+              </div>
+
+              {mcpServers.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  No MCP servers configured
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {mcpServers.map((server) => (
+                    <div key={server.id} className="bg-muted/50 border border-border rounded-2xl p-4">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            {server.type === 'stdio' ? <Terminal className="w-4 h-4" /> :
+                             server.type === 'sse' ? <Zap className="w-4 h-4" /> :
+                             <Globe className="w-4 h-4" />}
+                            <span className="font-medium">{server.name}</span>
+                            <span className="text-xs bg-muted px-2 py-0.5 rounded-2xl">
+                              {server.type}
+                            </span>
+                          </div>
+                          <div className="text-sm text-muted-foreground space-y-1">
+                            {server.type === 'stdio' && server.config.command && (
+                              <div>Command: <code className="bg-muted px-1 rounded text-xs">{server.config.command}</code></div>
+                            )}
+                            {(server.type === 'sse' || server.type === 'http') && server.config.url && (
+                              <div>URL: <code className="bg-muted px-1 rounded text-xs">{server.config.url}</code></div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            onClick={() => handleMcpTest(server.id)}
+                            variant="ghost"
+                            size="sm"
+                            title="Test connection"
+                          >
+                            <Play className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            onClick={() => {
+                              setEditingMcpServer(server);
+                              setMcpFormData({
+                                name: server.name,
+                                type: server.type,
+                                scope: server.scope,
+                                config: { ...server.config }
+                              });
+                              setShowMcpForm(true);
+                            }}
+                            variant="ghost"
+                            size="sm"
+                          >
+                            <Edit3 className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            onClick={() => handleMcpDelete(server.id)}
+                            variant="ghost"
+                            size="sm"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                      {mcpTestResults[server.id] && (
+                        <div className={`mt-2 p-2 rounded-2xl text-xs ${
+                          mcpTestResults[server.id].success 
+                            ? 'bg-muted/50 text-muted-foreground border border-border' 
+                            : 'bg-muted/50 text-muted-foreground border border-border'
+                        }`}>
+                          <div className="font-medium">{mcpTestResults[server.id].message}</div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
               <CardTitle className="text-lg sm:text-xl">Safety & Disclaimers</CardTitle>
               <CardDescription className="text-sm">
                 Manage safety warnings and acknowledgments.
@@ -580,6 +777,173 @@ export function Settings() {
         {/* Spacer to prevent content from being hidden behind sticky button */}
         <div className="h-20"></div>
       </div>
+
+      {/* MCP Server Form Modal */}
+      {showMcpForm && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-card border border-border rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-4 border-b border-border">
+              <h3 className="text-lg font-medium">
+                {editingMcpServer ? 'Edit MCP Server' : 'Add MCP Server'}
+              </h3>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => {
+                  setShowMcpForm(false);
+                  setEditingMcpServer(null);
+                  setMcpFormData({
+                    name: '',
+                    type: 'stdio',
+                    scope: 'user',
+                    config: {
+                      command: '',
+                      args: [],
+                      env: {},
+                      url: '',
+                      headers: {},
+                      timeout: 30000
+                    }
+                  });
+                }}
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+            
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              setMcpLoading(true);
+              
+              try {
+                const token = localStorage.getItem('auth-token');
+                const response = await fetch('/api/mcp/cli/add', {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                  },
+                  body: JSON.stringify({
+                    name: mcpFormData.name,
+                    type: mcpFormData.type,
+                    command: mcpFormData.config?.command,
+                    args: mcpFormData.config?.args || [],
+                    url: mcpFormData.config?.url,
+                    headers: mcpFormData.config?.headers || {},
+                    env: mcpFormData.config?.env || {}
+                  })
+                });
+                
+                if (response.ok) {
+                  await fetchMcpServers();
+                  setShowMcpForm(false);
+                }
+              } catch (error) {
+                console.error('Error saving MCP server:', error);
+              } finally {
+                setMcpLoading(false);
+              }
+            }} className="p-4 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label>Server Name *</Label>
+                  <Input
+                    value={mcpFormData.name}
+                    onChange={(e) => setMcpFormData(prev => ({...prev, name: e.target.value}))}
+                    placeholder="my-server"
+                    required
+                  />
+                </div>
+                
+                <div>
+                  <Label>Transport Type *</Label>
+                  <Select 
+                    value={mcpFormData.type} 
+                    onValueChange={(value) => setMcpFormData(prev => ({...prev, type: value}))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="stdio">stdio</SelectItem>
+                      <SelectItem value="sse">SSE</SelectItem>
+                      <SelectItem value="http">HTTP</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {mcpFormData.type === 'stdio' && (
+                <div className="space-y-4">
+                  <div>
+                    <Label>Command *</Label>
+                    <Input
+                      value={mcpFormData.config.command}
+                      onChange={(e) => setMcpFormData(prev => ({
+                        ...prev,
+                        config: { ...prev.config, command: e.target.value }
+                      }))}
+                      placeholder="/path/to/mcp-server"
+                      required
+                    />
+                  </div>
+                  
+                  <div>
+                    <Label>Arguments (one per line)</Label>
+                    <textarea
+                      value={mcpFormData.config.args?.join('\n') || ''}
+                      onChange={(e) => setMcpFormData(prev => ({
+                        ...prev,
+                        config: { ...prev.config, args: e.target.value.split('\n').filter(arg => arg.trim()) }
+                      }))}
+                      className="w-full px-3 py-2 border border-border bg-background rounded-2xl focus:ring-ring focus:border-ring"
+                      rows={3}
+                      placeholder="--api-key&#10;abc123"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {(mcpFormData.type === 'sse' || mcpFormData.type === 'http') && (
+                <div>
+                  <Label>URL *</Label>
+                  <Input
+                    value={mcpFormData.config.url}
+                    onChange={(e) => setMcpFormData(prev => ({
+                      ...prev,
+                      config: { ...prev.config, url: e.target.value }
+                    }))}
+                    placeholder="https://api.example.com/mcp"
+                    type="url"
+                    required
+                  />
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-4">
+                <Button type="button" variant="outline" onClick={() => setShowMcpForm(false)}>
+                  Cancel
+                </Button>
+                <Button 
+                  type="submit" 
+                  disabled={mcpLoading}
+                  className="bg-muted hover:bg-muted/80"
+                >
+                  {mcpLoading ? 'Saving...' : (editingMcpServer ? 'Update Server' : 'Add Server')}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      <GitHubLoginDialog
+        open={showGitHubLogin}
+        onOpenChange={setShowGitHubLogin}
+        onSuccess={() => {
+          setShowGitHubLogin(false);
+        }}
+      />
     </div>
   );
 }

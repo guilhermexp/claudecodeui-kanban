@@ -1,9 +1,24 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { GitBranch, GitCommit, Plus, Minus, RefreshCw, Check, X, ChevronDown, ChevronRight, Info, History, FileText, Mic, MicOff, Sparkles, Download, RotateCcw, Trash2, AlertTriangle, Upload } from 'lucide-react';
+import { GitBranch, GitCommit, Plus, RefreshCw, Check, X, ChevronDown, ChevronRight, Info, History, FileText, Sparkles, Download, Trash2, AlertTriangle, Upload } from 'lucide-react';
 import { MicButton } from './MicButton.jsx';
 import { authenticatedFetch } from '../utils/api';
 
 function GitPanel({ selectedProject, isMobile, isVisible = false }) {
+  // Error state for user-friendly messages
+  const [errorMessage, setErrorMessage] = useState(null);
+  const errorTimeoutRef = useRef(null);
+  
+  // Helper function to show error with auto-dismiss
+  const showError = (message) => {
+    setErrorMessage(message);
+    if (errorTimeoutRef.current) {
+      clearTimeout(errorTimeoutRef.current);
+    }
+    errorTimeoutRef.current = setTimeout(() => {
+      setErrorMessage(null);
+    }, 5000); // Auto-dismiss after 5 seconds
+  };
+  
   const [gitStatus, setGitStatus] = useState(null);
   const [gitDiff, setGitDiff] = useState({});
   const [isLoading, setIsLoading] = useState(false);
@@ -55,25 +70,30 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
     };
     
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      if (errorTimeoutRef.current) {
+        clearTimeout(errorTimeoutRef.current);
+      }
+    };
   }, []);
 
   const fetchGitStatus = async () => {
     if (!selectedProject || !isVisible) return;
     
-    console.log('Fetching git status for project:', selectedProject.name, 'path:', selectedProject.path);
+    // Fetching git status
     
     setIsLoading(true);
     try {
       const response = await authenticatedFetch(`/api/git/status?project=${encodeURIComponent(selectedProject.name)}`);
       const data = await response.json();
       
-      console.log('Git status response:', data);
+      // Git status received
       
       if (data.error) {
         // Only log non-repository errors as warnings instead of errors to reduce console noise
         if (data.error.includes('not a git repository')) {
-          console.warn('Git status info:', data.error);
+          // Not a git repository
         } else {
           console.error('Git status error:', data.error);
         }
@@ -157,6 +177,7 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
         fetchGitStatus(); // Refresh status after branch switch
       } else {
         console.error('Failed to switch branch:', data.error);
+        showError(`Failed to switch branch: ${data.error}`);
       }
     } catch (error) {
       console.error('Error switching branch:', error);
@@ -187,6 +208,7 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
         fetchGitStatus(); // Refresh status
       } else {
         console.error('Failed to create branch:', data.error);
+        showError(`Failed to create branch: ${data.error}`);
       }
     } catch (error) {
       console.error('Error creating branch:', error);
@@ -213,6 +235,7 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
         fetchRemoteStatus();
       } else {
         console.error('Fetch failed:', data.error);
+        showError(`Fetch failed: ${data.error}`);
       }
     } catch (error) {
       console.error('Error fetching from remote:', error);
@@ -239,7 +262,7 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
         fetchRemoteStatus();
       } else {
         console.error('Pull failed:', data.error);
-        // TODO: Show user-friendly error message
+        showError(`Pull failed: ${data.error}`);
       }
     } catch (error) {
       console.error('Error pulling from remote:', error);
@@ -266,7 +289,7 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
         fetchRemoteStatus();
       } else {
         console.error('Push failed:', data.error);
-        // TODO: Show user-friendly error message
+        showError(`Push failed: ${data.error}`);
       }
     } catch (error) {
       console.error('Error pushing to remote:', error);
@@ -294,7 +317,7 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
         fetchRemoteStatus();
       } else {
         console.error('Publish failed:', data.error);
-        // TODO: Show user-friendly error message
+        showError(`Publish failed: ${data.error}`);
       }
     } catch (error) {
       console.error('Error publishing branch:', error);
@@ -325,6 +348,7 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
         fetchGitStatus();
       } else {
         console.error('Discard failed:', data.error);
+        showError(`Failed to discard changes: ${data.error}`);
       }
     } catch (error) {
       console.error('Error discarding changes:', error);
@@ -353,6 +377,7 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
         fetchGitStatus();
       } else {
         console.error('Delete failed:', data.error);
+        showError(`Failed to delete file: ${data.error}`);
       }
     } catch (error) {
       console.error('Error deleting untracked file:', error);
@@ -455,6 +480,7 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
         setCommitMessage(data.message);
       } else {
         console.error('Failed to generate commit message:', data.error);
+        showError(`Failed to generate commit message: ${data.error}`);
       }
     } catch (error) {
       console.error('Error generating commit message:', error);
@@ -527,6 +553,7 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
         fetchRemoteStatus();
       } else {
         console.error('Commit failed:', data.error);
+        showError(`Commit failed: ${data.error}`);
       }
     } catch (error) {
       console.error('Error committing changes:', error);
@@ -1219,6 +1246,32 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Error Message Banner */}
+      {errorMessage && (
+        <div className="fixed top-4 right-4 left-4 md:left-auto md:max-w-md z-50 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 shadow-lg">
+          <div className="flex items-start justify-between">
+            <div className="flex items-start">
+              <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400 mt-0.5 mr-3" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-red-800 dark:text-red-200">Error</p>
+                <p className="text-sm text-red-600 dark:text-red-300 mt-1">{errorMessage}</p>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                setErrorMessage(null);
+                if (errorTimeoutRef.current) {
+                  clearTimeout(errorTimeoutRef.current);
+                }
+              }}
+              className="ml-4 text-red-400 hover:text-red-600 dark:hover:text-red-300"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
         </div>
       )}

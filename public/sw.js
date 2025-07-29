@@ -41,7 +41,7 @@ self.addEventListener('fetch', event => {
           return response;
         })
         .catch(error => {
-          console.log('API fetch failed:', error);
+          // API fetch failed - returning error
           // Could return cached data here if appropriate
           throw error;
         })
@@ -76,7 +76,7 @@ self.addEventListener('fetch', event => {
         });
       })
       .catch(error => {
-        console.log('Fetch failed; returning offline page instead.', error);
+        // Fetch failed; returning offline page instead
         // Return offline page for navigation requests
         if (event.request.destination === 'document') {
           return caches.match('/index.html');
@@ -93,7 +93,7 @@ self.addEventListener('activate', event => {
       return Promise.all(
         cacheNames.map(cacheName => {
           if (cacheName !== CACHE_NAME && cacheName !== DYNAMIC_CACHE) {
-            console.log('Deleting old cache:', cacheName);
+            // Deleting old cache
             return caches.delete(cacheName);
           }
         })
