@@ -733,9 +733,12 @@ function Sidebar({
                     <div className="md:hidden">
                       <div
                         className={cn(
-                          "p-3 mx-3 my-1 rounded-lg bg-card border border-border active:scale-[0.98] transition-all duration-150 relative",
+                          "p-3 mx-3 my-1 rounded-lg border border-border active:scale-[0.98] transition-all duration-150 relative",
+                          isVibeKanbanProject(project) && !isSelected && "bg-gray-100 dark:bg-gray-800/50",
+                          !isVibeKanbanProject(project) && !isSelected && "bg-card",
                           isSelected && "bg-accent",
-                          isStarred && !isSelected && "bg-yellow-50/50 dark:bg-yellow-900/10"
+                          isStarred && !isSelected && !isVibeKanbanProject(project) && "bg-blue-50/30 dark:bg-blue-900/10",
+                          isStarred && !isSelected && isVibeKanbanProject(project) && "bg-gray-200 dark:bg-gray-800/70"
                         )}
                         onClick={() => {
                           // On mobile, just toggle the folder - don't select the project
@@ -830,7 +833,7 @@ function Sidebar({
                                   className={cn(
                                     "w-8 h-8 rounded-lg flex items-center justify-center active:scale-90 transition-all duration-150 border",
                                     isStarred 
-                                      ? "bg-yellow-500/10 dark:bg-yellow-900/30 border-yellow-200 dark:border-yellow-800" 
+                                      ? "bg-blue-500/10 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800" 
                                       : "bg-gray-500/10 dark:bg-gray-900/30 border-gray-200 dark:border-gray-800"
                                   )}
                                   onClick={(e) => {
@@ -843,7 +846,7 @@ function Sidebar({
                                   <Star className={cn(
                                     "w-4 h-4 transition-colors",
                                     isStarred 
-                                      ? "text-yellow-600 dark:text-yellow-400 fill-current" 
+                                      ? "text-blue-600 dark:text-blue-400 fill-current" 
                                       : "text-gray-600 dark:text-gray-400"
                                   )} />
                                 </button>
@@ -887,9 +890,12 @@ function Sidebar({
                     <Button
                       variant="ghost"
                       className={cn(
-                        "hidden md:flex w-full justify-between px-3 py-2 h-auto font-normal hover:bg-accent hover:text-accent-foreground relative rounded-lg",
+                        "hidden md:flex w-full justify-between px-3 py-2 h-auto font-normal hover:text-accent-foreground relative rounded-lg",
+                        isVibeKanbanProject(project) && !isSelected && "bg-gray-100 dark:bg-gray-800/50 hover:bg-gray-200 dark:hover:bg-gray-800/60",
+                        !isVibeKanbanProject(project) && !isSelected && "hover:bg-accent",
                         isSelected && "bg-accent text-accent-foreground",
-                        isStarred && !isSelected && "bg-yellow-50/50 dark:bg-yellow-900/10 hover:bg-yellow-100/50 dark:hover:bg-yellow-900/20"
+                        isStarred && !isSelected && !isVibeKanbanProject(project) && "bg-blue-50/30 dark:bg-blue-900/10 hover:bg-blue-100/30 dark:hover:bg-blue-900/20",
+                        isStarred && !isSelected && isVibeKanbanProject(project) && "bg-gray-200 dark:bg-gray-800/70 hover:bg-gray-300 dark:hover:bg-gray-800/80"
                       )}
                       onClick={() => {
                         // Desktop behavior: select project and toggle
@@ -989,7 +995,7 @@ function Sidebar({
                               className={cn(
                                 "w-5 h-5 opacity-0 group-hover:opacity-100 transition-all duration-200 flex items-center justify-center rounded cursor-pointer touch:opacity-100",
                                 isStarred 
-                                  ? "hover:bg-yellow-50 dark:hover:bg-yellow-900/20 opacity-100" 
+                                  ? "hover:bg-blue-50 dark:hover:bg-blue-900/20 opacity-100" 
                                   : "hover:bg-accent"
                               )}
                               onClick={(e) => {
@@ -1001,7 +1007,7 @@ function Sidebar({
                               <Star className={cn(
                                 "w-3 h-3 transition-colors",
                                 isStarred 
-                                  ? "text-yellow-600 dark:text-yellow-400 fill-current" 
+                                  ? "text-blue-600 dark:text-blue-400 fill-current" 
                                   : "text-muted-foreground"
                               )} />
                             </div>
