@@ -46,8 +46,7 @@ function MainContent({
 }) {
   const [editingFile, setEditingFile] = useState(null);
   const [openShellSessions, setOpenShellSessions] = useState(0);
-  const [shellTerminals, setShellTerminals] = useState([]);
-  const [activeShellTerminal, setActiveShellTerminal] = useState(null);
+  // Shell terminals state removed - single terminal mode only
 
   const handleFileOpen = (filePath, diffInfo = null) => {
     // Create a file object that CodeEditor expects
@@ -276,55 +275,7 @@ function MainContent({
           </div>
         </div>
         
-        {/* Shell Terminal Tabs - Only show when Shell tab is active */}
-        {activeTab === 'shell' && shellTerminals.length > 0 && (
-          <div className="flex items-center bg-muted border-t border-border overflow-x-auto scrollbar-hide mt-2">
-            {shellTerminals.map((term) => {
-              const isActive = term.key === activeShellTerminal;
-              return (
-                <button
-                  key={term.key}
-                  onClick={() => {
-                    // This will be handled by Shell component
-                    window.switchToShellTerminal?.(term.key);
-                  }}
-                  className={`px-3 py-1.5 text-sm border-r border-border transition-colors min-w-[140px] ${
-                    isActive 
-                      ? 'bg-background text-foreground' 
-                      : 'bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground'
-                  }`}
-                >
-                  <span className="flex items-center gap-2">
-                    <div className={`w-2 h-2 rounded-full ${term.isConnected ? 'bg-green-500' : 'bg-gray-500'}`} />
-                    <span className="flex flex-col items-start truncate max-w-[180px]">
-                      <span className="text-[10px] leading-tight text-gray-500 dark:text-gray-400 truncate w-full">{term.projectDisplayName || term.projectName || 'Project'}</span>
-                      <span className="text-xs leading-tight font-medium truncate w-full">{term.sessionSummary || 'New Session'}</span>
-                    </span>
-                    <span
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        window.closeShellTerminal?.(term.key);
-                      }}
-                      className="ml-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 cursor-pointer"
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.stopPropagation();
-                          window.closeShellTerminal?.(term.key);
-                        }
-                      }}
-                    >
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        )}
+        {/* Shell Terminal Tabs removed - single terminal mode only */}
       </div>
 
       {/* Content Area */}
@@ -360,8 +311,7 @@ function MainContent({
             selectedSession={selectedSession}
             isActive={activeTab === 'shell'}
             onSessionCountChange={setOpenShellSessions}
-            onTerminalsChange={setShellTerminals}
-            onActiveTerminalChange={setActiveShellTerminal}
+            // Multi-terminal callbacks removed
             onConnectionChange={onShellConnectionChange}
           />
         </div>
