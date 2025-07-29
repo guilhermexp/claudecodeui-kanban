@@ -65,7 +65,8 @@ function Sidebar({
   updateAvailable,
   latestVersion,
   currentVersion,
-  onShowVersionModal
+  onShowVersionModal,
+  onSidebarClose
 }) {
   const navigate = useNavigate();
   const [expandedProjects, setExpandedProjects] = useState(new Set());
@@ -512,6 +513,17 @@ function Sidebar({
             >
               <FolderPlus className="w-4 h-4" />
             </Button>
+            {onSidebarClose && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 hover:bg-accent hover:text-accent-foreground"
+                onClick={onSidebarClose}
+                title="Close sidebar"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            )}
           </div>
         </div>
         
