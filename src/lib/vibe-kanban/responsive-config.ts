@@ -56,14 +56,13 @@ export const getMainContainerClasses = (isPanelOpen: boolean) => {
 export const getKanbanSectionClasses = (isPanelOpen: boolean) => {
   if (!isPanelOpen) return 'w-full';
 
-  const overlayClasses = 'w-full opacity-50 pointer-events-none';
+  // Remove opacity and pointer-events for mobile to fix transparency issue
+  const overlayClasses = 'w-full';
   const sideBySideClasses = [
     `${PANEL_SIDE_BY_SIDE_BREAKPOINT}:flex-1`,
     `${PANEL_SIDE_BY_SIDE_BREAKPOINT}:min-w-0`,
     `${PANEL_SIDE_BY_SIDE_BREAKPOINT}:h-full`,
     `${PANEL_SIDE_BY_SIDE_BREAKPOINT}:overflow-y-auto`,
-    `${PANEL_SIDE_BY_SIDE_BREAKPOINT}:opacity-100`,
-    `${PANEL_SIDE_BY_SIDE_BREAKPOINT}:pointer-events-auto`,
   ].join(' ');
 
   return `${overlayClasses} ${sideBySideClasses}`;
