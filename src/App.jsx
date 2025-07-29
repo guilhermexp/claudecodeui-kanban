@@ -54,7 +54,7 @@ function AppContent() {
       activeTab: savedState[appStatePersistence.KEYS.ACTIVE_TAB] || 'shell',
       sidebarOpen: savedState[appStatePersistence.KEYS.SIDEBAR_OPEN] !== undefined 
         ? savedState[appStatePersistence.KEYS.SIDEBAR_OPEN] 
-        : false,
+        : true, // Default to true for better desktop experience
     };
   };
 
@@ -582,8 +582,8 @@ function AppContent() {
 
   return (
     <div className="fixed inset-0 flex bg-background">
-      {/* Fixed Desktop Sidebar */}
-      {!isMobile && (
+      {/* Desktop Sidebar - now respects sidebarOpen state */}
+      {!isMobile && sidebarOpen && (
         <div className="w-80 flex-shrink-0 border-r border-border bg-card">
           <div className="h-full overflow-y-auto">
             <Sidebar
@@ -602,6 +602,7 @@ function AppContent() {
               latestVersion={latestVersion}
               currentVersion={currentVersion}
               onShowVersionModal={() => setShowVersionModal(true)}
+              onSidebarClose={() => setSidebarOpen(false)}
             />
           </div>
         </div>
@@ -647,6 +648,7 @@ function AppContent() {
               latestVersion={latestVersion}
               currentVersion={currentVersion}
               onShowVersionModal={() => setShowVersionModal(true)}
+              onSidebarClose={() => setSidebarOpen(false)}
             />
           </div>
         </div>
@@ -664,6 +666,8 @@ function AppContent() {
           messages={messages}
           isMobile={isMobile}
           onMenuClick={() => setSidebarOpen(true)}
+          onSidebarOpen={() => setSidebarOpen(true)}
+          sidebarOpen={sidebarOpen}
           isLoading={isLoadingProjects}
           onInputFocusChange={setIsInputFocused}
           onSessionActive={markSessionAsActive}

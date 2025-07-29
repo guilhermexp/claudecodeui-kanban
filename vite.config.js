@@ -20,12 +20,16 @@ export default defineConfig(({ command, mode }) => {
       hmr: {
         protocol: 'ws',
         host: 'localhost',
-        port: 9000
+        port: 9000,
+        clientPort: 9000
       },
       // Permite requisições do ngrok
       strictPort: true,
       headers: {
-        'Access-Control-Allow-Origin': '*'
+        'Access-Control-Allow-Origin': '*',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
       },
       // Permite QUALQUER host do ngrok
       allowedHosts: [
