@@ -48,10 +48,18 @@ function AppContent() {
   // Load persisted state on mount
   const loadPersistedState = () => {
     const savedState = appStatePersistence.loadState();
+    // Check if we have recent chat state (within 30 minutes)
+    const chatState = savedState[appStatePersistence.KEYS.CHAT_MESSAGES];
+    const shouldRestoreSession = chatState && 
+      chatState.timestamp && 
+      (Date.now() - chatState.timestamp < 30 * 60 * 1000); // 30 minutes
+    
     return {
-      selectedProject: null, // Always start fresh - no persisted project
-      selectedSession: null, // Always start fresh - no persisted session
-      activeTab: savedState[appStatePersistence.KEYS.ACTIVE_TAB] || 'shell',
+      selectedProject: shouldRestoreSession ? savedState[appStatePersistence.KEYS.SELECTED_PROJECT] : null,
+      selectedSession: shouldRestoreSession ? savedState[appStatePersistence.KEYS.SELECTED_SESSION] : null,
+      activeTab: shouldRestoreSession && savedState[appStatePersistence.KEYS.ACTIVE_TAB] === 'chat' 
+        ? 'chat' 
+        : (savedState[appStatePersistence.KEYS.ACTIVE_TAB] || 'shell'),
       sidebarOpen: savedState[appStatePersistence.KEYS.SIDEBAR_OPEN] !== undefined 
         ? savedState[appStatePersistence.KEYS.SIDEBAR_OPEN] 
         : true, // Default to true for better desktop experience

@@ -4,7 +4,7 @@ import { ChevronDown, ChevronUp } from 'lucide-react';
 import TaskDetailsToolbar from '../TaskDetailsToolbar';
 
 function CollapsibleToolbar() {
-  const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
+  const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(true);
 
   return (
     <div className="border-b">
@@ -25,11 +25,9 @@ function CollapsibleToolbar() {
           )}
         </Button>
       </div>
-      {!isHeaderCollapsed && (
-        <div className="px-3 sm:px-4 pb-2 animate-in slide-in-from-top-2 duration-200">
-          <TaskDetailsToolbar />
-        </div>
-      )}
+      <div className={isHeaderCollapsed ? "hidden" : "px-3 sm:px-4 pb-2 animate-in slide-in-from-top-2 duration-200"}>
+        <TaskDetailsToolbar />
+      </div>
     </div>
   );
 }

@@ -11,6 +11,12 @@ async function spawnClaude(command, options = {}, ws) {
     let capturedSessionId = sessionId; // Track session ID throughout the process
     let sessionCreatedSent = false; // Track if we've already sent session-created event
     
+    console.log('🆕 === NEW CLAUDE SPAWN REQUEST ===');
+    console.log('🆕 Command:', command || '[No command - Interactive]');
+    console.log('🆕 SessionId:', sessionId || '[NEW SESSION]');
+    console.log('🆕 Resume:', resume);
+    console.log('🆕 Working Dir:', cwd || projectPath || process.cwd());
+    
     // Use tools settings passed from frontend, or defaults
     const settings = toolsSettings || {
       allowedTools: [],
@@ -213,20 +219,29 @@ async function spawnClaude(command, options = {}, ws) {
     console.log('🔍 Full command args:', JSON.stringify(args, null, 2));
     console.log('🔍 Final Claude command will be: claude ' + args.join(' '));
     
+    console.log('🚀 Spawning Claude process...');
     const claudeProcess = spawn('claude', args, {
       cwd: workingDir,
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env } // Inherit all environment variables
     });
     
+    console.log('✅ Claude process spawned, PID:', claudeProcess.pid);
+    
     // No temp files to attach anymore since we don't save images
     
     // Store process reference for potential abort
     const processKey = capturedSessionId || sessionId || Date.now().toString();
     activeClaudeProcesses.set(processKey, claudeProcess);
+    console.log('📌 Process stored with key:', processKey);
     
     // Handle stdout (streaming JSON responses)
+    let isFirstOutput = true;
     claudeProcess.stdout.on('data', (data) => {
+      if (isFirstOutput) {
+        console.log('🎉 First stdout data received!');
+        isFirstOutput = false;
+      }
       const rawOutput = data.toString();
       console.log('📤 Claude CLI stdout:', rawOutput);
       
@@ -242,18 +257,26 @@ async function spawnClaude(command, options = {}, ws) {
             capturedSessionId = response.session_id;
             console.log('📝 Captured session ID:', capturedSessionId);
             
+            // Check if Claude created a different session than requested
+            if (sessionId && response.session_id !== sessionId) {
+              console.log('⚠️ WARNING: Claude created new session instead of resuming!');
+              console.log('  Requested:', sessionId);
+              console.log('  Got:', response.session_id);
+            }
+            
             // Update process key with captured session ID
             if (processKey !== capturedSessionId) {
               activeClaudeProcesses.delete(processKey);
               activeClaudeProcesses.set(capturedSessionId, claudeProcess);
             }
             
-            // Send session-created event only once for new sessions
-            if (!sessionId && !sessionCreatedSent) {
+            // Send session-created event for all new sessions (even when resume fails)
+            if (!sessionCreatedSent) {
               sessionCreatedSent = true;
               ws.send(JSON.stringify({
                 type: 'session-created',
-                sessionId: capturedSessionId
+                sessionId: capturedSessionId,
+                wasResumeAttempt: !!sessionId // Flag to indicate this was a resume attempt
               }));
             }
           }
@@ -275,7 +298,12 @@ async function spawnClaude(command, options = {}, ws) {
     });
     
     // Handle stderr
+    let isFirstError = true;
     claudeProcess.stderr.on('data', (data) => {
+      if (isFirstError) {
+        console.log('⚠️ First stderr data received!');
+        isFirstError = false;
+      }
       console.error('Claude CLI stderr:', data.toString());
       ws.send(JSON.stringify({
         type: 'claude-error',
@@ -325,6 +353,7 @@ async function spawnClaude(command, options = {}, ws) {
     // Handle stdin for interactive mode
     if (command) {
       // For --print mode with arguments, we don't need to write to stdin
+      console.log('🔒 Closing stdin (--print mode with command)');
       claudeProcess.stdin.end();
     } else {
       // For interactive mode, we need to write the command to stdin if provided later

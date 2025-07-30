@@ -96,7 +96,7 @@ export function TaskDetailsPanel({
 
             {/* Tab Content */}
             <div
-              className={`flex-1 overflow-hidden flex flex-col ${activeTab === 'logs' ? 'p-4' : 'pt-4'}`}
+              className={`flex-1 overflow-hidden flex flex-col ${activeTab === 'logs' ? 'p-4 dark:bg-black' : 'pt-4'}`}
             >
               {activeTab === 'diffs' ? (
                 <DiffTab />
