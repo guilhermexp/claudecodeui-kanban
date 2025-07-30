@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '../ui/button';
 import {
   FolderOpen,
@@ -10,6 +10,18 @@ import {
 
 export function Navbar() {
   const location = useLocation();
+  const navigate = useNavigate();
+
+  // Função para lidar com o botão voltar
+  const handleBack = () => {
+    // Se estiver na página de chat do Vibe Kanban, volta para o Claude Code UI
+    if (location.pathname === '/vibe-kanban' || location.pathname === '/vibe-kanban/chat' || location.pathname === '/vibe-kanban/') {
+      navigate('/');
+    } else {
+      // Caso contrário, usa o histórico do navegador para voltar
+      navigate(-1);
+    }
+  };
 
   return (
     <>
@@ -18,14 +30,12 @@ export function Navbar() {
           <div className="flex items-center justify-between h-14 sm:h-16">
             <div className="flex items-center space-x-3 sm:space-x-6">
               <Button
-                asChild
                 variant="outline"
                 size="sm"
+                onClick={handleBack}
               >
-                <Link to="/">
-                  <ArrowLeft className="h-4 w-4" />
-                  <span className="ml-2">Voltar</span>
-                </Link>
+                <ArrowLeft className="h-4 w-4" />
+                <span className="ml-2">Voltar</span>
               </Button>
               <div className="hidden sm:flex items-center space-x-1">
                 <Button
@@ -87,13 +97,15 @@ export function Navbar() {
         {/* Mobile navigation dropdown */}
         <div className="mobile-nav-items hidden sm:hidden border-t border-border py-2">
           <div className="space-y-1 px-3">
-            <Link
-              to="/"
-              className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent"
+            <button
+              onClick={handleBack}
+              className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent w-full text-left"
             >
               <ArrowLeft className="h-4 w-4" />
-              Voltar ao Claude Code UI
-            </Link>
+              {location.pathname === '/vibe-kanban' || location.pathname === '/vibe-kanban/chat' || location.pathname === '/vibe-kanban/'
+                ? 'Voltar ao Claude Code UI' 
+                : 'Voltar'}
+            </button>
             <Link
               to="/vibe-kanban/chat"
               className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
