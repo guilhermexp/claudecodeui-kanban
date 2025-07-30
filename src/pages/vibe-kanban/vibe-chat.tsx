@@ -4,8 +4,10 @@ import { projectsApi, tasksApi, githubApi, templatesApi } from '../../lib/vibe-k
 import { Button } from '../../components/vibe-kanban/ui/button';
 import { MicButton } from '../../components/MicButton';
 import { ProjectForm } from '../../components/vibe-kanban/projects/project-form';
+import { TaskDetailsPanelWrapper } from '../../components/vibe-kanban/tasks/TaskDetailsPanelWrapper';
 import { EXECUTOR_TYPES, EXECUTOR_LABELS } from '../../lib/vibe-kanban/shared-types';
 import { useConfig } from '../../components/vibe-kanban/config-provider';
+import { cn } from '../../lib/utils';
 import { 
   FolderOpen, 
   GitBranch, 
@@ -20,7 +22,6 @@ import {
   Clock,
   Circle
 } from 'lucide-react';
-import { cn } from '../../lib/utils';
 
 interface Project {
   id: string;
@@ -87,6 +88,18 @@ export function VibeChat() {
   const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
   const [showProjectForm, setShowProjectForm] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  
+  // Task details panel state
+  const [showTaskDetails, setShowTaskDetails] = useState(false);
+  const [selectedTaskForDetails, setSelectedTaskForDetails] = useState<Task | null>(null);
+  const [panelWidth, setPanelWidth] = useState(() => {
+    const saved = localStorage.getItem('vibe-chat-panel-width');
+    const defaultWidth = window.innerWidth >= 1536 ? 600 : 
+                        window.innerWidth >= 1280 ? 500 : 
+                        window.innerWidth >= 1024 ? 450 : 400;
+    return saved ? parseInt(saved, 10) : defaultWidth;
+  });
+  const [isResizing, setIsResizing] = useState(false);
 
   // Load projects on mount and set default executor
   useEffect(() => {
@@ -330,9 +343,66 @@ export function VibeChat() {
     return project.name;
   };
 
+  // Handle task click to open panel
+  const handleTaskClick = (task: Task) => {
+    setSelectedTaskForDetails(task);
+    setShowTaskDetails(true);
+  };
+
+  // Handle resize
+  const handleResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+  };
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing) return;
+      
+      const newWidth = window.innerWidth - e.clientX;
+      const minWidth = 400;
+      const maxWidth = Math.min(window.innerWidth * 0.5, 1000);
+      
+      const clampedWidth = Math.min(Math.max(newWidth, minWidth), maxWidth);
+      setPanelWidth(clampedWidth);
+    };
+
+    const handleMouseUp = () => {
+      if (isResizing) {
+        setIsResizing(false);
+        localStorage.setItem('vibe-chat-panel-width', panelWidth.toString());
+      }
+    };
+
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isResizing, panelWidth]);
+
   return (
-    <div className="min-h-screen bg-background">
-      <div className="max-w-4xl mx-auto px-3 sm:px-4 py-3 sm:py-8">
+    <div className="min-h-screen bg-background flex">
+      {/* Main Content - responsive width */}
+      <div className={cn(
+        "flex-1 transition-all overflow-auto",
+        isResizing && "transition-none"
+      )} style={{
+        marginRight: showTaskDetails && window.innerWidth >= 1024 ? `${panelWidth}px` : 0,
+        transition: isResizing ? 'none' : 'margin-right 0.3s ease-in-out'
+      }}>
+        <div className={cn(
+          "mx-auto px-3 sm:px-4 py-3 sm:py-8 transition-all duration-300",
+          showTaskDetails && window.innerWidth >= 1024 ? "max-w-full" : "max-w-4xl"
+        )}>
         {/* Title */}
         <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-center mb-4 sm:mb-8 text-gray-900 dark:text-white">
           O que vamos programar a seguir?
@@ -601,7 +671,7 @@ export function VibeChat() {
                         <div
                           key={task.id}
                           className="p-3 sm:p-4 rounded-xl border border-border hover:bg-accent cursor-pointer transition-colors"
-                          onClick={() => navigate(`/vibe-kanban/projects/${task.project_id}/tasks/${task.id}`)}
+                          onClick={() => handleTaskClick(task)}
                         >
                           <div className="flex items-start justify-between gap-2">
                             <h3 className="font-medium text-sm sm:text-base text-foreground mb-1 flex-1">
@@ -722,7 +792,48 @@ export function VibeChat() {
           </div>
         </div>
 
+        </div>
       </div>
+      
+      {/* Task Details Panel */}
+      {showTaskDetails && window.innerWidth >= 1024 && (
+        <div 
+          className="fixed right-0 top-0 h-full shadow-xl border-l border-border bg-card"
+          style={{ width: `${panelWidth}px` }}
+        >
+          {/* Resize handle */}
+          <div 
+            className="absolute left-0 top-0 w-1 h-full cursor-col-resize hover:bg-primary/20 active:bg-primary/30 transition-colors"
+            onMouseDown={handleResize}
+          >
+            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-12 bg-border rounded-full" />
+          </div>
+          <div className="h-full relative">
+            <TaskDetailsPanelWrapper
+              task={selectedTaskForDetails as any}
+              projectId={selectedTaskForDetails?.project_id || ''}
+              onClose={() => {
+                setShowTaskDetails(false);
+                setSelectedTaskForDetails(null);
+              }}
+            />
+          </div>
+        </div>
+      )}
+      
+      {/* Mobile Task Details (full screen) */}
+      {showTaskDetails && window.innerWidth < 1024 && selectedTaskForDetails && (
+        <div className="fixed inset-0 z-50 bg-background">
+          <TaskDetailsPanelWrapper
+            task={selectedTaskForDetails as any}
+            projectId={selectedTaskForDetails.project_id}
+            onClose={() => {
+              setShowTaskDetails(false);
+              setSelectedTaskForDetails(null);
+            }}
+          />
+        </div>
+      )}
       
       {/* Project Form Modal */}
       <ProjectForm

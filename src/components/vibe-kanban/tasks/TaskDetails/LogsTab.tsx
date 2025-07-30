@@ -108,7 +108,7 @@ function LogsTab() {
     }
 
     return (
-      <div className="flex-1 overflow-y-auto min-h-0">
+      <div className="flex-1 overflow-y-auto min-h-0 dark:bg-black">
         <div className="mb-4">
           <p
             className={`text-lg font-semibold mb-2 ${isSetupFailed ? 'text-destructive' : ''}`}

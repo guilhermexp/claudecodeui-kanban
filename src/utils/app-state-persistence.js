@@ -86,12 +86,13 @@ export const appStatePersistence = {
   },
 
   // Save chat state
-  saveChatState: (sessionId, messages, inputValue) => {
+  saveChatState: (sessionId, messages, inputValue, scrollPosition = null) => {
     try {
       const chatState = {
         sessionId,
         messages,
         inputValue,
+        scrollPosition,
         timestamp: Date.now()
       };
       localStorage.setItem(appStatePersistence.KEYS.CHAT_MESSAGES, JSON.stringify(chatState));

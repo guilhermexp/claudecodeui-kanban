@@ -1444,8 +1444,32 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           
           // Try to restore saved chat state
           const savedState = appStatePersistence.loadChatState(selectedSession.id);
-          if (savedState && savedState.inputValue) {
-            setInput(savedState.inputValue);
+          if (savedState) {
+            // Restore input value
+            if (savedState.inputValue) {
+              setInput(savedState.inputValue);
+            }
+            
+            // Restore messages if they exist and we don't have session messages
+            if (savedState.messages && savedState.messages.length > 0 && messages.length === 0) {
+              setChatMessages(savedState.messages);
+            }
+            
+            // Restore scroll position after messages are rendered
+            if (savedState.scrollPosition) {
+              setTimeout(() => {
+                if (scrollContainerRef.current) {
+                  const { scrollTop, scrollHeight, clientHeight } = savedState.scrollPosition;
+                  // Calculate the ratio of scroll position
+                  const scrollRatio = scrollTop / (scrollHeight - clientHeight);
+                  // Apply the ratio to the new scroll height
+                  const newScrollHeight = scrollContainerRef.current.scrollHeight;
+                  const newClientHeight = scrollContainerRef.current.clientHeight;
+                  const newScrollTop = scrollRatio * (newScrollHeight - newClientHeight);
+                  scrollContainerRef.current.scrollTop = newScrollTop;
+                }
+              }, 100);
+            }
           }
         } else {
           // Reset the flag after handling system session change
@@ -1475,10 +1499,17 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
   }, [convertedMessages, sessionMessages, selectedSession]);
 
-  // Save chat state when messages or input changes
+  // Save chat state and scroll position when messages or input changes
   useEffect(() => {
     if (selectedSession?.id && (chatMessages.length > 0 || input.trim())) {
-      appStatePersistence.saveChatState(selectedSession.id, chatMessages, input);
+      // Get current scroll position
+      const scrollPosition = scrollContainerRef.current ? {
+        scrollTop: scrollContainerRef.current.scrollTop,
+        scrollHeight: scrollContainerRef.current.scrollHeight,
+        clientHeight: scrollContainerRef.current.clientHeight
+      } : null;
+      
+      appStatePersistence.saveChatState(selectedSession.id, chatMessages, input, scrollPosition);
     }
   }, [chatMessages, input, selectedSession]);
 

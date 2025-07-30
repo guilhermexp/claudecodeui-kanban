@@ -1,6 +1,6 @@
 import { Hammer } from 'lucide-react';
 import { Loader } from '../../../ui/loader';
-import MarkdownRenderer from '../../../ui/markdown-renderer';
+import MarkdownRendererCompact from '../../../ui/markdown-renderer-compact';
 import type { ExecutionProcess, WorktreeDiff } from '../../../../lib/vibe-kanban/shared-types';
 import DisplayConversationEntry from '../DisplayConversationEntry';
 import useNormalizedConversation from '../../../../../hooks/vibe-kanban/useNormalizedConversation';
@@ -58,7 +58,7 @@ export function NormalizedConversationViewer({
   }
 
   return (
-    <div>
+    <div className="dark:bg-black">
       {/* Display prompt if available */}
       {conversation.prompt && (
         <div className="flex items-start gap-3">
@@ -67,7 +67,7 @@ export function NormalizedConversationViewer({
           </div>
           <div className="flex-1 min-w-0">
             <div className="text-sm whitespace-pre-wrap text-foreground">
-              <MarkdownRenderer
+              <MarkdownRendererCompact
                 content={conversation.prompt}
                 className="whitespace-pre-wrap break-words"
               />

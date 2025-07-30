@@ -6,11 +6,31 @@ import {
   Settings,
   ArrowLeft,
   MessageSquare,
+  Sun,
+  Moon,
 } from 'lucide-react';
 
 export function Navbar() {
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Check if dark mode is enabled
+  const [isDarkMode, setIsDarkMode] = React.useState(() => {
+    return document.documentElement.classList.contains('dark');
+  });
+
+  // Toggle dark mode
+  const toggleDarkMode = () => {
+    if (isDarkMode) {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+      setIsDarkMode(false);
+    } else {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+      setIsDarkMode(true);
+    }
+  };
 
   // Função para lidar com o botão voltar
   const handleBack = () => {
@@ -76,8 +96,22 @@ export function Navbar() {
                 </Button>
               </div>
             </div>
-          {/* Mobile menu button */}
-          <div className="sm:hidden">
+            <div className="flex items-center gap-2">
+              {/* Theme Toggle */}
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={toggleDarkMode}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                {isDarkMode ? (
+                  <Sun className="h-5 w-5" />
+                ) : (
+                  <Moon className="h-5 w-5" />
+                )}
+              </Button>
+              {/* Mobile menu button */}
+              <div className="sm:hidden">
               <Button
                 variant="ghost"
                 size="icon"
@@ -91,6 +125,7 @@ export function Navbar() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
                 </svg>
               </Button>
+            </div>
             </div>
           </div>
         </div>

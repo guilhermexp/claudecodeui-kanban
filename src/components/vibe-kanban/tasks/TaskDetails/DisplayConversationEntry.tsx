@@ -1,6 +1,6 @@
 import { useContext, useMemo, useState } from 'react';
 import { DiffCard } from './DiffCard';
-import MarkdownRenderer from '../../ui/markdown-renderer';
+import MarkdownRendererCompact from '../../ui/markdown-renderer-compact';
 import {
   AlertCircle,
   Bot,
@@ -331,7 +331,7 @@ function DisplayConversationEntry({ entry, index, diffDeletable }: Props) {
               <div className={getContentClassName(entry.entry_type)}>
                 {isExpanded ? (
                   shouldRenderMarkdown(entry.entry_type) ? (
-                    <MarkdownRenderer
+                    <MarkdownRendererCompact
                       content={entry.content}
                       className="whitespace-pre-wrap break-words"
                     />
@@ -364,7 +364,7 @@ function DisplayConversationEntry({ entry, index, diffDeletable }: Props) {
           ) : (
             <div className={getContentClassName(entry.entry_type)}>
               {shouldRenderMarkdown(entry.entry_type) ? (
-                <MarkdownRenderer
+                <MarkdownRendererCompact
                   content={entry.content}
                   className="whitespace-pre-wrap break-words"
                 />
