@@ -40,10 +40,4 @@ sizes.forEach(size => {
   const filepath = path.join(__dirname, 'icons', filename);
   
   fs.writeFileSync(filepath, svgContent);
-  console.log(`Created ${filename}`);
 });
-
-console.log('\nSVG icons created! To convert to PNG, you can use:');
-console.log('1. Online converter like cloudconvert.com');
-console.log('2. If you have ImageMagick: convert icon.svg icon.png');
-console.log('3. If you have Inkscape: inkscape --export-type=png icon.svg');

@@ -22,7 +22,6 @@ class ShellSessionManager {
   // Get or create a shell session
   getOrCreateSession(sessionKey, projectPath, sessionId, bypassPermissions = false) {
     if (this.sessions.has(sessionKey)) {
-      console.log('📦 Reusing existing shell session:', sessionKey);
       // Cancel timeout since session is being reused
       this.cancelTimeout(sessionKey);
       
@@ -35,7 +34,6 @@ class ShellSessionManager {
       return session;
     }
 
-    console.log('🆕 Creating new shell session:', sessionKey);
     
     // Create new shell process
     const shellProcess = this.createShellProcess(projectPath, sessionId, bypassPermissions);
@@ -62,7 +60,6 @@ class ShellSessionManager {
 
   // Create the actual shell process
   createShellProcess(projectPath, sessionId, bypassPermissions) {
-    console.log('🔧 Creating shell process for:', projectPath);
     
     // This method is not used anymore since we create the process in index.js
     // Kept for future reference if needed
@@ -74,7 +71,6 @@ class ShellSessionManager {
     const session = this.sessions.get(sessionKey);
     if (session) {
       session.clients.add(ws);
-      console.log(`👥 Added client to session ${sessionKey}. Total clients: ${session.clients.size}`);
     }
   }
 
@@ -83,7 +79,6 @@ class ShellSessionManager {
     const session = this.sessions.get(sessionKey);
     if (session) {
       session.clients.delete(ws);
-      console.log(`👥 Removed client from session ${sessionKey}. Total clients: ${session.clients.size}`);
       
       // If no clients remain, start the timeout
       if (session.clients.size === 0) {
@@ -105,7 +100,6 @@ class ShellSessionManager {
       }, this.SESSION_TIMEOUT);
       
       this.timeouts.set(sessionKey, timeoutId);
-      console.log(`⏱️ Scheduled timeout for session ${sessionKey} (10 minutes)`);
     }
   }
 
@@ -114,7 +108,6 @@ class ShellSessionManager {
     if (this.timeouts.has(sessionKey)) {
       clearTimeout(this.timeouts.get(sessionKey));
       this.timeouts.delete(sessionKey);
-      console.log(`⏱️ Cancelled timeout for session ${sessionKey}`);
     }
   }
 
@@ -122,7 +115,6 @@ class ShellSessionManager {
   destroySession(sessionKey) {
     const session = this.sessions.get(sessionKey);
     if (session) {
-      console.log(`🗑️ Destroying shell session: ${sessionKey}`);
       
       // Kill the shell process
       if (session.process && !session.process.killed) {
@@ -165,7 +157,6 @@ class ShellSessionManager {
 
   // Clean up all sessions (for server shutdown)
   cleanup() {
-    console.log('🧹 Cleaning up all shell sessions...');
     for (const sessionKey of this.sessions.keys()) {
       this.destroySession(sessionKey);
     }

@@ -257,7 +257,6 @@ export function VibeChat() {
         return false;
       }
       if (file.size > 10 * 1024 * 1024) { // 10MB limit
-        console.warn(`File ${file.name} is too large (max 10MB)`);
         return false;
       }
       return true;

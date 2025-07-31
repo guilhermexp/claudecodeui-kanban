@@ -62,7 +62,6 @@ export function useAudioRecorder() {
       // Start recording
       recorder.start();
       setRecording(true);
-      console.log('Recording started');
     } catch (err) {
       console.error('Failed to start recording:', err);
       setError(err.message || 'Failed to start recording');
@@ -71,12 +70,10 @@ export function useAudioRecorder() {
   }, []);
 
   const stop = useCallback(() => {
-    console.log('Stop called, recorder state:', mediaRecorderRef.current?.state);
     
     try {
       if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
         mediaRecorderRef.current.stop();
-        console.log('Recording stopped');
       }
     } catch (err) {
       console.error('Error stopping recorder:', err);

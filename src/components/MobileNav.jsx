@@ -67,7 +67,6 @@ function MobileNav({ activeTab, setActiveTab, isInputFocused, isShellConnected }
       if (window.sendToActiveTerminal && typeof window.sendToActiveTerminal === 'function') {
         window.sendToActiveTerminal(text);
       } else {
-        console.warn('Terminal voice handler not available');
       }
     } else if (activeTab === 'chat') {
       // For chat, we need to set the text in the input
