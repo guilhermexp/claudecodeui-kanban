@@ -43,19 +43,10 @@ async function spawnClaude(command, options = {}, ws) {
     if (images && images.length > 0) {
       console.log(`📸 User provided ${images.length} image(s) with their message`);
       
-      // Send a warning to the UI that images aren't supported in CLI mode
-      ws.send(JSON.stringify({
-        type: 'claude-response',
-        data: {
-          type: 'info',
-          content: '⚠️ Note: Claude Code CLI does not currently support image input. The images you attached cannot be processed. To analyze images, please use the Claude web interface or API directly.'
-        }
-      }));
-      
-      // If there's a command, add a note about the images
+      // Add image URLs to the command
       if (command && command.trim()) {
-        const imageNote = `\n\n[Note: ${images.length} image(s) were attached to this message, but Claude Code CLI doesn't support image input. The images cannot be analyzed.]`;
-        const modifiedCommand = command + imageNote;
+        const imageUrls = images.map((img, index) => `![Image ${index + 1}](${img})`).join('\n');
+        const modifiedCommand = command + '\n\n' + imageUrls;
         
         // Update the command in args
         const printIndex = args.indexOf('--print');

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { projectsApi, tasksApi, githubApi, templatesApi } from '../../lib/vibe-kanban/api';
 import { Button } from '../../components/vibe-kanban/ui/button';
@@ -8,6 +8,7 @@ import { TaskDetailsPanelWrapper } from '../../components/vibe-kanban/tasks/Task
 import { EXECUTOR_TYPES, EXECUTOR_LABELS } from '../../lib/vibe-kanban/shared-types';
 import { useConfig } from '../../components/vibe-kanban/config-provider';
 import { cn } from '../../lib/utils';
+import { useDropzone } from 'react-dropzone';
 import { 
   FolderOpen, 
   GitBranch, 
@@ -20,7 +21,10 @@ import {
   Plus,
   Settings2,
   Clock,
-  Circle
+  Circle,
+  Image,
+  X,
+  Paperclip
 } from 'lucide-react';
 
 interface Project {
@@ -100,6 +104,11 @@ export function VibeChat() {
     return saved ? parseInt(saved, 10) : defaultWidth;
   });
   const [isResizing, setIsResizing] = useState(false);
+  
+  // Image upload state
+  const [attachedImages, setAttachedImages] = useState<File[]>([]);
+  const [uploadingImages, setUploadingImages] = useState(false);
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
 
   // Load projects on mount and set default executor
   useEffect(() => {
@@ -241,11 +250,117 @@ export function VibeChat() {
     }
   };
 
+  // Handle image files
+  const handleImageFiles = useCallback((files: File[]) => {
+    const validFiles = files.filter(file => {
+      if (!file.type.startsWith('image/')) {
+        return false;
+      }
+      if (file.size > 10 * 1024 * 1024) { // 10MB limit
+        console.warn(`File ${file.name} is too large (max 10MB)`);
+        return false;
+      }
+      return true;
+    });
+
+    if (validFiles.length > 0) {
+      setAttachedImages(prev => [...prev, ...validFiles].slice(0, 5)); // Max 5 images
+    }
+  }, []);
+
+  // Handle paste event for images
+  const handlePaste = useCallback(async (e: React.ClipboardEvent) => {
+    const items = Array.from(e.clipboardData.items);
+    const imageFiles: File[] = [];
+    
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) {
+          imageFiles.push(file);
+        }
+      }
+    }
+    
+    if (imageFiles.length > 0) {
+      handleImageFiles(imageFiles);
+    }
+  }, [handleImageFiles]);
+
+  // Setup dropzone
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    accept: {
+      'image/*': ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg']
+    },
+    maxSize: 10 * 1024 * 1024, // 10MB
+    maxFiles: 5,
+    onDrop: handleImageFiles,
+    noClick: true,
+    noKeyboard: true,
+  });
+
+  // Upload images and get URLs
+  const uploadImages = async (): Promise<string[]> => {
+    if (attachedImages.length === 0) return [];
+    
+    setUploadingImages(true);
+    const urls: string[] = [];
+    
+    try {
+      // Upload each image
+      for (const file of attachedImages) {
+        const formData = new FormData();
+        formData.append('image', file);
+        
+        const response = await fetch('/api/vibe-kanban/upload-image', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('auth-token')}`
+          },
+          body: formData
+        });
+        
+        if (!response.ok) {
+          throw new Error('Failed to upload image');
+        }
+        
+        const result = await response.json();
+        if (result.url) {
+          urls.push(result.url);
+        }
+      }
+      
+      return urls;
+    } catch (error) {
+      console.error('Image upload failed:', error);
+      return [];
+    } finally {
+      setUploadingImages(false);
+    }
+  };
+
+  // Remove attached image
+  const removeImage = (index: number) => {
+    setAttachedImages(prev => prev.filter((_, i) => i !== index));
+  };
+
   const handleCreateTask = async () => {
     if (!taskDescription?.trim() || !selectedProject || isCreatingTask) return;
     
     try {
       setIsCreatingTask(true);
+      
+      // Upload images and get URLs
+      let finalDescription = taskDescription?.trim() || '';
+      if (attachedImages.length > 0) {
+        const uploadedUrls = await uploadImages();
+        
+        if (uploadedUrls.length > 0) {
+          // Add image URLs to the description
+          const imageSection = '\n\nImagens anexadas:\n' + uploadedUrls.map((url, index) => `![Imagem ${index + 1}](${url})`).join('\n');
+          finalDescription += imageSection;
+        }
+      }
       
       // Generate automatic title from description (first 50 chars or first line)
       const firstLine = taskDescription?.trim().split('\n')[0] || '';
@@ -256,7 +371,7 @@ export function VibeChat() {
       const newTask = {
         project_id: selectedProject.id,
         title: autoTitle,
-        description: taskDescription?.trim() || null,
+        description: finalDescription,
         parent_task_attempt: null,
         executor: selectedExecutor ? {
           type: selectedExecutor,
@@ -267,8 +382,9 @@ export function VibeChat() {
       // Use createAndStart to create the task and immediately start it
       await tasksApi.createAndStart(selectedProject.id, newTask);
       
-      // Clear input and reload tasks
+      // Clear input and images
       setTaskDescription('');
+      setAttachedImages([]);
       await loadTasks();
       await loadAllTasks(); // Also reload all tasks
       
@@ -410,7 +526,11 @@ export function VibeChat() {
 
         {/* Main Input Card */}
         <div className="bg-card rounded-2xl shadow-sm border border-border mb-4 sm:mb-8">
-          <div className="p-4 sm:p-6">
+          <div {...getRootProps()} className={cn(
+            "p-4 sm:p-6 relative",
+            isDragActive && "bg-accent/10 border-2 border-dashed border-accent"
+          )}>
+            <input {...getInputProps()} />
             {!selectedProject && (
               <div className="mb-4 p-2 sm:p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg">
                 <p className="text-xs sm:text-sm text-yellow-800 dark:text-yellow-200">
@@ -423,10 +543,38 @@ export function VibeChat() {
               value={taskDescription}
               onChange={(e) => setTaskDescription(e.target.value)}
               onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
               placeholder="Descreva uma tarefa e pressione Cmd+Enter para criar"
               className="w-full min-h-[100px] sm:min-h-[120px] resize-none bg-transparent text-base sm:text-lg placeholder-muted-foreground focus:outline-none text-foreground"
               disabled={isCreatingTask || !selectedProject}
             />
+            
+            {/* Image preview */}
+            {attachedImages.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {attachedImages.map((file, index) => (
+                  <div key={index} className="relative group">
+                    <img 
+                      src={URL.createObjectURL(file)} 
+                      alt={`Attached ${index + 1}`}
+                      className="w-20 h-20 object-cover rounded-lg border border-border"
+                    />
+                    <button
+                      onClick={() => removeImage(index)}
+                      className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            {isDragActive && (
+              <div className="absolute inset-0 flex items-center justify-center bg-background/80 rounded-lg">
+                <p className="text-lg font-medium">Solte as imagens aqui...</p>
+              </div>
+            )}
           </div>
           
           {/* Controls Bar */}
@@ -592,21 +740,57 @@ export function VibeChat() {
 
               {/* Action Buttons */}
               <div className="flex items-center gap-2 ml-auto">
+                {/* Image Upload Button */}
+                <button
+                  onClick={() => document.getElementById('image-upload-input')?.click()}
+                  disabled={!selectedProject || attachedImages.length >= 5}
+                  className={cn(
+                    "p-1.5 sm:p-2 rounded-lg transition-colors relative",
+                    selectedProject && attachedImages.length < 5
+                      ? "bg-muted hover:bg-muted/80 text-foreground"
+                      : "bg-muted text-muted-foreground cursor-not-allowed"
+                  )}
+                  title={attachedImages.length >= 5 ? "Máximo de 5 imagens" : "Anexar imagem"}
+                >
+                  <Paperclip className="w-4 h-4 sm:w-5 sm:h-5" />
+                  {attachedImages.length > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs rounded-full w-4 h-4 flex items-center justify-center">
+                      {attachedImages.length}
+                    </span>
+                  )}
+                </button>
+                <input
+                  id="image-upload-input"
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files || []);
+                    handleImageFiles(files);
+                    e.target.value = ''; // Reset input
+                  }}
+                />
+
                 {/* Send Button */}
                 <button
                   onClick={handleCreateTask}
-                  disabled={!taskDescription?.trim() || isCreatingTask || !selectedProject}
+                  disabled={!taskDescription?.trim() || isCreatingTask || !selectedProject || uploadingImages}
                   className={cn(
-                    "p-1.5 sm:p-2 rounded-lg transition-colors",
-                    taskDescription?.trim() && selectedProject && !isCreatingTask
+                    "p-1.5 sm:p-2 rounded-lg transition-colors flex items-center",
+                    taskDescription?.trim() && selectedProject && !isCreatingTask && !uploadingImages
                       ? "bg-primary hover:bg-primary/90 text-primary-foreground"
                       : "bg-muted text-muted-foreground cursor-not-allowed"
                   )}
                   title="Criar tarefa (Cmd+Enter)"
                 >
-                  <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                  </svg>
+                  {isCreatingTask || uploadingImages ? (
+                    <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
+                  ) : (
+                    <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                    </svg>
+                  )}
                 </button>
 
                 {/* Mic Button */}

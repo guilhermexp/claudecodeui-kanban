@@ -1038,6 +1038,100 @@ const vibeProxy = new VibeKanbanProxy({
   circuitBreakerTimeout: 60000 // 1 minute
 });
 
+// Image upload endpoint for Vibe Kanban
+app.post('/api/vibe-kanban/upload-image', authenticateToken, async (req, res) => {
+  try {
+    const multer = (await import('multer')).default;
+    const path = (await import('path')).default;
+    const fs = (await import('fs')).promises;
+    const os = (await import('os')).default;
+    const crypto = (await import('crypto')).default;
+    
+    // Configure multer for image uploads
+    const storage = multer.diskStorage({
+      destination: async (req, file, cb) => {
+        const uploadDir = path.join(os.tmpdir(), 'vibe-kanban-uploads', String(req.user.id));
+        await fs.mkdir(uploadDir, { recursive: true });
+        cb(null, uploadDir);
+      },
+      filename: (req, file, cb) => {
+        const uniqueSuffix = crypto.randomBytes(6).toString('hex');
+        const ext = path.extname(file.originalname);
+        cb(null, `image-${Date.now()}-${uniqueSuffix}${ext}`);
+      }
+    });
+    
+    const upload = multer({
+      storage: storage,
+      limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+      fileFilter: (req, file, cb) => {
+        if (file.mimetype.startsWith('image/')) {
+          cb(null, true);
+        } else {
+          cb(new Error('Only image files are allowed'));
+        }
+      }
+    }).single('image');
+    
+    upload(req, res, async (err) => {
+      if (err) {
+        console.error('Upload error:', err);
+        return res.status(400).json({ error: err.message });
+      }
+      
+      if (!req.file) {
+        return res.status(400).json({ error: 'No image file provided' });
+      }
+      
+      // Generate a URL that can be accessed by the client
+      // In production, you might want to upload to S3 or similar
+      // For now, we'll create a temporary URL endpoint
+      const imageId = path.basename(req.file.filename, path.extname(req.file.filename));
+      const imageUrl = `${req.protocol}://${req.get('host')}/api/vibe-kanban/images/${imageId}`;
+      
+      // Store file path in memory for retrieval (in production, use database)
+      if (!global.vibeKanbanImages) {
+        global.vibeKanbanImages = new Map();
+      }
+      global.vibeKanbanImages.set(imageId, {
+        path: req.file.path,
+        mimetype: req.file.mimetype,
+        userId: req.user.id,
+        uploadedAt: new Date()
+      });
+      
+      // Clean up old images after 1 hour
+      setTimeout(() => {
+        if (global.vibeKanbanImages.has(imageId)) {
+          const imageData = global.vibeKanbanImages.get(imageId);
+          fs.unlink(imageData.path).catch(err => console.error('Failed to delete image:', err));
+          global.vibeKanbanImages.delete(imageId);
+        }
+      }, 60 * 60 * 1000);
+      
+      res.json({ url: imageUrl });
+    });
+  } catch (error) {
+    console.error('Error handling image upload:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Serve uploaded images
+app.get('/api/vibe-kanban/images/:imageId', (req, res) => {
+  const imageId = req.params.imageId;
+  
+  if (!global.vibeKanbanImages || !global.vibeKanbanImages.has(imageId)) {
+    return res.status(404).json({ error: 'Image not found' });
+  }
+  
+  const imageData = global.vibeKanbanImages.get(imageId);
+  
+  // Send the image file
+  res.contentType(imageData.mimetype);
+  res.sendFile(imageData.path);
+});
+
 // Proxy VibeKanban API requests to Rust backend
 app.use('/api/vibe-kanban', express.json(), async (req, res) => {
   try {
