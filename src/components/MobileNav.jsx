@@ -116,8 +116,8 @@ function MobileNav({ activeTab, setActiveTab, isInputFocused, isShellConnected }
           );
         })}
         
-        {/* Voice button - show when shell is connected OR when in chat tab */}
-        {((activeTab === 'shell' && isShellConnected) || activeTab === 'chat') && (
+        {/* Voice button - show when in shell tab OR when in chat tab */}
+        {(activeTab === 'shell' || activeTab === 'chat') && (
           <MicButton 
             onTranscript={handleVoiceTranscript}
             className="p-3 rounded-2xl min-h-[44px] min-w-[44px] bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700"
