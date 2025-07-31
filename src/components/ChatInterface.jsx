@@ -1107,7 +1107,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   });
   const [chatMessages, setChatMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [currentSessionId, setCurrentSessionId] = useState(selectedSession?.id || null);
+  const [currentSessionId, setCurrentSessionId] = useState(() => selectedSession?.id || null);
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [sessionMessages, setSessionMessages] = useState([]);
   const [isLoadingSessionMessages, setIsLoadingSessionMessages] = useState(false);
@@ -1476,8 +1476,10 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           setIsSystemSessionChange(false);
         }
       } else {
-        // Don't clear messages immediately to avoid flashing
+        // Clear everything for new session
         setCurrentSessionId(null);
+        setSessionMessages([]);
+        setChatMessages([]);
         // Reset context window when no session
         setContextWindowPercentage(null);
         setAutoCompactNotification(null);
@@ -1489,13 +1491,13 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
 
   // Update chatMessages when convertedMessages changes
   useEffect(() => {
-    if (sessionMessages.length > 0) {
+    if (!selectedSession) {
+      // Clear messages when no session is selected (new session)
+      setChatMessages([]);
+    } else if (sessionMessages.length > 0) {
       // Don't trigger transition animation, it's causing the flashing
       setChatMessages(convertedMessages);
       // NO AUTO SCROLL - user controls their own scrolling
-    } else if (!selectedSession) {
-      // Only clear messages when no session is selected
-      setChatMessages([]);
     }
   }, [convertedMessages, sessionMessages, selectedSession]);
 
@@ -1542,6 +1544,17 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       }
     }
   }, [selectedProject?.name]);
+  
+  // Clear input when starting a new session
+  useEffect(() => {
+    if (!selectedSession && currentSessionId === null) {
+      setInput('');
+      // Also clear the saved draft for new sessions
+      if (selectedProject) {
+        safeLocalStorage.removeItem(`draft_input_${selectedProject.name}`);
+      }
+    }
+  }, [selectedSession, currentSessionId, selectedProject]);
 
   // Smart message filtering to prevent session bleeding while preserving continuity
   const isMessageRelevant = useCallback((message) => {
@@ -1583,8 +1596,12 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           // Reset context window for new session
           setContextWindowPercentage(null);
           setAutoCompactNotification(null);
-          if (latestMessage.sessionId && !currentSessionId) {
-            sessionStorage.setItem('pendingSessionId', latestMessage.sessionId);
+          if (latestMessage.sessionId) {
+            if (!currentSessionId) {
+              // New session - update currentSessionId immediately
+              setCurrentSessionId(latestMessage.sessionId);
+              sessionStorage.setItem('pendingSessionId', latestMessage.sessionId);
+            }
             
             // Session Protection: Replace temporary "new-session-*" identifier with real session ID
             // This maintains protection continuity - no gap between temp ID and real ID

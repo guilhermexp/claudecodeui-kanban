@@ -144,10 +144,10 @@ async function spawnClaude(command, options = {}, ws) {
     
     // Add model for new sessions
     if (!resume) {
-      // Get model from message or default to sonnet
-      const model = message.model || 'sonnet';
-      args.push('--model', model);
-      console.log('🤖 Using model:', model);
+      // Get model from options or default to sonnet
+      const selectedModel = model || 'sonnet';
+      args.push('--model', selectedModel);
+      console.log('🤖 Using model:', selectedModel);
     }
     
     // Add permission mode if specified (works for both new and resumed sessions)

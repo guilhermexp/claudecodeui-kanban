@@ -372,7 +372,6 @@ function AppContent() {
   const handleNewSession = (project) => {
     setSelectedProject(project);
     setSelectedSession(null);
-    setMessages([]); // Clear messages for new session
     setActiveTab('chat'); // Switch to chat tab for new session
     navigate('/');
     if (isMobile) {
