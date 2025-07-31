@@ -337,8 +337,8 @@ function MainContent({
             selectedSession={selectedSession}
             isActive={activeTab === 'shell'}
             onSessionCountChange={setOpenShellSessions}
-            // Multi-terminal callbacks removed
             onConnectionChange={onShellConnectionChange}
+            isMobile={isMobile}
           />
         </div>
         <div className={`h-full overflow-hidden ${activeTab === 'git' ? 'block' : 'hidden'}`}>

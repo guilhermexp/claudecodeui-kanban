@@ -2,9 +2,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { ClipboardAddon } from '@xterm/addon-clipboard';
+import { WebglAddon } from '@xterm/addon-webgl';
 import 'xterm/css/xterm.css';
 
-// CSS to remove xterm focus outline and scrollbar
+// CSS to remove xterm focus outline
 const xtermStyles = `
   .xterm .xterm-screen {
     outline: none !important;
@@ -14,37 +15,6 @@ const xtermStyles = `
   }
   .xterm-screen:focus {
     outline: none !important;
-  }
-  .scrollbar-hide {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-  }
-  .scrollbar-hide::-webkit-scrollbar {
-    display: none;
-  }
-  /* Make xterm background transparent */
-  .xterm {
-    background-color: transparent !important;
-    width: 100% !important;
-  }
-  .xterm .xterm-viewport {
-    background-color: transparent !important;
-    overflow-x: hidden !important;
-  }
-  .xterm .xterm-screen {
-    background-color: transparent !important;
-  }
-  .xterm .xterm-screen canvas {
-    background-color: transparent !important;
-  }
-  /* Prevent horizontal scrolling on mobile */
-  @media (max-width: 768px) {
-    .xterm {
-      font-size: 12px !important;
-    }
-    .xterm-viewport {
-      overflow-x: hidden !important;
-    }
   }
 `;
 
@@ -56,19 +26,11 @@ if (typeof document !== 'undefined') {
   document.head.appendChild(styleSheet);
 }
 
-// Import centralized session manager
-import shellSessionManager from '../lib/shellSessionManager';
+// Global store for shell sessions to persist across tab switches
+const shellSessions = new Map();
 
-// Local maps for DOM elements only
-const terminalElementsRef = new Map();
-
-// Session storage is now handled by shellSessionManager
-
-// Timeout management is now handled by shellSessionManager
-
-function Shell({ selectedProject, selectedSession, isActive, onSessionCountChange, onConnectionChange }) {
-  const terminalContainerRef = useRef(null);
-  const terminalElementsMapRef = useRef(terminalElementsRef); // Reference to global map
+function Shell({ selectedProject, selectedSession, isActive, onConnectionChange, isMobile }) {
+  const terminalRef = useRef(null);
   const terminal = useRef(null);
   const fitAddon = useRef(null);
   const ws = useRef(null);
@@ -76,94 +38,15 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
   const [isInitialized, setIsInitialized] = useState(false);
   const [isRestarting, setIsRestarting] = useState(false);
   const [lastSessionId, setLastSessionId] = useState(null);
-  const [lastProjectName, setLastProjectName] = useState(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isBypassingPermissions, setIsBypassingPermissions] = useState(false);
-  const bypassRef = useRef(false);
-  const isSwitchingContext = useRef(false);
-  const [isDraggingOver, setIsDraggingOver] = useState(false);
-  const dragCounter = useRef(0);
-  const [isMobile, setIsMobile] = useState(false);
-  // Single terminal state
-  const [sessionKey, setSessionKey] = useState(null);
-  const statusCheckInterval = useRef(null);
-  const initTimeoutRef = useRef(null);
-
-  // Get or create a terminal DOM element for a specific session
-  const getTerminalElement = (sessionKey) => {
-    if (!terminalElementsMapRef.current.has(sessionKey)) {
-      const element = document.createElement('div');
-      element.className = 'terminal-instance';
-      element.style.width = '100%';
-      element.style.height = '100%';
-      element.style.display = 'none'; // Hidden by default
-      terminalElementsMapRef.current.set(sessionKey, element);
-      
-      // Append to container if it exists
-      if (terminalContainerRef.current) {
-        terminalContainerRef.current.appendChild(element);
-      }
-    }
-    return terminalElementsMapRef.current.get(sessionKey);
-  };
-
-  // Show only the active terminal element
-  const showTerminalElement = (sessionKey) => {
-    terminalElementsMapRef.current.forEach((element, key) => {
-      element.style.display = key === sessionKey ? 'block' : 'none';
-    });
-  };
-
-  // Single terminal mode - no event subscriptions needed
-
-  // Keep bypassRef in sync with state
+  
+  // Notify parent about connection status changes
   useEffect(() => {
-    bypassRef.current = isBypassingPermissions;
-  }, [isBypassingPermissions]);
-
-  // Notify parent component when connection state changes
-  useEffect(() => {
-    if (onConnectionChange && typeof onConnectionChange === 'function') {
+    if (onConnectionChange) {
       onConnectionChange(isConnected);
     }
   }, [isConnected, onConnectionChange]);
-
-  // Add ESC key listener to close drag overlay
-  useEffect(() => {
-    const handleEscKey = (e) => {
-      if (e.key === 'Escape' && isDraggingOver) {
-        setIsDraggingOver(false);
-        dragCounter.current = 0;
-      }
-    };
-
-    if (isDraggingOver) {
-      document.addEventListener('keydown', handleEscKey);
-      return () => document.removeEventListener('keydown', handleEscKey);
-    }
-  }, [isDraggingOver]);
-
-  // Multi-terminal list management removed
-  // Multi-terminal switching removed - single terminal only
-
-  // Multi-terminal effects removed
-
-  // Detect mobile device
-  useEffect(() => {
-    const checkMobile = () => {
-      // Check for mobile devices based on screen width and touch capability
-      const isMobileDevice = window.innerWidth <= 768 && 
-                            ('ontouchstart' in window || navigator.maxTouchPoints > 0);
-      setIsMobile(isMobileDevice);
-    };
-
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
-
-  // Multi-terminal status checking removed
 
   // Connect to shell function
   const connectToShell = () => {
@@ -189,25 +72,55 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
       terminal.current.write('\x1b[2J\x1b[H'); // Clear screen and move cursor to home
     }
     
-    // Remove the session using session manager
-    const currentSessionKey = sessionKey || selectedSession?.id || `project-${selectedProject.name}`;
-    shellSessionManager.removeSession(currentSessionKey);
-    
-    // Update terminals list
-    updateTerminalsList();
-    
     setIsConnected(false);
     setIsConnecting(false);
   };
+
+  // Toggle bypass permissions
+  const toggleBypassPermissions = () => {
+    setIsBypassingPermissions(!isBypassingPermissions);
+    
+    // Send message to server if connected
+    if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+      ws.current.send(JSON.stringify({
+        type: 'bypassPermissions',
+        enabled: !isBypassingPermissions
+      }));
+    }
+  };
+
+
+  // Set up global function for MicButton to send to terminal
+  useEffect(() => {
+    if (isActive && isConnected) {
+      window.sendToActiveTerminal = (data) => {
+        if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+          ws.current.send(JSON.stringify({
+            type: 'input',
+            data: data
+          }));
+        }
+      };
+    }
+    
+    return () => {
+      // Clean up when component unmounts or becomes inactive
+      if (window.sendToActiveTerminal && isActive) {
+        delete window.sendToActiveTerminal;
+      }
+    };
+  }, [isActive, isConnected]);
 
   // Restart shell function
   const restartShell = () => {
     setIsRestarting(true);
     
     // Clear ALL session storage for this project to force fresh start
-    const sessions = shellSessionManager.getAllSessions();
-    const projectSessions = sessions.filter(s => s.key.includes(selectedProject.name));
-    projectSessions.forEach(s => shellSessionManager.removeSession(s.key));
+    const sessionKeys = Array.from(shellSessions.keys()).filter(key => 
+      key.includes(selectedProject.name)
+    );
+    sessionKeys.forEach(key => shellSessions.delete(key));
+    
     
     // Close existing WebSocket
     if (ws.current) {
@@ -217,6 +130,7 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
     
     // Clear and dispose existing terminal
     if (terminal.current) {
+      
       // Dispose terminal immediately without writing text
       terminal.current.dispose();
       terminal.current = null;
@@ -227,169 +141,66 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
     setIsConnected(false);
     setIsInitialized(false);
     
+    
     // Force re-initialization after cleanup
     setTimeout(() => {
       setIsRestarting(false);
     }, 200);
   };
 
-  // Watch for session/project changes and switch between shells
+  // Watch for session changes and restart shell
   useEffect(() => {
     const currentSessionId = selectedSession?.id || null;
-    const currentProjectName = selectedProject?.name || null;
     
-    // Check if session or project changed
-    const sessionChanged = currentSessionId !== lastSessionId;
-    const projectChanged = currentProjectName !== lastProjectName;
     
-    // Check if user clicked "New Session" (was a session, now null)
-    const isNewSession = lastSessionId !== null && currentSessionId === null && currentProjectName === lastProjectName;
-    
-    // Always ensure initialization for new sessions
-    if (currentSessionId === null && !sessionKey && !isInitialized) {
-      setIsInitialized(true);
-    }
-    
-    // Only react to session changes, not project changes alone
-    if (sessionChanged && (lastSessionId !== null || currentSessionId !== null)) {
-      // Store current shell state before switching (if connected)
-      if (isConnected && terminal.current) {
-        const oldKey = sessionKey || lastSessionId || `project-${lastProjectName}`;
-        
-        // Check if WebSocket is really connected before storing
-        const wsConnected = ws.current && ws.current.readyState === WebSocket.OPEN;
-        
-        // Save terminal buffer content
-        let bufferContent = '';
-        if (terminal.current && terminal.current.buffer && terminal.current.buffer.active) {
-          const buffer = terminal.current.buffer.active;
-          for (let i = 0; i < buffer.length; i++) {
-            const line = buffer.getLine(i);
-            if (line) {
-              bufferContent += line.translateToString(true) + '\n';
-            }
-          }
+    // Disconnect when session changes (user will need to manually reconnect)
+    if (lastSessionId !== null && lastSessionId !== currentSessionId && isInitialized) {
+      
+      // Disconnect from current shell
+      disconnectFromShell();
+      
+      // Clear stored sessions for this project
+      const allKeys = Array.from(shellSessions.keys());
+      allKeys.forEach(key => {
+        if (key.includes(selectedProject.name)) {
+          shellSessions.delete(key);
         }
-        
-        // Update session in session manager
-        shellSessionManager.updateSession(oldKey, {
-          terminal: terminal.current,
-          fitAddon: fitAddon.current,
-          ws: ws.current,
-          isConnected: wsConnected,
-          isBypassingPermissions: isBypassingPermissions,
-          sessionSummary: selectedSession?.summary || 'New Session',
-          projectDisplayName: selectedProject?.displayName || selectedProject?.name || 'Project',
-          projectName: lastProjectName,
-          sessionId: lastSessionId,
-          bufferContent: bufferContent.trim()
-        });
-        
-        // Update terminals list
-        updateTerminalsList();
-      }
-      
-      // Create key for new context
-      let newKey;
-      if (currentSessionId) {
-        newKey = currentSessionId;
-      } else if (isNewSession) {
-        // Use session manager to generate unique key
-        newKey = shellSessionManager.generateSessionKey(selectedProject, null, true);
-      } else {
-        newKey = shellSessionManager.generateSessionKey(selectedProject, selectedSession);
-      }
-      setSessionKey(newKey);
-      shellSessionManager.setActiveSession(newKey);
-      
-      // If it's a new session, ensure we create a fresh terminal
-      if (isNewSession) {
-        // Force creation of a new terminal by clearing the current one
-        terminal.current = null;
-        fitAddon.current = null;
-        ws.current = null;
-      }
-      
-      // Mark that we're switching context
-      isSwitchingContext.current = true;
-      
-      // Reset local refs to prepare for new/existing session
-      terminal.current = null;
-      fitAddon.current = null;
-      ws.current = null;
-      
-      // Force re-initialization which will check for existing session
-      setIsInitialized(false);
-      setIsConnected(false); // Reset connection state when switching
-
-      // Reset switching flag after a moment
-      setTimeout(() => {
-        isSwitchingContext.current = false;
-      }, 100);
+      });
     }
     
     setLastSessionId(currentSessionId);
-    setLastProjectName(currentProjectName);
-  }, [selectedSession?.id, selectedProject?.name, lastSessionId, lastProjectName, isConnected, isBypassingPermissions]);
+  }, [selectedSession?.id, isInitialized]);
 
   // Initialize terminal when component mounts
   useEffect(() => {
-    if (!terminalContainerRef.current || !selectedProject || isRestarting) {
+    
+    if (!terminalRef.current || !selectedProject || isRestarting) {
       return;
     }
-    
-    // Always allow initialization, even for new sessions
-    // This fixes the infinite loading issue
-    
-    // Set a timeout to force initialization if it takes too long
-    if (initTimeoutRef.current) {
-      clearTimeout(initTimeoutRef.current);
-    }
-    
-    initTimeoutRef.current = setTimeout(() => {
-      if (!isInitialized && !terminal.current) {
 
-        setIsInitialized(true);
-      }
-    }, 2000);
-
-    // Get or generate session key
-    const currentSessionKey = sessionKey || shellSessionManager.generateSessionKey(selectedProject, selectedSession);
+    // Create session key for this project/session combination
+    const sessionKey = selectedSession?.id || `project-${selectedProject.name}`;
     
     // Check if we have an existing session
-    let existingSession = shellSessionManager.getSession(currentSessionKey);
-    
-    // For new sessions (containing 'session-' in key), ensure we create fresh terminals
-    if (currentSessionKey.includes('session-') && currentSessionKey.includes(Date.now().toString())) {
-      existingSession = null;
-    }
-    
-    if (existingSession && existingSession.terminal && !terminal.current) {
+    const existingSession = shellSessions.get(sessionKey);
+    if (existingSession && !terminal.current) {
+      
       try {
         // Reuse existing terminal
         terminal.current = existingSession.terminal;
         fitAddon.current = existingSession.fitAddon;
         ws.current = existingSession.ws;
         
-        // Check if WebSocket is really connected
+        // Check if websocket is still connected
         const wsConnected = existingSession.ws && existingSession.ws.readyState === WebSocket.OPEN;
         setIsConnected(wsConnected);
-        setIsBypassingPermissions(existingSession.isBypassingPermissions || false);
         
-        // Get the terminal element for this session
-        const terminalElement = getTerminalElement(currentSessionKey);
-        
-        // Open terminal in its dedicated element
-        if (terminalElement) {
-          terminalElement.innerHTML = '';
-          terminal.current.open(terminalElement);
-          showTerminalElement(currentSessionKey);
+        // Reattach to DOM - dispose existing element first if needed
+        if (terminal.current.element && terminal.current.element.parentNode) {
+          terminal.current.element.parentNode.removeChild(terminal.current.element);
         }
         
-        // Restore buffer content if available
-        if (existingSession.bufferContent) {
-          terminal.current.write(existingSession.bufferContent);
-        }
+        terminal.current.open(terminalRef.current);
         
         setTimeout(() => {
           if (fitAddon.current) {
@@ -408,9 +219,8 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
         setIsInitialized(true);
         return;
       } catch (error) {
-        // Error: 'Error reusing terminal:', error
         // Clear the broken session and continue to create a new one
-        shellSessionManager.removeSession(currentSessionKey);
+        shellSessions.delete(sessionKey);
         terminal.current = null;
         fitAddon.current = null;
         ws.current = null;
@@ -421,10 +231,6 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
       return;
     }
 
-    // Prevent duplicate terminal creation
-    if (terminal.current) {
-      return;
-    }
 
     // Initialize new terminal
     terminal.current = new Terminal({
@@ -432,7 +238,7 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
       fontSize: isMobile ? 12 : 14,
       fontFamily: 'Menlo, Monaco, "Courier New", monospace',
       allowProposedApi: true, // Required for clipboard addon
-      allowTransparency: true,  // Enable transparency
+      allowTransparency: false,
       convertEol: true,
       scrollback: isMobile ? 5000 : 10000,
       tabStopWidth: 4,
@@ -443,11 +249,11 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
       // Enhanced theme with full 16-color ANSI support + true colors
       theme: {
         // Basic colors
-        background: 'rgba(30, 30, 30, 0.85)',  // Translucent background
+        background: '#1e1e1e',
         foreground: '#d4d4d4',
         cursor: '#ffffff',
-        cursorAccent: 'rgba(30, 30, 30, 0.85)',
-        selection: 'rgba(38, 79, 120, 0.7)',
+        cursorAccent: '#1e1e1e',
+        selection: '#264f78',
         selectionForeground: '#ffffff',
         
         // Standard ANSI colors (0-7)
@@ -483,37 +289,24 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
 
     fitAddon.current = new FitAddon();
     const clipboardAddon = new ClipboardAddon();
+    const webglAddon = new WebglAddon();
     
     terminal.current.loadAddon(fitAddon.current);
     terminal.current.loadAddon(clipboardAddon);
     
-    // Note: WebGL addon disabled to allow transparency
-    
-    // Get the terminal element for this session
-    const terminalElement = getTerminalElement(currentSessionKey);
-    
-    // Open terminal in its dedicated element
-    if (terminalElement) {
-      terminal.current.open(terminalElement);
-      showTerminalElement(currentSessionKey);
+    try {
+      terminal.current.loadAddon(webglAddon);
+    } catch (error) {
     }
+    
+    terminal.current.open(terminalRef.current);
 
     // Wait for terminal to be fully rendered, then fit
-    // Use multiple attempts to ensure proper rendering
-    let fitAttempts = 0;
-    const tryFit = () => {
-      if (fitAddon.current && terminalContainerRef.current && terminalContainerRef.current.offsetHeight > 0) {
+    setTimeout(() => {
+      if (fitAddon.current) {
         fitAddon.current.fit();
-        // Write a prompt if terminal is empty
-        if (terminal.current.buffer.active.length === 0) {
-          terminal.current.write('\r\n$ ');
-        }
-      } else if (fitAttempts < 10) {
-        fitAttempts++;
-        setTimeout(tryFit, 100);
       }
-    };
-    setTimeout(tryFit, 50);
+    }, 50);
 
     // Add keyboard shortcuts for copy/paste
     terminal.current.attachCustomKeyEventHandler((event) => {
@@ -523,84 +316,23 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
         return false;
       }
       
-      // Ctrl+V or Cmd+V for paste - handled by paste event listener
+      // Ctrl+V or Cmd+V for paste
       if ((event.ctrlKey || event.metaKey) && event.key === 'v') {
-        // Don't handle here, let the paste event handle it
-        return true;
+        navigator.clipboard.readText().then(text => {
+          if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+            ws.current.send(JSON.stringify({
+              type: 'input',
+              data: text
+            }));
+          }
+        }).catch(err => {
+          // Failed to read clipboard
+        });
+        return false;
       }
       
       return true;
     });
-    
-    // Add paste event listener for images and text
-    const handlePaste = async (e) => {
-      e.preventDefault();
-      
-      if (!ws.current || ws.current.readyState !== WebSocket.OPEN) {
-        // Warning: 'WebSocket not connected'
-        return;
-      }
-      
-      // Check for image data
-      const items = Array.from(e.clipboardData.items);
-      let hasImage = false;
-      
-      for (const item of items) {
-        if (item.type.startsWith('image/')) {
-          hasImage = true;
-          const file = item.getAsFile();
-          if (file) {
-            // Upload image and get path
-            try {
-              const formData = new FormData();
-              formData.append('file', file);
-              
-              const response = await fetch('/api/upload', {
-                method: 'POST',
-                headers: {
-                  'Authorization': `Bearer ${localStorage.getItem('auth-token')}`
-                },
-                body: formData
-              });
-              
-              if (!response.ok) {
-                throw new Error('Failed to upload image');
-              }
-              
-              const result = await response.json();
-              
-              // Send the file path to terminal
-              ws.current.send(JSON.stringify({
-                type: 'input',
-                data: result.path,
-                bypassPermissions: bypassRef.current
-              }));
-              
-              // Show success message in terminal
-              terminal.current.write(`\r\n\x1b[32m✓ Image uploaded: ${result.path}\x1b[0m\r\n`);
-            } catch (error) {
-              // Error: 'Error uploading image:', error
-              terminal.current.write(`\r\n\x1b[31m✗ Failed to upload image\x1b[0m\r\n`);
-            }
-          }
-        }
-      }
-      
-      // If no image, handle text paste
-      if (!hasImage) {
-        const text = e.clipboardData.getData('text/plain');
-        if (text) {
-          ws.current.send(JSON.stringify({
-            type: 'input',
-            data: text,
-            bypassPermissions: bypassRef.current
-          }));
-        }
-      }
-    };
-    
-    // Add paste event listener to the terminal element
-    terminalElement.addEventListener('paste', handlePaste);
     
     // Ensure terminal takes full space and notify backend of size
     setTimeout(() => {
@@ -619,34 +351,12 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
     
     setIsInitialized(true);
 
-    // For new terminals, ensure we start disconnected
-    setIsConnected(false);
-    
-    // Set session key
-    setSessionKey(currentSessionKey);
-    shellSessionManager.setActiveSession(currentSessionKey);
-    
-    // Check if we should auto-reconnect (after page refresh)
-    if (existingSession && existingSession.shouldReconnect) {
-      // Set bypass permissions if they were set before
-      setIsBypassingPermissions(existingSession.isBypassingPermissions || false);
-      
-      // Delay to ensure component is fully mounted
-      setTimeout(() => {
-        connectToShell();
-      }, 100); // Reduced delay for faster reconnection
-    }
-    
-    // Don't update terminals list here - only when connected
-    // This prevents creating tabs before user authorizes connection
-
     // Handle terminal input
     terminal.current.onData((data) => {
       if (ws.current && ws.current.readyState === WebSocket.OPEN) {
         ws.current.send(JSON.stringify({
           type: 'input',
-          data: data,
-          bypassPermissions: bypassRef.current
+          data: data
         }));
       }
     });
@@ -668,58 +378,30 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
       }
     });
 
-    if (terminalContainerRef.current) {
-      resizeObserver.observe(terminalContainerRef.current);
+    if (terminalRef.current) {
+      resizeObserver.observe(terminalRef.current);
     }
 
     return () => {
       resizeObserver.disconnect();
       
-      // Clear init timeout
-      if (initTimeoutRef.current) {
-        clearTimeout(initTimeoutRef.current);
-      }
-      
-      // Remove paste event listener
-      if (terminalElement) {
-        terminalElement.removeEventListener('paste', handlePaste);
-      }
-      
-      // Store session for reuse instead of disposing - but only if connected
+      // Store session for reuse instead of disposing
       if (terminal.current && selectedProject) {
+        const sessionKey = selectedSession?.id || `project-${selectedProject.name}`;
+        
         try {
-          // Check if WebSocket is really connected before storing
-          const wsConnected = ws.current && ws.current.readyState === WebSocket.OPEN;
+          shellSessions.set(sessionKey, {
+            terminal: terminal.current,
+            fitAddon: fitAddon.current,
+            ws: ws.current,
+            isConnected: ws.current && ws.current.readyState === WebSocket.OPEN
+          });
           
-          // Only store if actually connected
-          if (wsConnected) {
-            // Save terminal buffer content
-            let bufferContent = '';
-            if (terminal.current && terminal.current.buffer && terminal.current.buffer.active) {
-              const buffer = terminal.current.buffer.active;
-              for (let i = 0; i < buffer.length; i++) {
-                const line = buffer.getLine(i);
-                if (line) {
-                  bufferContent += line.translateToString(true) + '\n';
-                }
-              }
-            }
-            
-            shellSessionManager.updateSession(currentSessionKey, {
-              terminal: terminal.current,
-              fitAddon: fitAddon.current,
-              ws: ws.current,
-              isConnected: wsConnected,
-              isBypassingPermissions: isBypassingPermissions,
-              bufferContent: bufferContent.trim()
-            });
-          }
         } catch (error) {
-          // Error: 'Error storing shell session:', error
         }
       }
     };
-  }, [terminalContainerRef.current, selectedProject, selectedSession, isRestarting]);
+  }, [terminalRef.current, selectedProject, selectedSession, isRestarting]);
 
   // Fit terminal when tab becomes active
   useEffect(() => {
@@ -741,71 +423,6 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
     }, 100);
   }, [isActive, isInitialized]);
 
-  // Handle drag and drop
-  const handleDragEnter = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dragCounter.current++;
-    
-    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
-      setIsDraggingOver(true);
-    }
-  };
-
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-  };
-
-  const handleDragLeave = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dragCounter.current--;
-    
-    if (dragCounter.current === 0) {
-      setIsDraggingOver(false);
-    }
-  };
-
-  const handleDrop = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDraggingOver(false);
-    dragCounter.current = 0;
-
-    // Only process drop if terminal is connected
-    if (!isConnected || !ws.current || ws.current.readyState !== WebSocket.OPEN) {
-      // Warning: 'Terminal not connected. Cannot process dropped files.'
-      return;
-    }
-
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const files = Array.from(e.dataTransfer.files);
-      
-      // Build the full command with file paths
-      const filePaths = files.map(file => {
-        // In Electron, file.path contains the full path
-        // In browser, we only have file.name
-        const fullPath = file.path || file.name;
-        
-        // Escape spaces and special characters in path
-        if (fullPath.includes(' ') || fullPath.includes('(') || fullPath.includes(')')) {
-          return `"${fullPath}"`;
-        }
-        return fullPath;
-      });
-      
-      // Send all paths at once, separated by spaces
-      const pathsToInsert = filePaths.join(' ');
-      
-      ws.current.send(JSON.stringify({
-        type: 'input',
-        data: pathsToInsert,
-        bypassPermissions: bypassRef.current
-      }));
-    }
-  };
-
   // WebSocket connection function (called manually)
   const connectWebSocket = async () => {
     if (isConnecting || isConnected) return;
@@ -814,7 +431,7 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
       // Get authentication token
       const token = localStorage.getItem('auth-token');
       if (!token) {
-        // Error: 'No authentication token found for Shell WebSocket connection'
+        console.error('No authentication token found for Shell WebSocket connection');
         return;
       }
       
@@ -832,15 +449,15 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
         // If the config returns localhost but we're not on localhost, use current host but with API server port
         if (wsBaseUrl.includes('localhost') && !window.location.hostname.includes('localhost')) {
           const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-          // When using ngrok or similar proxy, WebSocket should use the same host and port
-          wsBaseUrl = `${protocol}//${window.location.host}`;
-
+          // For development, API server is typically on port 3002 when Vite is on 3001
+          const apiPort = window.location.port === '3001' ? '3002' : window.location.port;
+          wsBaseUrl = `${protocol}//${window.location.hostname}:${apiPort}`;
         }
       } catch (error) {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        // When using ngrok or similar proxy, use the same host and port
-        wsBaseUrl = `${protocol}//${window.location.host}`;
-
+        // For development, API server is typically on port 3002 when Vite is on 3001
+        const apiPort = window.location.port === '3001' ? '3002' : window.location.port;
+        wsBaseUrl = `${protocol}//${window.location.hostname}:${apiPort}`;
       }
       
       // Include token in WebSocket URL as query parameter
@@ -851,30 +468,6 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
       ws.current.onopen = () => {
         setIsConnected(true);
         setIsConnecting(false);
-        
-        // Update session in session manager when connected
-        const currentSessionKey = sessionKey || shellSessionManager.generateSessionKey(selectedProject, selectedSession);
-        
-        // Store project and session info at connection time
-        const projectName = selectedProject?.name || 'Unknown';
-        const projectDisplayName = selectedProject?.displayName || projectName;
-        const sessionSummary = selectedSession?.summary || 'New Session';
-        
-        shellSessionManager.setSession(currentSessionKey, {
-          terminal: terminal.current,
-          fitAddon: fitAddon.current,
-          ws: ws.current,
-          isConnected: true,
-          isBypassingPermissions: bypassRef.current,
-          sessionSummary: sessionSummary,
-          projectDisplayName: projectDisplayName,
-          projectName: projectName,
-          sessionId: selectedSession?.id,
-          bufferContent: '' // New session, no buffer yet
-        });
-        
-        // Update terminals list to reflect connected state
-        updateTerminalsList();
         
         // Wait for terminal to be ready, then fit and send dimensions
         setTimeout(() => {
@@ -887,26 +480,14 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
               const initPayload = {
                 type: 'init',
                 projectPath: selectedProject.fullPath || selectedProject.path,
-                sessionId: selectedSession?.id || sessionKey,
+                sessionId: selectedSession?.id,
                 hasSession: !!selectedSession,
                 cols: terminal.current.cols,
                 rows: terminal.current.rows,
-                bypassPermissions: bypassRef.current
+                bypassPermissions: isBypassingPermissions
               };
               
               ws.current.send(JSON.stringify(initPayload));
-              
-              // Send bypass state immediately after init if enabled
-              if (isBypassingPermissions) {
-                setTimeout(() => {
-                  if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-                    ws.current.send(JSON.stringify({
-                      type: 'bypassPermissions',
-                      enabled: true
-                    }));
-                  }
-                }, 50);
-              }
               
               // Also send resize message immediately after init
               setTimeout(() => {
@@ -926,7 +507,6 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
       ws.current.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          
           if (data.type === 'output') {
             // Check for URLs in the output and make them clickable
             const urlRegex = /(https?:\/\/[^\s\x1b\x07]+)/g;
@@ -941,17 +521,12 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
             
             // If URLs found, log them for potential opening
             
-            if (terminal.current && !terminal.current.disposed) {
-              terminal.current.write(output);
-            } else {
-              // Error: 'Terminal not available for writing'
-            }
+            terminal.current.write(output);
           } else if (data.type === 'url_open') {
             // Handle explicit URL opening requests from server
             window.open(data.url, '_blank');
           }
         } catch (error) {
-          // Error: 'Error processing shell message:', error
         }
       };
 
@@ -959,35 +534,11 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
         setIsConnected(false);
         setIsConnecting(false);
         
-        // Don't clear terminal content - keep it for reconnection
-        if (terminal.current && !isSwitchingContext.current) {
-          terminal.current.write('\r\n\x1b[1;31m[Connection closed]\x1b[0m\r\n');
+        // Clear terminal content when connection closes
+        if (terminal.current) {
+          terminal.current.clear();
+          terminal.current.write('\x1b[2J\x1b[H'); // Clear screen and move cursor to home
         }
-        
-        // Update the session state to disconnected but keep it in memory
-        const currentSessionKey = sessionKey || shellSessionManager.generateSessionKey(selectedProject, selectedSession);
-        const session = shellSessionManager.getSession(sessionKey);
-        if (session) {
-          // Save the current buffer content for reconnection
-          let bufferContent = '';
-          if (terminal.current && terminal.current.buffer && terminal.current.buffer.active) {
-            const buffer = terminal.current.buffer.active;
-            for (let i = 0; i < buffer.length; i++) {
-              const line = buffer.getLine(i);
-              if (line) {
-                bufferContent += line.translateToString(true) + '\n';
-              }
-            }
-          }
-          
-          shellSessionManager.updateSession(currentSessionKey, {
-            isConnected: false,
-            bufferContent: bufferContent.trim()
-          });
-        }
-        
-        // Update terminals list to reflect disconnected state
-        updateTerminalsList();
         
         // Don't auto-reconnect anymore - user must manually connect
       };
@@ -1001,6 +552,7 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
       setIsConnecting(false);
     }
   };
+
 
   if (!selectedProject) {
     return (
@@ -1018,183 +570,84 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
     );
   }
 
-  // Set up global function for voice input only
-  useEffect(() => {
-    // Keep voice input function for compatibility
-    window.sendToActiveTerminal = (text) => {
-      if (isConnected && ws.current && ws.current.readyState === WebSocket.OPEN) {
-        ws.current.send(JSON.stringify({
-          type: 'input',
-          data: text,
-          bypassPermissions: bypassRef.current
-        }));
-      } else {
-        // Warning: 'Terminal not connected. Cannot send voice input.'
-      }
-    };
-    
-    return () => {
-      delete window.sendToActiveTerminal;
-    };
-  }, [isConnected]);
-
   return (
     <div className="h-full flex flex-col bg-gray-900 w-full">
-      
       {/* Header */}
       <div className="flex-shrink-0 bg-gray-800 border-b border-gray-700 px-2 sm:px-4 py-2">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center min-w-0 flex-1">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2 flex-1 min-w-0">
             <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
-            <div className="ml-2 truncate">
-              {selectedSession && (
-                <span className="text-xs text-blue-300 truncate">
-                  ({selectedSession.summary.slice(0, isMobile ? 15 : 25)}...)
-                </span>
-              )}
-              {!selectedSession && (
-                <span className="text-xs text-gray-400">(New Session)</span>
-              )}
-              {!isInitialized && (
-                <span className="text-xs text-yellow-400">(Initializing...)</span>
-              )}
-              {isRestarting && (
-                <span className="text-xs text-blue-400">(Restarting...)</span>
-              )}
-            </div>
+            {selectedSession && !isMobile && (
+              <span className="text-xs text-blue-300 truncate">
+                ({selectedSession.summary.slice(0, 30)}...)
+              </span>
+            )}
+            {!selectedSession && !isMobile && (
+              <span className="text-xs text-gray-400">(New Session)</span>
+            )}
+            {!isInitialized && (
+              <span className="text-xs text-yellow-400">(Initializing...)</span>
+            )}
+            {isRestarting && (
+              <span className="text-xs text-blue-400">(Restarting...)</span>
+            )}
           </div>
-          <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+          <div className="flex items-center space-x-2 sm:space-x-3">
+            {/* Bypass Permissions Toggle */}
+            <button
+              onClick={toggleBypassPermissions}
+              className={`px-2 sm:px-3 py-1 text-xs rounded flex items-center space-x-1 transition-colors ${
+                isBypassingPermissions 
+                  ? 'bg-yellow-600 text-white hover:bg-yellow-700' 
+                  : 'bg-gray-600 text-gray-300 hover:bg-gray-700'
+              }`}
+              title={isBypassingPermissions ? "Disable bypass permissions" : "Enable bypass permissions"}
+            >
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                  d={isBypassingPermissions 
+                    ? "M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" 
+                    : "M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                  } 
+                />
+              </svg>
+              <span className="hidden sm:inline">{isBypassingPermissions ? 'Bypass ON' : 'Bypass OFF'}</span>
+            </button>
+            
             {isConnected && (
-              <>
-                <button
-                  onClick={() => {
-                    const newBypassState = !isBypassingPermissions;
-                    setIsBypassingPermissions(newBypassState);
-                    
-                    // Send bypass state change to backend
-                    if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-                      ws.current.send(JSON.stringify({
-                        type: 'bypassPermissions',
-                        enabled: newBypassState
-                      }));
-                    }
-                  }}
-                  className={`px-2 sm:px-3 py-1 text-xs rounded flex items-center gap-1 transition-all duration-200 ${
-                    isBypassingPermissions 
-                      ? 'bg-orange-600 text-white hover:bg-orange-700' 
-                      : 'bg-gray-600 text-white hover:bg-gray-700'
-                  }`}
-                  title={isBypassingPermissions ? "Disable permission bypass" : "Enable permission bypass"}
-                >
-                  <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    {isBypassingPermissions ? (
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                    ) : (
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                    )}
-                  </svg>
-                  <span className={isMobile ? 'hidden' : ''}>{isBypassingPermissions ? 'Bypass ON' : 'Bypass OFF'}</span>
-                </button>
-                <button
-                  onClick={disconnectFromShell}
-                  className="p-1 sm:px-3 sm:py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 flex items-center gap-1"
-                  title="Disconnect from shell"
-                >
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                  <span className={isMobile ? 'hidden' : ''}>Disconnect</span>
-                </button>
-              </>
+              <button
+                onClick={disconnectFromShell}
+                className="px-2 sm:px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 flex items-center space-x-1"
+                title="Disconnect from shell"
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                <span className="hidden sm:inline">Disconnect</span>
+              </button>
             )}
             
             <button
               onClick={restartShell}
-              disabled={isRestarting}
-              className="p-1 sm:px-2 text-xs text-gray-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-              title="Restart Shell"
+              disabled={isRestarting || isConnected}
+              className="p-1 sm:px-2 text-xs text-gray-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1"
+              title="Restart Shell (disconnect first)"
             >
               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
-              <span className={isMobile ? 'hidden' : ''}>Restart</span>
+              <span className="hidden sm:inline">Restart</span>
             </button>
           </div>
         </div>
       </div>
 
       {/* Terminal */}
-      <div 
-        className="flex-1 p-2 overflow-hidden relative bg-gray-900/95"
-        onDragEnter={handleDragEnter}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-      >
-        <div ref={terminalContainerRef} className={`h-full w-full focus:outline-none ${isMobile ? 'pb-20' : 'pb-10'}`} style={{ outline: 'none' }} />
-        
-        {/* Drag and drop overlay */}
-        {isDraggingOver && (
-          <div 
-            className="absolute inset-0 z-50"
-            onClick={() => {
-              setIsDraggingOver(false);
-              dragCounter.current = 0;
-            }}
-          >
-            <div className={`h-full w-full border-4 border-dashed rounded-lg flex items-center justify-center backdrop-blur-sm ${
-              isConnected 
-                ? 'border-green-500 bg-green-500/20' 
-                : 'border-red-500 bg-red-500/20'
-            }`}>
-              <div className="bg-gray-800/95 rounded-xl p-6 text-center shadow-2xl relative">
-                {/* Close button */}
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setIsDraggingOver(false);
-                    dragCounter.current = 0;
-                  }}
-                  className="absolute top-2 right-2 text-gray-400 hover:text-white transition-colors p-1"
-                  aria-label="Close drag overlay"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-                
-                <div className={`w-20 h-20 mx-auto mb-4 rounded-full flex items-center justify-center ${
-                  isConnected ? 'bg-green-500/20' : 'bg-red-500/20'
-                }`}>
-                  <svg className={`w-12 h-12 ${isConnected ? 'text-green-500' : 'text-red-500'}`} fill="currentColor" viewBox="0 0 24 24">
-                    {isConnected ? (
-                      <path d="M3 7h18a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1zM6 10v2h2v-2H6zm0 4v2h2v-2H6zm4-4v2h2v-2h-2zm0 4v2h2v-2h-2zm4-4v2h2v-2h-2zm0 4v2h2v-2h-2z"/>
-                    ) : (
-                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-                    )}
-                  </svg>
-                </div>
-                <h3 className="text-lg font-semibold text-white mb-2">
-                  {isConnected ? 'Drop files here' : 'Terminal not connected'}
-                </h3>
-                <p className="text-sm text-gray-400">
-                  {isConnected 
-                    ? 'Files will be uploaded and the path sent to terminal' 
-                    : 'Connect to terminal first to drop files'}
-                </p>
-                <p className="text-xs text-gray-500 mt-2">
-                  Or press <kbd className="px-2 py-1 bg-gray-700 rounded text-gray-300">⌘V</kbd> to paste from clipboard
-                </p>
-                <p className="text-xs text-gray-400 mt-3">
-                  Click anywhere or press ESC to close
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
+      <div className="flex-1 p-2 overflow-hidden relative">
+        <div ref={terminalRef} className="h-full w-full focus:outline-none" style={{ outline: 'none' }} />
         
         {/* Loading state */}
-        {!isInitialized && !isRestarting && (
+        {!isInitialized && (
           <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-90">
             <div className="text-white">Loading terminal...</div>
           </div>
@@ -1203,68 +656,31 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
         {/* Connect button when not connected */}
         {isInitialized && !isConnected && !isConnecting && (
           <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-90 p-4">
-            <div className="text-center max-w-md w-full">
-              {/* Check if this is a disconnected session that can be resumed */}
-              {(() => {
-                const session = shellSessionManager.getSession(sessionKey);
-                const wasDisconnectedByTimeout = session && !session.isConnected && session.terminal;
-                
-                return wasDisconnectedByTimeout ? (
-                  <div className="mb-4 p-3 bg-yellow-900/30 border border-yellow-700 rounded-lg">
-                    <div className="flex items-center justify-center text-yellow-500 mb-2">
-                      <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <span className="text-sm font-medium">Session disconnected due to inactivity</span>
-                    </div>
-                    <p className="text-xs text-gray-400">
-                      Your session is preserved. Click below to reconnect.
-                    </p>
-                  </div>
-                ) : null;
-              })()}
-              
-              <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                <button
-                  onClick={() => {
-                    // Ensure bypass is OFF for normal connection
-                    setIsBypassingPermissions(false);
-                    bypassRef.current = false;
-                    connectToShell();
-                  }}
-                  className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors flex items-center justify-center space-x-2 text-sm"
-                  title="Connect to shell"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                  <span>Continue in Shell</span>
-                </button>
-                <button
-                  onClick={() => {
-                    setIsBypassingPermissions(true);
-                    // Force bypassRef to be updated immediately
-                    bypassRef.current = true;
-                    // Wait a tick for state to update
-                    setTimeout(() => {
-                      connectToShell();
-                    }, 0);
-                  }}
-                  className="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 transition-colors flex items-center justify-center space-x-2 text-sm"
-                  title="Connect to shell with bypass permissions"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                  </svg>
-                  <span>Continue with Bypass</span>
-                </button>
-              </div>
+            <div className="text-center max-w-sm w-full">
+              <button
+                onClick={connectToShell}
+                className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center space-x-2 text-base font-medium w-full sm:w-auto"
+                title="Connect to shell"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                <span>Continue in Shell</span>
+              </button>
               <p className="text-gray-400 text-sm mt-3 px-2">
                 {selectedSession ? 
-                  `Resume session: ${selectedSession.summary.slice(0, 30)}...` : 
+                  `Resume session: ${selectedSession.summary.slice(0, 50)}...` : 
                   'Start a new Claude session'
                 }
               </p>
+              {isBypassingPermissions && (
+                <p className="text-yellow-400 text-xs mt-2 px-2 flex items-center justify-center space-x-1">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+                  </svg>
+                  <span>Bypass permissions enabled</span>
+                </p>
+              )}
             </div>
           </div>
         )}
@@ -1283,7 +699,6 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
             </div>
           </div>
         )}
-        
       </div>
     </div>
   );

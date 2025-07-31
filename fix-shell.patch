@@ -1,0 +1,115 @@
+diff --git a/src/components/Shell.jsx b/src/components/Shell.jsx
+index b3ce366..3033b03 100755
+--- a/src/components/Shell.jsx
++++ b/src/components/Shell.jsx
+@@ -2,9 +2,10 @@ import React, { useEffect, useRef, useState } from 'react';
+ import { Terminal } from 'xterm';
+ import { FitAddon } from 'xterm-addon-fit';
+ import { ClipboardAddon } from '@xterm/addon-clipboard';
++import { WebglAddon } from '@xterm/addon-webgl';
+ import 'xterm/css/xterm.css';
+ 
+-// CSS to remove xterm focus outline and scrollbar
++// CSS to remove xterm focus outline
+ const xtermStyles = `
+   .xterm .xterm-screen {
+     outline: none !important;
+@@ -15,37 +16,6 @@ const xtermStyles = `
+   .xterm-screen:focus {
+     outline: none !important;
+   }
+-  .scrollbar-hide {
+-    -ms-overflow-style: none;
+-    scrollbar-width: none;
+-  }
+-  .scrollbar-hide::-webkit-scrollbar {
+-    display: none;
+-  }
+-  /* Make xterm background transparent */
+-  .xterm {
+-    background-color: transparent !important;
+-    width: 100% !important;
+-  }
+-  .xterm .xterm-viewport {
+-    background-color: transparent !important;
+-    overflow-x: hidden !important;
+-  }
+-  .xterm .xterm-screen {
+-    background-color: transparent !important;
+-  }
+-  .xterm .xterm-screen canvas {
+-    background-color: transparent !important;
+-  }
+-  /* Prevent horizontal scrolling on mobile */
+-  @media (max-width: 768px) {
+-    .xterm {
+-      font-size: 12px !important;
+-    }
+-    .xterm-viewport {
+-      overflow-x: hidden !important;
+-    }
+-  }
+ `;
+ 
+ // Inject styles
+@@ -56,19 +26,11 @@ if (typeof document !== 'undefined') {
+   document.head.appendChild(styleSheet);
+ }
+ 
+-// Import centralized session manager
+-import shellSessionManager from '../lib/shellSessionManager';
+-
+-// Local maps for DOM elements only
+-const terminalElementsRef = new Map();
++// Global store for shell sessions to persist across tab switches
++const shellSessions = new Map();
+ 
+-// Session storage is now handled by shellSessionManager
+-
+-// Timeout management is now handled by shellSessionManager
+-
+-function Shell({ selectedProject, selectedSession, isActive, onSessionCountChange, onConnectionChange }) {
+-  const terminalContainerRef = useRef(null);
+-  const terminalElementsMapRef = useRef(terminalElementsRef); // Reference to global map
++function Shell({ selectedProject, selectedSession, isActive }) {
++  const terminalRef = useRef(null);
+   const terminal = useRef(null);
+   const fitAddon = useRef(null);
+   const ws = useRef(null);
+@@ -76,94 +38,7 @@ function Shell({ selectedProject, selectedSession, isActive, onSessionCountChang
+   const [isInitialized, setIsInitialized] = useState(false);
+   const [isRestarting, setIsRestarting] = useState(false);
+   const [lastSessionId, setLastSessionId] = useState(null);
+-  const [lastProjectName, setLastProjectName] = useState(null);
+   const [isConnecting, setIsConnecting] = useState(false);
+-  const [isBypassingPermissions, setIsBypassingPermissions] = useState(false);
+-  const bypassRef = useRef(false);
+-  const isSwitchingContext = useRef(false);
+-  const [isDraggingOver, setIsDraggingOver] = useState(false);
+-  const dragCounter = useRef(0);
+-  const [isMobile, setIsMobile] = useState(false);
+-  // Single terminal state
+-  const [sessionKey, setSessionKey] = useState(null);
+-  const statusCheckInterval = useRef(null);
+-  const initTimeoutRef = useRef(null);
+-
+   const restartShell = () => {
+@@ -217,9 +227,63 @@ function Shell({ selectedProject, selectedSession, isActive }) {
+   
+   // Watch for session changes and restart shell
+   useEffect(() => {
+     const currentSessionId = selectedSession?.id || null;
+-    const currentProjectName = selectedProject?.name || null;
++    
+     
+     // Disconnect when session changes (user will need to manually reconnect)
+     if (lastSessionId !== null && lastSessionId !== currentSessionId && isInitialized) {
+@@ -388,30 +452,6 @@ function Shell({ selectedProject, selectedSession, isActive }) {
+       terminal.current = new Terminal({
+         cursorBlink: true,
+-        fontSize: isMobile ? 12 : 14,
++        fontSize: 14,
+         fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+         allowProposedApi: true, // Required for clipboard addon
+-        allowTransparency: true,  // Enable transparency
++        allowTransparency: false,
