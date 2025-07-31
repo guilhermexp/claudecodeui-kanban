@@ -209,7 +209,6 @@ async function getProjects() {
             total: sessionResult.total
           };
         } catch (e) {
-          console.warn(`Could not load sessions for project ${entry.name}:`, e.message);
         }
         
         projects.push(project);
@@ -329,7 +328,6 @@ async function parseJsonlSessions(filePath) {
       crlfDelay: Infinity
     });
     
-    // console.log(`[JSONL Parser] Reading file: ${filePath}`);
     let lineCount = 0;
     
     for await (const line of rl) {
@@ -374,12 +372,10 @@ async function parseJsonlSessions(filePath) {
             }
           }
         } catch (parseError) {
-          console.warn(`[JSONL Parser] Error parsing line ${lineCount}:`, parseError.message);
         }
       }
     }
     
-    // console.log(`[JSONL Parser] Processed ${lineCount} lines, found ${sessions.size} sessions`);
   } catch (error) {
     console.error('Error reading JSONL file:', error);
   }
@@ -421,7 +417,6 @@ async function getSessionMessages(projectName, sessionId) {
               messages.push(entry);
             }
           } catch (parseError) {
-            console.warn('Error parsing line:', parseError.message);
           }
         }
       }

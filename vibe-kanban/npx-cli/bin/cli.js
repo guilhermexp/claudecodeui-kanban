@@ -116,9 +116,7 @@ if (isMcpMode) {
     process.on("SIGTERM", () => proc.kill("SIGTERM"));
   });
 } else {
-  console.log(`📦 Extracting vibe-kanban...`);
   extractAndRun("vibe-kanban", (bin) => {
-    console.log(`🚀 Launching vibe-kanban...`);
     if (platform === "win32") {
       execSync(`"${bin}"`, { stdio: "inherit" });
     } else {

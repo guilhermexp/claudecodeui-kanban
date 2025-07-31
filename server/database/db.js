@@ -14,7 +14,6 @@ const INIT_SQL_PATH = path.join(__dirname, 'init.sql');
 let db;
 try {
   db = new Database(DB_PATH);
-  console.log('Connected to SQLite database');
 } catch (error) {
   console.error('Failed to connect to SQLite database:', error);
   throw error;
@@ -25,7 +24,6 @@ const initializeDatabase = async () => {
   try {
     const initSQL = fs.readFileSync(INIT_SQL_PATH, 'utf8');
     db.exec(initSQL);
-    console.log('Database initialized successfully');
   } catch (error) {
     console.error('Error initializing database:', error.message);
     throw error;

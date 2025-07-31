@@ -19,10 +19,8 @@ try {
     }
   });
 } catch (e) {
-  console.log('No .env file found or error reading it:', e.message);
 }
 
-console.log('PORT from env:', process.env.PORT);
 
 import express from 'express';
 import { WebSocketServer } from 'ws';
@@ -187,7 +185,6 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ 
   server,
   verifyClient: (info) => {
-    console.log('WebSocket connection attempt to:', info.req.url);
     
     // Extract token from query parameters or headers
     const url = new URL(info.req.url, 'http://localhost');
@@ -197,13 +194,11 @@ const wss = new WebSocketServer({
     // Verify token
     const user = authenticateWebSocket(token);
     if (!user) {
-      console.log('❌ WebSocket authentication failed');
       return false;
     }
     
     // Store user info in the request for later use
     info.req.user = user;
-    console.log('✅ WebSocket authenticated for user:', user.username);
     return true;
   }
 });
@@ -247,7 +242,6 @@ app.get('/api/config', authenticateToken, (req, res) => {
   const host = req.headers.host || `${req.hostname}:${PORT}`;
   const protocol = req.protocol === 'https' || req.get('x-forwarded-proto') === 'https' ? 'wss' : 'ws';
   
-  console.log('Config API called - Returning host:', host, 'Protocol:', protocol);
   
   res.json({
     serverPort: PORT,
@@ -349,7 +343,6 @@ app.get('/api/projects/:projectName/file', authenticateToken, async (req, res) =
     const { projectName } = req.params;
     const { filePath } = req.query;
     
-    console.log('📄 File read request:', projectName, filePath);
     
     // Using fsPromises from import
     
@@ -378,7 +371,6 @@ app.get('/api/projects/:projectName/files/content', authenticateToken, async (re
     const { projectName } = req.params;
     const { path: filePath } = req.query;
     
-    console.log('🖼️ Binary file serve request:', projectName, filePath);
     
     // Using fs from import
     // Using mime from import
@@ -424,7 +416,6 @@ app.put('/api/projects/:projectName/file', authenticateToken, async (req, res) =
     const { projectName } = req.params;
     const { filePath, content } = req.body;
     
-    console.log('💾 File save request:', projectName, filePath);
     
     // Using fsPromises from import
     
@@ -441,9 +432,7 @@ app.put('/api/projects/:projectName/file', authenticateToken, async (req, res) =
     try {
       const backupPath = filePath + '.backup.' + Date.now();
       await fsPromises.copyFile(filePath, backupPath);
-      console.log('📋 Created backup:', backupPath);
     } catch (backupError) {
-      console.warn('Could not create backup:', backupError.message);
     }
     
     // Write the new content
@@ -500,7 +489,6 @@ app.get('/api/projects/:projectName/files', authenticateToken, async (req, res) 
 // WebSocket connection handler that routes based on URL path
 wss.on('connection', (ws, request) => {
   const url = request.url;
-  console.log('🔗 Client connected to:', url);
   
   // Parse URL to get pathname without query parameters
   const urlObj = new URL(url, 'http://localhost');
@@ -511,14 +499,12 @@ wss.on('connection', (ws, request) => {
   } else if (pathname === '/ws') {
     handleChatConnection(ws, request);
   } else {
-    console.log('❌ Unknown WebSocket path:', pathname);
     ws.close();
   }
 });
 
 // Handle chat WebSocket connections
 function handleChatConnection(ws, request) {
-  console.log('💬 Chat WebSocket connected');
   
   // Store user context for session isolation
   const user = request.user; // From WebSocket authentication
@@ -529,16 +515,12 @@ function handleChatConnection(ws, request) {
     lastActivity: Date.now()
   });
   
-  console.log('✅ Chat connection registered for user:', user.username);
   
   ws.on('message', async (message) => {
     try {
       const data = JSON.parse(message);
       
       if (data.type === 'claude-command') {
-        console.log('💬 User message:', data.command || '[Continue/Resume]');
-        console.log('📁 Project:', data.options?.projectPath || 'Unknown');
-        console.log('🔄 Session:', data.options?.sessionId ? 'Resume' : 'New');
         
         // Register user's active project for smart broadcasting
         if (data.options?.projectPath) {
@@ -548,7 +530,6 @@ function handleChatConnection(ws, request) {
         
         await spawnClaude(data.command, data.options, ws);
       } else if (data.type === 'abort-session') {
-        console.log('🛑 Abort session request:', data.sessionId);
         const success = abortClaudeSession(data.sessionId);
         ws.send(JSON.stringify({
           type: 'session-aborted',
@@ -566,7 +547,6 @@ function handleChatConnection(ws, request) {
   });
   
   ws.on('close', () => {
-    console.log('🔌 Chat client disconnected');
     // Remove from connected clients
     connectedClients.delete(ws);
   });
@@ -574,11 +554,9 @@ function handleChatConnection(ws, request) {
 
 // Handle shell WebSocket connections
 function handleShellConnection(ws, request) {
-  console.log('🐚 Shell client connected');
   
   // Get user info from authenticated request
   const user = request.user || { userId: 'anonymous', username: 'anonymous' };
-  console.log('👤 Shell user:', user.username);
   
   let shellProcess = null;
   let bypassPermissions = false;
@@ -586,7 +564,6 @@ function handleShellConnection(ws, request) {
   ws.on('message', async (message) => {
     try {
       const data = JSON.parse(message);
-      console.log('📨 Shell message received:', data.type);
       
       if (data.type === 'init') {
         const projectPath = data.projectPath || process.cwd();
@@ -598,7 +575,6 @@ function handleShellConnection(ws, request) {
         // Sessions are managed on the client side now
         
         // Create new shell session
-        console.log('🆕 Creating new shell session');
           
           // Send welcome message
           const welcomeMsg = hasSession ? 
@@ -638,11 +614,9 @@ function handleShellConnection(ws, request) {
             }
             
             // Start shell using PTY and then execute claude
-            console.log('🔧 Starting shell in directory:', projectPath);
             
             // Use the user's default shell to ensure proper environment loading
             const userShell = process.env.SHELL || '/bin/bash';
-            console.log('🐚 Using shell:', userShell);
             
             // Create an interactive shell with login flag to load user's profile
             shellProcess = pty.spawn(userShell, ['-l'], {
@@ -661,7 +635,6 @@ function handleShellConnection(ws, request) {
             
             // After shell starts, execute claude command
             setTimeout(() => {
-              console.log('🚀 Executing claude command:', claudeCommand);
               // Clear the terminal first for a clean start
               shellProcess.write('clear\r');
               setTimeout(() => {
@@ -678,18 +651,14 @@ function handleShellConnection(ws, request) {
               }, 100);
             }, 200);
             
-            console.log('🟢 Shell process started with PTY, PID:', shellProcess.pid);
             
             // Handle data output
             shellProcess.onData((data) => {
               const output = data.toString();
               // Log errors or important messages (but limit output to reduce spam)
               if (output.includes('zsh: command not found') || output.includes('bash: command not found')) {
-                console.log('❌ Shell error: command not found');
               } else if (output.includes('Starting Claude CLI')) {
-                console.log('🚀 Claude CLI starting...');
               } else if (output.includes('Welcome to Claude') || output.includes('claude>')) {
-                console.log('✅ Claude CLI is running');
               }
               if (ws.readyState === ws.OPEN) {
                 ws.send(JSON.stringify({
@@ -701,7 +670,6 @@ function handleShellConnection(ws, request) {
             
             // Handle process exit
             shellProcess.onExit((exitCode) => {
-              console.log('🔚 Shell process exited with code:', exitCode.exitCode, 'signal:', exitCode.signal);
               if (ws.readyState === ws.OPEN) {
                 ws.send(JSON.stringify({
                   type: 'output',
@@ -730,18 +698,15 @@ function handleShellConnection(ws, request) {
             console.error('Error writing to shell:', error);
           }
         } else {
-          console.warn('No active shell process to send input to');
         }
       } else if (data.type === 'resize') {
         // Handle terminal resize
         if (shellProcess && shellProcess.resize) {
-          console.log('Terminal resize requested:', data.cols, 'x', data.rows);
           shellProcess.resize(data.cols, data.rows);
         }
       } else if (data.type === 'bypassPermissions') {
         // Handle bypass permissions toggle
         bypassPermissions = data.enabled;
-        console.log('🔓 Bypass permissions:', bypassPermissions ? 'ENABLED' : 'DISABLED');
         
         // Send visual feedback to terminal
         const bypassMsg = bypassPermissions 
@@ -779,7 +744,6 @@ function handleShellConnection(ws, request) {
   });
   
   ws.on('close', () => {
-    console.log('🔌 Shell client disconnected');
     
     // Process cleanup is now handled by client-side session management
   });
@@ -1139,7 +1103,6 @@ app.use('/api/vibe-kanban', express.json(), async (req, res) => {
     const queryString = req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : '';
     const fullPath = `${vibeKanbanPath}${queryString}`;
     
-    console.log(`Proxying VibeKanban request: ${req.method} ${req.originalUrl}`);
     
     // Use the robust proxy
     const response = await vibeProxy.makeRequest(fullPath, {
@@ -1319,7 +1282,6 @@ async function startServer() {
   try {
     // Initialize authentication database
     await initializeDatabase();
-    console.log('✅ Database initialization skipped (testing)');
     
     // Get local network IP
     const networkInterfaces = os.networkInterfaces();
@@ -1336,9 +1298,6 @@ async function startServer() {
     
     // Listen on all interfaces (0.0.0.0) to allow access from network
     server.listen(PORT, '0.0.0.0', async () => {
-      console.log(`Claude Code UI server running on:`)
-      console.log(`  - Local: http://localhost:${PORT}`);
-      console.log(`  - Network: http://${localIP}:${PORT}`);
       
       // Start watching the projects folder for changes
       await setupProjectsWatcher(); // Re-enabled with better-sqlite3
@@ -1358,11 +1317,9 @@ async function gracefulShutdown(signal) {
   if (isShuttingDown) return;
   isShuttingDown = true;
   
-  console.log(`\n🛑 ${signal} received. Starting graceful shutdown...`);
   
   // Stop accepting new connections
   server.close(() => {
-    console.log('✅ HTTP server closed');
   });
   
   // Close WebSocket connections gracefully
@@ -1375,12 +1332,10 @@ async function gracefulShutdown(signal) {
       client.close(1001, 'Server shutting down');
     }
   });
-  console.log('✅ WebSocket connections closed');
   
   // Stop Vibe Kanban proxy health checks
   if (vibeProxy) {
     vibeProxy.destroy();
-    console.log('✅ Vibe Kanban proxy stopped');
   }
   
   // Close shell sessions
@@ -1390,14 +1345,12 @@ async function gracefulShutdown(signal) {
         session.pty.kill();
       }
     });
-    console.log('✅ Shell sessions closed');
   }
   
   // Close database connections
   if (global.db) {
     try {
       global.db.close();
-      console.log('✅ Database connections closed');
     } catch (error) {
       console.error('❌ Error closing database:', error);
     }
@@ -1405,7 +1358,6 @@ async function gracefulShutdown(signal) {
   
   // Give processes time to clean up
   setTimeout(() => {
-    console.log('✅ Graceful shutdown completed');
     process.exit(0);
   }, 1000);
 }

@@ -15,7 +15,6 @@ const __dirname = dirname(__filename);
 // GET /api/mcp/cli/list - List MCP servers using Claude CLI
 router.get('/cli/list', async (req, res) => {
   try {
-    console.log('📋 Listing MCP servers using Claude CLI');
     
     const { spawn } = await import('child_process');
     const { promisify } = await import('util');
@@ -60,7 +59,6 @@ router.post('/cli/add', async (req, res) => {
   try {
     const { name, type = 'stdio', command, args = [], url, headers = {}, env = {} } = req.body;
     
-    console.log('➕ Adding MCP server using Claude CLI:', name);
     
     const { spawn } = await import('child_process');
     
@@ -91,7 +89,6 @@ router.post('/cli/add', async (req, res) => {
       }
     }
     
-    console.log('🔧 Running Claude CLI command:', 'claude', cliArgs.join(' '));
     
     const process = spawn('claude', cliArgs, {
       stdio: ['pipe', 'pipe', 'pipe']
@@ -132,7 +129,6 @@ router.delete('/cli/remove/:name', async (req, res) => {
   try {
     const { name } = req.params;
     
-    console.log('🗑️ Removing MCP server using Claude CLI:', name);
     
     const { spawn } = await import('child_process');
     
@@ -175,7 +171,6 @@ router.get('/cli/get/:name', async (req, res) => {
   try {
     const { name } = req.params;
     
-    console.log('📄 Getting MCP server details using Claude CLI:', name);
     
     const { spawn } = await import('child_process');
     
@@ -247,7 +242,6 @@ function parseClaudeListOutput(output) {
     }
   }
   
-  console.log('🔍 Parsed Claude CLI servers:', servers);
   return servers;
 }
 

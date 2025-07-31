@@ -416,12 +416,10 @@ function CurrentAttempt({
       if (response.ok) {
         const result: ApiResponse<FollowUpResponse> = await response.json();
         if (result.success && result.data) {
-          console.log('Plan approved successfully:', result.message);
 
           // If a new task was created, navigate to it
           if (result.data.created_new_attempt) {
             const newTaskId = result.data.actual_attempt_id;
-            console.log('Navigating to new task:', newTaskId);
             navigate(`/projects/${projectId}/tasks/${newTaskId}`);
           } else {
             // Otherwise, just refresh the current task data

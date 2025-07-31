@@ -113,12 +113,10 @@ export function GitHubLoginDialog({
           setCopied(true);
           setTimeout(() => setCopied(false), 2000);
         } catch (err) {
-          console.warn('Copy to clipboard failed:', err);
         }
         document.body.removeChild(textArea);
       }
     } catch (err) {
-      console.warn('Copy to clipboard failed:', err);
     }
   };
 

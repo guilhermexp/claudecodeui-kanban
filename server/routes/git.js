@@ -61,7 +61,6 @@ router.get('/status', async (req, res) => {
 
   try {
     const projectPath = await getActualProjectPath(project);
-    console.log('Git status for project:', project, '-> path:', projectPath);
     
     // Validate git repository and get git root
     const gitRoot = await validateGitRepository(projectPath);
@@ -228,7 +227,6 @@ router.get('/branches', async (req, res) => {
 
   try {
     const projectPath = await getActualProjectPath(project);
-    console.log('Git branches for project:', project, '-> path:', projectPath);
     
     // Validate git repository and get git root
     const gitRoot = await validateGitRepository(projectPath);
@@ -588,7 +586,6 @@ router.post('/fetch', async (req, res) => {
       remoteName = stdout.trim().split('/')[0]; // Extract remote name
     } catch (error) {
       // No upstream, try to fetch from origin anyway
-      console.log('No upstream configured, using origin as fallback');
     }
 
     const { stdout } = await execAsync(`git fetch ${remoteName}`, { cwd: gitRoot });
@@ -635,7 +632,6 @@ router.post('/pull', async (req, res) => {
       remoteBranch = tracking.split('/').slice(1).join('/'); // Extract branch name
     } catch (error) {
       // No upstream, use fallback
-      console.log('No upstream configured, using origin/branch as fallback');
     }
 
     const { stdout } = await execAsync(`git pull ${remoteName} ${remoteBranch}`, { cwd: gitRoot });
@@ -705,7 +701,6 @@ router.post('/push', async (req, res) => {
       remoteBranch = tracking.split('/').slice(1).join('/'); // Extract branch name
     } catch (error) {
       // No upstream, use fallback
-      console.log('No upstream configured, using origin/branch as fallback');
     }
 
     const { stdout } = await execAsync(`git push ${remoteName} ${remoteBranch}`, { cwd: gitRoot });

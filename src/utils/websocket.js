@@ -33,7 +33,6 @@ export function useWebSocket(authReady = false) {
       // Get authentication token
       const token = localStorage.getItem('auth-token');
       if (!token) {
-        console.warn('No authentication token found for WebSocket connection');
         return;
       }
       
@@ -50,13 +49,11 @@ export function useWebSocket(authReady = false) {
         
         // If the config returns localhost but we're not on localhost, use current host
         if (wsBaseUrl.includes('localhost') && !window.location.hostname.includes('localhost')) {
-          console.warn('Config returned localhost, using current host with same port');
           const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
           // When using ngrok or proxy, use the same host/port
           wsBaseUrl = `${protocol}//${window.location.host}`;
         }
       } catch (error) {
-        console.warn('Could not fetch server config, falling back to current host');
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         // When using ngrok or proxy, use the same host/port
         wsBaseUrl = `${protocol}//${window.location.host}`;
@@ -108,7 +105,6 @@ export function useWebSocket(authReady = false) {
     if (ws && isConnected) {
       ws.send(JSON.stringify(message));
     } else {
-      console.warn('WebSocket not connected');
     }
   };
 

@@ -35,7 +35,6 @@ const useNormalizedConversation = ({
   // Development-only logging helper
   const debugLog = useCallback((message: string, ...args: any[]) => {
     if (import.meta.env.DEV) {
-      console.log(message, ...args);
     }
   }, []);
 
@@ -175,7 +174,6 @@ const useNormalizedConversation = ({
 
                   return updated;
                 } catch (patchError) {
-                  console.warn('❌ SSE: Patch failed:', patchError);
                   // Reset cursor on failure for potential retry
                   if (batch_id && batch_id > 0) {
                     manager.highestBatchId = batch_id - 1;
@@ -189,12 +187,10 @@ const useNormalizedConversation = ({
                 }
               });
             } catch (e) {
-              console.warn('❌ SSE: Parse failed:', e);
             }
           }
         },
         onerror: (err) => {
-          console.warn(`🔌 SSE: Connection error for ${processId}:`, err);
           manager.isActive = false;
 
           // Only attempt reconnection if process is still running
@@ -208,7 +204,6 @@ const useNormalizedConversation = ({
         },
       }).catch((error) => {
         if (error.name !== 'AbortError') {
-          console.warn(`❌ SSE: Fetch error for ${processId}:`, error);
           manager.isActive = false;
 
           // Only attempt reconnection if process is still running

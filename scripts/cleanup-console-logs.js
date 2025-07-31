@@ -7,7 +7,6 @@ import path from 'path';
 const DRY_RUN = process.argv.includes('--dry-run');
 const AGGRESSIVE = process.argv.includes('--aggressive');
 
-console.log(`🧹 Cleaning console logs (${DRY_RUN ? 'DRY RUN' : 'LIVE'})...`);
 
 // Find all JS/TS files excluding node_modules and dist
 const files = glob.sync('**/*.{js,jsx,ts,tsx}', {
@@ -83,26 +82,17 @@ files.forEach(file => {
   }
 });
 
-console.log(`\n📊 Cleanup Summary:`);
-console.log(`   Total console statements found: ${totalRemoved}`);
-console.log(`   Files with console statements: ${filesWithLogs.length}`);
 
 if (filesWithLogs.length > 0) {
-  console.log(`\n📝 Files that ${DRY_RUN ? 'would be' : 'were'} modified:`);
   filesWithLogs
     .sort((a, b) => b.count - a.count)
     .slice(0, 20)
     .forEach(({ file, count }) => {
-      console.log(`   ${file}: ${count} statement(s)`);
     });
     
   if (filesWithLogs.length > 20) {
-    console.log(`   ... and ${filesWithLogs.length - 20} more files`);
   }
 }
 
 if (DRY_RUN) {
-  console.log(`\n💡 Run without --dry-run to apply changes`);
 }
-
-console.log(`\n✅ Cleanup complete!`);
