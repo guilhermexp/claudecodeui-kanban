@@ -437,15 +437,17 @@ function parseClaudeListOutput(output) {
       let type = 'stdio'; // default type
       
       // Check if it has transport type in parentheses like "(SSE)" or "(HTTP)"
-      const typeMatch = rest.match(/\((\w+)\)\s*$/);
+      // Look for transport type before any status indicators
+      const typeMatch = rest.match(/\((\w+)\)(?:\s*-\s*[✓✗])?/);
       if (typeMatch) {
         type = typeMatch[1].toLowerCase();
-      } else if (rest.startsWith('http://') || rest.startsWith('https://')) {
+      } else if (rest.includes('http://') || rest.includes('https://')) {
         // If it's a URL but no explicit type, assume HTTP
         type = 'http';
       }
       
-      if (name) {
+      // Skip lines that are not server entries
+      if (name && !name.includes('Checking') && !name.includes('health')) {
         const server = {
           id: name, // Use name as ID since Claude doesn't provide IDs
           name,
@@ -456,7 +458,11 @@ function parseClaudeListOutput(output) {
         };
         
         // Extract URL or command based on type
-        const cleanRest = rest.replace(/\s*\(\w+\)\s*$/, '').trim();
+        // Remove status indicators like "- ✓ Connected" and transport type in parentheses
+        const cleanRest = rest
+          .replace(/\s*-\s*[✓✗]\s*\w+.*$/, '') // Remove status indicators
+          .replace(/\s*\(\w+\)\s*$/, '') // Remove transport type
+          .trim();
         
         if (type === 'http' || type === 'sse') {
           server.config.url = cleanRest;
