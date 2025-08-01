@@ -31,6 +31,7 @@ const colors = {
 
 function log(service, message, color = colors.reset) {
   const timestamp = new Date().toLocaleTimeString();
+  console.log(`${color}[${timestamp}] [${service}] ${message}${colors.reset}`);
 }
 
 // Kill processes on specific ports
