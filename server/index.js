@@ -731,6 +731,51 @@ function handleShellConnection(ws, request) {
             data: restartMsg
           }));
         }
+      } else if (data.type === 'image') {
+        // Handle image upload
+        try {
+          const imageData = data.data;
+          const { filename, type, size, base64 } = imageData;
+          
+          // Create temporary directory for images if it doesn't exist
+          const tempDir = path.join(os.tmpdir(), 'claude-code-images');
+          await fsPromises.mkdir(tempDir, { recursive: true });
+          
+          // Generate unique filename
+          const timestamp = Date.now();
+          const ext = path.extname(filename) || '.png';
+          const tempFilename = `image_${timestamp}${ext}`;
+          const tempFilePath = path.join(tempDir, tempFilename);
+          
+          // Save image to temporary file
+          const buffer = Buffer.from(base64, 'base64');
+          await fsPromises.writeFile(tempFilePath, buffer);
+          
+          // Send success message with file path to terminal
+          const successMsg = `\r\n\x1b[32m📷 Imagem salva: ${tempFilePath}\x1b[0m\r\n` +
+                           `\x1b[36mArquivo: ${filename} (${(size / 1024).toFixed(1)}KB)\x1b[0m\r\n`;
+          
+          ws.send(JSON.stringify({
+            type: 'output',
+            data: successMsg
+          }));
+          
+          // Also add the file path to the next Claude command context
+          const contextMsg = `\r\n\x1b[90m💡 Use este caminho no seu próximo comando Claude:\x1b[0m\r\n` +
+                           `\x1b[97m${tempFilePath}\x1b[0m\r\n\r\n`;
+          
+          ws.send(JSON.stringify({
+            type: 'output',
+            data: contextMsg
+          }));
+          
+        } catch (error) {
+          console.error('Error processing image:', error);
+          ws.send(JSON.stringify({
+            type: 'output',
+            data: `\r\n\x1b[31m❌ Erro ao processar imagem: ${error.message}\x1b[0m\r\n`
+          }));
+        }
       }
     } catch (error) {
       console.error('❌ Shell WebSocket error:', error.message);

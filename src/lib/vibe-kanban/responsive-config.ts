@@ -10,12 +10,12 @@ export const PANEL_SIDE_BY_SIDE_BREAKPOINT = 'xl' as const;
 
 // Panel widths for different screen sizes (in overlay mode)
 export const PANEL_WIDTHS = {
-  base: 'w-full', // < 640px
-  sm: 'sm:w-[90vw] sm:max-w-[560px]', // 640px+
-  md: 'md:w-[85vw] md:max-w-[600px]', // 768px+
-  lg: 'lg:w-[75vw] lg:max-w-[650px]', // 1024px+ (smaller to start transitioning)
-  xl: 'xl:w-[60vw] xl:max-w-[750px]', // 1280px+
-  '2xl': '2xl:w-[50vw] 2xl:max-w-[800px]', // 1536px+ (side-by-side mode)
+  base: 'w-full max-h-screen', // < 640px - full width with constrained height
+  sm: 'sm:w-[95vw] sm:max-w-[540px] sm:max-h-[85vh]', // 640px+ - more space on mobile
+  md: 'md:w-[85vw] md:max-w-[600px] md:max-h-[90vh]', // 768px+
+  lg: 'lg:w-[75vw] lg:max-w-[650px] lg:max-h-[92vh]', // 1024px+
+  xl: 'xl:w-[60vw] xl:max-w-[750px] xl:max-h-[95vh]', // 1280px+
+  '2xl': '2xl:w-[50vw] 2xl:max-w-[800px] 2xl:max-h-full', // 1536px+ (side-by-side mode)
 } as const;
 
 // Generate classes for TaskDetailsPanel
@@ -37,7 +37,7 @@ export const getTaskPanelClasses = () => {
     `${PANEL_SIDE_BY_SIDE_BREAKPOINT}:w-[800px]`,
   ].join(' ');
 
-  return `${overlayClasses} ${sideBySideClasses} bg-background border-l shadow-lg flex flex-col overflow-hidden`;
+  return `${overlayClasses} ${sideBySideClasses} bg-background border-l shadow-lg flex flex-col overflow-hidden rounded-l-lg sm:rounded-l-xl`;
 };
 
 // Generate classes for backdrop (only show in overlay mode)

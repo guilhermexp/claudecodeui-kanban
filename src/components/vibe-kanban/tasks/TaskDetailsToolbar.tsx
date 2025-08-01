@@ -220,11 +220,11 @@ function TaskDetailsToolbar() {
 
   return (
     <>
-      <div className="px-6 pb-4 border-b">
+      <div className="px-3 sm:px-6 pb-4 border-b">
         {/* Error Display */}
         {error && (
           <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-            <div className="text-red-600 text-sm">{error}</div>
+            <div className="text-red-600 text-sm break-words">{error}</div>
           </div>
         )}
 
@@ -243,7 +243,7 @@ function TaskDetailsToolbar() {
             availableExecutors={availableExecutors}
           />
         ) : (
-          <div className="space-y-3 p-3 bg-muted/20 rounded-lg border">
+          <div className="space-y-3 p-2 sm:p-3 bg-muted/20 rounded-lg border">
             {/* Current Attempt Info */}
             <div className="space-y-2">
               {selectedAttempt ? (
@@ -259,11 +259,11 @@ function TaskDetailsToolbar() {
                   branches={branches}
                 />
               ) : (
-                <div className="text-center py-8">
-                  <div className="text-lg font-medium text-muted-foreground">
+                <div className="text-center py-6 sm:py-8">
+                  <div className="text-base sm:text-lg font-medium text-muted-foreground">
                     No attempts yet
                   </div>
-                  <div className="text-sm text-muted-foreground mt-1">
+                  <div className="text-xs sm:text-sm text-muted-foreground mt-1 px-2">
                     Start your first attempt to begin working on this task
                   </div>
                 </div>

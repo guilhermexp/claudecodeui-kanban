@@ -254,13 +254,13 @@ export function TaskFormDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[550px]">
+      <DialogContent className="sm:max-w-[550px] w-full max-w-full mx-4 sm:mx-auto">
         <DialogHeader>
           <DialogTitle>
             {isEditMode ? 'Edit Task' : 'Create New Task'}
           </DialogTitle>
         </DialogHeader>
-        <div className="space-y-4">
+        <div className="space-y-4 sm:space-y-4">
           {/* Plan warning when in planning mode without plan */}
           {showPlanWarning && (
             <div className="p-4 rounded-lg border border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-950/20">
@@ -301,9 +301,9 @@ export function TaskFormDialog({
               value={description}
               onChange={setDescription}
               rows={3}
-              maxRows={8}
+              maxRows={6}
               placeholder="Add more details (optional). Type @ to search files."
-              className="mt-1.5"
+              className="mt-1.5 resize-none"
               disabled={isSubmitting || isSubmittingAndStart}
               projectId={projectId}
             />
@@ -381,11 +381,12 @@ export function TaskFormDialog({
             </div>
           )}
 
-          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-4 sm:pt-2">
             <Button
               variant="outline"
               onClick={handleCancel}
               disabled={isSubmitting || isSubmittingAndStart}
+              className="w-full sm:w-auto"
             >
               Cancel
             </Button>
@@ -393,6 +394,7 @@ export function TaskFormDialog({
               <Button
                 onClick={handleSubmit}
                 disabled={isSubmitting || !title.trim()}
+                className="w-full sm:w-auto"
               >
                 {isSubmitting ? 'Updating...' : 'Update Task'}
               </Button>
@@ -407,11 +409,11 @@ export function TaskFormDialog({
                     !title.trim() ||
                     isPlanningModeWithoutPlan
                   }
-                  className={
+                  className={`w-full sm:w-auto ${
                     isPlanningModeWithoutPlan
                       ? 'opacity-60 cursor-not-allowed'
                       : ''
-                  }
+                  }`}
                   title={
                     isPlanningModeWithoutPlan
                       ? 'Plan required before creating task'
@@ -432,7 +434,7 @@ export function TaskFormDialog({
                       !title.trim() ||
                       isPlanningModeWithoutPlan
                     }
-                    className={`font-medium ${isPlanningModeWithoutPlan ? 'opacity-60 cursor-not-allowed bg-red-600 hover:bg-red-600' : ''}`}
+                    className={`w-full sm:w-auto font-medium ${isPlanningModeWithoutPlan ? 'opacity-60 cursor-not-allowed bg-red-600 hover:bg-red-600' : ''}`}
                     title={
                       isPlanningModeWithoutPlan
                         ? 'Plan required before creating and starting task'
