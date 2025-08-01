@@ -469,18 +469,23 @@ function CurrentAttempt({
   }, [selectedAttempt.worktree_path]);
 
   return (
-    <div className="space-y-2">
-      <div className="grid grid-cols-4 gap-3 items-start">
+    <div className="space-y-3">
+      {/* Mobile: Stack vertically, Desktop: Grid layout */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-start">
         <div>
           <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
             Started
           </div>
           <div className="text-sm font-medium">
-            {new Date(selectedAttempt.created_at).toLocaleDateString()}{' '}
-            {new Date(selectedAttempt.created_at).toLocaleTimeString([], {
-              hour: '2-digit',
-              minute: '2-digit',
-            })}
+            <span className="block sm:inline">
+              {new Date(selectedAttempt.created_at).toLocaleDateString()}
+            </span>
+            <span className="block sm:inline sm:ml-2">
+              {new Date(selectedAttempt.created_at).toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
+            </span>
           </div>
         </div>
 
@@ -488,7 +493,7 @@ function CurrentAttempt({
           <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
             Agent
           </div>
-          <div className="text-sm font-medium">
+          <div className="text-sm font-medium truncate">
             {availableExecutors.find((e) => e.id === selectedAttempt.executor)
               ?.name ||
               selectedAttempt.executor ||
@@ -523,51 +528,51 @@ function CurrentAttempt({
               </Tooltip>
             </TooltipProvider>
           </div>
-          <div className="flex items-center gap-1.5">
-            <GitBranchIcon className="h-3 w-3 text-muted-foreground" />
-            <span className="text-sm font-medium">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <GitBranchIcon className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+            <span className="text-sm font-medium truncate">
               {branchStatus?.base_branch_name || selectedBranchDisplayName}
             </span>
           </div>
         </div>
 
-        <div>
+        <div className="sm:col-span-2 lg:col-span-1">
           <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
             {isPlanTask ? 'Plan Status' : 'Merge Status'}
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 min-w-0">
             {isPlanTask ? (
               // Plan status for planning tasks
               relatedTasks && relatedTasks.length > 0 ? (
-                <div className="flex items-center gap-1.5">
-                  <div className="h-2 w-2 bg-green-500 rounded-full" />
-                  <span className="text-sm font-medium text-green-700">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <div className="h-2 w-2 bg-green-500 rounded-full flex-shrink-0" />
+                  <span className="text-sm font-medium text-green-700 truncate">
                     Task Created
                   </span>
                 </div>
               ) : (
-                <div className="flex items-center gap-1.5">
-                  <div className="h-2 w-2 bg-gray-500 rounded-full" />
-                  <span className="text-sm font-medium text-gray-700">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <div className="h-2 w-2 bg-gray-500 rounded-full flex-shrink-0" />
+                  <span className="text-sm font-medium text-gray-700 truncate">
                     Draft
                   </span>
                 </div>
               )
             ) : // Merge status for regular tasks
             selectedAttempt.merge_commit ? (
-              <div className="flex items-center gap-1.5">
-                <div className="h-2 w-2 bg-green-500 rounded-full" />
-                <span className="text-sm font-medium text-green-700">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <div className="h-2 w-2 bg-green-500 rounded-full flex-shrink-0" />
+                <span className="text-sm font-medium text-green-700 truncate">
                   Merged
                 </span>
-                <span className="text-xs font-mono text-muted-foreground">
+                <span className="text-xs font-mono text-muted-foreground flex-shrink-0">
                   ({selectedAttempt.merge_commit.slice(0, 8)})
                 </span>
               </div>
             ) : (
-              <div className="flex items-center gap-1.5">
-                <div className="h-2 w-2 bg-yellow-500 rounded-full" />
-                <span className="text-sm font-medium text-yellow-700">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <div className="h-2 w-2 bg-yellow-500 rounded-full flex-shrink-0" />
+                <span className="text-sm font-medium text-yellow-700 truncate">
                   Not merged
                 </span>
               </div>
@@ -576,23 +581,24 @@ function CurrentAttempt({
         </div>
       </div>
 
-      <div className="col-span-4">
-        <div className="flex items-center gap-1.5 mb-1">
-          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
+      {/* Worktree Path Section */}
+      <div className="space-y-2">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
             Worktree Path
           </div>
           <Button
             variant="ghost"
             size="sm"
             onClick={() => handleOpenInEditor()}
-            className="h-6 px-2 text-xs hover:bg-muted gap-1"
+            className="h-6 px-2 text-xs hover:bg-muted gap-1 self-start sm:self-auto"
           >
             <ExternalLink className="h-3 w-3" />
-            Open in {editorDisplayName}
+            <span className="hidden sm:inline">Open in</span> {editorDisplayName}
           </Button>
         </div>
         <div
-          className={`text-xs font-mono px-2 py-1 rounded break-all cursor-pointer transition-all duration-300 flex items-center gap-2 ${
+          className={`text-xs font-mono px-2 py-1.5 rounded break-all cursor-pointer transition-all duration-300 flex items-center gap-2 ${
             copied
               ? 'bg-green-100 text-green-800 border border-green-300'
               : 'text-muted-foreground bg-muted hover:bg-muted/80'
@@ -600,17 +606,18 @@ function CurrentAttempt({
           onClick={handleCopyWorktreePath}
           title={copied ? 'Copied!' : 'Click to copy worktree path'}
         >
-          {copied && <Check className="h-3 w-3 text-green-600" />}
-          <span className={copied ? 'text-green-800' : ''}>
+          {copied && <Check className="h-3 w-3 text-green-600 flex-shrink-0" />}
+          <span className={`${copied ? 'text-green-800' : ''} min-w-0 flex-1`}>
             {selectedAttempt.worktree_path}
           </span>
           {copied && (
-            <span className="text-green-700 font-medium">Copied!</span>
+            <span className="text-green-700 font-medium whitespace-nowrap">Copied!</span>
           )}
         </div>
       </div>
 
-      <div className="col-span-4 flex flex-wrap items-center justify-between gap-2">
+      {/* Action Buttons Section */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex items-center gap-2 flex-wrap">
           <TooltipProvider>
             <Tooltip>
@@ -630,12 +637,12 @@ function CurrentAttempt({
                     {runningDevServer ? (
                       <>
                         <StopCircle className="h-3 w-3" />
-                        Stop Dev
+                        <span className="hidden xs:inline">Stop</span> Dev
                       </>
                     ) : (
                       <>
                         <Play className="h-3 w-3" />
-                        Dev Server
+                        <span className="hidden xs:inline">Dev</span> Server
                       </>
                     )}
                   </Button>
@@ -678,9 +685,9 @@ function CurrentAttempt({
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="sm" className="gap-2">
-                        <History className="h-4 w-4" />
-                        History
+                      <Button variant="outline" size="sm" className="gap-1 sm:gap-2">
+                        <History className="h-3 w-3 sm:h-4 sm:w-4" />
+                        <span className="hidden xs:inline">History</span>
                       </Button>
                     </DropdownMenuTrigger>
                   </TooltipTrigger>
@@ -766,11 +773,20 @@ function CurrentAttempt({
                       className="border-blue-300 text-blue-700 hover:bg-blue-50 gap-1"
                     >
                       <GitPullRequest className="h-3 w-3" />
-                      {selectedAttempt.pr_url
-                        ? 'Open PR'
-                        : creatingPR
-                          ? 'Creating...'
-                          : 'Create PR'}
+                      <span className="hidden xs:inline">
+                        {selectedAttempt.pr_url
+                          ? 'Open PR'
+                          : creatingPR
+                            ? 'Creating...'
+                            : 'Create PR'}
+                      </span>
+                      <span className="xs:hidden">
+                        {selectedAttempt.pr_url
+                          ? 'PR'
+                          : creatingPR
+                            ? '...'
+                            : 'PR'}
+                      </span>
                     </Button>
                     <Button
                       onClick={handleMergeClick}
@@ -783,7 +799,8 @@ function CurrentAttempt({
                       className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 gap-1"
                     >
                       <GitBranchIcon className="h-3 w-3" />
-                      {merging ? 'Merging...' : 'Merge'}
+                      <span className="hidden xs:inline">{merging ? 'Merging...' : 'Merge'}</span>
+                      <span className="xs:hidden">{merging ? '...' : 'M'}</span>
                     </Button>
                   </>
                 )
@@ -797,20 +814,22 @@ function CurrentAttempt({
               size="sm"
               onClick={stopAllExecutions}
               disabled={isStopping}
-              className="gap-2"
+              className="gap-1 sm:gap-2"
             >
-              <StopCircle className="h-4 w-4" />
-              {isStopping ? 'Stopping...' : 'Stop Attempt'}
+              <StopCircle className="h-3 w-3 sm:h-4 sm:w-4" />
+              <span className="hidden xs:inline">{isStopping ? 'Stopping...' : 'Stop Attempt'}</span>
+              <span className="xs:hidden">{isStopping ? '...' : 'Stop'}</span>
             </Button>
           ) : (
             <Button
               variant="outline"
               size="sm"
               onClick={handleEnterCreateAttemptMode}
-              className="gap-2"
+              className="gap-1 sm:gap-2"
             >
-              <Plus className="h-4 w-4" />
-              New Attempt
+              <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
+              <span className="hidden xs:inline">New Attempt</span>
+              <span className="xs:hidden">New</span>
             </Button>
           )}
         </div>

@@ -1,11 +1,12 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { ClipboardAddon } from '@xterm/addon-clipboard';
 import { WebglAddon } from '@xterm/addon-webgl';
+import { useDropzone } from 'react-dropzone';
 import 'xterm/css/xterm.css';
 
-// CSS to remove xterm focus outline
+// CSS to make xterm responsive and remove focus outline
 const xtermStyles = `
   .xterm .xterm-screen {
     outline: none !important;
@@ -15,6 +16,42 @@ const xtermStyles = `
   }
   .xterm-screen:focus {
     outline: none !important;
+  }
+  
+  /* Make terminal responsive */
+  .xterm {
+    width: 100% !important;
+    height: 100% !important;
+  }
+  
+  .xterm .xterm-viewport {
+    width: 100% !important;
+    overflow-x: auto !important;
+  }
+  
+  .xterm .xterm-screen {
+    width: 100% !important;
+  }
+  
+  /* Mobile optimizations */
+  @media (max-width: 640px) {
+    .xterm {
+      font-size: 11px !important;
+    }
+    
+    .xterm .xterm-viewport {
+      -webkit-overflow-scrolling: touch;
+    }
+    
+    .xterm .xterm-screen {
+      min-width: 100% !important;
+    }
+  }
+  
+  /* Prevent text from overflowing */
+  .xterm .xterm-rows {
+    word-wrap: break-word;
+    word-break: break-all;
   }
 `;
 
@@ -41,12 +78,73 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   const [isConnecting, setIsConnecting] = useState(false);
   const [isBypassingPermissions, setIsBypassingPermissions] = useState(false);
   
+  // Image drag & drop states
+  const [isDraggedImageOver, setIsDraggedImageOver] = useState(false);
+  
+  // Scroll to bottom functionality
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const scrollCheckRef = useRef(null);
+  
   // Notify parent about connection status changes
   useEffect(() => {
     if (onConnectionChange) {
       onConnectionChange(isConnected);
     }
   }, [isConnected, onConnectionChange]);
+
+  // Scroll to bottom function
+  const scrollToBottom = useCallback(() => {
+    if (terminal.current) {
+      terminal.current.scrollToBottom();
+      setShowScrollToBottom(false);
+    }
+  }, []);
+
+  // Check if user is at bottom of terminal
+  const checkScrollPosition = useCallback(() => {
+    if (!terminal.current) return;
+    
+    try {
+      const viewport = terminal.current.element?.querySelector('.xterm-viewport');
+      if (!viewport) return;
+      
+      const scrollTop = viewport.scrollTop;
+      const scrollHeight = viewport.scrollHeight;
+      const clientHeight = viewport.clientHeight;
+      
+      // Show button if user is not near the bottom (within 100px)
+      const isNearBottom = scrollTop + clientHeight >= scrollHeight - 100;
+      setShowScrollToBottom(!isNearBottom && scrollHeight > clientHeight);
+    } catch (error) {
+      // Ignore errors, terminal might not be ready
+    }
+  }, []);
+
+  // Set up scroll position monitoring
+  useEffect(() => {
+    if (!isConnected || !terminal.current) return;
+    
+    const viewport = terminal.current.element?.querySelector('.xterm-viewport');
+    if (!viewport) return;
+    
+    // Check scroll position periodically and on scroll events
+    const checkPosition = () => {
+      checkScrollPosition();
+    };
+    
+    viewport.addEventListener('scroll', checkPosition);
+    
+    // Also check periodically in case content changes
+    scrollCheckRef.current = setInterval(checkPosition, 1000);
+    
+    return () => {
+      viewport.removeEventListener('scroll', checkPosition);
+      if (scrollCheckRef.current) {
+        clearInterval(scrollCheckRef.current);
+        scrollCheckRef.current = null;
+      }
+    };
+  }, [isConnected, checkScrollPosition]);
 
   // Connect to shell function
   const connectToShell = () => {
@@ -74,6 +172,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     
     setIsConnected(false);
     setIsConnecting(false);
+    setShowScrollToBottom(false);
   };
 
   // Toggle bypass permissions
@@ -89,6 +188,29 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     }
   };
 
+  // Setup dropzone to redirect images to chat
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    accept: {
+      'image/*': ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg']
+    },
+    maxSize: 5 * 1024 * 1024, // 5MB
+    maxFiles: 5,
+    onDrop: (files) => {
+      // Call ChatInterface's handleImageFiles directly
+      if (window.addImagesToChatInterface) {
+        window.addImagesToChatInterface(files);
+      } else {
+        console.warn('Chat interface not ready for image handling');
+      }
+    },
+    noClick: true,
+    noKeyboard: true,
+    noDragEventsBubbling: true,
+    onDragEnter: () => setIsDraggedImageOver(true),
+    onDragLeave: () => setIsDraggedImageOver(false),
+    onDropAccepted: () => setIsDraggedImageOver(false),
+    onDropRejected: () => setIsDraggedImageOver(false)
+  });
 
   // Set up global function for MicButton to send to terminal
   useEffect(() => {
@@ -140,6 +262,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     // Reset states
     setIsConnected(false);
     setIsInitialized(false);
+    setShowScrollToBottom(false);
     
     
     // Force re-initialization after cleanup
@@ -155,6 +278,12 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     
     // Disconnect when session changes (user will need to manually reconnect)
     if (lastSessionId !== null && lastSessionId !== currentSessionId && isInitialized) {
+      
+      // Clear scroll monitoring interval
+      if (scrollCheckRef.current) {
+        clearInterval(scrollCheckRef.current);
+        scrollCheckRef.current = null;
+      }
       
       // Disconnect from current shell
       disconnectFromShell();
@@ -232,16 +361,17 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     }
 
 
-    // Initialize new terminal
+    // Initialize new terminal with responsive settings
     terminal.current = new Terminal({
       cursorBlink: true,
-      fontSize: isMobile ? 12 : 14,
+      fontSize: isMobile ? 11 : 14,
       fontFamily: 'Menlo, Monaco, "Courier New", monospace',
       allowProposedApi: true, // Required for clipboard addon
       allowTransparency: false,
       convertEol: true,
-      scrollback: isMobile ? 5000 : 10000,
+      scrollback: isMobile ? 3000 : 10000,
       tabStopWidth: 4,
+      ...(isMobile && { cols: 80, rows: 24 }), // Only set cols/rows for mobile to prevent horizontal scroll
       // Enable full color support
       windowsMode: false,
       macOptionIsMeta: true,
@@ -540,6 +670,9 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
           terminal.current.write('\x1b[2J\x1b[H'); // Clear screen and move cursor to home
         }
         
+        // Hide scroll to bottom button when disconnected
+        setShowScrollToBottom(false);
+        
         // Don't auto-reconnect anymore - user must manually connect
       };
 
@@ -571,39 +704,45 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   }
 
   return (
-    <div className="h-full flex flex-col bg-gray-900 w-full">
+    <div className="h-full flex flex-col bg-gray-900 w-full" {...getRootProps({onClick: e => e.stopPropagation()})}>
+      <input {...getInputProps()} />
       {/* Header */}
       <div className="flex-shrink-0 bg-gray-800 border-b border-gray-700 px-2 sm:px-4 py-2">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           <div className="flex items-center space-x-2 flex-1 min-w-0">
             <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
-            {selectedSession && !isMobile && (
+            {selectedSession && (
               <span className="text-xs text-blue-300 truncate">
-                ({selectedSession.summary.slice(0, 30)}...)
+                ({selectedSession.summary.slice(0, isMobile ? 20 : 30)}...)
               </span>
             )}
-            {!selectedSession && !isMobile && (
-              <span className="text-xs text-gray-400">(New Session)</span>
+            {!selectedSession && (
+              <span className="text-xs text-gray-400 hidden xs:inline">(New Session)</span>
             )}
             {!isInitialized && (
-              <span className="text-xs text-yellow-400">(Initializing...)</span>
+              <span className="text-xs text-yellow-400">
+                {isMobile ? 'Init...' : '(Initializing...)'}
+              </span>
             )}
             {isRestarting && (
-              <span className="text-xs text-blue-400">(Restarting...)</span>
+              <span className="text-xs text-blue-400">
+                {isMobile ? 'Restart...' : '(Restarting...)'}
+              </span>
             )}
           </div>
-          <div className="flex items-center space-x-2 sm:space-x-3">
+          <div className="flex items-center space-x-1 sm:space-x-2">
+            
             {/* Bypass Permissions Toggle */}
             <button
               onClick={toggleBypassPermissions}
-              className={`px-2 sm:px-3 py-1 text-xs rounded flex items-center space-x-1 transition-colors ${
+              className={`px-1.5 sm:px-3 py-1 text-xs rounded flex items-center space-x-1 transition-colors ${
                 isBypassingPermissions 
                   ? 'bg-yellow-600 text-white hover:bg-yellow-700' 
                   : 'bg-gray-600 text-gray-300 hover:bg-gray-700'
               }`}
               title={isBypassingPermissions ? "Disable bypass permissions" : "Enable bypass permissions"}
             >
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
                   d={isBypassingPermissions 
                     ? "M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" 
@@ -611,16 +750,18 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
                   } 
                 />
               </svg>
-              <span className="hidden sm:inline">{isBypassingPermissions ? 'Bypass ON' : 'Bypass OFF'}</span>
+              <span className="hidden sm:inline whitespace-nowrap">
+                {isBypassingPermissions ? 'Bypass ON' : 'Bypass OFF'}
+              </span>
             </button>
             
             {isConnected && (
               <button
                 onClick={disconnectFromShell}
-                className="px-2 sm:px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 flex items-center space-x-1"
+                className="px-1.5 sm:px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 flex items-center space-x-1"
                 title="Disconnect from shell"
               >
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
                 <span className="hidden sm:inline">Disconnect</span>
@@ -633,7 +774,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
               className="p-1 sm:px-2 text-xs text-gray-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1"
               title="Restart Shell (disconnect first)"
             >
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
               <span className="hidden sm:inline">Restart</span>
@@ -643,42 +784,64 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       </div>
 
       {/* Terminal */}
-      <div className="flex-1 p-2 overflow-hidden relative">
+      <div className="flex-1 p-1 sm:p-2 overflow-hidden relative">
         <div ref={terminalRef} className="h-full w-full focus:outline-none" style={{ outline: 'none' }} />
+        
+        {/* Drag overlay for images */}
+        {(isDragActive || isDraggedImageOver) && (
+          <div className="absolute inset-0 bg-blue-500/20 border-2 border-dashed border-blue-500 rounded-lg flex items-center justify-center z-50 pointer-events-none">
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-lg pointer-events-none">
+              <svg className="w-8 h-8 text-blue-500 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+              <p className="text-sm font-medium text-blue-600 dark:text-blue-400 mb-1">Solte as imagens aqui</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
+                Imagens serão adicionadas ao chat do Claude
+              </p>
+              <p className="text-xs text-gray-400 dark:text-gray-500 text-center mt-1">
+                Ou pressione ⌘V para colar da área de transferência
+              </p>
+            </div>
+          </div>
+        )}
         
         {/* Loading state */}
         {!isInitialized && (
           <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-90">
-            <div className="text-white">Loading terminal...</div>
+            <div className="text-white text-sm sm:text-base">Loading terminal...</div>
           </div>
         )}
         
         {/* Connect button when not connected */}
         {isInitialized && !isConnected && !isConnecting && (
-          <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-90 p-4">
+          <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-90 p-3 sm:p-4">
             <div className="text-center max-w-sm w-full">
               <button
                 onClick={connectToShell}
-                className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center space-x-2 text-base font-medium w-full sm:w-auto"
+                className="px-4 sm:px-6 py-2 sm:py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center space-x-2 text-sm sm:text-base font-medium w-full"
                 title="Connect to shell"
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
                 <span>Continue in Shell</span>
               </button>
-              <p className="text-gray-400 text-sm mt-3 px-2">
-                {selectedSession ? 
-                  `Resume session: ${selectedSession.summary.slice(0, 50)}...` : 
+              <p className="text-gray-400 text-xs sm:text-sm mt-2 sm:mt-3 px-2 break-words">
+                {selectedSession ? (
+                  <>Resume session: {selectedSession.summary.slice(0, isMobile ? 30 : 50)}...</>
+                ) : (
                   'Start a new Claude session'
-                }
+                )}
+              </p>
+              <p className="text-gray-500 text-xs mt-1 px-2 text-center">
+                Arraste imagens ou pressione ⌘V para adicionar ao chat
               </p>
               {isBypassingPermissions && (
-                <p className="text-yellow-400 text-xs mt-2 px-2 flex items-center justify-center space-x-1">
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <p className="text-yellow-400 text-xs mt-2 px-2 flex items-center justify-center space-x-1 flex-wrap">
+                  <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
                   </svg>
-                  <span>Bypass permissions enabled</span>
+                  <span className="text-center">Bypass permissions enabled</span>
                 </p>
               )}
             </div>
@@ -687,17 +850,41 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
         
         {/* Connecting state */}
         {isConnecting && (
-          <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-90 p-4">
+          <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-90 p-3 sm:p-4">
             <div className="text-center max-w-sm w-full">
-              <div className="flex items-center justify-center space-x-3 text-yellow-400">
-                <div className="w-6 h-6 animate-spin rounded-full border-2 border-yellow-400 border-t-transparent"></div>
-                <span className="text-base font-medium">Connecting to shell...</span>
+              <div className="flex items-center justify-center space-x-2 sm:space-x-3 text-yellow-400">
+                <div className="w-5 h-5 sm:w-6 sm:h-6 animate-spin rounded-full border-2 border-yellow-400 border-t-transparent"></div>
+                <span className="text-sm sm:text-base font-medium">Connecting...</span>
               </div>
-              <p className="text-gray-400 text-sm mt-3 px-2">
-                Starting Claude CLI in {selectedProject.displayName}
+              <p className="text-gray-400 text-xs sm:text-sm mt-2 sm:mt-3 px-2 break-words">
+                Starting Claude CLI in {selectedProject.displayName || selectedProject.name}
               </p>
             </div>
           </div>
+        )}
+
+        {/* Scroll to Bottom Button */}
+        {showScrollToBottom && isConnected && (
+          <button
+            onClick={scrollToBottom}
+            className="absolute bottom-4 right-4 z-10 bg-gray-700 hover:bg-gray-600 text-white rounded-full p-3 shadow-lg transition-all duration-200 hover:scale-105 active:scale-95 border border-gray-600"
+            title="Scroll to bottom"
+            aria-label="Scroll to bottom"
+          >
+            <svg 
+              className="w-5 h-5" 
+              fill="none" 
+              stroke="currentColor" 
+              viewBox="0 0 24 24"
+            >
+              <path 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+                strokeWidth={2} 
+                d="M19 14l-7 7m0 0l-7-7m7 7V3" 
+              />
+            </svg>
+          </button>
         )}
       </div>
     </div>

@@ -17,6 +17,7 @@ import FileTree from './FileTree';
 import CodeEditor from './CodeEditor';
 import Shell from './Shell';
 import GitPanel from './GitPanel';
+import VibeTaskPanel from './VibeTaskPanel';
 import ErrorBoundary from './ErrorBoundary';
 
 function MainContent({ 
@@ -49,6 +50,7 @@ function MainContent({
   const [editingFile, setEditingFile] = useState(null);
   const [openShellSessions, setOpenShellSessions] = useState(0);
   const [contextWindowPercentage, setContextWindowPercentage] = useState(null);
+  const [isVibeTaskPanelOpen, setIsVibeTaskPanelOpen] = useState(false);
   // Shell terminals state removed - single terminal mode only
 
   const handleFileOpen = (filePath, diffInfo = null) => {
@@ -192,7 +194,9 @@ function MainContent({
               ) : (
                 <div>
                   <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
-                    {activeTab === 'files' ? 'Project Files' : activeTab === 'git' ? 'Source Control' : 'Project'}
+                    {activeTab === 'files' ? 'Project Files' : 
+                     activeTab === 'git' ? 'Source Control' : 
+                     'Project'}
                   </h2>
                   <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
                     {selectedProject.displayName}
@@ -202,6 +206,7 @@ function MainContent({
             </div>
           </div>
           
+
           {/* Context Window Display - shows on all screen sizes */}
           {contextWindowPercentage !== null && (
             <div className={`px-2 py-1 rounded text-xs sm:text-sm ${
@@ -279,6 +284,21 @@ function MainContent({
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                   </svg>
                   <span className="hidden sm:inline">Source Control</span>
+                </span>
+              </button>
+              <button
+                onClick={() => setIsVibeTaskPanelOpen(!isVibeTaskPanelOpen)}
+                className={`relative px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
+                  isVibeTaskPanelOpen
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                }`}
+              >
+                <span className="flex items-center gap-1 sm:gap-1.5">
+                  <svg className="w-3 sm:w-3.5 h-3 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                  </svg>
+                  <span className="hidden sm:inline">Tasks</span>
                 </span>
               </button>
                {/* <button
@@ -378,6 +398,23 @@ function MainContent({
           file={editingFile}
           onClose={handleCloseEditor}
           projectPath={selectedProject?.path}
+        />
+      )}
+
+      {/* Vibe Kanban Sliding Panel */}
+      <div 
+        className={`fixed top-0 right-0 h-full w-72 sm:w-80 bg-background border-l border-border shadow-xl transform transition-transform duration-300 ease-in-out z-50 ${
+          isVibeTaskPanelOpen ? 'translate-x-0' : 'translate-x-full'
+        }`}
+      >
+        <VibeTaskPanel isVisible={isVibeTaskPanelOpen} onClose={() => setIsVibeTaskPanelOpen(false)} />
+      </div>
+
+      {/* Overlay */}
+      {isVibeTaskPanelOpen && (
+        <div 
+          className="fixed inset-0 bg-black/20 z-40 transition-opacity duration-300"
+          onClick={() => setIsVibeTaskPanelOpen(false)}
         />
       )}
     </div>

@@ -72,15 +72,15 @@ export function TaskFollowUpSection() {
 
   return (
     selectedAttempt && (
-      <div className="border-t p-4">
-        <div className="space-y-2">
+      <div className="border-t p-3 sm:p-4 bg-background w-full">
+        <div className="space-y-3 w-full">
           {followUpError && (
-            <Alert variant="destructive">
+            <Alert variant="destructive" className="w-full">
               <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{followUpError}</AlertDescription>
+              <AlertDescription className="text-sm break-words">{followUpError}</AlertDescription>
             </Alert>
           )}
-          <div className="flex gap-2 items-start">
+          <div className="flex flex-col sm:flex-row gap-2 sm:items-start w-full">
             <FileSearchTextarea
               placeholder="Continue working on this task... Type @ to search files."
               value={followUpMessage}
@@ -100,7 +100,7 @@ export function TaskFollowUpSection() {
                   }
                 }
               }}
-              className="flex-1 min-h-[40px] resize-none"
+              className="min-h-[40px] sm:min-h-[44px] resize-none"
               disabled={!canSendFollowUp}
               projectId={projectId}
               rows={1}
@@ -112,13 +112,15 @@ export function TaskFollowUpSection() {
                 !canSendFollowUp || !followUpMessage.trim() || isSendingFollowUp
               }
               size="sm"
+              className="w-full sm:w-auto self-stretch sm:self-start gap-2 flex-shrink-0"
             >
               {isSendingFollowUp ? (
-                <Loader size={16} className="mr-2" />
+                <Loader size={16} />
               ) : (
                 <>
-                  <Send className="h-4 w-4 mr-2" />
-                  Send
+                  <Send className="h-4 w-4" />
+                  <span className="sm:hidden">Send Message</span>
+                  <span className="hidden sm:inline">Send</span>
                 </>
               )}
             </Button>

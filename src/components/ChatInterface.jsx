@@ -190,13 +190,17 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                 <div className="w-8 h-8 bg-red-600 rounded-full flex items-center justify-center text-white text-sm flex-shrink-0">
                   !
                 </div>
+              ) : message.type === 'system' ? (
+                <div className="w-8 h-8 bg-gray-500 rounded-full flex items-center justify-center text-white text-sm flex-shrink-0">
+                  S
+                </div>
               ) : (
                 <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm flex-shrink-0 p-1">
                   <ClaudeLogo className="w-full h-full" />
                 </div>
               )}
               <div className="text-sm font-medium text-gray-900 dark:text-white">
-                {message.type === 'error' ? 'Error' : 'Claude'}
+                {message.type === 'error' ? 'Error' : message.type === 'system' ? 'Sistema' : 'Claude'}
               </div>
             </div>
           )}
@@ -1601,6 +1605,16 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
               // New session - update currentSessionId immediately
               setCurrentSessionId(latestMessage.sessionId);
               sessionStorage.setItem('pendingSessionId', latestMessage.sessionId);
+              
+              // Continue seamlessly without visual feedback
+              
+              // Navigate to the new session to ensure UI continuity
+              // This is especially important when a session was lost and a new one is created
+              // Mark this as a system-initiated change to preserve current chat messages
+              setIsSystemSessionChange(true);
+              if (onNavigateToSession) {
+                onNavigateToSession(latestMessage.sessionId);
+              }
             }
             
             // Session Protection: Replace temporary "new-session-*" identifier with real session ID
@@ -1807,11 +1821,34 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           break;
 
         case 'claude-error':
-          setChatMessages(prev => [...prev, {
-            type: 'error',
-            content: `Error: ${latestMessage.error}`,
-            timestamp: new Date()
-          }]);
+          // Check if the error is about session not found
+          if (latestMessage.error && latestMessage.error.includes('No conversation found with session ID')) {
+            // Session doesn't exist anymore, clear it and allow user to start new session
+            setCurrentSessionId(null);
+            
+            setChatMessages(prev => [...prev, {
+              type: 'error',
+              content: 'A sessão anterior não foi encontrada. Clique em "Nova Sessão" para continuar.',
+              timestamp: new Date()
+            }]);
+            
+            // Mark session as inactive to stop protection
+            if (onSessionInactive) {
+              onSessionInactive(currentSessionId);
+            }
+            
+            // Stop loading state so user can try again
+            setIsLoading(false);
+            setCanAbortSession(false);
+          } else {
+            setChatMessages(prev => [...prev, {
+              type: 'error',
+              content: `Error: ${latestMessage.error}`,
+              timestamp: new Date()
+            }]);
+            setIsLoading(false);
+            setCanAbortSession(false);
+          }
           break;
           
         case 'claude-complete':
@@ -2101,6 +2138,34 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
   }, []); // Only run once on mount
 
+  // Clean up ONLY old temporary session configurations on mount to prevent conflicts
+  // This does NOT affect user settings like tools, UI preferences, or models
+  useEffect(() => {
+    const cleanupOldTempSessions = () => {
+      try {
+        // Only clean up pendingSessionId if it's stale (not matching current session)
+        const pendingSessionId = sessionStorage.getItem('pendingSessionId');
+        if (pendingSessionId && currentSessionId && pendingSessionId !== currentSessionId) {
+          // Check if it's from a previous page load (timestamp-based IDs)
+          const match = pendingSessionId.match(/-(\d+)$/);
+          if (match) {
+            const timestamp = parseInt(match[1]);
+            const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
+            // Only remove if older than 5 minutes
+            if (timestamp < fiveMinutesAgo) {
+              sessionStorage.removeItem('pendingSessionId');
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error cleaning up old session configs:', error);
+      }
+    };
+    
+    // Run cleanup only once on component mount
+    cleanupOldTempSessions();
+  }, []); // Empty dependency array for mount-only execution
+
   // Reset textarea height when input is cleared programmatically
   useEffect(() => {
     if (textareaRef.current && !input.trim()) {
@@ -2143,6 +2208,12 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
 
   // Handle image files from drag & drop or file picker
   const handleImageFiles = useCallback((files) => {
+    // Add null/undefined check for files parameter
+    if (!files || !Array.isArray(files)) {
+      console.warn('handleImageFiles called with invalid files parameter:', files);
+      return;
+    }
+    
     const validFiles = files.filter(file => {
       try {
         // Validate file object and properties
@@ -2177,6 +2248,14 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       setAttachedImages(prev => [...prev, ...validFiles].slice(0, 5)); // Max 5 images
     }
   }, []);
+
+  // Expose handleImageFiles globally for Shell component
+  useEffect(() => {
+    window.addImagesToChatInterface = handleImageFiles;
+    return () => {
+      delete window.addImagesToChatInterface;
+    };
+  }, [handleImageFiles]);
 
   // Handle clipboard paste for images
   const handlePaste = useCallback(async (e) => {
@@ -2336,7 +2415,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       type: 'user',
       content: input,
       images: uploadedImages,
-      timestamp: new Date()
+      timestamp: new Date(),
+      isRecovering: false // Will be updated if session recovery is needed
     };
 
     setChatMessages(prev => [...prev, userMessage]);
@@ -2395,19 +2475,27 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     const selectedModel = localStorage.getItem('claude-model') || 'sonnet';
 
     // Send command to Claude CLI via WebSocket with images
+    // Add session validation to improve error handling
+    const messageOptions = {
+      projectPath: selectedProject.path,
+      cwd: selectedProject.fullPath,  
+      sessionId: currentSessionId,
+      resume: !!currentSessionId,
+      toolsSettings: toolsSettings,
+      permissionMode: permissionMode,
+      images: uploadedImages, // Pass images to backend
+      model: selectedModel // Pass selected model
+    };
+    
+    // Add session validation flag for better error recovery
+    if (currentSessionId) {
+      messageOptions.validateSession = true;
+    }
+    
     sendMessage({
       type: 'claude-command',
       command: input,
-      options: {
-        projectPath: selectedProject.path,
-        cwd: selectedProject.fullPath,
-        sessionId: currentSessionId,
-        resume: !!currentSessionId,
-        toolsSettings: toolsSettings,
-        permissionMode: permissionMode,
-        images: uploadedImages, // Pass images to backend
-        model: selectedModel // Pass selected model
-      }
+      options: messageOptions
     });
 
     setInput('');
@@ -2429,6 +2517,50 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   };
 
   const handleKeyDown = (e) => {
+    // Handle slash command menu navigation
+    if (showCommandMenu && filteredCommands.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedCommandIndex(prev => 
+          prev < filteredCommands.length - 1 ? prev + 1 : 0
+        );
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedCommandIndex(prev => 
+          prev > 0 ? prev - 1 : filteredCommands.length - 1
+        );
+        return;
+      }
+      if (e.key === 'Tab' || e.key === 'Enter') {
+        e.preventDefault();
+        if (selectedCommandIndex >= 0 && selectedCommandIndex < filteredCommands.length) {
+          const selectedCommand = filteredCommands[selectedCommandIndex];
+          const beforeSlash = input.substring(0, slashPosition);
+          const afterCommand = input.substring(textareaRef.current.selectionStart);
+          const newInput = beforeSlash + '/' + selectedCommand.name + ' ' + afterCommand;
+          setInput(newInput);
+          setShowCommandMenu(false);
+          
+          // Set cursor after the command
+          const newCursorPos = slashPosition + selectedCommand.name.length + 2;
+          setTimeout(() => {
+            if (textareaRef.current) {
+              textareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
+              textareaRef.current.focus();
+            }
+          }, 0);
+        }
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowCommandMenu(false);
+        return;
+      }
+    }
+    
     // Handle file dropdown navigation
     if (showFileDropdown && filteredFiles.length > 0) {
       if (e.key === 'ArrowDown') {
@@ -2461,8 +2593,8 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       }
     }
     
-    // Handle Tab key for mode switching (only when file dropdown is not showing)
-    if (e.key === 'Tab' && !showFileDropdown) {
+    // Handle Tab key for mode switching (only when no dropdowns are showing)
+    if (e.key === 'Tab' && !showFileDropdown && !showCommandMenu) {
       e.preventDefault();
       const modes = ['default', 'acceptEdits', 'bypassPermissions', 'plan'];
       const currentIndex = modes.indexOf(permissionMode);
@@ -2560,6 +2692,38 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
       e.target.style.height = 'auto';
       setIsTextareaExpanded(false);
     }
+    
+    // Check for slash command
+    const cursorPos = e.target.selectionStart;
+    const textBeforeCursor = newValue.substring(0, cursorPos);
+    const lastSlashIndex = textBeforeCursor.lastIndexOf('/');
+    
+    // Show command menu if "/" is typed at the beginning or after a space
+    if (lastSlashIndex >= 0) {
+      const beforeSlash = lastSlashIndex === 0 ? '' : newValue[lastSlashIndex - 1];
+      if (beforeSlash === '' || beforeSlash === ' ' || beforeSlash === '\n') {
+        const afterSlash = textBeforeCursor.substring(lastSlashIndex + 1);
+        
+        // Only show menu if we're still typing the command (no space after)
+        if (!afterSlash.includes(' ')) {
+          setShowCommandMenu(true);
+          setSlashPosition(lastSlashIndex);
+          
+          // Filter commands based on what's typed after "/"
+          const filtered = slashCommands.filter(cmd => 
+            cmd.name.toLowerCase().startsWith(afterSlash.toLowerCase())
+          );
+          setFilteredCommands(filtered);
+          setSelectedCommandIndex(0);
+        } else {
+          setShowCommandMenu(false);
+        }
+      } else {
+        setShowCommandMenu(false);
+      }
+    } else {
+      setShowCommandMenu(false);
+    }
   };
 
   const handleTextareaClick = (e) => {
@@ -2567,11 +2731,16 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   };
 
   const handleNewSession = () => {
+    // Clear current session ID to ensure new session is created
+    setCurrentSessionId(null);
     setChatMessages([]);
     setInput('');
     setIsLoading(false);
     setCanAbortSession(false);
+    // Clear any pending session IDs
+    sessionStorage.removeItem('pendingSessionId');
   };
+
   
   const handleAbortSession = () => {
     if (currentSessionId && canAbortSession) {
@@ -2610,6 +2779,43 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     }
   };
 
+  // Load slash commands
+  useEffect(() => {
+    const loadSlashCommands = async () => {
+      try {
+        const response = await api.get('/api/slash-commands');
+        if (response.data && response.data.commands) {
+          setSlashCommands(response.data.commands);
+        }
+      } catch (error) {
+        // If the endpoint doesn't exist, use default SuperClaude commands
+        const defaultCommands = [
+          { name: 'sc:analyze', description: 'Analyze code or system' },
+          { name: 'sc:build', description: 'Build project or component' },
+          { name: 'sc:cleanup', description: 'Clean up code' },
+          { name: 'sc:debug', description: 'Debug issues' },
+          { name: 'sc:document', description: 'Generate documentation' },
+          { name: 'sc:explain', description: 'Explain code or concept' },
+          { name: 'sc:fix', description: 'Fix bugs or issues' },
+          { name: 'sc:implement', description: 'Implement feature' },
+          { name: 'sc:improve', description: 'Improve code quality' },
+          { name: 'sc:optimize', description: 'Optimize performance' },
+          { name: 'sc:refactor', description: 'Refactor code' },
+          { name: 'sc:test', description: 'Write or run tests' },
+          { name: 'sc:task', description: 'Create or manage tasks' },
+          { name: 'sc:git', description: 'Git operations' },
+          { name: 'sc:design', description: 'Design systems or architecture' },
+          { name: 'sc:estimate', description: 'Estimate time or complexity' },
+          { name: 'sc:troubleshoot', description: 'Troubleshoot problems' },
+          { name: 'sc:workflow', description: 'Create workflows' },
+        ];
+        setSlashCommands(defaultCommands);
+      }
+    };
+    
+    loadSlashCommands();
+  }, []);
+
   // Don't render if no project is selected
   if (!selectedProject) {
     return (
@@ -2630,7 +2836,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
           }
         `}
       </style>
-      <div className="h-full flex flex-col">
+      <div className="h-full flex flex-col" data-chat-container>
         {/* Messages Area - Scrollable Middle Section */}
       <div 
         ref={scrollContainerRef}
@@ -2786,6 +2992,51 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                   />
                 ))}
               </div>
+            </div>
+          )}
+          
+          {/* Slash command menu */}
+          {showCommandMenu && filteredCommands.length > 0 && (
+            <div className="absolute bottom-full left-0 right-0 mb-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg max-h-64 overflow-y-auto z-50 backdrop-blur-sm">
+              <div className="px-3 py-2 text-xs font-medium text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+                Slash Commands
+              </div>
+              {filteredCommands.map((command, index) => (
+                <div
+                  key={command.name}
+                  className={`px-4 py-3 cursor-pointer border-b border-gray-100 dark:border-gray-700 last:border-b-0 touch-manipulation ${
+                    index === selectedCommandIndex
+                      ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300'
+                      : 'hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300'
+                  }`}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const beforeSlash = input.substring(0, slashPosition);
+                    const afterCommand = input.substring(textareaRef.current.selectionStart);
+                    const newInput = beforeSlash + '/' + command.name + ' ' + afterCommand;
+                    setInput(newInput);
+                    setShowCommandMenu(false);
+                    
+                    const newCursorPos = slashPosition + command.name.length + 2;
+                    setTimeout(() => {
+                      if (textareaRef.current) {
+                        textareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
+                        textareaRef.current.focus();
+                      }
+                    }, 0);
+                  }}
+                >
+                  <div className="font-mono text-sm">/{command.name}</div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    {command.description}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
           
