@@ -172,12 +172,9 @@ async function spawnClaude(command, options = {}, ws) {
       
       // Log when skip permissions is disabled due to plan mode
       if (settings.skipPermissions && permissionMode === 'plan') {
+        console.log('Skip permissions disabled in plan mode');
       }
     }
-    
-      const cleanArg = arg.replace(/\n/g, '\\n').replace(/\r/g, '\\r');
-      return cleanArg.includes(' ') ? `"${cleanArg}"` : cleanArg;
-    }).join(' '));
     
     const claudeProcess = spawn('claude', args, {
       cwd: workingDir,

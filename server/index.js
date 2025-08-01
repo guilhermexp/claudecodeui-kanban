@@ -1298,6 +1298,8 @@ async function startServer() {
     
     // Listen on all interfaces (0.0.0.0) to allow access from network
     server.listen(PORT, '0.0.0.0', async () => {
+      console.log(`✅ Server running on http://localhost:${PORT}`);
+      console.log(`✅ Network access: http://${localIP}:${PORT}`);
       
       // Start watching the projects folder for changes
       await setupProjectsWatcher(); // Re-enabled with better-sqlite3

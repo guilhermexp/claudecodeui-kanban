@@ -1,24 +1,31 @@
 <div align="center">
   <img src="public/logo.svg" alt="Claude Code UI" width="64" height="64">
   <h1>Claude Code UI + Vibe Kanban</h1>
-  <p><strong>Interface completa para Claude Code CLI com sistema de gerenciamento de tarefas integrado</strong></p>
+  <p><strong>Web interface for Claude Code CLI with integrated task management</strong></p>
+  
+  [![Version](https://img.shields.io/badge/version-1.5.0-blue.svg)](https://github.com/yourusername/claude-code-ui)
+  [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+  [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org)
+  [![Rust](https://img.shields.io/badge/rust-%3E%3D1.70.0-orange.svg)](https://www.rust-lang.org)
 </div>
 
 ---
 
-## 🚀 Visão Geral
+## 🚀 Overview
 
-Claude Code UI é uma interface web moderna e responsiva para o [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code), agora com **Vibe Kanban** integrado - um poderoso sistema de gerenciamento de tarefas baseado em Rust. 
+Claude Code UI is a modern, responsive web interface for [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code), enhanced with **Vibe Kanban** - a powerful Rust-based task management system.
 
-### Principais Características
+### ✨ Key Features
 
-- **🏗️ Arquitetura Dual Backend** - Node.js (Express) + Rust (Vibe Kanban)
-- **📱 100% Responsivo** - Desktop, tablet e mobile com PWA support
-- **🎯 Vibe Kanban Integrado** - Sistema completo de gestão de tarefas
-- **💬 Chat Inteligente** - Interface aprimorada com suporte a voz
-- **🔧 Terminal Melhorado** - Shell integrado com novas funcionalidades
-- **📁 Explorador de Arquivos** - Edição ao vivo com syntax highlighting
-- **🔀 Git Completo** - Gestão visual de branches, commits e PRs
+- **🏗️ Dual Backend Architecture** - Node.js (Express) + Rust (Actix-web)
+- **📱 Fully Responsive** - Desktop, tablet, and mobile with PWA support
+- **🎯 Vibe Kanban Integration** - Complete task management system
+- **💬 Enhanced Chat** - Voice transcription, file uploads, and smart suggestions
+- **🔧 Advanced Terminal** - Shell integration with bypass permissions
+- **📁 File Explorer** - Live editing with syntax highlighting
+- **🔀 Git Integration** - Visual branch management, commits, and PRs
+- **🎨 Theme Support** - Light/dark modes with system preference detection
+- **🔒 Security** - JWT authentication and tool permission management
 
 ## 📸 Screenshots
 
@@ -26,304 +33,270 @@ Claude Code UI é uma interface web moderna e responsiva para o [Claude Code CLI
 <table>
 <tr>
 <td align="center">
-<h3>Desktop - Interface Principal</h3>
-<img src="public/screenshots/desktop-main.png" alt="Desktop Interface" width="400">
-<br>
-<em>Chat integrado com Vibe Kanban visível</em>
+<h3>Desktop Interface</h3>
+<img src="docs/images/desktop-main.png" alt="Desktop Interface" width="400">
+<br><em>Full-featured desktop experience</em>
 </td>
 <td align="center">
-<h3>Mobile - Experiência Otimizada</h3>
-<img src="public/screenshots/mobile-chat.png" alt="Mobile Interface" width="250">
-<br>
-<em>Interface touch-friendly com navegação bottom-tab</em>
+<h3>Mobile Experience</h3>
+<img src="docs/images/mobile-chat.png" alt="Mobile Interface" width="200">
+<br><em>Touch-optimized mobile UI</em>
 </td>
 </tr>
 <tr>
 <td align="center">
-<h3>Vibe Kanban - Gestão de Tarefas</h3>
-<img src="public/screenshots/vibe-kanban.png" alt="Vibe Kanban" width="400">
-<br>
-<em>Sistema kanban completo com drag-and-drop</em>
+<h3>Vibe Kanban Board</h3>
+<img src="docs/images/vibe-kanban.png" alt="Vibe Kanban" width="400">
+<br><em>Drag-and-drop task management</em>
 </td>
 <td align="center">
-<h3>Terminal Integrado</h3>
-<img src="public/screenshots/terminal.png" alt="Terminal" width="400">
-<br>
-<em>Terminal com suporte completo ao Claude CLI</em>
+<h3>Integrated Terminal</h3>
+<img src="docs/images/terminal.png" alt="Terminal" width="400">
+<br><em>Full terminal with Claude integration</em>
 </td>
 </tr>
 </table>
 </div>
 
-## 🛠️ Arquitetura
+## 🛠️ Installation
 
-### Sistema com Dual Backend
+### Prerequisites
 
-```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Frontend      │    │   Backend 1     │    │  Claude CLI     │
-│   React/Vite    │◄──►│ Express/Node.js │◄──►│  Integration    │
-│   Port: 9000    │    │   Port: 8080    │    │                 │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-         │                      │
-         │                      │
-         ▼                      ▼
-┌─────────────────┐    ┌─────────────────┐
-│  Vibe Kanban    │    │   Shared        │
-│  Rust Backend   │◄──►│   Database      │
-│   Port: 8081    │    │   SQLite        │
-└─────────────────┘    └─────────────────┘
-```
+- **Node.js** ≥ 18.0.0
+- **Rust** ≥ 1.70.0
+- **Claude Code CLI** installed and configured
+- **Git** (optional, for Git features)
 
-### Stack Tecnológico
+### Quick Start
 
-#### Frontend (Port 9000)
-- **React 18** com hooks e componentes modernos
-- **Vite** para build rápido e HMR
-- **Tailwind CSS** + CSS Modules
-- **TypeScript** (migração gradual)
-- **CodeMirror 6** para edição de código
-- **XTerm.js** para terminal
-- **Lucide Icons** para ícones
-
-#### Backend Principal (Port 8080)
-- **Node.js** + **Express**
-- **WebSocket (ws)** para comunicação real-time
-- **SQLite** via better-sqlite3
-- **node-pty** para gerenciamento de processos
-- **JWT** para autenticação
-- **Multer** para upload de arquivos
-
-#### Vibe Kanban Backend (Port 8081)
-- **Rust** com Cargo
-- **Actix-web** para servidor HTTP
-- **SQLite** compartilhado
-- **Git2** para integração Git
-- **Serde** para serialização
-
-## 📦 Instalação
-
-### Pré-requisitos
-
-- **Node.js** v20 ou superior
-- **Rust** e Cargo (para Vibe Kanban)
-- **Claude Code CLI** instalado e configurado
-- **Git** para funcionalidades de versionamento
-
-### Passo a Passo
-
-1. **Clone o repositório**
 ```bash
-git clone https://github.com/siteboon/claudecodeui.git
-cd claudecodeui
-```
+# Clone the repository
+git clone https://github.com/yourusername/claude-code-ui.git
+cd claude-code-ui
 
-2. **Instale as dependências**
-```bash
-# Dependências Node.js
+# Install dependencies
 npm install
 
-# Build do Vibe Kanban (Rust)
+# Build Vibe Kanban (Rust backend)
 cd vibe-kanban/backend
 cargo build --release
 cd ../..
-```
 
-3. **Configure o ambiente**
-```bash
-cp .env.example .env
-# Edite o .env com suas configurações
-```
-
-4. **Inicie a aplicação**
-```bash
-# Modo desenvolvimento (todos os serviços)
+# Start development servers
 npm run dev
-
-# Ou inicie individualmente:
-npm run server        # Backend Node.js
-npm run client        # Frontend Vite
-npm run vibe-backend  # Backend Rust
 ```
 
-5. **Acesse a aplicação**
-- Frontend: `http://localhost:9000`
-- Backend API: `http://localhost:8080`
-- Vibe Kanban API: `http://localhost:8081`
+The application will be available at:
+- Frontend: http://localhost:9000
+- API Server: http://localhost:8080
+- Vibe Kanban: http://localhost:8081
 
-## 🎯 Principais Funcionalidades
-
-### 1. Vibe Kanban - Sistema de Tarefas
-
-- **Quadro Kanban Visual** - Colunas customizáveis (Todo, In Progress, Done)
-- **Drag and Drop** - Arraste tarefas entre colunas
-- **Detalhes de Tarefa** - Descrição rica, logs, processos, diffs
-- **Integração Git** - Crie branches e PRs direto das tarefas
-- **Templates** - Crie e reutilize templates de tarefas
-- **Mobile Otimizado** - Interface touch-friendly
-
-### 2. Chat Aprimorado
-
-- **Streaming em Tempo Real** - Respostas incrementais do Claude
-- **Suporte a Voz** - Gravação e transcrição de áudio
-- **Histórico Persistente** - Todas as conversas salvas
-- **Anexos** - Envie arquivos e imagens
-- **Syntax Highlighting** - Blocos de código formatados
-
-### 3. Terminal Integrado
-
-- **Shell Completo** - Acesso total ao sistema
-- **Múltiplas Sessões** - Abas de terminal
-- **Resize Dinâmico** - Ajuste automático
-- **Clipboard** - Copiar/colar integrado
-- **Mobile Support** - Teclado virtual otimizado
-
-### 4. Explorador de Arquivos
-
-- **Árvore Interativa** - Navegação com expand/collapse
-- **Editor Integrado** - CodeMirror com syntax highlighting
-- **Operações CRUD** - Criar, editar, renomear, deletar
-- **Preview** - Visualização de imagens
-- **Pesquisa** - Busca rápida de arquivos
-
-### 5. Git Visual
-
-- **Status em Tempo Real** - Mudanças destacadas
-- **Gestão de Branches** - Criar, trocar, deletar
-- **Commit Visual** - Stage/unstage com interface gráfica
-- **Histórico** - Visualize commits anteriores
-- **Pull Requests** - Integração com GitHub
-
-### 6. Mobile Experience
-
-- **PWA Support** - Instale como app nativo
-- **Touch Gestures** - Swipe e tap otimizados
-- **Bottom Navigation** - Navegação thumb-friendly
-- **Responsive Layouts** - Adaptação automática
-- **Offline Support** - Funciona sem conexão
-
-## 🔒 Segurança
-
-### Sistema de Permissões
-
-Por padrão, todas as ferramentas estão **desabilitadas** por segurança:
-
-1. Acesse **Settings** (ícone de engrenagem)
-2. Vá para a aba **Tools**
-3. Habilite apenas as ferramentas necessárias
-4. Salve as configurações
-
-### Ferramentas Disponíveis
-
-- **File Operations** - Leitura/escrita de arquivos
-- **Terminal Access** - Execução de comandos
-- **Git Operations** - Controle de versão
-- **MCP Servers** - Servidores de contexto
-
-## ⚙️ Configuração
-
-### Variáveis de Ambiente (.env)
+### Production Deployment
 
 ```bash
-# Portas dos Serviços
-PORT=8080                    # Backend Node.js
-VITE_PORT=9000              # Frontend
-VIBE_PORT=8081              # Vibe Kanban
+# Build for production
+npm run build
 
-# URLs
-VITE_SERVER_URL=http://localhost:8080
-VITE_WS_URL=ws://localhost:8080
-VITE_VIBE_URL=http://localhost:8081
-
-# Segurança
-SESSION_SECRET=your-secret-key
-JWT_SECRET=your-jwt-secret
-
-# Features
-ENABLE_AUTH=true
-ENABLE_MCP=true
-ENABLE_VOICE=true
-
-# Vibe Kanban
-VIBE_NO_BROWSER=true
-VIBE_DATABASE_URL=sqlite://./data/vibe.db
+# Start production server
+npm start
 ```
 
-### MCP (Model Context Protocol)
+## 🎯 Features
 
-Suporte completo para servidores MCP:
+### Chat Interface
+- **Voice Transcription** - Speak commands using Whisper API
+- **File Uploads** - Drag & drop files and images
+- **Code Highlighting** - Syntax highlighting for code blocks
+- **Markdown Support** - Full markdown rendering
+- **Session Management** - Save and resume conversations
 
-```json
+### Terminal Integration
+- **XTerm.js** - Full terminal emulation
+- **Claude Integration** - Direct CLI access
+- **Bypass Permissions** - Toggle dangerous operations
+- **Session Persistence** - Maintain terminal sessions
+- **Mobile Optimized** - Touch-friendly controls
+
+### Vibe Kanban
+- **Task Boards** - Organize tasks in columns
+- **Drag & Drop** - Intuitive task management
+- **Git Integration** - Link tasks to commits
+- **Real-time Sync** - Updates across all clients
+- **Markdown Editor** - Rich text task descriptions
+
+### File Management
+- **Tree View** - Navigate project structure
+- **Live Editing** - Edit files with syntax highlighting
+- **Search** - Find files and content quickly
+- **Preview** - View images and documents
+
+### Git Features
+- **Visual Branches** - See branch structure
+- **Commit History** - Browse commits with diffs
+- **Pull Requests** - Create and manage PRs
+- **Status Tracking** - Real-time Git status
+
+## ⚙️ Configuration
+
+### Environment Variables
+
+Create a `.env` file in the root directory:
+
+```env
+# Server Configuration
+PORT=8080
+VITE_API_URL=http://localhost:8080
+VITE_WS_URL=ws://localhost:8080
+
+# Optional Features
+WHISPER_API_KEY=your_openai_api_key
+GITHUB_CLIENT_ID=your_github_client_id
+GITHUB_CLIENT_SECRET=your_github_client_secret
+
+# Security
+JWT_SECRET=your_jwt_secret_key
+SESSION_SECRET=your_session_secret
+```
+
+### Tool Permissions
+
+Tools are disabled by default for security. Enable them in Settings:
+
+```javascript
 {
-  "servers": {
-    "filesystem": {
-      "command": "npx",
-      "args": ["@modelcontextprotocol/server-filesystem"],
-      "config": {
-        "directories": ["/path/to/project"]
-      }
-    }
+  "tools": {
+    "write": false,
+    "edit": false,
+    "bash": false,
+    "web_fetch": false
   }
 }
 ```
 
-## 🚀 Scripts Disponíveis
+## 📱 Mobile Support
 
-```bash
-# Desenvolvimento
-npm run dev              # Inicia todos os serviços
-npm run dev:network      # Desenvolvimento com acesso rede
-npm run server           # Apenas backend Node.js
-npm run client           # Apenas frontend
-npm run vibe-backend     # Apenas Vibe Kanban
+### Progressive Web App
+- Install as native app on mobile devices
+- Offline support with service workers
+- Push notifications (coming soon)
 
-# Produção
-npm run build            # Build de produção
-npm run start            # Inicia em produção
-npm run preview          # Preview do build
+### Touch Optimizations
+- Bottom navigation bar
+- Swipe gestures
+- Touch-friendly buttons
+- Responsive layouts
 
-# Utilitários
-npm run tunnel           # Cloudflare tunnel
-npm run ngrok            # Ngrok tunnel
-npm run lint             # Linting
-npm run format           # Formatação
+## 🔒 Security
+
+### Authentication
+- JWT-based authentication
+- Session management
+- Secure password hashing
+
+### Tool Safety
+- All tools disabled by default
+- Per-tool permission control
+- Bypass mode for advanced users
+- Audit logging
+
+## 🧪 Development
+
+### Project Structure
+
+```
+claude-code-ui/
+├── src/                    # React frontend
+│   ├── components/        # UI components
+│   ├── hooks/            # Custom React hooks
+│   ├── utils/            # Utility functions
+│   └── contexts/         # React contexts
+├── server/                # Node.js backend
+│   ├── routes/           # API routes
+│   ├── database/         # SQLite integration
+│   └── lib/              # Server utilities
+├── vibe-kanban/          # Rust backend
+│   ├── backend/          # Actix-web server
+│   └── frontend/         # Vibe UI components
+├── public/               # Static assets
+└── scripts/              # Build and dev scripts
 ```
 
-## 🤝 Contribuindo
+### Available Scripts
 
-Contribuições são bem-vindas! Por favor:
+```bash
+npm run dev              # Start all development servers
+npm run dev:network      # Start with network access
+npm run build            # Build for production
+npm run test             # Run tests
+npm run test:e2e         # Run E2E tests
+npm run tunnel           # Create Cloudflare tunnel
+npm run ngrok            # Create ngrok tunnel
+```
 
-1. Fork o projeto
-2. Crie uma feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit suas mudanças (`git commit -m 'Add: Amazing Feature'`)
-4. Push para a branch (`git push origin feature/AmazingFeature`)
-5. Abra um Pull Request
+### Testing
 
-### Padrões de Código
+```bash
+# Unit tests
+npm run test:unit
 
-- Use ESLint e Prettier
-- Siga as convenções do projeto
-- Adicione testes quando possível
-- Documente novas funcionalidades
+# Integration tests
+npm run test:integration
 
-## 📝 Licença
+# E2E tests
+npm run test:e2e
 
-Este projeto está sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para detalhes.
+# Coverage report
+npm run test:coverage
+```
 
-## 🙏 Agradecimentos
+## 🤝 Contributing
 
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) - CLI oficial da Anthropic
-- [Vibe Kanban](https://github.com/vibe-kanban) - Sistema de tarefas em Rust
-- [React](https://react.dev/) - Biblioteca UI
-- [Vite](https://vitejs.dev/) - Build tool
-- [Tailwind CSS](https://tailwindcss.com/) - Framework CSS
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
 
-## 💖 Patrocinadores
+### Development Guidelines
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-- [Siteboon - AI powered website builder](https://siteboon.ai)
+### Code Style
+- JavaScript: ESLint with Prettier
+- Rust: rustfmt and clippy
+- Commits: Conventional Commits
+
+## 📚 Documentation
+
+- [Installation Guide](docs/INSTALLATION.md)
+- [User Guide](docs/USER_GUIDE.md)
+- [API Documentation](docs/API.md)
+- [Architecture Overview](docs/ARCHITECTURE.md)
+- [Troubleshooting](docs/TROUBLESHOOTING.md)
+
+## 🐛 Known Issues
+
+- Terminal may disconnect on network changes
+- File uploads limited to 10MB
+- Some Git operations require CLI fallback
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- [Anthropic](https://anthropic.com) for Claude and Claude Code CLI
+- [XTerm.js](https://xtermjs.org) for terminal emulation
+- [Vite](https://vitejs.dev) for build tooling
+- [Tailwind CSS](https://tailwindcss.com) for styling
 
 ---
 
 <div align="center">
-  <strong>Feito com ❤️ para a comunidade Claude Code</strong>
+  <p>Made with ❤️ by the Claude Code UI Team</p>
+  <p>
+    <a href="https://github.com/yourusername/claude-code-ui">GitHub</a> •
+    <a href="https://docs.claude-code-ui.com">Documentation</a> •
+    <a href="https://discord.gg/claude-code-ui">Discord</a>
+  </p>
 </div>
