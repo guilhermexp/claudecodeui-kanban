@@ -17,10 +17,7 @@ export default defineConfig(({ command, mode }) => {
     server: {
       port: 9000,
       host: true, // Allow access from network
-      hmr: {
-        protocol: 'wss',
-        clientPort: 443
-      },
+      hmr: true,
       // Permite requisições do ngrok
       strictPort: true,
       headers: {
