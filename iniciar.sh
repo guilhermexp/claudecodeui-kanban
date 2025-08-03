@@ -182,6 +182,10 @@ EOF
 echo ""
 echo "🔗 URL do Ngrok aparecerá abaixo:"
 echo ""
+echo "💡 Dica: Se o hot reload não funcionar via ngrok:"
+echo "   1. Use Ctrl+Shift+R (ou Cmd+Shift+R no Mac) para forçar reload"
+echo "   2. Ou desative o cache nas DevTools (F12 > Network > Disable cache)"
+echo ""
 
 # Inicia ngrok com domínio fixo configurado
 ngrok start claudecodeui
