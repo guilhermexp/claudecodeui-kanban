@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, Loader2, Brain, Delete } from 'lucide-react';
+import { Mic, Loader2, Brain } from 'lucide-react';
 import { transcribeWithWhisper } from '../utils/whisper';
 
 export function MicButton({ onTranscript, className = '', isChat = false, hasChatText = false }) {
