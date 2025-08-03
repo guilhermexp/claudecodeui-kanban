@@ -18,10 +18,8 @@ export default defineConfig(({ command, mode }) => {
       port: 9000,
       host: true, // Allow access from network
       hmr: {
-        protocol: 'ws',
-        host: 'localhost',
-        port: 9000,
-        clientPort: 9000
+        protocol: 'wss',
+        clientPort: 443
       },
       // Permite requisições do ngrok
       strictPort: true,
@@ -29,7 +27,8 @@ export default defineConfig(({ command, mode }) => {
         'Access-Control-Allow-Origin': '*',
         'Cache-Control': 'no-cache, no-store, must-revalidate',
         'Pragma': 'no-cache',
-        'Expires': '0'
+        'Expires': '0',
+        'ngrok-skip-browser-warning': 'true'
       },
       // Permite QUALQUER host do ngrok
       allowedHosts: [
