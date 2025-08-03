@@ -595,15 +595,8 @@ function handleShellConnection(ws, request) {
           }
           
           try {
-            // Build shell command - try multiple possible locations
-            const possibleClaudePaths = [
-              '/opt/homebrew/bin/claude',
-              '/usr/local/bin/claude',
-              'claude'
-            ];
-            
-            // We'll try the most likely path first
-            let claudeCommand = possibleClaudePaths[0];
+            // Build claude command
+            let claudeCommand = 'claude';
             
             if (bypassPermissions) {
               claudeCommand += ' --dangerously-skip-permissions';
@@ -613,43 +606,25 @@ function handleShellConnection(ws, request) {
               claudeCommand += ` --resume ${sessionId}`;
             }
             
-            // Start shell using PTY and then execute claude
-            
             // Use the user's default shell to ensure proper environment loading
             const userShell = process.env.SHELL || '/bin/bash';
             
-            // Create an interactive shell with login flag to load user's profile
-            shellProcess = pty.spawn(userShell, ['-l'], {
+            // Build the full shell command
+            const shellCommand = `cd "${projectPath}" && ${claudeCommand}`;
+            
+            // Start shell with the command directly
+            shellProcess = pty.spawn(userShell, ['-lc', shellCommand], {
               name: 'xterm-256color',
               cols: data.cols || 80,
               rows: data.rows || 24,
               cwd: projectPath,
               env: {
                 ...process.env,
-                // Ensure PATH includes common locations for claude including Homebrew paths
-                PATH: `/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:${process.env.PATH || ''}`,
-                TERM: 'xterm-256color',
-                SHELL: userShell
+                // Ensure PATH includes common locations for claude including NVM
+                PATH: `/Users/guilhermevarela/.nvm/versions/node/v20.19.4/bin:${process.env.PATH || ''}`,
+                TERM: 'xterm-256color'
               }
             });
-            
-            // After shell starts, execute claude command
-            setTimeout(() => {
-              // Clear the terminal first for a clean start
-              shellProcess.write('clear\r');
-              setTimeout(() => {
-                // Show which command we're running
-                shellProcess.write(`echo "Starting Claude CLI..."\r`);
-                shellProcess.write(`echo "Command: ${claudeCommand}"\r`);
-                shellProcess.write(`echo ""\r`);
-                // Ensure PATH is set correctly before running claude
-                shellProcess.write(`export PATH="/opt/homebrew/bin:$PATH"\r`);
-                setTimeout(() => {
-                  // Execute the claude command directly
-                  shellProcess.write(`${claudeCommand}\r`);
-                }, 100);
-              }, 100);
-            }, 200);
             
             
             // Handle data output
