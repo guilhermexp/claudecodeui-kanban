@@ -3093,7 +3093,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
                 setIsTextareaExpanded(isExpanded);
               }}
               placeholder="(@ to reference files)"
-              disabled={isLoading}
+              disabled={false}
               rows={1}
               className="chat-input-placeholder w-full pl-12 pr-28 sm:pr-40 py-3 sm:py-4 bg-transparent rounded-2xl focus:outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 disabled:opacity-50 resize-none min-h-[40px] sm:min-h-[56px] max-h-[40vh] sm:max-h-[300px] overflow-y-auto text-sm sm:text-base transition-all duration-200"
               style={{ height: 'auto' }}
@@ -3162,7 +3162,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
             {/* Send button */}
             <button
               type="submit"
-              disabled={!input.trim() || isLoading}
+              disabled={!input.trim()}
               onMouseDown={(e) => {
                 e.preventDefault();
                 handleSubmit(e);
