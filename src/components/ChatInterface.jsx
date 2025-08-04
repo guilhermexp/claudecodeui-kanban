@@ -1003,40 +1003,86 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
             ) : (
               <div className="text-sm text-gray-700 dark:text-gray-300">
                 {message.type === 'assistant' ? (
-                  <div className="prose prose-sm max-w-none dark:prose-invert prose-gray [&_code]:!bg-transparent [&_code]:!p-0">
+                  <div className="prose prose-sm max-w-none dark:prose-invert prose-gray [&_code]:!bg-transparent [&_code]:!p-0 space-y-1">
                     <ReactMarkdown
                       components={{
                         code: ({node, inline, className, children, ...props}) => {
                           return inline ? (
-                            <strong className="text-blue-600 dark:text-blue-400 font-bold not-prose" {...props}>
+                            <code className="px-2 py-1 mx-0.5 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded text-sm font-mono border border-gray-300 dark:border-gray-600" {...props}>
                               {children}
-                            </strong>
+                            </code>
                           ) : (
-                            <div className="bg-gray-100 dark:bg-gray-800 p-3 rounded-lg overflow-hidden my-2">
-                              <code className="text-gray-800 dark:text-gray-200 text-sm font-mono block whitespace-pre-wrap break-words" {...props}>
+                            <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg overflow-auto my-3 border border-gray-200 dark:border-gray-700">
+                              <code className="text-gray-800 dark:text-gray-200 text-sm font-mono block whitespace-pre-wrap break-words leading-relaxed" {...props}>
                                 {children}
                               </code>
                             </div>
                           );
                         },
                         blockquote: ({children}) => (
-                          <blockquote className="border-l-4 border-gray-300 dark:border-gray-600 pl-4 italic text-gray-600 dark:text-gray-400 my-2">
-                            {children}
+                          <blockquote className="border-l-4 border-blue-400 dark:border-blue-500 pl-4 py-2 my-3 bg-blue-50 dark:bg-blue-950/20 rounded-r">
+                            <div className="text-gray-700 dark:text-gray-300 italic">
+                              {children}
+                            </div>
                           </blockquote>
                         ),
                         a: ({href, children}) => (
-                          <a href={href} className="text-blue-600 dark:text-blue-400 hover:underline" target="_blank" rel="noopener noreferrer">
+                          <a href={href} className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 underline decoration-2 underline-offset-2" target="_blank" rel="noopener noreferrer">
                             {children}
                           </a>
                         ),
                         p: ({children}) => (
-                          <div className="mb-1 last:mb-0">
+                          <div className="mb-4 last:mb-0 leading-7 text-gray-800 dark:text-gray-200">
                             {children}
                           </div>
+                        ),
+                        ul: ({children}) => (
+                          <ul className="list-disc list-inside mb-4 space-y-2 text-gray-800 dark:text-gray-200 pl-4">
+                            {children}
+                          </ul>
+                        ),
+                        ol: ({children}) => (
+                          <ol className="list-decimal list-inside mb-4 space-y-2 text-gray-800 dark:text-gray-200 pl-4">
+                            {children}
+                          </ol>
+                        ),
+                        li: ({children}) => (
+                          <li className="mb-2 leading-6">
+                            {children}
+                          </li>
+                        ),
+                        h1: ({children}) => (
+                          <h1 className="text-xl font-bold mb-4 mt-6 first:mt-0 text-gray-900 dark:text-gray-100 border-b border-gray-200 dark:border-gray-700 pb-2">
+                            {children}
+                          </h1>
+                        ),
+                        h2: ({children}) => (
+                          <h2 className="text-lg font-semibold mb-3 mt-5 first:mt-0 text-gray-900 dark:text-gray-100">
+                            {children}
+                          </h2>
+                        ),
+                        h3: ({children}) => (
+                          <h3 className="text-base font-medium mb-2 mt-4 first:mt-0 text-gray-900 dark:text-gray-100">
+                            {children}
+                          </h3>
+                        ),
+                        strong: ({children}) => (
+                          <strong className="font-semibold text-gray-900 dark:text-gray-100">
+                            {children}
+                          </strong>
+                        ),
+                        em: ({children}) => (
+                          <em className="italic text-gray-700 dark:text-gray-300">
+                            {children}
+                          </em>
                         )
                       }}
                     >
-                      {String(message.content || '')}
+                      {String(message.content || '')
+                        .replace(/\n\n\n+/g, '\n\n')  // Multiple newlines to double
+                        .replace(/([.!?])\s*\n(?=[A-Z])/g, '$1\n\n')  // Add space after sentences
+                        .replace(/\n/g, '  \n')  // Preserve line breaks in markdown
+                      }
                     </ReactMarkdown>
                   </div>
                 ) : (
