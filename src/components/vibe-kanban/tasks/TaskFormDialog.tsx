@@ -254,7 +254,7 @@ export function TaskFormDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[95vw] sm:max-w-[500px] w-full mx-2 sm:mx-auto max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-[95vw] sm:max-w-[650px] w-full mx-2 sm:mx-auto max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {isEditMode ? 'Edit Task' : 'Create New Task'}
