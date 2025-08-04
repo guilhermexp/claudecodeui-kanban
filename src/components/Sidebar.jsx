@@ -203,15 +203,15 @@ function Sidebar({
   // Helper function to get displayed sessions (limited to 2 initially)
   const getDisplayedSessions = (project) => {
     const allSessions = getAllSessions(project);
-    const hasAdditional = additionalSessions[project.name]?.length > 0;
+    const hasLoadedMore = additionalSessions[project.name]?.length > 0;
     
-    // If we haven't loaded additional sessions yet, show only first 2
-    if (!hasAdditional) {
-      return allSessions.slice(0, 2);
+    // If we have loaded additional sessions, show all
+    if (hasLoadedMore) {
+      return allSessions;
     }
     
-    // If we have additional sessions, show all
-    return allSessions;
+    // Otherwise, show only first 2
+    return allSessions.slice(0, 2);
   };
 
   // Helper function to check if project has active sessions
@@ -399,8 +399,9 @@ function Sidebar({
   const loadMoreSessions = async (project) => {
     // Check if we can load more sessions
     const canLoadMore = project.sessionMeta?.hasMore !== false;
+    const hasAlreadyLoaded = additionalSessions[project.name]?.length > 0;
     
-    if (!canLoadMore || loadingSessions[project.name]) {
+    if (!canLoadMore || loadingSessions[project.name] || hasAlreadyLoaded) {
       return;
     }
 
@@ -429,7 +430,7 @@ function Sidebar({
         }
       }
     } catch (error) {
-      // Error: 'Error loading more sessions:', error
+      console.error('Error loading more sessions:', error);
     } finally {
       setLoadingSessions(prev => ({ ...prev, [project.name]: false }));
     }
@@ -1240,10 +1241,14 @@ function Sidebar({
                       {(() => {
                         const allSessions = getAllSessions(project);
                         const displayedSessions = getDisplayedSessions(project);
-                        const hasMoreToShow = allSessions.length > displayedSessions.length;
+                        const hasLoadedMore = additionalSessions[project.name]?.length > 0;
                         const hasMoreFromServer = project.sessionMeta?.hasMore !== false;
                         
-                        return (hasMoreToShow || hasMoreFromServer) && (
+                        // Show button if we have more sessions locally to display OR more on server
+                        const hasMoreToShow = allSessions.length > displayedSessions.length;
+                        const canLoadFromServer = hasMoreFromServer && !hasLoadedMore;
+                        
+                        return (hasMoreToShow || canLoadFromServer) && (
                           <Button
                             variant="ghost"
                             size="sm"
