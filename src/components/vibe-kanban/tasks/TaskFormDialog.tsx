@@ -254,13 +254,13 @@ export function TaskFormDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[550px] w-full max-w-full mx-4 sm:mx-auto">
+      <DialogContent className="max-w-[95vw] sm:max-w-[500px] w-full mx-2 sm:mx-auto max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {isEditMode ? 'Edit Task' : 'Create New Task'}
           </DialogTitle>
         </DialogHeader>
-        <div className="space-y-4 sm:space-y-4">
+        <div className="space-y-3 sm:space-y-4">
           {/* Plan warning when in planning mode without plan */}
           {showPlanWarning && (
             <div className="p-4 rounded-lg border border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-950/20">
@@ -381,7 +381,7 @@ export function TaskFormDialog({
             </div>
           )}
 
-          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-4 sm:pt-2">
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-3 sm:pt-4">
             <Button
               variant="outline"
               onClick={handleCancel}
