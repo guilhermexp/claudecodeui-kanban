@@ -178,8 +178,11 @@ function MainContent({
                   <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white truncate">
                     {selectedSession.summary}
                   </h2>
-                  <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                    {selectedProject.displayName} <span className="hidden sm:inline">• {selectedSession.id}</span>
+                  <div className="text-xs truncate">
+                    <span className="inline-block px-2 py-1 rounded-full bg-gradient-to-r from-blue-500/20 to-purple-500/20 dark:from-blue-400/30 dark:to-purple-400/30 text-blue-700 dark:text-blue-300 font-medium">
+                      {selectedProject.displayName}
+                    </span>
+                    <span className="hidden sm:inline text-gray-500 dark:text-gray-400 ml-2">• {selectedSession.id}</span>
                   </div>
                 </div>
               ) : activeTab === 'chat' && !selectedSession ? (
@@ -187,8 +190,10 @@ function MainContent({
                   <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
                     New Session
                   </h2>
-                  <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                    {selectedProject.displayName}
+                  <div className="text-xs truncate">
+                    <span className="inline-block px-2 py-1 rounded-full bg-gradient-to-r from-blue-500/20 to-purple-500/20 dark:from-blue-400/30 dark:to-purple-400/30 text-blue-700 dark:text-blue-300 font-medium">
+                      {selectedProject.displayName}
+                    </span>
                   </div>
                 </div>
               ) : (
@@ -198,8 +203,10 @@ function MainContent({
                      activeTab === 'git' ? 'Source Control' : 
                      'Project'}
                   </h2>
-                  <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                    {selectedProject.displayName}
+                  <div className="text-xs truncate">
+                    <span className="inline-block px-2 py-1 rounded-full bg-gradient-to-r from-blue-500/20 to-purple-500/20 dark:from-blue-400/30 dark:to-purple-400/30 text-blue-700 dark:text-blue-300 font-medium">
+                      {selectedProject.displayName}
+                    </span>
                   </div>
                 </div>
               )}
