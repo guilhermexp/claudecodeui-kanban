@@ -514,7 +514,7 @@ function AppContent() {
         />
         
         {/* Modal */}
-        <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 w-full max-w-md mx-4 p-6 space-y-4">
+        <div className="relative bg-white dark:bg-gray-950 rounded-lg shadow-xl border border-gray-200 dark:border-gray-800 w-full max-w-md mx-4 p-6 space-y-4">
           {/* Header */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -553,7 +553,7 @@ function AppContent() {
           {/* Upgrade Instructions */}
           <div className="space-y-3">
             <h3 className="text-sm font-medium text-gray-900 dark:text-white">How to upgrade:</h3>
-            <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-3 border">
+            <div className="bg-gray-100 dark:bg-gray-900 rounded-lg p-3 border">
               <code className="text-sm text-gray-800 dark:text-gray-200 font-mono">
                 git checkout main && git pull && npm install
               </code>

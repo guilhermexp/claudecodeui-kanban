@@ -58,24 +58,24 @@
 
   .dark {
     /* ChatGPT-like dark theme with greyish tones */
-    --background: 210 11% 11%;        /* Very dark grey background - similar to ChatGPT main */
+    --background: 0 0% 0%;            /* Pure black background */
     --foreground: 213 27% 84%;        /* Light grey text */
-    --card: 210 11% 15%;              /* Slightly lighter grey for cards */
+    --card: 0 0% 8%;                  /* Very dark grey for cards */
     --card-foreground: 213 27% 84%;   /* Light grey text on cards */
-    --popover: 210 11% 15%;           /* Same as card for consistency */
+    --popover: 0 0% 8%;               /* Same as card for consistency */
     --popover-foreground: 213 27% 84%; /* Light grey text */
     --primary: 215 13.8% 50.2%;       /* Medium grey instead of blue */
     --primary-foreground: 0 0% 100%;  /* White text on primary */
-    --secondary: 210 11% 21%;         /* Medium grey for secondary elements */
+    --secondary: 0 0% 12%;            /* Dark grey for secondary elements */
     --secondary-foreground: 213 27% 84%; /* Light grey text */
-    --muted: 210 11% 21%;             /* Medium grey for muted elements */
+    --muted: 0 0% 12%;                /* Dark grey for muted elements */
     --muted-foreground: 215 13.8% 50.2%; /* Medium grey text */
-    --accent: 210 11% 21%;            /* Medium grey accent */
+    --accent: 0 0% 15%;               /* Dark grey accent */
     --accent-foreground: 213 27% 84%; /* Light grey text */
     --destructive: 210 11% 35%;       /* Dark grey for destructive actions */
     --destructive-foreground: 0 0% 100%; /* White text on destructive */
-    --border: 210 11% 21%;            /* Medium grey borders */
-    --input: 210 11% 15%;             /* Dark grey inputs */
+    --border: 0 0% 15%;               /* Dark grey borders */
+    --input: 0 0% 8%;                 /* Very dark grey inputs */
     --ring: 215 13.8% 50.2%;          /* Grey focus ring */
 
     /* VibeKanban specific status colors */
