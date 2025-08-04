@@ -403,7 +403,7 @@ function MainContent({
 
       {/* Vibe Kanban Sliding Panel */}
       <div 
-        className={`fixed top-0 right-0 h-full w-72 sm:w-80 bg-background border-l border-border shadow-xl transform transition-transform duration-300 ease-in-out z-50 ${
+        className={`fixed top-0 right-0 h-full w-80 sm:w-96 bg-background border-l border-border shadow-xl transform transition-transform duration-300 ease-in-out z-50 ${
           isVibeTaskPanelOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >

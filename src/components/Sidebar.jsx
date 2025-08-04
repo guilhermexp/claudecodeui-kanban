@@ -745,11 +745,11 @@ function Sidebar({
                       <div
                         className={cn(
                           "p-3 mx-3 my-1 rounded-lg border border-border active:scale-[0.98] transition-all duration-150 relative",
-                          isVibeKanbanProject(project) && !isSelected && "bg-gray-100 dark:bg-gray-800/50",
+                          isVibeKanbanProject(project) && !isSelected && "bg-gray-100 dark:bg-black/30",
                           !isVibeKanbanProject(project) && !isSelected && "bg-card",
                           isSelected && "bg-accent",
                           isStarred && !isSelected && !isVibeKanbanProject(project) && "bg-blue-50/30 dark:bg-blue-900/10",
-                          isStarred && !isSelected && isVibeKanbanProject(project) && "bg-gray-200 dark:bg-gray-800/70"
+                          isStarred && !isSelected && isVibeKanbanProject(project) && "bg-gray-200 dark:bg-black/50"
                         )}
                         onClick={() => {
                           // On mobile, just toggle the folder - don't select the project
@@ -845,7 +845,7 @@ function Sidebar({
                                     "w-8 h-8 rounded-lg flex items-center justify-center active:scale-90 transition-all duration-150 border",
                                     isStarred 
                                       ? "bg-blue-500/10 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800" 
-                                      : "bg-gray-500/10 dark:bg-gray-900/30 border-gray-200 dark:border-gray-800"
+                                      : "bg-gray-500/10 dark:bg-black/20 border-gray-200 dark:border-gray-900"
                                   )}
                                   onClick={(e) => {
                                     e.stopPropagation();
@@ -902,11 +902,11 @@ function Sidebar({
                       variant="ghost"
                       className={cn(
                         "hidden md:flex w-full justify-between px-3 py-2 h-auto font-normal hover:text-accent-foreground relative rounded-lg",
-                        isVibeKanbanProject(project) && !isSelected && "bg-gray-100 dark:bg-gray-800/50 hover:bg-gray-200 dark:hover:bg-gray-800/60",
+                        isVibeKanbanProject(project) && !isSelected && "bg-gray-100 dark:bg-black/30 hover:bg-gray-200 dark:hover:bg-black/40",
                         !isVibeKanbanProject(project) && !isSelected && "hover:bg-accent",
                         isSelected && "bg-accent text-accent-foreground",
                         isStarred && !isSelected && !isVibeKanbanProject(project) && "bg-blue-50/30 dark:bg-blue-900/10 hover:bg-blue-100/30 dark:hover:bg-blue-900/20",
-                        isStarred && !isSelected && isVibeKanbanProject(project) && "bg-gray-200 dark:bg-gray-800/70 hover:bg-gray-300 dark:hover:bg-gray-800/80"
+                        isStarred && !isSelected && isVibeKanbanProject(project) && "bg-gray-200 dark:bg-black/50 hover:bg-gray-300 dark:hover:bg-black/60"
                       )}
                       onClick={() => {
                         // Desktop behavior: select project and toggle
@@ -990,7 +990,7 @@ function Sidebar({
                               <Check className="w-3 h-3" />
                             </div>
                             <div
-                              className="w-6 h-6 text-gray-500 hover:text-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 flex items-center justify-center rounded cursor-pointer transition-colors"
+                              className="w-6 h-6 text-gray-500 hover:text-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900 flex items-center justify-center rounded cursor-pointer transition-colors"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 cancelEditing();
@@ -1191,7 +1191,7 @@ function Sidebar({
                                               <Check className="w-2 h-2 text-green-600 dark:text-green-400" />
                                             </button>
                                             <button
-                                              className="w-4 h-4 bg-gray-50 hover:bg-gray-100 dark:bg-gray-900/20 dark:hover:bg-gray-900/40 rounded flex items-center justify-center"
+                                              className="w-4 h-4 bg-gray-50 hover:bg-gray-100 dark:bg-black/20 dark:hover:bg-black/40 rounded flex items-center justify-center"
                                               onClick={(e) => {
                                                 e.stopPropagation();
                                                 setEditingSession(null);
@@ -1205,7 +1205,7 @@ function Sidebar({
                                         ) : (
                                           <>
                                             <button
-                                              className="w-4 h-4 bg-gray-50 hover:bg-gray-100 dark:bg-gray-900/20 dark:hover:bg-gray-900/40 rounded flex items-center justify-center"
+                                              className="w-4 h-4 bg-gray-50 hover:bg-gray-100 dark:bg-black/20 dark:hover:bg-black/40 rounded flex items-center justify-center"
                                               onClick={(e) => {
                                                 e.stopPropagation();
                                                 setEditingSession(session.id);

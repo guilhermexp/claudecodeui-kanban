@@ -79,7 +79,7 @@ function MobileNav({ activeTab, setActiveTab, isInputFocused, isShellConnected }
   return (
     <>
       <div 
-        className={`fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 z-40 transform transition-transform duration-300 ease-in-out shadow-lg ${
+        className={`fixed bottom-0 left-0 right-0 bg-white dark:bg-black border-t border-gray-200 dark:border-gray-800 z-40 transform transition-transform duration-300 ease-in-out shadow-lg ${
           isInputFocused ? 'translate-y-full' : 'translate-y-0'
         }`}
         style={{
@@ -119,7 +119,7 @@ function MobileNav({ activeTab, setActiveTab, isInputFocused, isShellConnected }
         {(activeTab === 'shell' || activeTab === 'chat') && (
           <MicButton 
             onTranscript={handleVoiceTranscript}
-            className="p-3 rounded-2xl min-h-[44px] min-w-[44px] bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700"
+            className="p-3 rounded-2xl min-h-[44px] min-w-[44px] bg-gray-100 dark:bg-gray-900 hover:bg-gray-200 dark:hover:bg-gray-800"
             isChat={activeTab === 'chat'}
             hasChatText={hasChatText}
           />

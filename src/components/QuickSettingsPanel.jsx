@@ -56,7 +56,7 @@ const QuickSettingsPanel = ({
       >
         <button
           onClick={handleToggle}
-          className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-l-md p-2 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors shadow-lg"
+          className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-l-md p-2 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors shadow-lg"
           aria-label={localIsOpen ? 'Close settings panel' : 'Open settings panel'}
         >
           {localIsOpen ? (
@@ -69,13 +69,13 @@ const QuickSettingsPanel = ({
 
       {/* Panel */}
       <div
-        className={`fixed top-0 right-0 h-full w-64 bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 shadow-xl transform transition-transform duration-150 ease-out z-40 ${
+        className={`fixed top-0 right-0 h-full w-64 bg-white dark:bg-gray-950 border-l border-gray-200 dark:border-gray-800 shadow-xl transform transition-transform duration-150 ease-out z-40 ${
           localIsOpen ? 'translate-x-0' : 'translate-x-full'
         } ${isMobile ? 'h-screen' : ''}`}
       >
         <div className="h-full flex flex-col">
           {/* Header */}
-          <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+          <div className="p-4 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
               <Settings2 className="h-5 w-5 text-gray-600 dark:text-gray-400" />
               Quick Settings
@@ -110,7 +110,7 @@ const QuickSettingsPanel = ({
                   type="checkbox"
                   checked={autoExpandTools}
                   onChange={(e) => onAutoExpandChange(e.target.checked)}
-                  className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 focus:ring-blue-500 dark:focus:ring-blue-400 dark:bg-gray-800 dark:checked:bg-blue-600"
+                  className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 focus:ring-blue-500 dark:focus:ring-blue-400 dark:bg-gray-900 dark:checked:bg-blue-600"
                 />
               </label>
 
@@ -123,7 +123,7 @@ const QuickSettingsPanel = ({
                   type="checkbox"
                   checked={showRawParameters}
                   onChange={(e) => onShowRawParametersChange(e.target.checked)}
-                  className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 focus:ring-blue-500 dark:focus:ring-blue-400 dark:bg-gray-800 dark:checked:bg-blue-600"
+                  className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 focus:ring-blue-500 dark:focus:ring-blue-400 dark:bg-gray-900 dark:checked:bg-blue-600"
                 />
               </label>
             </div>
@@ -140,7 +140,7 @@ const QuickSettingsPanel = ({
                   type="checkbox"
                   checked={autoScrollToBottom}
                   onChange={(e) => onAutoScrollChange(e.target.checked)}
-                  className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 focus:ring-blue-500 dark:focus:ring-blue-400 dark:bg-gray-800 dark:checked:bg-blue-600"
+                  className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 focus:ring-blue-500 dark:focus:ring-blue-400 dark:bg-gray-900 dark:checked:bg-blue-600"
                 />
               </label>
             </div>
@@ -167,7 +167,7 @@ const QuickSettingsPanel = ({
                     
                     window.dispatchEvent(new CustomEvent('claude-model-changed', { detail: newModel }));
                   }}
-                  className="w-full px-3 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-blue-500 dark:focus:border-blue-400 text-gray-900 dark:text-white"
+                  className="w-full px-3 py-2 text-sm bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-blue-500 dark:focus:border-blue-400 text-gray-900 dark:text-white"
                 >
                   <option value="sonnet">Sonnet 4 (Fast & Efficient)</option>
                   <option value="opus">Opus 4 (Most Powerful)</option>
@@ -191,7 +191,7 @@ const QuickSettingsPanel = ({
                   type="checkbox"
                   checked={sendByCtrlEnter}
                   onChange={(e) => onSendByCtrlEnterChange(e.target.checked)}
-                  className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 focus:ring-blue-500 dark:focus:ring-blue-400 dark:bg-gray-800 dark:checked:bg-blue-600"
+                  className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-500 focus:ring-blue-500 dark:focus:ring-blue-400 dark:bg-gray-900 dark:checked:bg-blue-600"
                 />
               </label>
               <p className="text-xs text-gray-500 dark:text-gray-400 ml-3">
@@ -204,7 +204,7 @@ const QuickSettingsPanel = ({
               <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">Whisper Dictation</h4>
               
               <div className="space-y-2">
-                <label className="flex items-start p-3 rounded-lg bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer transition-colors border border-transparent hover:border-gray-300 dark:hover:border-gray-600">
+                <label className="flex items-start p-3 rounded-lg bg-gray-50 dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer transition-colors border border-transparent hover:border-gray-300 dark:hover:border-gray-700">
                   <input
                     type="radio"
                     name="whisperMode"
@@ -228,7 +228,7 @@ const QuickSettingsPanel = ({
                   </div>
                 </label>
 
-                <label className="flex items-start p-3 rounded-lg bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer transition-colors border border-transparent hover:border-gray-300 dark:hover:border-gray-600">
+                <label className="flex items-start p-3 rounded-lg bg-gray-50 dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer transition-colors border border-transparent hover:border-gray-300 dark:hover:border-gray-700">
                   <input
                     type="radio"
                     name="whisperMode"
@@ -252,7 +252,7 @@ const QuickSettingsPanel = ({
                   </div>
                 </label>
 
-                <label className="flex items-start p-3 rounded-lg bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer transition-colors border border-transparent hover:border-gray-300 dark:hover:border-gray-600">
+                <label className="flex items-start p-3 rounded-lg bg-gray-50 dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer transition-colors border border-transparent hover:border-gray-300 dark:hover:border-gray-700">
                   <input
                     type="radio"
                     name="whisperMode"
