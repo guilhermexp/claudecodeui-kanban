@@ -1078,11 +1078,65 @@ const MessageComponent = memo(({ message, index, prevMessage, createDiff, onFile
                         )
                       }}
                     >
-                      {String(message.content || '')
-                        .replace(/\n\n\n+/g, '\n\n')  // Multiple newlines to double
-                        .replace(/([.!?])\s*\n(?=[A-Z])/g, '$1\n\n')  // Add space after sentences
-                        .replace(/\n/g, '  \n')  // Preserve line breaks in markdown
-                      }
+                      {(() => {
+                        const content = String(message.content || '');
+                        
+                        // Function to process and format content
+                        const processContent = (text) => {
+                          // Detect and format JSON blocks and arrays
+                          let processedText = text.replace(
+                            /(\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}|\[[^\[\]]*(?:\[[^\[\]]*\][^\[\]]*)*\])/g,
+                            (match) => {
+                              try {
+                                // Check if it's valid JSON and long enough to format
+                                const parsed = JSON.parse(match);
+                                if (match.length > 80) {
+                                  return '\n```json\n' + JSON.stringify(parsed, null, 2) + '\n```\n';
+                                }
+                                return '`' + match + '`';
+                              } catch (e) {
+                                // If not valid JSON, check if it looks like structured data
+                                if (match.length > 80 && (match.includes(':') || match.includes(','))) {
+                                  return '\n```\n' + match + '\n```\n';
+                                }
+                                return match;
+                              }
+                            }
+                          );
+                          
+                          // Detect very long unbroken strings that look like data
+                          processedText = processedText.replace(
+                            /([a-zA-Z0-9_\-:,"{}[\]]{150,})/g,
+                            (match) => {
+                              // Try to format as JSON if it contains JSON-like patterns
+                              if (match.includes('":') && match.includes(',"')) {
+                                try {
+                                  const parsed = JSON.parse('{' + match + '}');
+                                  return '\n```json\n' + JSON.stringify(parsed, null, 2) + '\n```\n';
+                                } catch (e) {
+                                  // If not valid, wrap in code block anyway
+                                  return '\n```\n' + match + '\n```\n';
+                                }
+                              }
+                              return '\n```\n' + match + '\n```\n';
+                            }
+                          );
+                          
+                          // Detect and format long URLs or technical strings
+                          processedText = processedText.replace(
+                            /(\b(?:https?:\/\/|mcp_|[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+)[^\s]{30,})/g,
+                            '`$1`'
+                          );
+                          
+                          // Improve line breaks
+                          return processedText
+                            .replace(/\n\n\n+/g, '\n\n')  // Multiple newlines to double
+                            .replace(/([.!?])\s*\n(?=[A-Z])/g, '$1\n\n')  // Add space after sentences
+                            .replace(/\n/g, '  \n');  // Preserve line breaks in markdown
+                        };
+                        
+                        return processContent(content);
+                      })()}
                     </ReactMarkdown>
                   </div>
                 ) : (
