@@ -63,7 +63,7 @@ if (typeof document !== 'undefined') {
   document.head.appendChild(styleSheet);
 }
 
-// Global store for shell sessions to persist across tab switches
+// Global store for shell sessions to persist across tab switches AND project switches
 const shellSessions = new Map();
 
 function Shell({ selectedProject, selectedSession, isActive, onConnectionChange, isMobile }) {
@@ -80,6 +80,14 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   
   // Image drag & drop states
   const [isDraggedImageOver, setIsDraggedImageOver] = useState(false);
+  
+  // Heartbeat interval reference
+  const heartbeatInterval = useRef(null);
+  
+  // Reconnection state
+  const reconnectTimeout = useRef(null);
+  const reconnectAttempts = useRef(0);
+  const maxReconnectAttempts = 5;
   
   // Scroll to bottom functionality
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
@@ -157,15 +165,30 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   };
 
   // Disconnect from shell function
-  const disconnectFromShell = () => {
+  const disconnectFromShell = (clearTerminal = true, closeWebSocket = true) => {
     
-    if (ws.current) {
+    if (closeWebSocket && ws.current) {
       ws.current.close();
       ws.current = null;
     }
     
-    // Clear terminal content completely
-    if (terminal.current) {
+    // Clear heartbeat interval
+    if (heartbeatInterval.current) {
+      clearInterval(heartbeatInterval.current);
+      heartbeatInterval.current = null;
+    }
+    
+    // Clear reconnection timeout
+    if (reconnectTimeout.current) {
+      clearTimeout(reconnectTimeout.current);
+      reconnectTimeout.current = null;
+    }
+    
+    // Reset reconnection attempts
+    reconnectAttempts.current = 0;
+    
+    // Clear terminal content only if requested
+    if (clearTerminal && terminal.current) {
       terminal.current.clear();
       terminal.current.write('\x1b[2J\x1b[H'); // Clear screen and move cursor to home
     }
@@ -196,12 +219,32 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     maxSize: 5 * 1024 * 1024, // 5MB
     maxFiles: 5,
     onDrop: (files) => {
-      // Call ChatInterface's handleImageFiles directly
-      if (window.addImagesToChatInterface) {
-        window.addImagesToChatInterface(files);
-      } else {
-        console.warn('Chat interface not ready for image handling');
+      console.log('Shell: Images dropped:', files.length, 'files');
+      
+      // Store images in a global queue
+      if (!window.pendingImagesForChat) {
+        window.pendingImagesForChat = [];
       }
+      window.pendingImagesForChat.push(...files);
+      
+      // Show notification
+      if (terminal.current) {
+        terminal.current.write('\r\n\x1b[32m✓ Imagens adicionadas. Mudando para aba Chat...\x1b[0m\r\n');
+      }
+      
+      // Switch to chat tab automatically
+      if (window.switchToTab) {
+        window.switchToTab('chat');
+      }
+      
+      // Try to add images immediately if possible
+      setTimeout(() => {
+        if (window.addImagesToChatInterface && window.pendingImagesForChat.length > 0) {
+          console.log('Shell: Sending images to ChatInterface');
+          window.addImagesToChatInterface(window.pendingImagesForChat);
+          window.pendingImagesForChat = [];
+        }
+      }, 100);
     },
     noClick: true,
     noKeyboard: true,
@@ -271,13 +314,15 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     }, 200);
   };
 
-  // Watch for session changes and restart shell
+  // Watch for session changes within the same project
   useEffect(() => {
     const currentSessionId = selectedSession?.id || null;
     
-    
-    // Disconnect when session changes (user will need to manually reconnect)
-    if (lastSessionId !== null && lastSessionId !== currentSessionId && isInitialized) {
+    // Only disconnect when changing sessions WITHIN the same project
+    if (lastSessionId !== null && 
+        lastSessionId !== currentSessionId && 
+        isInitialized && 
+        selectedProject) {
       
       // Clear scroll monitoring interval
       if (scrollCheckRef.current) {
@@ -287,14 +332,6 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       
       // Disconnect from current shell
       disconnectFromShell();
-      
-      // Clear stored sessions for this project
-      const allKeys = Array.from(shellSessions.keys());
-      allKeys.forEach(key => {
-        if (key.includes(selectedProject.name)) {
-          shellSessions.delete(key);
-        }
-      });
     }
     
     setLastSessionId(currentSessionId);
@@ -323,6 +360,20 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
         // Check if websocket is still connected
         const wsConnected = existingSession.ws && existingSession.ws.readyState === WebSocket.OPEN;
         setIsConnected(wsConnected);
+        
+        // If WebSocket is still connected, re-attach our event handlers
+        if (wsConnected) {
+          // Re-establish heartbeat interval
+          if (heartbeatInterval.current) {
+            clearInterval(heartbeatInterval.current);
+          }
+          
+          heartbeatInterval.current = setInterval(() => {
+            if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+              ws.current.send(JSON.stringify({ type: 'ping' }));
+            }
+          }, 30000);
+        }
         
         // Reattach to DOM - dispose existing element first if needed
         if (terminal.current.element && terminal.current.element.parentNode) {
@@ -515,6 +566,17 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     return () => {
       resizeObserver.disconnect();
       
+      // Clear intervals on unmount
+      if (heartbeatInterval.current) {
+        clearInterval(heartbeatInterval.current);
+        heartbeatInterval.current = null;
+      }
+      
+      if (reconnectTimeout.current) {
+        clearTimeout(reconnectTimeout.current);
+        reconnectTimeout.current = null;
+      }
+      
       // Store session for reuse instead of disposing
       if (terminal.current && selectedProject) {
         const sessionKey = selectedSession?.id || `project-${selectedProject.name}`;
@@ -599,6 +661,20 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
         setIsConnected(true);
         setIsConnecting(false);
         
+        // Reset reconnection attempts on successful connection
+        reconnectAttempts.current = 0;
+        
+        // Start heartbeat to keep connection alive
+        if (heartbeatInterval.current) {
+          clearInterval(heartbeatInterval.current);
+        }
+        
+        heartbeatInterval.current = setInterval(() => {
+          if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+            ws.current.send(JSON.stringify({ type: 'ping' }));
+          }
+        }, 30000); // Send ping every 30 seconds
+        
         // Wait for terminal to be ready, then fit and send dimensions
         setTimeout(() => {
           if (fitAddon.current && terminal.current) {
@@ -655,6 +731,8 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
           } else if (data.type === 'url_open') {
             // Handle explicit URL opening requests from server
             window.open(data.url, '_blank');
+          } else if (data.type === 'pong') {
+            // Server responded to our ping - connection is alive
           }
         } catch (error) {
         }
@@ -664,16 +742,45 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
         setIsConnected(false);
         setIsConnecting(false);
         
-        // Clear terminal content when connection closes
-        if (terminal.current) {
-          terminal.current.clear();
-          terminal.current.write('\x1b[2J\x1b[H'); // Clear screen and move cursor to home
+        // Clear heartbeat interval
+        if (heartbeatInterval.current) {
+          clearInterval(heartbeatInterval.current);
+          heartbeatInterval.current = null;
         }
         
         // Hide scroll to bottom button when disconnected
         setShowScrollToBottom(false);
         
-        // Don't auto-reconnect anymore - user must manually connect
+        // Check if it was an unexpected disconnect (not user-initiated)
+        const wasUnexpected = event.code !== 1000 && event.code !== 1001;
+        
+        if (wasUnexpected && reconnectAttempts.current < maxReconnectAttempts) {
+          // Show reconnection message in terminal
+          if (terminal.current) {
+            terminal.current.write('\r\n\x1b[33mConnection lost. Attempting to reconnect...\x1b[0m\r\n');
+          }
+          
+          // Attempt to reconnect after a delay
+          reconnectAttempts.current++;
+          const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current - 1), 10000); // Exponential backoff, max 10s
+          
+          reconnectTimeout.current = setTimeout(() => {
+            if (!isConnected && !isConnecting) {
+              connectWebSocket();
+            }
+          }, delay);
+        } else if (!wasUnexpected) {
+          // User-initiated disconnect - clear terminal
+          if (terminal.current) {
+            terminal.current.clear();
+            terminal.current.write('\x1b[2J\x1b[H'); // Clear screen and move cursor to home
+          }
+        } else {
+          // Max reconnection attempts reached
+          if (terminal.current) {
+            terminal.current.write('\r\n\x1b[31mConnection lost. Please reconnect manually.\x1b[0m\r\n');
+          }
+        }
       };
 
       ws.current.onerror = (error) => {
@@ -796,7 +903,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
               </svg>
               <p className="text-sm font-medium text-blue-600 dark:text-blue-400 mb-1">Solte as imagens aqui</p>
               <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
-                Imagens serão adicionadas ao chat do Claude
+                Imagens serão enviadas para o chat do Claude
               </p>
               <p className="text-xs text-gray-400 dark:text-gray-500 text-center mt-1">
                 Ou pressione ⌘V para colar da área de transferência
