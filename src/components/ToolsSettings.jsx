@@ -272,7 +272,7 @@ function ToolsSettings({ isOpen, onClose }) {
     }
   }, [isOpen]);
 
-  // Listen for localStorage changes to sync with ChatInterface
+  // Listen for localStorage changes to sync settings
   useEffect(() => {
     const handleStorageChange = (e) => {
       if (e.key === 'claude-tools-settings' && e.newValue) {
