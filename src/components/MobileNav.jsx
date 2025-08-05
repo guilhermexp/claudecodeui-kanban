@@ -1,39 +1,8 @@
 import React from 'react';
-import { MessageSquare, Folder, Terminal, GitBranch } from 'lucide-react';
+import { Folder, Terminal, GitBranch } from 'lucide-react';
 import { MicButton } from './MicButton';
 
 function MobileNav({ activeTab, setActiveTab, isInputFocused, isShellConnected }) {
-  const [hasChatText, setHasChatText] = React.useState(false);
-  
-  // Check if chat has text periodically
-  React.useEffect(() => {
-    if (activeTab === 'chat') {
-      const checkText = () => {
-        if (window.hasChatText && typeof window.hasChatText === 'function') {
-          const hasText = window.hasChatText();
-          setHasChatText(hasText);
-        } else {
-          // Try again in a moment if function not available yet
-          setTimeout(() => {
-            if (window.hasChatText && typeof window.hasChatText === 'function') {
-              const hasText = window.hasChatText();
-              setHasChatText(hasText);
-            }
-          }, 200);
-        }
-      };
-      
-      // Check immediately
-      checkText();
-      
-      // Check periodically
-      const interval = setInterval(checkText, 100);
-      
-      return () => clearInterval(interval);
-    } else {
-      setHasChatText(false);
-    }
-  }, [activeTab]);
   
   // Detect dark mode
   const isDarkMode = document.documentElement.classList.contains('dark');
@@ -42,11 +11,6 @@ function MobileNav({ activeTab, setActiveTab, isInputFocused, isShellConnected }
       id: 'shell',
       icon: Terminal,
       onClick: () => setActiveTab('shell')
-    },
-    {
-      id: 'chat',
-      icon: MessageSquare,
-      onClick: () => setActiveTab('chat')
     },
     {
       id: 'files',
@@ -67,11 +31,6 @@ function MobileNav({ activeTab, setActiveTab, isInputFocused, isShellConnected }
       if (window.sendToActiveTerminal && typeof window.sendToActiveTerminal === 'function') {
         window.sendToActiveTerminal(text);
       } else {
-      }
-    } else if (activeTab === 'chat') {
-      // For chat, we need to set the text in the input
-      if (window.setChatInput && typeof window.setChatInput === 'function') {
-        window.setChatInput(text);
       }
     }
   };
@@ -115,13 +74,13 @@ function MobileNav({ activeTab, setActiveTab, isInputFocused, isShellConnected }
           );
         })}
         
-        {/* Voice button - show when in shell tab OR when in chat tab */}
-        {(activeTab === 'shell' || activeTab === 'chat') && (
+        {/* Voice button - show when in shell tab */}
+        {activeTab === 'shell' && (
           <MicButton 
             onTranscript={handleVoiceTranscript}
             className="p-3 rounded-2xl min-h-[44px] min-w-[44px] bg-gray-100 dark:bg-gray-900 hover:bg-gray-200 dark:hover:bg-gray-800"
-            isChat={activeTab === 'chat'}
-            hasChatText={hasChatText}
+            isChat={false}
+            hasChatText={false}
           />
         )}
       </div>
