@@ -192,38 +192,66 @@ EOF
 echo ""
 echo "🔗 URL do Ngrok aparecerá abaixo:"
 echo ""
-echo "💡 Dica: Se o hot reload não funcionar via ngrok:"
-echo "   1. Use Ctrl+Shift+R (ou Cmd+Shift+R no Mac) para forçar reload"
-echo "   2. Ou desative o cache nas DevTools (F12 > Network > Disable cache)"
+echo "💡 Dicas para Hot Reload via Ngrok:"
+echo "   1. Use Ctrl+Shift+R (ou Cmd+Shift+R no Mac) para forçar reload completo"
+echo "   2. Desative o cache nas DevTools: F12 > Network > ☑️ Disable cache"
+echo "   3. Se ainda não atualizar, recarregue a página 2x seguidas"
+echo ""
+echo "⚠️  IMPORTANTE: O Vite HMR (Hot Module Replacement) pode ter delays via ngrok"
+echo "   Para desenvolvimento rápido, use http://localhost:9000"
 echo ""
 
-# Inicia ngrok em background
+# Mata qualquer sessão ngrok anterior para garantir fresh start
+pkill -f "ngrok.*claudecodeui" 2>/dev/null
+sleep 1
+
+# Inicia ngrok em background com retry
+echo "🔄 Iniciando ngrok (pode levar alguns segundos)..."
 ngrok start claudecodeui &
 NGROK_PID=$!
 
-# Aguarda ngrok inicializar
-sleep 3
+# Aguarda ngrok inicializar com verificação melhorada
+echo "⏳ Aguardando ngrok conectar..."
+for i in {1..10}; do
+    sleep 1
+    if curl -s http://localhost:4040/api/tunnels >/dev/null 2>&1; then
+        break
+    fi
+    echo -n "."
+done
+echo ""
 
 # Verifica se o ngrok está rodando e mostra a URL
 if kill -0 $NGROK_PID 2>/dev/null; then
     echo "✅ Ngrok iniciado com sucesso!"
     echo ""
-    echo "🌐 URL de acesso remoto:"
-    echo "   https://www.claudecode.ngrok.app"
+    echo "🌐 URLs de acesso:"
+    echo "   Local:  http://localhost:9000"
+    echo "   Remoto: https://www.claudecode.ngrok.app"
     echo ""
     
-    # Verifica se o túnel está ativo
+    # Verifica se o túnel está ativo e mostra detalhes
     if command -v curl >/dev/null 2>&1; then
-        TUNNEL_STATUS=$(curl -s http://localhost:4040/api/tunnels 2>/dev/null | grep -o '"public_url":"[^"]*"' | head -1)
-        if [ ! -z "$TUNNEL_STATUS" ]; then
-            echo "   Status: ✅ Túnel ativo"
+        TUNNEL_INFO=$(curl -s http://localhost:4040/api/tunnels 2>/dev/null)
+        if [ ! -z "$TUNNEL_INFO" ] && echo "$TUNNEL_INFO" | grep -q "public_url"; then
+            echo "   Status: ✅ Túnel ativo e funcionando"
+            echo "   Dashboard: http://localhost:4040 (estatísticas do ngrok)"
         else
-            echo "   Status: ⏳ Aguardando túnel..."
+            echo "   Status: ⚠️  Túnel iniciando..."
+            echo "   Tente recarregar a página em alguns segundos"
         fi
     fi
+    
+    echo ""
+    echo "🔄 Para forçar atualização após mudanças no código:"
+    echo "   - No navegador: Ctrl+Shift+R (Windows/Linux) ou Cmd+Shift+R (Mac)"
+    echo "   - Ou abra DevTools (F12) e desative cache na aba Network"
 else
     echo "❌ Erro ao iniciar ngrok!"
-    echo "   Verifique se o domínio não está em uso por outra sessão"
+    echo "   Possíveis soluções:"
+    echo "   1. Verifique se outro ngrok está rodando: pkill -f ngrok"
+    echo "   2. Verifique se o domínio está configurado corretamente"
+    echo "   3. Tente: ngrok config check"
 fi
 
 echo ""
