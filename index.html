@@ -70,8 +70,7 @@
     <script>
       // Check if SW should be disabled (for development)
       const disableSW = window.location.hostname === 'localhost' || 
-                       window.location.hostname.includes('ngrok') ||
-                       import.meta.env?.VITE_DISABLE_SW === 'true';
+                       window.location.hostname.includes('ngrok');
       
       if ('serviceWorker' in navigator && !disableSW) {
         if (window.location.protocol === 'https:') {

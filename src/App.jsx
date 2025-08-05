@@ -666,10 +666,6 @@ function AppContent() {
           onReplaceTemporarySession={replaceTemporarySession}
           onNavigateToSession={(sessionId) => navigate(`/session/${sessionId}`)}
           onShowSettings={() => setShowToolsSettings(true)}
-          autoExpandTools={autoExpandTools}
-          showRawParameters={showRawParameters}
-          autoScrollToBottom={autoScrollToBottom}
-          sendByCtrlEnter={sendByCtrlEnter}
           onShellConnectionChange={setIsShellConnected}
         />
       </div>
