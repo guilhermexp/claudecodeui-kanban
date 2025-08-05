@@ -77,6 +77,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   const [lastSessionId, setLastSessionId] = useState(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isBypassingPermissions, setIsBypassingPermissions] = useState(false);
+  const [isManualDisconnect, setIsManualDisconnect] = useState(false);
   
   // Image drag & drop states
   const [isDraggedImageOver, setIsDraggedImageOver] = useState(false);
@@ -158,6 +159,9 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   const connectToShell = () => {
     if (!isInitialized || isConnected || isConnecting) return;
     
+    // Reset manual disconnect flag when connecting manually
+    setIsManualDisconnect(false);
+    
     setIsConnecting(true);
     
     // Start the WebSocket connection
@@ -166,9 +170,11 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
 
   // Disconnect from shell function
   const disconnectFromShell = (clearTerminal = true, closeWebSocket = true) => {
+    // Mark as manual disconnect to prevent auto-reconnection
+    setIsManualDisconnect(true);
     
     if (closeWebSocket && ws.current) {
-      ws.current.close();
+      ws.current.close(1000, 'User requested disconnect');
       ws.current = null;
     }
     
@@ -257,6 +263,8 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   // Restart shell function
   const restartShell = () => {
     setIsRestarting(true);
+    // Reset manual disconnect flag to allow connection
+    setIsManualDisconnect(false);
     
     // Clear ALL session storage for this project to force fresh start
     const sessionKeys = Array.from(shellSessions.keys()).filter(key => 
@@ -732,7 +740,8 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
         // Check if it was an unexpected disconnect (not user-initiated)
         const wasUnexpected = event.code !== 1000 && event.code !== 1001;
         
-        if (wasUnexpected && reconnectAttempts.current < maxReconnectAttempts) {
+        // Don't reconnect if it was a manual disconnect
+        if (!isManualDisconnect && wasUnexpected && reconnectAttempts.current < maxReconnectAttempts) {
           // Show reconnection message in terminal
           if (terminal.current) {
             terminal.current.write('\r\n\x1b[33mConnection lost. Attempting to reconnect...\x1b[0m\r\n');
