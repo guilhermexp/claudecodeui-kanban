@@ -1,6 +1,7 @@
 // Service Worker for Claude Code UI PWA
-const CACHE_NAME = 'claude-ui-v1';
-const DYNAMIC_CACHE = 'claude-ui-dynamic-v1';
+const CACHE_VERSION = 2; // Increment this to force cache update
+const CACHE_NAME = `claude-ui-v${CACHE_VERSION}`;
+const DYNAMIC_CACHE = `claude-ui-dynamic-v${CACHE_VERSION}`;
 const urlsToCache = [
   '/',
   '/index.html',
@@ -19,7 +20,26 @@ self.addEventListener('install', event => {
         return cache.addAll(urlsToCache);
       })
   );
+  // Force the waiting service worker to become the active service worker
   self.skipWaiting();
+});
+
+// Activate event - clean up old caches
+self.addEventListener('activate', event => {
+  event.waitUntil(
+    caches.keys().then(cacheNames => {
+      return Promise.all(
+        cacheNames.map(cacheName => {
+          if (cacheName !== CACHE_NAME && cacheName !== DYNAMIC_CACHE) {
+            console.log('Deleting old cache:', cacheName);
+            return caches.delete(cacheName);
+          }
+        })
+      );
+    })
+  );
+  // Force all clients to use the new service worker
+  self.clients.claim();
 });
 
 // Fetch event with Network First strategy for API calls and Cache First for assets

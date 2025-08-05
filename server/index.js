@@ -630,11 +630,28 @@ function handleShellConnection(ws, request) {
             // Handle data output
             shellProcess.onData((data) => {
               const output = data.toString();
+              
+              // Filter out suspicious JavaScript code artifacts
+              // This appears to be a bug where minified JS code is being output
+              const suspiciousPatterns = [
+                /\bn\d{3,4}-/g,  // Variables like n992-, n993-
+                /fileHandler\.configure/,
+                /generateAutoCompletion/,
+                /tFileHandler/,
+                /\\t\\t\\t\\t\\t/  // Multiple tabs indicating formatted code
+              ];
+              
+              if (suspiciousPatterns.some(pattern => output.match(pattern))) {
+                console.warn('Filtered out suspicious JS code output:', output.substring(0, 50) + '...');
+                return; // Skip this output entirely
+              }
+              
               // Log errors or important messages (but limit output to reduce spam)
               if (output.includes('zsh: command not found') || output.includes('bash: command not found')) {
               } else if (output.includes('Starting Claude CLI')) {
               } else if (output.includes('Welcome to Claude') || output.includes('claude>')) {
               }
+              
               if (ws.readyState === ws.OPEN) {
                 ws.send(JSON.stringify({
                   type: 'output',
@@ -678,6 +695,11 @@ function handleShellConnection(ws, request) {
         // Handle terminal resize
         if (shellProcess && shellProcess.resize) {
           shellProcess.resize(data.cols, data.rows);
+        }
+      } else if (data.type === 'ping') {
+        // Respond to client ping with pong
+        if (ws.readyState === ws.OPEN) {
+          ws.send(JSON.stringify({ type: 'pong' }));
         }
       } else if (data.type === 'bypassPermissions') {
         // Handle bypass permissions toggle

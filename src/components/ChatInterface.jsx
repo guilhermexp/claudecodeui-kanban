@@ -2352,6 +2352,14 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
   // Expose handleImageFiles globally for Shell component
   useEffect(() => {
     window.addImagesToChatInterface = handleImageFiles;
+    
+    // Check for pending images from Shell
+    if (window.pendingImagesForChat && window.pendingImagesForChat.length > 0) {
+      console.log('ChatInterface: Processing pending images from Shell');
+      handleImageFiles(window.pendingImagesForChat);
+      window.pendingImagesForChat = [];
+    }
+    
     return () => {
       delete window.addImagesToChatInterface;
     };
@@ -2572,7 +2580,7 @@ function ChatInterface({ selectedProject, selectedSession, ws, sendMessage, mess
     const toolsSettings = getToolsSettings();
 
     // Get selected model from localStorage
-    const selectedModel = localStorage.getItem('claude-model') || 'sonnet';
+    const selectedModel = localStorage.getItem('claude-model') || 'default';
 
     // Send command to Claude CLI via WebSocket with images
     // Add session validation to improve error handling

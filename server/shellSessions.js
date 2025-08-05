@@ -10,8 +10,8 @@ class ShellSessionManager {
     // Map to store session timeouts
     this.timeouts = new Map();
     
-    // Default timeout: 10 minutes
-    this.SESSION_TIMEOUT = 10 * 60 * 1000;
+    // Default timeout: 30 minutes (increased from 10)
+    this.SESSION_TIMEOUT = 30 * 60 * 1000;
   }
 
   // Create a unique session key

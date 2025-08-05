@@ -52,6 +52,14 @@ function MainContent({
   const [contextWindowPercentage, setContextWindowPercentage] = useState(null);
   const [isVibeTaskPanelOpen, setIsVibeTaskPanelOpen] = useState(false);
   // Shell terminals state removed - single terminal mode only
+  
+  // Expose tab switching globally for Shell image drops
+  useEffect(() => {
+    window.switchToTab = setActiveTab;
+    return () => {
+      delete window.switchToTab;
+    };
+  }, [setActiveTab]);
 
   const handleFileOpen = (filePath, diffInfo = null) => {
     // Create a file object that CodeEditor expects

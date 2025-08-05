@@ -68,13 +68,21 @@
     
     <!-- Service Worker Registration -->
     <script>
-      if ('serviceWorker' in navigator) {
+      // Check if SW should be disabled (for development)
+      const disableSW = window.location.hostname === 'localhost' || 
+                       window.location.hostname.includes('ngrok') ||
+                       import.meta.env?.VITE_DISABLE_SW === 'true';
+      
+      if ('serviceWorker' in navigator && !disableSW) {
         if (window.location.protocol === 'https:') {
           // Only register service worker in production (HTTPS)
           window.addEventListener('load', () => {
-            navigator.serviceWorker.register('/sw.js')
+            // Add version to force update
+            navigator.serviceWorker.register('/sw.js?v=' + Date.now())
               .then(registration => {
                 console.log('SW registered: ', registration);
+                // Force update check
+                registration.update();
               })
               .catch(registrationError => {
                 console.log('SW registration failed: ', registrationError);
