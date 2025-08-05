@@ -17,7 +17,14 @@ export default defineConfig(({ command, mode }) => {
     server: {
       port: 9000,
       host: true, // Allow access from network
-      hmr: true,
+      hmr: {
+        overlay: true,
+        // Força o HMR a funcionar melhor com proxies
+        protocol: 'ws',
+        host: 'localhost',
+        port: 9000,
+        clientPort: 9000
+      },
       // Permite requisições do ngrok
       strictPort: true,
       headers: {
@@ -31,6 +38,7 @@ export default defineConfig(({ command, mode }) => {
       allowedHosts: [
         '.ngrok.app',
         '.ngrok-free.app',
+        '.ngrok.io',
         'localhost'
       ],
       proxy: {
