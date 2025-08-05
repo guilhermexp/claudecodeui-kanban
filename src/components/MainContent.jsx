@@ -12,7 +12,6 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import ChatInterface from './ChatInterface';
 import FileTree from './FileTree';
 import CodeEditor from './CodeEditor';
 import Shell from './Shell';
@@ -181,33 +180,11 @@ function MainContent({
               </button>
             )}
             <div className="min-w-0">
-              {activeTab === 'chat' && selectedSession ? (
-                <div>
-                  <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white truncate">
-                    {selectedSession.summary}
-                  </h2>
-                  <div className="text-xs truncate">
-                    <span className="inline-block px-2 py-1 rounded-full bg-gradient-to-r from-blue-500/20 to-purple-500/20 dark:from-blue-400/30 dark:to-purple-400/30 text-blue-700 dark:text-blue-300 font-medium">
-                      {selectedProject.displayName}
-                    </span>
-                    <span className="hidden sm:inline text-gray-500 dark:text-gray-400 ml-2">• {selectedSession.id}</span>
-                  </div>
-                </div>
-              ) : activeTab === 'chat' && !selectedSession ? (
+              {
                 <div>
                   <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
-                    New Session
-                  </h2>
-                  <div className="text-xs truncate">
-                    <span className="inline-block px-2 py-1 rounded-full bg-gradient-to-r from-blue-500/20 to-purple-500/20 dark:from-blue-400/30 dark:to-purple-400/30 text-blue-700 dark:text-blue-300 font-medium">
-                      {selectedProject.displayName}
-                    </span>
-                  </div>
-                </div>
-              ) : (
-                <div>
-                  <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
-                    {activeTab === 'files' ? 'Project Files' : 
+                    {activeTab === 'shell' ? 'Shell' :
+                     activeTab === 'files' ? 'Project Files' : 
                      activeTab === 'git' ? 'Source Control' : 
                      'Project'}
                   </h2>
@@ -217,7 +194,7 @@ function MainContent({
                     </span>
                   </div>
                 </div>
-              )}
+              }
             </div>
           </div>
           
@@ -236,21 +213,6 @@ function MainContent({
           {/* Modern Tab Navigation - Right Side */}
           <div className="flex-shrink-0 hidden sm:block">
             <div className="relative flex bg-muted rounded-lg p-1">
-              <button
-                onClick={() => setActiveTab('chat')}
-                className={`relative px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md ${
-                  activeTab === 'chat'
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-                }`}
-              >
-                <span className="flex items-center gap-1 sm:gap-1.5">
-                  <svg className="w-3 sm:w-3.5 h-3 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                  </svg>
-                  <span className="hidden sm:inline">Chat</span>
-                </span>
-              </button>
               <button
                 onClick={() => setActiveTab('shell')}
                 className={`relative px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
@@ -340,29 +302,6 @@ function MainContent({
 
       {/* Content Area */}
       <div className="flex-1 flex flex-col min-h-0">
-        <div className={`h-full ${activeTab === 'chat' ? 'block' : 'hidden'} ${isMobile && activeTab === 'chat' ? 'pb-14' : ''}`}>
-          <ErrorBoundary showDetails={true}>
-            <ChatInterface
-              selectedProject={selectedProject}
-              selectedSession={selectedSession}
-              ws={ws}
-              sendMessage={sendMessage}
-              messages={messages}
-              onFileOpen={handleFileOpen}
-              onInputFocusChange={onInputFocusChange}
-              onSessionActive={onSessionActive}
-              onSessionInactive={onSessionInactive}
-              onReplaceTemporarySession={onReplaceTemporarySession}
-              onNavigateToSession={onNavigateToSession}
-              onShowSettings={onShowSettings}
-              autoExpandTools={autoExpandTools}
-              showRawParameters={showRawParameters}
-              autoScrollToBottom={autoScrollToBottom}
-              sendByCtrlEnter={sendByCtrlEnter}
-              onContextWindowUpdate={setContextWindowPercentage}
-            />
-          </ErrorBoundary>
-        </div>
         <div className={`h-full overflow-hidden ${activeTab === 'files' ? 'block' : 'hidden'}`}>
           <FileTree selectedProject={selectedProject} />
         </div>

@@ -24,7 +24,6 @@ import Sidebar from './components/Sidebar';
 import MainContent from './components/MainContent';
 import MobileNav from './components/MobileNav';
 import ToolsSettings from './components/ToolsSettings';
-import QuickSettingsPanel from './components/QuickSettingsPanel';
 import VibeKanbanApp from './components/VibeKanbanApp';
 import SessionKeepAlive from './components/SessionKeepAlive';
 
@@ -57,9 +56,11 @@ function AppContent() {
     return {
       selectedProject: shouldRestoreSession ? savedState[appStatePersistence.KEYS.SELECTED_PROJECT] : null,
       selectedSession: shouldRestoreSession ? savedState[appStatePersistence.KEYS.SELECTED_SESSION] : null,
-      activeTab: shouldRestoreSession && savedState[appStatePersistence.KEYS.ACTIVE_TAB] === 'chat' 
-        ? 'chat' 
-        : (savedState[appStatePersistence.KEYS.ACTIVE_TAB] || 'shell'),
+      activeTab: savedState[appStatePersistence.KEYS.ACTIVE_TAB] === 'shell' || 
+                  savedState[appStatePersistence.KEYS.ACTIVE_TAB] === 'files' || 
+                  savedState[appStatePersistence.KEYS.ACTIVE_TAB] === 'git'
+        ? savedState[appStatePersistence.KEYS.ACTIVE_TAB]
+        : 'shell',
       sidebarOpen: savedState[appStatePersistence.KEYS.SIDEBAR_OPEN] !== undefined 
         ? savedState[appStatePersistence.KEYS.SIDEBAR_OPEN] 
         : true, // Default to true for better desktop experience
@@ -71,30 +72,13 @@ function AppContent() {
   const [projects, setProjects] = useState([]);
   const [selectedProject, setSelectedProject] = useState(persistedState.selectedProject);
   const [selectedSession, setSelectedSession] = useState(persistedState.selectedSession);
-  const [activeTab, setActiveTab] = useState(persistedState.activeTab); // 'shell', 'chat', 'files', 'git'
+  const [activeTab, setActiveTab] = useState(persistedState.activeTab); // 'shell', 'files', 'git'
   const [isMobile, setIsMobile] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(persistedState.sidebarOpen);
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [isShellConnected, setIsShellConnected] = useState(false);
   const [showToolsSettings, setShowToolsSettings] = useState(false);
-  const [showQuickSettings, setShowQuickSettings] = useState(false);
-  const [autoExpandTools, setAutoExpandTools] = useState(() => {
-    const saved = localStorage.getItem('autoExpandTools');
-    return saved !== null ? JSON.parse(saved) : false;
-  });
-  const [showRawParameters, setShowRawParameters] = useState(() => {
-    const saved = localStorage.getItem('showRawParameters');
-    return saved !== null ? JSON.parse(saved) : false;
-  });
-  const [autoScrollToBottom, setAutoScrollToBottom] = useState(() => {
-    const saved = localStorage.getItem('autoScrollToBottom');
-    return saved !== null ? JSON.parse(saved) : true;
-  });
-  const [sendByCtrlEnter, setSendByCtrlEnter] = useState(() => {
-    const saved = localStorage.getItem('sendByCtrlEnter');
-    return saved !== null ? JSON.parse(saved) : false;
-  });
   // Session Protection System: Track sessions with active conversations to prevent
   // automatic project updates from interrupting ongoing chats. When a user sends
   // a message, the session is marked as "active" and project updates are paused
@@ -372,7 +356,7 @@ function AppContent() {
   const handleNewSession = (project) => {
     setSelectedProject(project);
     setSelectedSession(null);
-    setActiveTab('chat'); // Switch to chat tab for new session
+    setActiveTab('shell'); // Switch to shell tab for new session
     navigate('/');
     if (isMobile) {
       setSidebarOpen(false);
@@ -697,34 +681,6 @@ function AppContent() {
           setActiveTab={setActiveTab}
           isInputFocused={isInputFocused}
           isShellConnected={isShellConnected}
-        />
-      )}
-      {/* Quick Settings Panel - Only show on chat tab */}
-      {activeTab === 'chat' && (
-        <QuickSettingsPanel
-          isOpen={showQuickSettings}
-          onToggle={setShowQuickSettings}
-          autoExpandTools={autoExpandTools}
-          onAutoExpandChange={(value) => {
-            setAutoExpandTools(value);
-            localStorage.setItem('autoExpandTools', JSON.stringify(value));
-          }}
-          showRawParameters={showRawParameters}
-          onShowRawParametersChange={(value) => {
-            setShowRawParameters(value);
-            localStorage.setItem('showRawParameters', JSON.stringify(value));
-          }}
-          autoScrollToBottom={autoScrollToBottom}
-          onAutoScrollChange={(value) => {
-            setAutoScrollToBottom(value);
-            localStorage.setItem('autoScrollToBottom', JSON.stringify(value));
-          }}
-          sendByCtrlEnter={sendByCtrlEnter}
-          onSendByCtrlEnterChange={(value) => {
-            setSendByCtrlEnter(value);
-            localStorage.setItem('sendByCtrlEnter', JSON.stringify(value));
-          }}
-          isMobile={isMobile}
         />
       )}
 
