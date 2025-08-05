@@ -75,6 +75,13 @@ if ! command -v ngrok &> /dev/null; then
     exit 1
 fi
 
+# Verifica configuração do ngrok
+NGROK_CONFIG="$HOME/Library/Application Support/ngrok/ngrok.yml"
+if [ ! -f "$NGROK_CONFIG" ]; then
+    echo "⚠️  Arquivo de configuração do ngrok não encontrado!"
+    echo "   Execute: ngrok config add-authtoken SEU_TOKEN"
+fi
+
 # Instala dependências se necessário
 if [ ! -d "node_modules" ]; then
     echo "📦 Instalando dependências..."
@@ -136,8 +143,11 @@ cleanup() {
     fi
     
     # Para o ngrok
+    if [ ! -z "$NGROK_PID" ]; then
+        kill $NGROK_PID 2>/dev/null
+        echo "   Parando ngrok..."
+    fi
     pkill -f ngrok 2>/dev/null
-    echo "   Parando ngrok..."
     
     # Para processos específicos das portas
     graceful_shutdown 9000
@@ -187,5 +197,38 @@ echo "   1. Use Ctrl+Shift+R (ou Cmd+Shift+R no Mac) para forçar reload"
 echo "   2. Ou desative o cache nas DevTools (F12 > Network > Disable cache)"
 echo ""
 
-# Inicia ngrok com domínio fixo configurado
-ngrok start claudecodeui
+# Inicia ngrok em background
+ngrok start claudecodeui &
+NGROK_PID=$!
+
+# Aguarda ngrok inicializar
+sleep 3
+
+# Verifica se o ngrok está rodando e mostra a URL
+if kill -0 $NGROK_PID 2>/dev/null; then
+    echo "✅ Ngrok iniciado com sucesso!"
+    echo ""
+    echo "🌐 URL de acesso remoto:"
+    echo "   https://www.claudecode.ngrok.app"
+    echo ""
+    
+    # Verifica se o túnel está ativo
+    if command -v curl >/dev/null 2>&1; then
+        TUNNEL_STATUS=$(curl -s http://localhost:4040/api/tunnels 2>/dev/null | grep -o '"public_url":"[^"]*"' | head -1)
+        if [ ! -z "$TUNNEL_STATUS" ]; then
+            echo "   Status: ✅ Túnel ativo"
+        else
+            echo "   Status: ⏳ Aguardando túnel..."
+        fi
+    fi
+else
+    echo "❌ Erro ao iniciar ngrok!"
+    echo "   Verifique se o domínio não está em uso por outra sessão"
+fi
+
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+
+# Mantém o script rodando
+wait $DEV_PID

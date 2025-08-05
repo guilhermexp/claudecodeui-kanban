@@ -125,8 +125,8 @@ async function spawnClaude(command, options = {}, ws) {
     
     // Add model for new sessions
     if (!resume) {
-      // Get model from options or default to sonnet
-      const selectedModel = model || 'sonnet';
+      // Get model from options or default to 'default'
+      const selectedModel = model || 'default';
       args.push('--model', selectedModel);
     }
     

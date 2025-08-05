@@ -155,7 +155,7 @@ const QuickSettingsPanel = ({
                   <span className="text-sm text-gray-900 dark:text-white">Claude Model</span>
                 </div>
                 <select
-                  value={localStorage.getItem('claude-model') || 'sonnet'}
+                  value={localStorage.getItem('claude-model') || 'default'}
                   onChange={(e) => {
                     const newModel = e.target.value;
                     localStorage.setItem('claude-model', newModel);
@@ -169,11 +169,12 @@ const QuickSettingsPanel = ({
                   }}
                   className="w-full px-3 py-2 text-sm bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-blue-500 dark:focus:border-blue-400 text-gray-900 dark:text-white"
                 >
-                  <option value="sonnet">Sonnet 4 (Fast & Efficient)</option>
+                  <option value="default">Default (Recommended)</option>
                   <option value="opus">Opus 4 (Most Powerful)</option>
+                  <option value="sonnet">Sonnet 4 (Fast & Efficient)</option>
                 </select>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                  Sonnet 4 is faster and great for most tasks. Opus 4 is more powerful for complex reasoning.
+                  Default: Opus 4 for up to 50% usage, then Sonnet 4. Opus is best for complex tasks. Sonnet 4 for daily use.
                 </p>
               </div>
             </div>
