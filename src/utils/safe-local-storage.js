@@ -8,7 +8,7 @@ export const safeLocalStorage = {
     try {
       return localStorage.getItem(key);
     } catch (error) {
-      console.warn('localStorage.getItem failed:', error);
+      // localStorage.getItem failed
       return null;
     }
   },
@@ -20,9 +20,9 @@ export const safeLocalStorage = {
     } catch (error) {
       if (error.name === 'QuotaExceededError') {
         // Try to clear old items or compress data
-        console.warn('localStorage quota exceeded');
+        // localStorage quota exceeded
       }
-      console.warn('localStorage.setItem failed:', error);
+      // localStorage.setItem failed
       return false;
     }
   },
@@ -32,7 +32,7 @@ export const safeLocalStorage = {
       localStorage.removeItem(key);
       return true;
     } catch (error) {
-      console.warn('localStorage.removeItem failed:', error);
+      // localStorage.removeItem failed
       return false;
     }
   },
@@ -42,7 +42,7 @@ export const safeLocalStorage = {
       localStorage.clear();
       return true;
     } catch (error) {
-      console.warn('localStorage.clear failed:', error);
+      // localStorage.clear failed
       return false;
     }
   }

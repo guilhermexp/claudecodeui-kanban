@@ -886,16 +886,10 @@ function Sidebar({
                         isStarred && !isSelected && isVibeKanbanProject(project) && "bg-gray-200 dark:bg-black/50 hover:bg-gray-300 dark:hover:bg-black/60"
                       )}
                       onClick={() => {
-                        // Desktop behavior: select project and toggle
-                        if (selectedProject?.name !== project.name) {
-                          onProjectSelect(project);
-                        }
+                        // Desktop behavior: only toggle dropdown
                         toggleProject(project.name);
                       }}
                       onTouchEnd={handleTouchClick(() => {
-                        if (selectedProject?.name !== project.name) {
-                          onProjectSelect(project);
-                        }
                         toggleProject(project.name);
                       })}
                     >

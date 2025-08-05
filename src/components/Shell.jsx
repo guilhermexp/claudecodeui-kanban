@@ -219,32 +219,10 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     maxSize: 5 * 1024 * 1024, // 5MB
     maxFiles: 5,
     onDrop: (files) => {
-      console.log('Shell: Images dropped:', files.length, 'files');
-      
-      // Store images in a global queue
-      if (!window.pendingImagesForChat) {
-        window.pendingImagesForChat = [];
-      }
-      window.pendingImagesForChat.push(...files);
-      
-      // Show notification
+      // Show notification that image drop is not supported in Shell
       if (terminal.current) {
-        terminal.current.write('\r\n\x1b[32m✓ Imagens adicionadas. Mudando para aba Chat...\x1b[0m\r\n');
+        terminal.current.write('\r\n\x1b[33m⚠ Arrastar imagens não é suportado no terminal.\x1b[0m\r\n');
       }
-      
-      // Switch to chat tab automatically
-      if (window.switchToTab) {
-        window.switchToTab('chat');
-      }
-      
-      // Try to add images immediately if possible
-      setTimeout(() => {
-        if (window.addImagesToChatInterface && window.pendingImagesForChat.length > 0) {
-          console.log('Shell: Sending images to ChatInterface');
-          window.addImagesToChatInterface(window.pendingImagesForChat);
-          window.pendingImagesForChat = [];
-        }
-      }, 100);
     },
     noClick: true,
     noKeyboard: true,
