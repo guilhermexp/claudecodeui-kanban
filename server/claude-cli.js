@@ -245,14 +245,34 @@ async function spawnClaude(command, options = {}, ws) {
     
     // Handle stderr
     let isFirstError = true;
+    let stderrBuffer = '';
     claudeProcess.stderr.on('data', (data) => {
       if (isFirstError) {
         isFirstError = false;
       }
-      console.error('Claude CLI stderr:', data.toString());
+      const errorStr = data.toString();
+      console.error('Claude CLI stderr:', errorStr);
+      stderrBuffer += errorStr;
+      
+      // Check for "No conversation found" error when trying to resume
+      if (errorStr.includes('No conversation found with session ID') && resume && sessionId) {
+        console.log(`Session ${sessionId} not found in Claude CLI, creating new session instead`);
+        
+        // Send a special message indicating we need to start a new session
+        ws.send(JSON.stringify({
+          type: 'session-not-found',
+          sessionId: sessionId,
+          message: 'Session not found in Claude CLI history. Starting a new session.',
+          shouldCreateNew: true
+        }));
+        
+        // Don't send the raw error to avoid confusing the user
+        return;
+      }
+      
       ws.send(JSON.stringify({
         type: 'claude-error',
-        error: data.toString()
+        error: errorStr
       }));
     });
     

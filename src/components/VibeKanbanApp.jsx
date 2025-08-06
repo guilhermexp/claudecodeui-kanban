@@ -51,7 +51,7 @@ function AppContent() {
       setShowDisclaimer(false);
       setShowOnboarding(!config.onboarding_acknowledged);
     } catch (err) {
-      console.error('Error saving config:', err);
+      // Error saving config
     }
   };
 
@@ -71,7 +71,7 @@ function AppContent() {
       await configApi.saveConfig(updatedConfig);
       setShowOnboarding(false);
     } catch (err) {
-      console.error('Error saving config:', err);
+      // Error saving config
     }
   };
 
@@ -90,7 +90,7 @@ function AppContent() {
       await configApi.saveConfig(updatedConfig);
       setShowPrivacyOptIn(false);
     } catch (err) {
-      console.error('Error saving config:', err);
+      // Error saving config
     }
   };
 
@@ -109,7 +109,7 @@ function AppContent() {
       updateConfig(updatedConfig);
       await configApi.saveConfig(updatedConfig);
     } catch (err) {
-      console.error('Error refreshing config:', err);
+      // Error refreshing config
     } finally {
       if (!config?.telemetry_acknowledged) {
         setShowPrivacyOptIn(true);

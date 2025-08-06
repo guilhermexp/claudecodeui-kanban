@@ -35,48 +35,76 @@
 @layer base {
   :root {
     --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --foreground: 0 0% 5%;                /* Preto quase puro para texto principal */
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 0 0% 5%;           /* Preto quase puro para texto em cards */
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover-foreground: 0 0% 5%;        /* Preto quase puro para popups */
     --primary: 215.4 16.3% 46.9%;
     --primary-foreground: 210 40% 98%;
     --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary-foreground: 0 0% 10%;     /* Preto para texto secundário */
     --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted-foreground: 0 0% 30%;         /* Cinza escuro para texto menos importante */
     --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 0% 45%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
+    --accent-foreground: 0 0% 10%;        /* Preto para texto de destaque */
+    --destructive: 0 60% 50%;             /* Vermelho mais visível */
+    --destructive-foreground: 0 0% 100%;  /* Branco sobre vermelho */
+    --border: 214.3 31.8% 85%;            /* Bordas mais visíveis */
     --input: 214.3 31.8% 91.4%;
     --ring: 215.4 16.3% 46.9%;
     --radius: 0.5rem;
+
+    /* VibeKanban specific status colors for light mode */
+    --success: 142 76% 36%;                /* Verde escuro */
+    --success-foreground: 0 0% 100%;       /* Branco */
+    --warning: 38 92% 50%;                 /* Laranja */
+    --warning-foreground: 0 0% 100%;       /* Branco */
+    --info: 201 96% 42%;                   /* Azul */
+    --info-foreground: 0 0% 100%;          /* Branco */
+    --neutral: 0 0% 50%;                   /* Cinza */
+    --neutral-foreground: 0 0% 100%;       /* Branco */
+
+    /* Status indicator colors for light mode */
+    --status-init: 0 0% 50%;
+    --status-init-foreground: 0 0% 100%;
+    --status-running: 201 96% 42%;
+    --status-running-foreground: 0 0% 100%;
+    --status-complete: 142 76% 36%;
+    --status-complete-foreground: 0 0% 100%;
+    --status-failed: 0 65% 48%;
+    --status-failed-foreground: 0 0% 100%;
+    --status-paused: 38 92% 50%;
+    --status-paused-foreground: 0 0% 100%;
+
+    /* Console/terminal colors for light mode */
+    --console-background: 0 0% 98%;
+    --console-foreground: 0 0% 10%;
+    --console-success: 142 76% 36%;
+    --console-error: 0 65% 48%;
   }
 
   .dark {
     /* ChatGPT-like dark theme with greyish tones */
     --background: 0 0% 0%;            /* Pure black background */
-    --foreground: 213 27% 84%;        /* Light grey text */
-    --card: 0 0% 8%;                  /* Very dark grey for cards */
-    --card-foreground: 213 27% 84%;   /* Light grey text on cards */
-    --popover: 0 0% 8%;               /* Same as card for consistency */
-    --popover-foreground: 213 27% 84%; /* Light grey text */
-    --primary: 215 13.8% 50.2%;       /* Medium grey instead of blue */
+    --foreground: 0 0% 95%;           /* White text */
+    --card: 0 0% 5%;                  /* Dark grey for cards - matching Files tab */
+    --card-foreground: 0 0% 95%;      /* White text on cards */
+    --popover: 0 0% 10%;              /* Slightly lighter grey for popups */
+    --popover-foreground: 0 0% 95%;   /* White text */
+    --primary: 0 0% 50%;              /* Neutral grey */
     --primary-foreground: 0 0% 100%;  /* White text on primary */
     --secondary: 0 0% 12%;            /* Dark grey for secondary elements */
-    --secondary-foreground: 213 27% 84%; /* Light grey text */
+    --secondary-foreground: 0 0% 90%; /* Light grey text */
     --muted: 0 0% 12%;                /* Dark grey for muted elements */
-    --muted-foreground: 215 13.8% 50.2%; /* Medium grey text */
+    --muted-foreground: 0 0% 60%;     /* Neutral grey text */
     --accent: 0 0% 15%;               /* Dark grey accent */
-    --accent-foreground: 213 27% 84%; /* Light grey text */
+    --accent-foreground: 0 0% 95%;    /* White text */
     --destructive: 210 11% 35%;       /* Dark grey for destructive actions */
     --destructive-foreground: 0 0% 100%; /* White text on destructive */
-    --border: 0 0% 15%;               /* Dark grey borders */
-    --input: 0 0% 8%;                 /* Very dark grey inputs */
-    --ring: 215 13.8% 50.2%;          /* Grey focus ring */
+    --border: 0 0% 20%;               /* Grey borders */
+    --input: 0 0% 10%;                /* Dark grey inputs */
+    --ring: 0 0% 50%;                 /* Neutral grey focus ring */
 
     /* VibeKanban specific status colors */
     --success: 138.5 76.5% 47.7%;
@@ -130,6 +158,21 @@
     height: 100%;
     margin: 0;
     padding: 0;
+  }
+  
+  /* PWA specific adjustments */
+  @media (display-mode: standalone) {
+    body {
+      /* Ensure full viewport usage */
+      min-height: 100vh;
+      min-height: -webkit-fill-available;
+    }
+    
+    #root {
+      /* Stretch to full available height */
+      min-height: 100vh;
+      min-height: -webkit-fill-available;
+    }
   }
   
   /* Global transition defaults */

@@ -53,6 +53,16 @@ function AppContent() {
       chatState.timestamp && 
       (Date.now() - chatState.timestamp < 30 * 60 * 1000); // 30 minutes
     
+    // Smart sidebar initial state based on screen size
+    const isMobileScreen = window.innerWidth < 768;
+    let sidebarOpenDefault = !isMobileScreen; // Open on desktop, closed on mobile
+    
+    // If we have a saved state, use it only for desktop
+    // Mobile should always start closed to avoid overlay issues
+    if (savedState[appStatePersistence.KEYS.SIDEBAR_OPEN] !== undefined) {
+      sidebarOpenDefault = isMobileScreen ? false : savedState[appStatePersistence.KEYS.SIDEBAR_OPEN];
+    }
+    
     return {
       selectedProject: shouldRestoreSession ? savedState[appStatePersistence.KEYS.SELECTED_PROJECT] : null,
       selectedSession: shouldRestoreSession ? savedState[appStatePersistence.KEYS.SELECTED_SESSION] : null,
@@ -61,9 +71,7 @@ function AppContent() {
                   savedState[appStatePersistence.KEYS.ACTIVE_TAB] === 'git'
         ? savedState[appStatePersistence.KEYS.ACTIVE_TAB]
         : 'shell',
-      sidebarOpen: savedState[appStatePersistence.KEYS.SIDEBAR_OPEN] !== undefined 
-        ? savedState[appStatePersistence.KEYS.SIDEBAR_OPEN] 
-        : true, // Default to true for better desktop experience
+      sidebarOpen: sidebarOpenDefault,
     };
   };
 
@@ -108,14 +116,15 @@ function AppContent() {
 
   // Persist state changes
   useEffect(() => {
+    // Only save sidebar state for desktop to avoid mobile overlay issues
     const stateToSave = {
       [appStatePersistence.KEYS.SELECTED_PROJECT]: selectedProject,
       [appStatePersistence.KEYS.SELECTED_SESSION]: selectedSession,
       [appStatePersistence.KEYS.ACTIVE_TAB]: activeTab,
-      [appStatePersistence.KEYS.SIDEBAR_OPEN]: sidebarOpen,
+      [appStatePersistence.KEYS.SIDEBAR_OPEN]: !isMobile ? sidebarOpen : true, // Always save 'true' for desktop default
     };
     appStatePersistence.saveState(stateToSave);
-  }, [selectedProject, selectedSession, activeTab, sidebarOpen]);
+  }, [selectedProject, selectedSession, activeTab, sidebarOpen, isMobile]);
 
   // Save navigation context when navigating away
   useEffect(() => {
@@ -151,14 +160,54 @@ function AppContent() {
   }, [selectedProject, selectedSession, activeTab]);
 
   useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
+    let previousWidth = window.innerWidth;
+    let resizeTimeout = null;
+    
+    const handleResize = () => {
+      // Clear existing timeout
+      if (resizeTimeout) {
+        clearTimeout(resizeTimeout);
+      }
+      
+      // Debounce resize handling
+      resizeTimeout = setTimeout(() => {
+        const currentWidth = window.innerWidth;
+        const wasMobile = previousWidth < 768;
+        const nowMobile = currentWidth < 768;
+        
+        setIsMobile(nowMobile);
+        
+        // Smart sidebar management on screen size change
+        if (wasMobile !== nowMobile) {
+          if (nowMobile) {
+            // Switching to mobile: close sidebar to avoid overlay
+            setSidebarOpen(false);
+          } else {
+            // Switching to desktop: open sidebar for better UX
+            setSidebarOpen(true);
+          }
+        }
+        
+        previousWidth = currentWidth;
+      }, 150); // 150ms debounce
     };
     
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
+    // Initial check
+    const initialCheck = () => {
+      const nowMobile = window.innerWidth < 768;
+      setIsMobile(nowMobile);
+      previousWidth = window.innerWidth;
+    };
     
-    return () => window.removeEventListener('resize', checkMobile);
+    initialCheck();
+    window.addEventListener('resize', handleResize);
+    
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      if (resizeTimeout) {
+        clearTimeout(resizeTimeout);
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -218,6 +267,25 @@ function AppContent() {
   useEffect(() => {
     if (messages.length > 0) {
       const latestMessage = messages[messages.length - 1];
+      
+      // Handle session not found error (when resuming external Claude CLI sessions)
+      if (latestMessage.type === 'session-not-found') {
+        // Session not found in Claude CLI, will create new session
+        
+        // Show a user-friendly notification
+        const notification = document.createElement('div');
+        notification.className = 'fixed top-4 right-4 bg-yellow-500 text-white px-4 py-2 rounded-lg shadow-lg z-50 animate-pulse';
+        notification.textContent = 'Session not found. Starting a new session...';
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+          notification.remove();
+        }, 3000);
+        
+        // The backend will automatically create a new session
+        // No need to do anything else here
+        return;
+      }
       
       if (latestMessage.type === 'projects_updated') {
         

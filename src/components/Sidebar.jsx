@@ -220,7 +220,7 @@ function Sidebar({
     return allSessions.some(session => {
       const sessionDate = new Date(session.lastActivity);
       const diffInMinutes = Math.floor((currentTime - sessionDate) / (1000 * 60));
-      return diffInMinutes < 10; // Active if within last 10 minutes
+      return diffInMinutes < 1; // Active if within last 1 minute
     });
   };
 
@@ -430,7 +430,7 @@ function Sidebar({
         }
       }
     } catch (error) {
-      console.error('Error loading more sessions:', error);
+      // Error loading more sessions
     } finally {
       setLoadingSessions(prev => ({ ...prev, [project.name]: false }));
     }
@@ -1048,10 +1048,10 @@ function Sidebar({
                         </div>
                       ) : (
                         getDisplayedSessions(project).map((session) => {
-                          // Calculate if session is active (within last 10 minutes)
+                          // Calculate if session is active (within last 1 minute)
                           const sessionDate = new Date(session.lastActivity);
                           const diffInMinutes = Math.floor((currentTime - sessionDate) / (1000 * 60));
-                          const isActive = diffInMinutes < 10;
+                          const isActive = diffInMinutes < 1;
                           
                           return (
                           <div key={session.id} className="group relative">
