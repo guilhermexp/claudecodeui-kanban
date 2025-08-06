@@ -1,0 +1,92 @@
+version: '3.8'
+
+services:
+  # Vibe Kanban Backend (Rust)
+  vibe-kanban:
+    build:
+      context: .
+      dockerfile: docker/vibe-kanban/Dockerfile
+    container_name: cloud-kanban-vibe
+    ports:
+      - "8081:8081"
+    environment:
+      - PORT=8081
+      - DATABASE_URL=/app/data/database.sqlite
+    volumes:
+      - ./data:/app/data
+      - ./projects:/app/projects
+    networks:
+      - cloud-kanban
+    restart: unless-stopped
+
+  # Backend Node.js
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend/Dockerfile
+    container_name: cloud-kanban-backend
+    ports:
+      - "8080:8080"
+    environment:
+      - NODE_ENV=production
+      - HOST=0.0.0.0
+      - PORT=8080
+      - JWT_SECRET=${JWT_SECRET:-development-secret-change-in-production}
+      - DATABASE_PATH=/app/data/database.sqlite
+      - CLAUDE_API_KEY=${CLAUDE_API_KEY}
+      - VIBE_KANBAN_URL=http://vibe-kanban:8081
+    volumes:
+      - ./data:/app/data
+      - ./uploads:/app/uploads
+      - claude-projects:/root/.claude/projects
+      - claude-config:/root/.claude
+      - ./temp:/app/temp
+    depends_on:
+      - vibe-kanban
+    networks:
+      - cloud-kanban
+    restart: unless-stopped
+
+  # Frontend React
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend/Dockerfile
+    container_name: cloud-kanban-frontend
+    ports:
+      - "9000:9000"
+    depends_on:
+      - backend
+      - vibe-kanban
+    networks:
+      - cloud-kanban
+    restart: unless-stopped
+
+  # Ngrok Tunnel
+  ngrok:
+    image: ngrok/ngrok:alpine
+    container_name: cloud-kanban-ngrok
+    environment:
+      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
+    command: >
+      http 
+      --domain=${NGROK_DOMAIN:-}
+      --log=stdout
+      frontend:9000
+    ports:
+      - "4040:4040" # Ngrok web interface
+    networks:
+      - cloud-kanban
+    restart: unless-stopped
+    depends_on:
+      - frontend
+
+networks:
+  cloud-kanban:
+    driver: bridge
+
+volumes:
+  claude-projects:
+    name: cloud-kanban-claude-projects
+  claude-config:
+    name: cloud-kanban-claude-config
