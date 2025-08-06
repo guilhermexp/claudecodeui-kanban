@@ -15,7 +15,6 @@ import React, { useState, useEffect } from 'react';
 import FileTree from './FileTree';
 import CodeEditor from './CodeEditor';
 import Shell from './Shell';
-import Chat from './Chat';
 import GitPanel from './GitPanel';
 import VibeTaskPanel from './VibeTaskPanel';
 import ErrorBoundary from './ErrorBoundary';
@@ -185,7 +184,6 @@ function MainContent({
                 <div>
                   <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
                     {activeTab === 'shell' ? 'Shell' :
-                     activeTab === 'chat' ? 'Chat' :
                      activeTab === 'files' ? 'Project Files' : 
                      activeTab === 'git' ? 'Source Control' : 
                      'Project'}
@@ -233,22 +231,6 @@ function MainContent({
                       {openShellSessions}
                     </span>
                   )}
-                </span>
-              </button>
-              <button
-                onClick={() => setActiveTab('chat')}
-                className={`relative px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
-                  activeTab === 'chat'
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-                }`}
-              >
-                <span className="flex items-center gap-1 sm:gap-1.5">
-                  <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                      d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-                  </svg>
-                  <span>Chat</span>
                 </span>
               </button>
               <button
@@ -331,13 +313,6 @@ function MainContent({
             onSessionCountChange={setOpenShellSessions}
             onConnectionChange={onShellConnectionChange}
             isMobile={isMobile}
-          />
-        </div>
-        <div className={`h-full overflow-hidden ${activeTab === 'chat' ? 'block' : 'hidden'}`}>
-          <Chat
-            selectedProject={selectedProject}
-            selectedSession={selectedSession}
-            onNavigateToSession={onNavigateToSession}
           />
         </div>
         <div className={`h-full overflow-hidden ${activeTab === 'git' ? 'block' : 'hidden'}`}>
