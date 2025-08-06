@@ -1,5 +1,5 @@
 import express from 'express';
-import { exec } from 'child_process';
+import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
 import { promises as fs } from 'fs';
@@ -436,9 +436,8 @@ router.post('/generate-commit-message', async (req, res) => {
       }
     }
     
-    // Use AI to generate commit message (simple implementation)
-    // In a real implementation, you might want to use GPT or Claude API
-    const message = generateSimpleCommitMessage(files, combinedDiff);
+    // Use Claude AI to generate intelligent commit message
+    const message = await generateSmartCommitMessage(files, combinedDiff, gitRoot);
     
     res.json({ message });
   } catch (error) {
@@ -447,7 +446,75 @@ router.post('/generate-commit-message', async (req, res) => {
   }
 });
 
-// Simple commit message generator (can be replaced with AI)
+// Enhanced commit message generator using Claude CLI
+async function generateSmartCommitMessage(files, diff, projectPath) {
+  try {
+    // Create a prompt for Claude to generate a commit message
+    const prompt = `Based on the following git diff, generate a concise and descriptive commit message following conventional commit format (type: description).
+
+Files changed:
+${files.join('\n')}
+
+Diff:
+${diff.substring(0, 4000)} ${diff.length > 4000 ? '... (truncated)' : ''}
+
+Generate a single-line commit message that:
+1. Starts with a type (feat, fix, refactor, style, docs, test, chore, perf)
+2. Has a concise description of what changed
+3. Is no longer than 72 characters
+4. Uses present tense ("add" not "added")
+
+Return ONLY the commit message, nothing else.`;
+
+    // Use Claude CLI to generate the message
+    return new Promise((resolve) => {
+      const claudeProcess = spawn('claude', ['--print', prompt], {
+        cwd: projectPath,
+        env: { ...process.env }
+      });
+
+      let output = '';
+      let error = '';
+
+      claudeProcess.stdout.on('data', (data) => {
+        output += data.toString();
+      });
+
+      claudeProcess.stderr.on('data', (data) => {
+        error += data.toString();
+      });
+
+      claudeProcess.on('close', (code) => {
+        if (code === 0 && output) {
+          // Extract just the commit message from the output
+          const lines = output.trim().split('\n');
+          // Look for a line that looks like a commit message
+          const commitMessage = lines.find(line => 
+            line.match(/^(feat|fix|refactor|style|docs|test|chore|perf):/i) ||
+            line.match(/^(Add|Update|Fix|Remove|Refactor|Enhance)/i)
+          ) || lines[lines.length - 1]; // Use last line if no pattern found
+          
+          resolve(commitMessage.trim());
+        } else {
+          // Fallback to simple message generator
+          resolve(generateSimpleCommitMessage(files, diff));
+        }
+      });
+
+      // Timeout after 5 seconds and use fallback
+      setTimeout(() => {
+        claudeProcess.kill();
+        resolve(generateSimpleCommitMessage(files, diff));
+      }, 5000);
+    });
+  } catch (error) {
+    console.error('Error generating smart commit message:', error);
+    // Fallback to simple message generator
+    return generateSimpleCommitMessage(files, diff);
+  }
+}
+
+// Simple commit message generator (fallback)
 function generateSimpleCommitMessage(files, diff) {
   const fileCount = files.length;
   const isMultipleFiles = fileCount > 1;

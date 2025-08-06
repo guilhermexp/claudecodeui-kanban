@@ -3,9 +3,6 @@ import { Folder, Terminal, GitBranch } from 'lucide-react';
 import { MicButton } from './MicButton';
 
 function MobileNav({ activeTab, setActiveTab, isInputFocused, isShellConnected }) {
-  
-  // Detect dark mode
-  const isDarkMode = document.documentElement.classList.contains('dark');
   const navItems = [
     {
       id: 'shell',
@@ -36,17 +33,19 @@ function MobileNav({ activeTab, setActiveTab, isInputFocused, isShellConnected }
   };
 
   return (
-    <>
+    <div 
+      className={`fixed bottom-0 left-0 right-0 bg-card border-t border-border z-40 transform transition-transform duration-300 ease-in-out ${
+        isInputFocused ? 'translate-y-full' : 'translate-y-0'
+      }`}
+    >
       <div 
-        className={`fixed bottom-0 left-0 right-0 bg-white dark:bg-black border-t border-gray-200 dark:border-gray-800 z-40 transform transition-transform duration-300 ease-in-out shadow-lg ${
-          isInputFocused ? 'translate-y-full' : 'translate-y-0'
-        }`}
+        className="flex items-center justify-around"
         style={{
-          paddingBottom: 'env(safe-area-inset-bottom)',
-          backgroundColor: isDarkMode ? '#111827' : '#ffffff'
-        }}
-      >
-      <div className="flex items-center justify-around py-2 min-h-[56px]">
+          minHeight: '56px',
+          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+          paddingLeft: 'env(safe-area-inset-left, 0px)',
+          paddingRight: 'env(safe-area-inset-right, 0px)'
+        }}>
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
@@ -59,16 +58,16 @@ function MobileNav({ activeTab, setActiveTab, isInputFocused, isShellConnected }
                 e.preventDefault();
                 item.onClick();
               }}
-              className={`flex items-center justify-center p-3 rounded-2xl min-h-[44px] min-w-[44px] relative touch-manipulation ${
+              className={`flex items-center justify-center p-2 rounded-lg min-h-[40px] min-w-[40px] relative touch-manipulation transition-colors ${
                 isActive
-                  ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20'
-                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
+                  ? 'text-blue-500 bg-blue-500/10'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent'
               }`}
               aria-label={item.id}
             >
-              <Icon className="w-6 h-6" />
+              <Icon className="w-5 h-5" />
               {isActive && (
-                <div className="absolute -top-1 left-1/2 transform -translate-x-1/2 w-6 h-1 bg-blue-600 dark:bg-blue-400 rounded-full" />
+                <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-8 h-0.5 bg-blue-500 rounded-full" />
               )}
             </button>
           );
@@ -78,14 +77,13 @@ function MobileNav({ activeTab, setActiveTab, isInputFocused, isShellConnected }
         {activeTab === 'shell' && (
           <MicButton 
             onTranscript={handleVoiceTranscript}
-            className="p-3 rounded-2xl min-h-[44px] min-w-[44px] bg-gray-100 dark:bg-gray-900 hover:bg-gray-200 dark:hover:bg-gray-800"
+            className="p-2 rounded-lg min-h-[40px] min-w-[40px] bg-accent hover:bg-accent/80 text-accent-foreground transition-colors"
             isChat={false}
             hasChatText={false}
           />
         )}
       </div>
     </div>
-    </>
   );
 }
 
