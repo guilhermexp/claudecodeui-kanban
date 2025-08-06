@@ -29,7 +29,7 @@ function VibeTaskPanel({ isVisible, onClose }) {
         setSelectedProject(result[0]);
       }
     } catch (err) {
-      console.error('Failed to fetch projects:', err);
+      // Failed to fetch projects
       setError('Failed to load projects. Make sure Vibe Kanban backend is running.');
     } finally {
       setLoading(false);
@@ -51,7 +51,7 @@ function VibeTaskPanel({ isVisible, onClose }) {
       setError(null);
       // Could add a success toast here
     } catch (err) {
-      console.error('Failed to create task:', err);
+      // Failed to create task
       setError('Failed to create task: ' + (err.message || ''));
     }
   }, [selectedProject]);
@@ -72,7 +72,7 @@ function VibeTaskPanel({ isVisible, onClose }) {
       setError(null);
       // Could add a success toast here
     } catch (err) {
-      console.error('Failed to create and start task:', err);
+      // Failed to create and start task
       setError('Failed to create and start task: ' + (err.message || ''));
     }
   }, [selectedProject]);

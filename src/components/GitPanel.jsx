@@ -604,7 +604,7 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
           className="flex items-start p-3 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
           onClick={() => toggleCommitExpanded(commit.hash)}
         >
-          <div className="mr-2 mt-1 p-0.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded">
+          <div className="mr-2 mt-1 p-0.5 hover:bg-gray-200 dark:hover:bg-gray-800 rounded">
             {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
           </div>
           <div className="flex-1 min-w-0">
@@ -624,7 +624,7 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
           </div>
         </div>
         {isExpanded && diff && (
-          <div className="bg-gray-50 dark:bg-gray-900">
+          <div className="bg-gray-50 dark:bg-gray-950">
             <div className="max-h-96 overflow-y-auto p-2">
               <div className="text-xs font-mono text-gray-600 dark:text-gray-400 mb-2">
                 {commit.stats}
@@ -643,20 +643,20 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
     const diff = gitDiff[filePath];
     
     return (
-      <div key={filePath} className="border-b border-gray-200 dark:border-gray-700 last:border-0">
+      <div key={filePath} className="border-b border-border last:border-0">
         <div className={`flex items-center hover:bg-gray-50 dark:hover:bg-gray-800 ${isMobile ? 'px-2 py-1.5' : 'px-3 py-2'}`}>
           <input
             type="checkbox"
             checked={isSelected}
             onChange={() => toggleFileSelected(filePath)}
             onClick={(e) => e.stopPropagation()}
-            className={`rounded-2xl border-border text-muted-foreground focus:ring-ring dark:bg-background dark:checked:bg-muted ${isMobile ? 'mr-1.5' : 'mr-2'}`}
+            className={`rounded-2xl border-gray-600 text-muted-foreground focus:ring-gray-500 dark:bg-gray-800 dark:checked:bg-gray-600 ${isMobile ? 'mr-1.5' : 'mr-2'}`}
           />
           <div 
             className="flex items-center flex-1 cursor-pointer"
             onClick={() => toggleFileExpanded(filePath)}
           >
-            <div className={`p-0.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded ${isMobile ? 'mr-1' : 'mr-2'}`}>
+            <div className={`p-0.5 hover:bg-gray-200 dark:hover:bg-gray-800 rounded ${isMobile ? 'mr-1' : 'mr-2'}`}>
               <ChevronRight className={`w-3 h-3 transition-transform duration-200 ease-in-out ${isExpanded ? 'rotate-90' : 'rotate-0'}`} />
             </div>
             <span className={`flex-1 truncate ${isMobile ? 'text-xs' : 'text-sm'}`}>{filePath}</span>
@@ -709,7 +709,7 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
             </div>
           </div>
         </div>
-        <div className={`bg-gray-50 dark:bg-gray-900 transition-all duration-400 ease-in-out overflow-hidden ${
+        <div className={`bg-gray-50 dark:bg-gray-950 transition-all duration-400 ease-in-out overflow-hidden ${
           isExpanded && diff 
             ? 'max-h-[600px] opacity-100 translate-y-0' 
             : 'max-h-0 opacity-0 -translate-y-1'
@@ -761,9 +761,9 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
   }
 
   return (
-    <div className="h-full flex flex-col bg-white dark:bg-gray-900">
+    <div className="h-full flex flex-col bg-card">
       {/* Header */}
-      <div className={`flex items-center justify-between border-b border-gray-200 dark:border-gray-700 ${isMobile ? 'px-3 py-2' : 'px-4 py-3'}`}>
+      <div className={`flex items-center justify-between border-b border-border ${isMobile ? 'px-3 py-2' : 'px-4 py-3'}`}>
         <div className="relative" ref={dropdownRef}>
           <button
             onClick={() => setShowBranchDropdown(!showBranchDropdown)}
@@ -793,19 +793,19 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
                 </div>
               )}
             </div>
-            <ChevronDown className={`w-3 h-3 text-gray-500 transition-transform ${showBranchDropdown ? 'rotate-180' : ''}`} />
+            <ChevronDown className={`w-3 h-3 text-muted-foreground transition-transform ${showBranchDropdown ? 'rotate-180' : ''}`} />
           </button>
           
           {/* Branch Dropdown */}
           {showBranchDropdown && (
-            <div className="absolute top-full left-0 mt-1 w-64 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-50">
+            <div className="absolute top-full left-0 mt-1 w-64 bg-popover rounded-lg shadow-lg border border-border z-50">
               <div className="py-1 max-h-64 overflow-y-auto">
                 {branches.map(branch => (
                   <button
                     key={branch}
                     onClick={() => switchBranch(branch)}
-                    className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 ${
-                      branch === currentBranch ? 'bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100' : 'text-gray-700 dark:text-gray-300'
+                    className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-800 ${
+                      branch === currentBranch ? 'bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100' : 'text-gray-700 dark:text-gray-300'
                     }`}
                   >
                     <div className="flex items-center space-x-2">
@@ -815,13 +815,13 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
                   </button>
                 ))}
               </div>
-              <div className="border-t border-gray-200 dark:border-gray-700 py-1">
+              <div className="border-t border-border py-1">
                 <button
                   onClick={() => {
                     setShowNewBranchModal(true);
                     setShowBranchDropdown(false);
                   }}
-                  className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center space-x-2"
+                  className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center space-x-2"
                 >
                   <Plus className="w-3 h-3" />
                   <span>Create new branch</span>
@@ -1010,7 +1010,7 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
                         value={commitMessage}
                         onChange={(e) => setCommitMessage(e.target.value)}
                         placeholder="Message (Ctrl+Enter to commit)"
-                        className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 resize-none pr-20"
+                        className="w-full px-3 py-2 text-sm border border-border rounded-md bg-card text-foreground placeholder-muted-foreground resize-none pr-20"
                         rows="3"
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
@@ -1041,7 +1041,7 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
                       </div>
                     </div>
                     <div className="flex items-center justify-between mt-2">
-                      <span className="text-xs text-gray-500">
+                      <span className="text-xs text-muted-foreground">
                         {selectedFiles.size} file{selectedFiles.size !== 1 ? 's' : ''} selected
                       </span>
                       <button
@@ -1151,7 +1151,7 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
         <div className={`flex-1 overflow-y-auto ${isMobile ? 'pb-20' : ''}`}>
           {isLoading ? (
             <div className="flex items-center justify-center h-32">
-              <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
+              <RefreshCw className="w-6 h-6 animate-spin text-muted-foreground" />
             </div>
           ) : !gitStatus || (!gitStatus.modified?.length && !gitStatus.added?.length && !gitStatus.deleted?.length && !gitStatus.untracked?.length) ? (
             <div className="flex flex-col items-center justify-center h-32 text-gray-500 dark:text-gray-400">
@@ -1174,7 +1174,7 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
         <div className={`flex-1 overflow-y-auto ${isMobile ? 'pb-20' : ''}`}>
           {isLoading ? (
             <div className="flex items-center justify-center h-32">
-              <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
+              <RefreshCw className="w-6 h-6 animate-spin text-muted-foreground" />
             </div>
           ) : recentCommits.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-32 text-gray-500 dark:text-gray-400">
@@ -1197,7 +1197,7 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
             <div className="p-6">
               <h3 className="text-lg font-semibold mb-4">Create New Branch</h3>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <label className="block text-sm font-medium text-muted-foreground mb-2">
                   Branch Name
                 </label>
                 <input
@@ -1210,11 +1210,11 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
                     }
                   }}
                   placeholder="feature/new-feature"
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-border rounded-md bg-card text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-muted-foreground"
                   autoFocus
                 />
               </div>
-              <div className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+              <div className="text-xs text-muted-foreground mb-4">
                 This will create a new branch from the current branch ({currentBranch})
               </div>
               <div className="flex justify-end space-x-3">
@@ -1223,7 +1223,7 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
                     setShowNewBranchModal(false);
                     setNewBranchName('');
                   }}
-                  className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md"
+                  className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md"
                 >
                   Cancel
                 </button>
@@ -1306,7 +1306,7 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
               <div className="flex justify-end space-x-3">
                 <button
                   onClick={() => setConfirmAction(null)}
-                  className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md"
+                  className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md"
                 >
                   Cancel
                 </button>

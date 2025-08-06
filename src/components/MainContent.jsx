@@ -79,7 +79,7 @@ function MainContent({
       <div className="h-full flex flex-col">
         {/* Header with menu button for mobile */}
         {isMobile && (
-          <div className="bg-card border-b border-border p-3 sm:p-4 flex-shrink-0">
+          <div className="bg-card border-b border-border p-3 md:p-4 flex-shrink-0">
             <button
               onClick={onMenuClick}
               className="p-1.5 text-muted-foreground hover:text-foreground rounded-xl hover:bg-accent"
@@ -115,7 +115,7 @@ function MainContent({
       <div className="h-full flex flex-col">
         {/* Header with menu button for mobile */}
         {isMobile && (
-          <div className="bg-card border-b border-border p-3 sm:p-4 flex-shrink-0">
+          <div className="bg-card border-b border-border p-3 md:p-4 flex-shrink-0">
             <button
               onClick={onMenuClick}
               className="p-1.5 text-muted-foreground hover:text-foreground rounded-xl hover:bg-accent"
@@ -151,7 +151,7 @@ function MainContent({
   return (
     <div className="h-full flex flex-col">
       {/* Header with tabs */}
-      <div className="bg-card border-b border-border p-3 sm:p-4 flex-shrink-0">
+      <div className="bg-card border-b border-border p-3 md:p-4 flex-shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2 sm:space-x-3 flex-1">
             {isMobile && (
@@ -305,7 +305,7 @@ function MainContent({
         <div className={`h-full overflow-hidden ${activeTab === 'files' ? 'block' : 'hidden'}`}>
           <FileTree selectedProject={selectedProject} />
         </div>
-        <div className={`h-full overflow-hidden ${activeTab === 'shell' ? 'block' : 'hidden'} ${isMobile && activeTab === 'shell' ? 'pb-14' : ''}`}>
+        <div className={`h-full overflow-hidden ${activeTab === 'shell' ? 'block' : 'hidden'}`}>
           <Shell 
             selectedProject={selectedProject} 
             selectedSession={selectedSession}

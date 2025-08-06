@@ -92,12 +92,12 @@ export default {
         },
         // ChatGPT-like theme colors for direct usage
         chatgpt: {
-          bg: "hsl(210 11% 11%)",       // Main background
-          surface: "hsl(210 11% 15%)",  // Cards/surfaces
-          border: "hsl(210 11% 21%)",   // Borders
-          text: "hsl(213 27% 84%)",     // Main text
-          muted: "hsl(215 13.8% 50.2%)", // Muted text
-          accent: "hsl(212 100% 47%)",  // Blue accent
+          bg: "hsl(0 0% 5%)",           // Main background - neutral black
+          surface: "hsl(0 0% 10%)",      // Cards/surfaces - neutral dark grey
+          border: "hsl(0 0% 20%)",       // Borders - neutral grey
+          text: "hsl(0 0% 95%)",         // Main text - white
+          muted: "hsl(0 0% 60%)",        // Muted text - neutral grey
+          accent: "hsl(0 0% 40%)",       // Grey accent instead of blue
         },
       },
       borderRadius: {

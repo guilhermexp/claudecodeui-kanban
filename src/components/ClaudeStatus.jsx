@@ -43,11 +43,11 @@ function ClaudeStatus({ status, onAbort, isLoading }) {
           <div className="flex items-center gap-2 text-sm">
             <span className="font-medium">{statusText}...</span>
             {elapsedTime > 0 && (
-              <span className="text-gray-400">({elapsedTime}s)</span>
+              <span className="text-muted-foreground">({elapsedTime}s)</span>
             )}
             {tokens !== null && tokens > 0 && (
               <>
-                <span className="text-gray-400 hidden sm:inline">·</span>
+                <span className="text-muted-foreground hidden sm:inline">·</span>
                 <span className="text-gray-300 hidden sm:inline">{tokens.toLocaleString()}</span>
               </>
             )}
