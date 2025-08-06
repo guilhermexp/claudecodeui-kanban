@@ -3,6 +3,7 @@ import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { ClipboardAddon } from '@xterm/addon-clipboard';
 import { WebglAddon } from '@xterm/addon-webgl';
+import { WebLinksAddon } from '@xterm/addon-web-links';
 import { useDropzone } from 'react-dropzone';
 import 'xterm/css/xterm.css';
 
@@ -491,9 +492,11 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     fitAddon.current = new FitAddon();
     const clipboardAddon = new ClipboardAddon();
     const webglAddon = new WebglAddon();
+    const webLinksAddon = new WebLinksAddon();
     
     terminal.current.loadAddon(fitAddon.current);
     terminal.current.loadAddon(clipboardAddon);
+    terminal.current.loadAddon(webLinksAddon);
     
     try {
       terminal.current.loadAddon(webglAddon);
