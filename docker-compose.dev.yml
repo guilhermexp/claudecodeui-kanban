@@ -1,0 +1,86 @@
+version: '3.8'
+
+# Configuração para desenvolvimento local com hot-reload
+services:
+  # Backend com hot-reload
+  backend-dev:
+    image: node:20-alpine
+    container_name: cloud-kanban-backend-dev
+    working_dir: /app
+    command: npm run server
+    ports:
+      - "8080:8080"
+    environment:
+      - NODE_ENV=development
+      - HOST=0.0.0.0
+      - PORT=8080
+      - JWT_SECRET=development-secret
+      - DATABASE_PATH=/app/data/database.sqlite
+      - CLAUDE_API_KEY=${CLAUDE_API_KEY}
+      - VIBE_KANBAN_URL=http://vibe-kanban-dev:8081
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - ./data:/app/data
+      - claude-projects:/root/.claude/projects
+      - claude-config:/root/.claude
+    networks:
+      - cloud-kanban-dev
+    restart: unless-stopped
+
+  # Vibe Kanban para desenvolvimento
+  vibe-kanban-dev:
+    build:
+      context: .
+      dockerfile: docker/vibe-kanban/Dockerfile
+    container_name: cloud-kanban-vibe-dev
+    ports:
+      - "8081:8081"
+    environment:
+      - PORT=8081
+      - DATABASE_URL=/app/data/database.sqlite
+    volumes:
+      - ./data:/app/data
+    networks:
+      - cloud-kanban-dev
+    restart: unless-stopped
+
+  # Frontend com hot-reload
+  frontend-dev:
+    image: node:20-alpine
+    container_name: cloud-kanban-frontend-dev
+    working_dir: /app
+    command: npm run client
+    ports:
+      - "9000:9000"
+    environment:
+      - NODE_ENV=development
+    volumes:
+      - .:/app
+      - /app/node_modules
+    networks:
+      - cloud-kanban-dev
+    restart: unless-stopped
+
+  # Ngrok para desenvolvimento
+  ngrok-dev:
+    image: ngrok/ngrok:alpine
+    container_name: cloud-kanban-ngrok-dev
+    environment:
+      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
+    command: http frontend-dev:9000
+    ports:
+      - "4040:4040"
+    networks:
+      - cloud-kanban-dev
+    restart: unless-stopped
+
+networks:
+  cloud-kanban-dev:
+    driver: bridge
+
+volumes:
+  claude-projects:
+    name: cloud-kanban-claude-projects-dev
+  claude-config:
+    name: cloud-kanban-claude-config-dev
