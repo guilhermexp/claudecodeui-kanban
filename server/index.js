@@ -37,6 +37,7 @@ import { spawnClaude, abortClaudeSession } from './claude-cli.js';
 import gitRoutes from './routes/git.js';
 import authRoutes from './routes/auth.js';
 import mcpRoutes from './routes/mcp.js';
+import usageRoutes from './routes/usage.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 
@@ -206,11 +207,11 @@ const wss = new WebSocketServer({
 app.use(cors());
 app.use(express.json());
 
-// Optional API key validation (if configured)
-app.use('/api', validateApiKey);
-
-// Authentication routes (public)
+// Authentication routes (public - before API key validation)
 app.use('/api/auth', authRoutes);
+
+// Optional API key validation (if configured) - for other /api routes
+app.use('/api', validateApiKey);
 
 
 // Health check endpoint (public)
@@ -233,6 +234,9 @@ app.use('/api/git', authenticateToken, gitRoutes);
 
 // MCP API Routes (protected)
 app.use('/api/mcp', authenticateToken, mcpRoutes);
+
+// Usage API Routes (protected)
+app.use('/api/usage', usageRoutes);
 
 // Static files served after API routes
 app.use(express.static(path.join(__dirname, '../dist')));
