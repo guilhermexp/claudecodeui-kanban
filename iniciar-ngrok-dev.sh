@@ -83,13 +83,14 @@ trap cleanup EXIT INT TERM
 # Configura variáveis de ambiente para melhor compatibilidade com ngrok
 export VITE_FORCE_OPTIMIZE_DEPS=true
 export VITE_LEGACY_BROWSER_SUPPORT=true
+export VITE_NGROK_DOMAIN=https://www.claudecode.ngrok.app
 
 echo ""
 echo "🚀 Iniciando servidores com otimizações para ngrok..."
 echo ""
 
 # Inicia os servidores com flag especial
-npm run dev:network &
+npm run dev &
 DEV_PID=$!
 
 # Aguarda servidores

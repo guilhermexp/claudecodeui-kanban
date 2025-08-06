@@ -6,6 +6,8 @@ export default defineConfig(({ command, mode }) => {
   // Load env file based on `mode` in the current working directory.
   const env = loadEnv(mode, process.cwd(), '')
   
+  // Detecta se está rodando via ngrok
+  const isNgrok = env.VITE_NGROK_DOMAIN || process.env.VITE_NGROK_DOMAIN
   
   return {
     plugins: [react()],
@@ -19,11 +21,11 @@ export default defineConfig(({ command, mode }) => {
       host: true, // Allow access from network
       hmr: {
         overlay: true,
-        // Força o HMR a funcionar melhor com proxies
-        protocol: 'ws',
-        host: 'localhost',
-        port: 9000,
-        clientPort: 9000
+        // Configuração para trabalhar com ngrok
+        protocol: isNgrok ? 'wss' : 'ws',
+        host: isNgrok ? isNgrok.replace('https://', '').replace('http://', '') : 'localhost',
+        port: isNgrok ? 443 : 9000,
+        clientPort: isNgrok ? 443 : 9000
       },
       // Permite requisições do ngrok
       strictPort: true,

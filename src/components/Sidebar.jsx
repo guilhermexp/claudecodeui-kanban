@@ -6,24 +6,14 @@ import { Badge } from './ui/badge';
 import { Input } from './ui/input';
 
 import { FolderOpen, Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, Edit3, Check, X, Trash2, Settings, FolderPlus, RefreshCw, Sparkles, Moon, Sun, Trello, Search, Star, Edit2, Loader2 } from 'lucide-react';
+import { ProjectIcon, isVibeKanbanProject as isVibeKanban } from '../utils/projectIcons.jsx';
 import { cn } from '../lib/utils';
 import ClaudeLogo from './ClaudeLogo';
 import { api } from '../utils/api';
 import { useTheme } from '../contexts/ThemeContext';
 import { formatTimeAgo } from '../utils/time';
 
-// Helper function to detect VibeKanban projects
-const isVibeKanbanProject = (project) => {
-  return project.fullPath && (
-    project.fullPath.includes('/vibe-kanban/') ||
-    project.fullPath.includes('\\vibe-kanban\\') ||
-    project.name.startsWith('vk-') ||
-    project.fullPath.includes('/T/vibe-kanban/') ||
-    project.fullPath.includes('\\T\\vibe-kanban\\') ||
-    project.fullPath.includes('/vk-') ||
-    project.fullPath.includes('\\vk-')
-  );
-};
+// Using isVibeKanban from projectIcons utility
 
 
 function Sidebar({ 
@@ -722,11 +712,11 @@ function Sidebar({
                       <div
                         className={cn(
                           "p-3 mx-3 my-1 rounded-lg border border-border active:scale-[0.98] transition-all duration-150 relative",
-                          isVibeKanbanProject(project) && !isSelected && "bg-gray-100 dark:bg-black/30",
-                          !isVibeKanbanProject(project) && !isSelected && "bg-card",
+                          isVibeKanban(project) && !isSelected && "bg-gray-100 dark:bg-black/30",
+                          !isVibeKanban(project) && !isSelected && "bg-card",
                           isSelected && "bg-accent",
-                          isStarred && !isSelected && !isVibeKanbanProject(project) && "bg-blue-50/30 dark:bg-blue-900/10",
-                          isStarred && !isSelected && isVibeKanbanProject(project) && "bg-gray-200 dark:bg-black/50"
+                          isStarred && !isSelected && !isVibeKanban(project) && "bg-blue-50/10 dark:bg-blue-950/10",
+                          isStarred && !isSelected && isVibeKanban(project) && "bg-gray-100/50 dark:bg-black/40"
                         )}
                         onClick={() => {
                           // On mobile, just toggle the folder - don't select the project
@@ -746,13 +736,15 @@ function Sidebar({
                               "w-8 h-8 rounded-2xl flex items-center justify-center transition-colors",
                               isExpanded ? "bg-muted" : "bg-muted/50"
                             )}>
-                              {isVibeKanbanProject(project) ? (
-                                <Trello className="w-4 h-4 text-muted-foreground" />
-                              ) : isExpanded ? (
-                                <FolderOpen className="w-4 h-4 text-primary" />
-                              ) : (
-                                <Folder className="w-4 h-4 text-muted-foreground" />
-                              )}
+                              <ProjectIcon 
+                                project={project} 
+                                isExpanded={isExpanded}
+                                size={16}
+                                className={cn(
+                                  "transition-colors",
+                                  isExpanded ? "text-primary" : "text-muted-foreground"
+                                )}
+                              />
                             </div>
                             <div className="min-w-0 flex-1">
                               {editingProject === project.name ? (
@@ -819,10 +811,10 @@ function Sidebar({
                                 {/* Star button */}
                                 <button
                                   className={cn(
-                                    "w-8 h-8 rounded-lg flex items-center justify-center active:scale-90 transition-all duration-150 border",
+                                    "w-7 h-7 rounded-lg flex items-center justify-center active:scale-90 transition-all duration-150 border",
                                     isStarred 
-                                      ? "bg-blue-500/10 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800" 
-                                      : "bg-gray-500/10 dark:bg-black/20 border-gray-200 dark:border-gray-900"
+                                      ? "bg-transparent border-blue-400/50 dark:border-blue-500/50" 
+                                      : "bg-transparent border-gray-300/30 dark:border-gray-700/30"
                                   )}
                                   onClick={(e) => {
                                     e.stopPropagation();
@@ -832,10 +824,10 @@ function Sidebar({
                                   title={isStarred ? "Remove from favorites" : "Add to favorites"}
                                 >
                                   <Star className={cn(
-                                    "w-4 h-4 transition-colors",
+                                    "w-3 h-3 transition-colors",
                                     isStarred 
-                                      ? "text-blue-600 dark:text-blue-400 fill-current" 
-                                      : "text-gray-600 dark:text-gray-400"
+                                      ? "text-blue-500 dark:text-blue-400 fill-none stroke-2" 
+                                      : "text-gray-500/60 dark:text-gray-500/60 fill-none stroke-1"
                                   )} />
                                 </button>
                                 {getAllSessions(project).length === 0 && (
@@ -879,11 +871,11 @@ function Sidebar({
                       variant="ghost"
                       className={cn(
                         "hidden md:flex w-full justify-between px-3 py-2 h-auto font-normal hover:text-accent-foreground relative rounded-lg",
-                        isVibeKanbanProject(project) && !isSelected && "bg-gray-100 dark:bg-black/30 hover:bg-gray-200 dark:hover:bg-black/40",
-                        !isVibeKanbanProject(project) && !isSelected && "hover:bg-accent",
+                        isVibeKanban(project) && !isSelected && "bg-gray-100 dark:bg-black/30 hover:bg-gray-200 dark:hover:bg-black/40",
+                        !isVibeKanban(project) && !isSelected && "hover:bg-accent",
                         isSelected && "bg-accent text-accent-foreground",
-                        isStarred && !isSelected && !isVibeKanbanProject(project) && "bg-blue-50/30 dark:bg-blue-900/10 hover:bg-blue-100/30 dark:hover:bg-blue-900/20",
-                        isStarred && !isSelected && isVibeKanbanProject(project) && "bg-gray-200 dark:bg-black/50 hover:bg-gray-300 dark:hover:bg-black/60"
+                        isStarred && !isSelected && !isVibeKanban(project) && "bg-blue-50/10 dark:bg-blue-950/10 hover:bg-blue-100/20 dark:hover:bg-blue-950/20",
+                        isStarred && !isSelected && isVibeKanban(project) && "bg-gray-100/50 dark:bg-black/40 hover:bg-gray-200/50 dark:hover:bg-black/50"
                       )}
                       onClick={() => {
                         // Desktop behavior: only toggle dropdown
@@ -900,13 +892,15 @@ function Sidebar({
                         </div>
                       )}
                       <div className="flex items-center gap-3 min-w-0 flex-1">
-                        {isVibeKanbanProject(project) ? (
-                          <Trello className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                        ) : isExpanded ? (
-                          <FolderOpen className="w-4 h-4 text-primary flex-shrink-0" />
-                        ) : (
-                          <Folder className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                        )}
+                        <ProjectIcon 
+                          project={project} 
+                          isExpanded={isExpanded}
+                          size={16}
+                          className={cn(
+                            "flex-shrink-0 transition-colors",
+                            isExpanded ? "text-primary" : "text-muted-foreground"
+                          )}
+                        />
                         <div className="min-w-0 flex-1 text-left">
                           {editingProject === project.name ? (
                             <div className="space-y-1">
@@ -975,10 +969,10 @@ function Sidebar({
                             {/* Star button */}
                             <div
                               className={cn(
-                                "w-5 h-5 opacity-0 group-hover:opacity-100 transition-all duration-200 flex items-center justify-center rounded cursor-pointer touch:opacity-100",
+                                "w-4 h-4 opacity-0 group-hover:opacity-60 transition-all duration-200 flex items-center justify-center rounded cursor-pointer touch:opacity-60",
                                 isStarred 
-                                  ? "hover:bg-blue-50 dark:hover:bg-blue-900/20 opacity-100" 
-                                  : "hover:bg-accent"
+                                  ? "hover:opacity-100 opacity-60" 
+                                  : "hover:opacity-100"
                               )}
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -987,10 +981,10 @@ function Sidebar({
                               title={isStarred ? "Remove from favorites" : "Add to favorites"}
                             >
                               <Star className={cn(
-                                "w-3 h-3 transition-colors",
+                                "w-2.5 h-2.5 transition-all",
                                 isStarred 
-                                  ? "text-blue-600 dark:text-blue-400 fill-current" 
-                                  : "text-muted-foreground"
+                                  ? "text-blue-500 dark:text-blue-400 fill-none stroke-[1.5]" 
+                                  : "text-gray-500 dark:text-gray-400 fill-none stroke-1"
                               )} />
                             </div>
                             <div
