@@ -5,7 +5,7 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
 
-import { FolderOpen, Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, Edit3, Check, X, Trash2, Settings, FolderPlus, RefreshCw, Sparkles, Moon, Sun, Trello, Search, Star, Edit2, Loader2 } from 'lucide-react';
+import { FolderOpen, Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, Edit3, Check, X, Trash2, Settings, FolderPlus, RefreshCw, Sparkles, Moon, Sun, Trello, Search, Star, Edit2, Loader2, BarChart3 } from 'lucide-react';
 import { ProjectIcon, isVibeKanbanProject as isVibeKanban } from '../utils/projectIcons.jsx';
 import { cn } from '../lib/utils';
 import ClaudeLogo from './ClaudeLogo';
@@ -28,6 +28,7 @@ function Sidebar({
   isLoading,
   onRefresh,
   onShowSettings,
+  onShowDashboard,
   updateAvailable,
   latestVersion,
   currentVersion,
@@ -1341,6 +1342,17 @@ function Sidebar({
       <div className="border-t border-border flex-shrink-0">
         {/* Desktop Footer */}
         <div className="hidden md:block p-3 space-y-2">
+          {/* Dashboard Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full justify-start gap-2 h-8"
+            onClick={onShowDashboard}
+          >
+            <BarChart3 className="w-4 h-4" />
+            <span>Dashboard</span>
+          </Button>
+          
           {/* VibeKanban Button */}
           <Button
             variant="outline"
@@ -1384,6 +1396,16 @@ function Sidebar({
         
         {/* Mobile Footer */}
         <div className="md:hidden p-3 pb-safe-area-inset-bottom space-y-2">
+          {/* Dashboard Button */}
+          <Button
+            variant="outline"
+            className="w-full h-10 justify-center gap-2"
+            onClick={onShowDashboard}
+          >
+            <BarChart3 className="w-4 h-4" />
+            <span>Dashboard</span>
+          </Button>
+          
           {/* VibeKanban Button */}
           <Button
             variant="outline"

@@ -24,6 +24,7 @@ import Sidebar from './components/Sidebar';
 import MainContent from './components/MainContent';
 import MobileNav from './components/MobileNav';
 import ToolsSettings from './components/ToolsSettings';
+import Dashboard from './components/Dashboard';
 import VibeKanbanApp from './components/VibeKanbanApp';
 import SessionKeepAlive from './components/SessionKeepAlive';
 
@@ -87,6 +88,7 @@ function AppContent() {
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [isShellConnected, setIsShellConnected] = useState(false);
   const [showToolsSettings, setShowToolsSettings] = useState(false);
+  const [showDashboard, setShowDashboard] = useState(false);
   // Session Protection System: Track sessions with active conversations to prevent
   // automatic project updates from interrupting ongoing chats. When a user sends
   // a message, the session is marked as "active" and project updates are paused
@@ -657,6 +659,7 @@ function AppContent() {
               isLoading={isLoadingProjects}
               onRefresh={handleSidebarRefresh}
               onShowSettings={() => setShowToolsSettings(true)}
+              onShowDashboard={() => setShowDashboard(true)}
               updateAvailable={updateAvailable}
               latestVersion={latestVersion}
               currentVersion={currentVersion}
@@ -703,6 +706,7 @@ function AppContent() {
               isLoading={isLoadingProjects}
               onRefresh={handleSidebarRefresh}
               onShowSettings={() => setShowToolsSettings(true)}
+              onShowDashboard={() => setShowDashboard(true)}
               updateAvailable={updateAvailable}
               latestVersion={latestVersion}
               currentVersion={currentVersion}
@@ -753,6 +757,13 @@ function AppContent() {
         isOpen={showToolsSettings}
         onClose={() => setShowToolsSettings(false)}
       />
+      
+      {/* Dashboard Modal */}
+      {showDashboard && (
+        <div className="fixed inset-0 bg-background z-50">
+          <Dashboard onBack={() => setShowDashboard(false)} />
+        </div>
+      )}
 
       {/* Version Upgrade Modal */}
       <VersionUpgradeModal />
