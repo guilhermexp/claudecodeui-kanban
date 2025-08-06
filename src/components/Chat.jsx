@@ -41,15 +41,44 @@ function Chat({ selectedProject, selectedSession, onNavigateToSession }) {
   };
 
   // Connect to WebSocket
-  const connectWebSocket = useCallback(() => {
+  const connectWebSocket = useCallback(async () => {
     if (ws.current?.readyState === WebSocket.OPEN) return;
 
     try {
       const token = localStorage.getItem('auth-token');
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const host = window.location.hostname;
-      const port = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
-      const wsUrl = `${protocol}//${host}:${port}/ws?token=${encodeURIComponent(token)}`;
+      if (!token) {
+        console.warn('No authentication token found for WebSocket connection');
+        return;
+      }
+      
+      // Fetch server configuration to get the correct WebSocket URL
+      let wsBaseUrl;
+      try {
+        const configResponse = await fetch('/api/config', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        const config = await configResponse.json();
+        wsBaseUrl = config.wsUrl;
+        
+        // If the config returns localhost but we're not on localhost, use current host but with API server port
+        if (wsBaseUrl.includes('localhost') && !window.location.hostname.includes('localhost')) {
+          const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+          // For development, API server is typically on port 3002 when Vite is on 3001
+          const apiPort = window.location.port === '9000' ? '8080' : window.location.port === '3001' ? '3002' : window.location.port;
+          wsBaseUrl = `${protocol}//${window.location.hostname}:${apiPort}`;
+        }
+      } catch (error) {
+        console.warn('Could not fetch server config, falling back to current host with API server port');
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        // For development, API server is typically on port 3002 when Vite is on 3001
+        const apiPort = window.location.port === '3001' ? '3002' : window.location.port;
+        wsBaseUrl = `${protocol}//${window.location.hostname}:${apiPort}`;
+      }
+      
+      // Include token in WebSocket URL as query parameter
+      const wsUrl = `${wsBaseUrl}/ws?token=${encodeURIComponent(token)}`;
       
       ws.current = new WebSocket(wsUrl);
 
@@ -217,9 +246,10 @@ function Chat({ selectedProject, selectedSession, onNavigateToSession }) {
       type: 'claude-command',
       command: input,
       options: {
-        projectPath: selectedProject.name,
+        projectPath: selectedProject.fullPath || selectedProject.path || selectedProject.name.replace(/-/g, '/'),
         sessionId: selectedSession?.id,
-        cwd: selectedProject.name.replace(/-/g, '/')
+        cwd: selectedProject.fullPath || selectedProject.path || selectedProject.name.replace(/-/g, '/'),
+        resume: !!selectedSession
       }
     }));
 
