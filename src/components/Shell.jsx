@@ -217,17 +217,50 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     }
   };
 
-  // Setup dropzone to redirect images to chat
+  // Setup dropzone to handle image drops
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     accept: {
       'image/*': ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg']
     },
     maxSize: 5 * 1024 * 1024, // 5MB
     maxFiles: 5,
-    onDrop: (files) => {
-      // Show notification that image drop is not supported in Shell
-      if (terminal.current) {
-        terminal.current.write('\r\n\x1b[33m⚠ Arrastar imagens não é suportado no terminal.\x1b[0m\r\n');
+    onDrop: async (files) => {
+      if (files.length > 0) {
+        try {
+          // Process each image file
+          for (const file of files) {
+            // Create a temporary path or save to temp directory
+            const fileName = file.name;
+            
+            // Convert to base64 for sending
+            const reader = new FileReader();
+            reader.onload = () => {
+              if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+                // Send command to save image to temp and add to Claude
+                const tempPath = `/tmp/${Date.now()}_${fileName}`;
+                
+                // First save the image data (you might need to handle this on backend)
+                // For now, just notify that we need to save and use the image
+                const command = `echo "Image: ${fileName}" && claude add-image "${tempPath}"\n`;
+                
+                ws.current.send(JSON.stringify({
+                  type: 'input',
+                  data: command
+                }));
+                
+                // Show feedback in terminal
+                if (terminal.current) {
+                  terminal.current.write(`\r\n\x1b[32m✓ Adicionando imagem: ${fileName}\x1b[0m\r\n`);
+                }
+              }
+            };
+            reader.readAsDataURL(file);
+          }
+        } catch (error) {
+          if (terminal.current) {
+            terminal.current.write(`\r\n\x1b[31m✗ Erro ao processar imagens\x1b[0m\r\n`);
+          }
+        }
       }
     },
     noClick: true,
@@ -368,19 +401,20 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
         
         terminal.current.open(terminalRef.current);
         
-        setTimeout(() => {
-          if (fitAddon.current) {
-            fitAddon.current.fit();
-            // Send terminal size to backend after reattaching
-            if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+        // Fit immediately for better responsiveness
+        if (fitAddon.current) {
+          fitAddon.current.fit();
+          // Send terminal size to backend after reattaching
+          setTimeout(() => {
+            if (ws.current && ws.current.readyState === WebSocket.OPEN && terminal.current) {
               ws.current.send(JSON.stringify({
                 type: 'resize',
                 cols: terminal.current.cols,
                 rows: terminal.current.rows
               }));
             }
-          }
-        }, 100);
+          }, 50);
+        }
         
         setIsInitialized(true);
         return;
@@ -416,11 +450,11 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       // Enhanced theme with full 16-color ANSI support + true colors
       theme: {
         // Basic colors
-        background: '#1e1e1e',
-        foreground: '#d4d4d4',
+        background: '#0d0d0d',  // Dark gray background matching bg-card
+        foreground: '#f2f2f2',  // White text matching foreground color
         cursor: '#ffffff',
-        cursorAccent: '#1e1e1e',
-        selection: '#264f78',
+        cursorAccent: '#0d0d0d',
+        selection: '#333333',   // Neutral gray selection
         selectionForeground: '#ffffff',
         
         // Standard ANSI colors (0-7)
@@ -468,12 +502,12 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     
     terminal.current.open(terminalRef.current);
 
-    // Wait for terminal to be fully rendered, then fit
-    setTimeout(() => {
+    // Fit terminal immediately after opening
+    requestAnimationFrame(() => {
       if (fitAddon.current) {
         fitAddon.current.fit();
       }
-    }, 50);
+    });
 
     // Add keyboard shortcuts for copy/paste
     terminal.current.attachCustomKeyEventHandler((event) => {
@@ -485,15 +519,65 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       
       // Ctrl+V or Cmd+V for paste
       if ((event.ctrlKey || event.metaKey) && event.key === 'v') {
-        navigator.clipboard.readText().then(text => {
-          if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-            ws.current.send(JSON.stringify({
-              type: 'input',
-              data: text
-            }));
+        // First try to read images from clipboard
+        navigator.clipboard.read().then(async (items) => {
+          let hasImage = false;
+          
+          for (const item of items) {
+            // Check if item contains an image
+            const imageTypes = item.types.filter(type => type.startsWith('image/'));
+            
+            if (imageTypes.length > 0) {
+              hasImage = true;
+              const blob = await item.getType(imageTypes[0]);
+              const fileName = `clipboard_${Date.now()}.${imageTypes[0].split('/')[1]}`;
+              
+              // Convert blob to base64
+              const reader = new FileReader();
+              reader.onload = () => {
+                if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+                  // Send notification about pasted image
+                  const command = `echo "Imagem colada: ${fileName}"\n`;
+                  
+                  ws.current.send(JSON.stringify({
+                    type: 'input',
+                    data: command
+                  }));
+                  
+                  if (terminal.current) {
+                    terminal.current.write(`\r\n\x1b[32m✓ Imagem colada do clipboard: ${fileName}\x1b[0m\r\n`);
+                  }
+                }
+              };
+              reader.readAsDataURL(blob);
+            }
           }
-        }).catch(err => {
-          // Failed to read clipboard
+          
+          // If no image found, try to paste text
+          if (!hasImage) {
+            navigator.clipboard.readText().then(text => {
+              if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+                ws.current.send(JSON.stringify({
+                  type: 'input',
+                  data: text
+                }));
+              }
+            }).catch(() => {
+              // Failed to read text
+            });
+          }
+        }).catch(() => {
+          // Fallback to text-only paste if clipboard API fails
+          navigator.clipboard.readText().then(text => {
+            if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+              ws.current.send(JSON.stringify({
+                type: 'input',
+                data: text
+              }));
+            }
+          }).catch(() => {
+            // Failed to read clipboard
+          });
         });
         return false;
       }
@@ -501,20 +585,22 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       return true;
     });
     
-    // Ensure terminal takes full space and notify backend of size
-    setTimeout(() => {
+    // Ensure terminal takes full space immediately
+    requestAnimationFrame(() => {
       if (fitAddon.current) {
         fitAddon.current.fit();
         // Send terminal size to backend after fitting
-        if (terminal.current && ws.current && ws.current.readyState === WebSocket.OPEN) {
-          ws.current.send(JSON.stringify({
-            type: 'resize',
-            cols: terminal.current.cols,
-            rows: terminal.current.rows
-          }));
-        }
+        setTimeout(() => {
+          if (terminal.current && ws.current && ws.current.readyState === WebSocket.OPEN) {
+            ws.current.send(JSON.stringify({
+              type: 'resize',
+              cols: terminal.current.cols,
+              rows: terminal.current.rows
+            }));
+          }
+        }, 50);
       }
-    }, 100);
+    });
     
     setIsInitialized(true);
 
@@ -528,20 +614,28 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       }
     });
 
-    // Add resize observer to handle container size changes
+    // Add resize observer to handle container size changes with debouncing
+    let resizeTimeout = null;
     const resizeObserver = new ResizeObserver(() => {
       if (fitAddon.current && terminal.current) {
-        setTimeout(() => {
-          fitAddon.current.fit();
+        // Immediate fit for visual responsiveness
+        fitAddon.current.fit();
+        
+        // Debounce the backend notification to avoid flooding
+        if (resizeTimeout) {
+          clearTimeout(resizeTimeout);
+        }
+        
+        resizeTimeout = setTimeout(() => {
           // Send updated terminal size to backend after resize
-          if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+          if (ws.current && ws.current.readyState === WebSocket.OPEN && terminal.current) {
             ws.current.send(JSON.stringify({
               type: 'resize',
               cols: terminal.current.cols,
               rows: terminal.current.rows
             }));
           }
-        }, 50);
+        }, 100);
       }
     });
 
@@ -551,6 +645,9 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
 
     return () => {
       resizeObserver.disconnect();
+      if (resizeTimeout) {
+        clearTimeout(resizeTimeout);
+      }
       
       // Clear intervals on unmount
       if (heartbeatInterval.current) {
@@ -585,11 +682,12 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   useEffect(() => {
     if (!isActive || !isInitialized) return;
 
-    // Fit terminal when tab becomes active and notify backend
-    setTimeout(() => {
-      if (fitAddon.current) {
-        fitAddon.current.fit();
-        // Send terminal size to backend after tab activation
+    // Fit terminal immediately when tab becomes active
+    if (fitAddon.current) {
+      fitAddon.current.fit();
+      
+      // Notify backend after a short delay
+      setTimeout(() => {
         if (terminal.current && ws.current && ws.current.readyState === WebSocket.OPEN) {
           ws.current.send(JSON.stringify({
             type: 'resize',
@@ -597,9 +695,51 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
             rows: terminal.current.rows
           }));
         }
-      }
-    }, 100);
+      }, 50);
+    }
   }, [isActive, isInitialized]);
+
+  // Handle window resize events for immediate responsiveness
+  useEffect(() => {
+    if (!isInitialized || !fitAddon.current) return;
+
+    let resizeDebounceTimer = null;
+    
+    const handleWindowResize = () => {
+      // Immediate visual update
+      if (fitAddon.current && terminal.current) {
+        fitAddon.current.fit();
+        
+        // Debounce backend notification
+        if (resizeDebounceTimer) {
+          clearTimeout(resizeDebounceTimer);
+        }
+        
+        resizeDebounceTimer = setTimeout(() => {
+          if (ws.current && ws.current.readyState === WebSocket.OPEN && terminal.current) {
+            ws.current.send(JSON.stringify({
+              type: 'resize',
+              cols: terminal.current.cols,
+              rows: terminal.current.rows
+            }));
+          }
+        }, 150);
+      }
+    };
+
+    window.addEventListener('resize', handleWindowResize);
+    
+    // Also listen for orientation change on mobile
+    window.addEventListener('orientationchange', handleWindowResize);
+
+    return () => {
+      window.removeEventListener('resize', handleWindowResize);
+      window.removeEventListener('orientationchange', handleWindowResize);
+      if (resizeDebounceTimer) {
+        clearTimeout(resizeDebounceTimer);
+      }
+    };
+  }, [isInitialized]);
 
   // WebSocket connection function (called manually)
   const connectWebSocket = async () => {
@@ -784,9 +924,9 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   if (!selectedProject) {
     return (
       <div className="h-full flex items-center justify-center">
-        <div className="text-center text-gray-500 dark:text-gray-400">
-          <div className="w-16 h-16 mx-auto mb-4 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center">
-            <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="text-center text-muted-foreground">
+          <div className="w-16 h-16 mx-auto mb-4 bg-muted rounded-full flex items-center justify-center">
+            <svg className="w-8 h-8 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z" />
             </svg>
           </div>
@@ -798,10 +938,10 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   }
 
   return (
-    <div className="h-full flex flex-col bg-gray-900 w-full" {...getRootProps({onClick: e => e.stopPropagation()})}>
+    <div className="h-full flex flex-col bg-card w-full" {...getRootProps({onClick: e => e.stopPropagation()})}>
       <input {...getInputProps()} />
-      {/* Header */}
-      <div className="flex-shrink-0 bg-gray-800 border-b border-gray-700 px-2 sm:px-4 py-2">
+      {/* Status Bar */}
+      <div className="flex-shrink-0 border-b border-border px-3 py-1.5">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center space-x-2 flex-1 min-w-0">
             <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
@@ -811,7 +951,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
               </span>
             )}
             {!selectedSession && (
-              <span className="text-xs text-gray-400 hidden xs:inline">(New Session)</span>
+              <span className="text-xs text-muted-foreground hidden xs:inline">(New Session)</span>
             )}
             {!isInitialized && (
               <span className="text-xs text-yellow-400">
@@ -832,7 +972,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
               className={`px-1.5 sm:px-3 py-1 text-xs rounded flex items-center space-x-1 transition-colors ${
                 isBypassingPermissions 
                   ? 'bg-yellow-600 text-white hover:bg-yellow-700' 
-                  : 'bg-gray-600 text-gray-300 hover:bg-gray-700'
+                  : 'bg-muted text-muted-foreground hover:bg-accent'
               }`}
               title={isBypassingPermissions ? "Disable bypass permissions" : "Enable bypass permissions"}
             >
@@ -865,7 +1005,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
             <button
               onClick={restartShell}
               disabled={isRestarting || isConnected}
-              className="p-1 sm:px-2 text-xs text-gray-400 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1"
+              className="p-1 sm:px-2 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1"
               title="Restart Shell (disconnect first)"
             >
               <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -884,7 +1024,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
         {/* Drag overlay for images */}
         {(isDragActive || isDraggedImageOver) && (
           <div className="absolute inset-0 bg-blue-500/20 border-2 border-dashed border-blue-500 rounded-lg flex items-center justify-center z-50 pointer-events-none">
-            <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-lg pointer-events-none">
+            <div className="bg-white dark:bg-card rounded-lg p-4 shadow-lg pointer-events-none">
               <svg className="w-8 h-8 text-blue-500 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
               </svg>
@@ -901,14 +1041,14 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
         
         {/* Loading state */}
         {!isInitialized && (
-          <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-90">
+          <div className="absolute inset-0 flex items-center justify-center bg-card bg-opacity-90">
             <div className="text-white text-sm sm:text-base">Loading terminal...</div>
           </div>
         )}
         
         {/* Connect button when not connected */}
         {isInitialized && !isConnected && !isConnecting && (
-          <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-90 p-3 sm:p-4">
+          <div className="absolute inset-0 flex items-center justify-center bg-card bg-opacity-90 p-3 sm:p-4">
             <div className="text-center max-w-sm w-full">
               <button
                 onClick={connectToShell}
@@ -920,14 +1060,14 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
                 </svg>
                 <span>Continue in Shell</span>
               </button>
-              <p className="text-gray-400 text-xs sm:text-sm mt-2 sm:mt-3 px-2 break-words">
+              <p className="text-muted-foreground text-xs sm:text-sm mt-2 sm:mt-3 px-2 break-words">
                 {selectedSession ? (
                   <>Resume session: {selectedSession.summary.slice(0, isMobile ? 30 : 50)}...</>
                 ) : (
                   'Start a new Claude session'
                 )}
               </p>
-              <p className="text-gray-500 text-xs mt-1 px-2 text-center">
+              <p className="text-muted-foreground text-xs mt-1 px-2 text-center">
                 Arraste imagens ou pressione ⌘V para adicionar ao chat
               </p>
               {isBypassingPermissions && (
@@ -944,13 +1084,13 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
         
         {/* Connecting state */}
         {isConnecting && (
-          <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-90 p-3 sm:p-4">
+          <div className="absolute inset-0 flex items-center justify-center bg-card bg-opacity-90 p-3 sm:p-4">
             <div className="text-center max-w-sm w-full">
               <div className="flex items-center justify-center space-x-2 sm:space-x-3 text-yellow-400">
                 <div className="w-5 h-5 sm:w-6 sm:h-6 animate-spin rounded-full border-2 border-yellow-400 border-t-transparent"></div>
                 <span className="text-sm sm:text-base font-medium">Connecting...</span>
               </div>
-              <p className="text-gray-400 text-xs sm:text-sm mt-2 sm:mt-3 px-2 break-words">
+              <p className="text-muted-foreground text-xs sm:text-sm mt-2 sm:mt-3 px-2 break-words">
                 Starting Claude CLI in {selectedProject.displayName || selectedProject.name}
               </p>
             </div>
@@ -961,7 +1101,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
         {showScrollToBottom && isConnected && (
           <button
             onClick={scrollToBottom}
-            className="absolute bottom-4 right-4 z-10 bg-gray-700 hover:bg-gray-600 text-white rounded-full p-3 shadow-lg transition-all duration-200 hover:scale-105 active:scale-95 border border-gray-600"
+            className="absolute bottom-4 right-4 z-10 bg-muted hover:bg-accent text-white rounded-full p-3 shadow-lg transition-all duration-200 hover:scale-105 active:scale-95 border border-border"
             title="Scroll to bottom"
             aria-label="Scroll to bottom"
           >

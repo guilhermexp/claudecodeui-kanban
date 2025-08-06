@@ -150,7 +150,7 @@ function CodeEditor({ file, onClose, projectPath }) {
         const data = await response.json();
         setContent(data.content);
       } catch (error) {
-        console.error('Error loading file:', error);
+        // Error loading file
         setContent(`// Error loading file: ${error.message}\n// File: ${file.name}\n// Path: ${file.path}`);
       } finally {
         setLoading(false);
@@ -192,7 +192,7 @@ function CodeEditor({ file, onClose, projectPath }) {
       setTimeout(() => setSaveSuccess(false), 2000); // Hide after 2 seconds
       
     } catch (error) {
-      console.error('Error saving file:', error);
+      // Error saving file
       alert(`Error saving file: ${error.message}`);
     } finally {
       setSaving(false);
@@ -217,7 +217,7 @@ function CodeEditor({ file, onClose, projectPath }) {
       setCopySuccess(true);
       setTimeout(() => setCopySuccess(false), 2000); // Hide after 2 seconds
     } catch (error) {
-      console.error('Failed to copy:', error);
+      // Failed to copy
       // Fallback for older browsers
       const textArea = document.createElement('textarea');
       textArea.value = content;
@@ -230,7 +230,7 @@ function CodeEditor({ file, onClose, projectPath }) {
         setCopySuccess(true);
         setTimeout(() => setCopySuccess(false), 2000);
       } catch (err) {
-        console.error('Fallback copy failed:', err);
+        // Fallback copy failed
         alert('Failed to copy to clipboard');
       }
       document.body.removeChild(textArea);
@@ -311,7 +311,7 @@ function CodeEditor({ file, onClose, projectPath }) {
                   </span>
                 )}
               </div>
-              <p className="text-sm text-gray-500 truncate">{file.path}</p>
+              <p className="text-sm text-muted-foreground truncate">{file.path}</p>
             </div>
           </div>
           
