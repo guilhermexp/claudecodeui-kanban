@@ -688,11 +688,118 @@ function handleShellConnection(ws, request) {
       } else if (data.type === 'input') {
         // Send input to shell process
         if (shellProcess && shellProcess.write) {
-          try {
-            shellProcess.write(data.data);
-          } catch (error) {
-            console.error('Error writing to shell:', error);
-          }
+          // Use async processing for image URL handling
+          (async () => {
+            try {
+            // Check if the input contains image URLs that need to be converted to file paths
+            let processedInput = data.data;
+            
+            // Pattern to match image URLs in the input (both internal API and external URLs)
+            const internalImagePattern = /\/api\/projects\/[^\/\s]+\/files\/content\?path=[^\s]+\.(png|jpg|jpeg|gif|webp|svg)/gi;
+            const externalImagePattern = /https?:\/\/[^\s]+\.(png|jpg|jpeg|gif|webp|svg)/gi;
+            
+            // First, handle internal API image URLs
+            const internalUrls = processedInput.match(internalImagePattern);
+            if (internalUrls && internalUrls.length > 0) {
+              for (const imageUrl of internalUrls) {
+                try {
+                  // Extract project name and file path from URL
+                  const urlParts = imageUrl.match(/\/api\/projects\/([^\/]+)\/files\/content\?path=(.+)/);
+                  if (urlParts) {
+                    const projectName = urlParts[1];
+                    const encodedPath = urlParts[2];
+                    const filePath = decodeURIComponent(encodedPath);
+                    
+                    // Get the actual project directory
+                    const projectDir = extractProjectDirectory(projectName);
+                    if (!projectDir) {
+                      console.error('Project not found:', projectName);
+                      continue;
+                    }
+                    
+                    // Construct the full file path
+                    const fullFilePath = path.join(projectDir, filePath);
+                    
+                    // Check if file exists
+                    if (fs.existsSync(fullFilePath)) {
+                      // Replace the URL with the actual file path in the input
+                      processedInput = processedInput.replace(imageUrl, fullFilePath);
+                      
+                      // Send feedback to terminal
+                      ws.send(JSON.stringify({
+                        type: 'output',
+                        data: `\r\n\x1b[32m✓ Imagem local encontrada: ${path.basename(fullFilePath)}\x1b[0m\r\n`
+                      }));
+                    } else {
+                      console.error('Image file not found:', fullFilePath);
+                      ws.send(JSON.stringify({
+                        type: 'output',
+                        data: `\r\n\x1b[31m✗ Arquivo de imagem não encontrado: ${path.basename(filePath)}\x1b[0m\r\n`
+                      }));
+                    }
+                  }
+                } catch (error) {
+                  console.error('Error processing internal image URL:', error);
+                }
+              }
+            }
+            
+            // Then, handle external HTTP/HTTPS image URLs
+            const externalUrls = processedInput.match(externalImagePattern);
+            if (externalUrls && externalUrls.length > 0) {
+              const axios = require('axios');
+              const os = require('os');
+              
+              for (const imageUrl of externalUrls) {
+                try {
+                  // Create temp directory for downloaded images
+                  const tempDir = path.join(os.tmpdir(), 'claude-code-images');
+                  await fsPromises.mkdir(tempDir, { recursive: true });
+                  
+                  // Generate unique filename
+                  const timestamp = Date.now();
+                  const urlPath = new URL(imageUrl).pathname;
+                  const ext = path.extname(urlPath) || '.png';
+                  const filename = `downloaded_${timestamp}${ext}`;
+                  const tempFilePath = path.join(tempDir, filename);
+                  
+                  // Download the image
+                  ws.send(JSON.stringify({
+                    type: 'output',
+                    data: `\r\n\x1b[33m⬇ Baixando imagem: ${imageUrl.substring(0, 50)}...\x1b[0m\r\n`
+                  }));
+                  
+                  const response = await axios.get(imageUrl, {
+                    responseType: 'arraybuffer',
+                    timeout: 10000 // 10 second timeout
+                  });
+                  
+                  // Save to temp file
+                  await fsPromises.writeFile(tempFilePath, response.data);
+                  
+                  // Replace URL with temp file path
+                  processedInput = processedInput.replace(imageUrl, tempFilePath);
+                  
+                  ws.send(JSON.stringify({
+                    type: 'output',
+                    data: `\r\n\x1b[32m✓ Imagem baixada: ${filename}\x1b[0m\r\n`
+                  }));
+                } catch (error) {
+                  console.error('Error downloading external image:', error);
+                  ws.send(JSON.stringify({
+                    type: 'output',
+                    data: `\r\n\x1b[31m✗ Erro ao baixar imagem: ${error.message}\x1b[0m\r\n`
+                  }));
+                }
+              }
+            }
+            
+            // Send the processed input with file paths instead of URLs
+            shellProcess.write(processedInput);
+            } catch (error) {
+              console.error('Error writing to shell:', error);
+            }
+          })(); // Execute the async function immediately
         } else {
         }
       } else if (data.type === 'resize') {
