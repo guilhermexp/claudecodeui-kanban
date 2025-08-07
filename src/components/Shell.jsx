@@ -941,7 +941,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   }
 
   return (
-    <div className="h-full flex flex-col bg-card w-full" {...getRootProps({onClick: e => e.stopPropagation()})}>
+    <div className="h-full flex flex-col bg-card w-full pb-16 md:pb-0" {...getRootProps({onClick: e => e.stopPropagation()})}>
       <input {...getInputProps()} />
       {/* Status Bar */}
       <div className="flex-shrink-0 border-b border-border px-3 py-1.5">
