@@ -171,10 +171,10 @@ function MainContent({
             {!isMobile && !sidebarOpen && onSidebarOpen && (
               <button
                 onClick={onSidebarOpen}
-                className="p-2.5 text-muted-foreground hover:text-foreground rounded-md hover:bg-accent"
-                title="Open sidebar"
+                className="p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent transition-colors"
+                title="Open sidebar (Ctrl+B)"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
                 </svg>
               </button>
