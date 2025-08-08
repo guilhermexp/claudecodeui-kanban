@@ -238,14 +238,21 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
               const imageData = reader.result; // This is already a data URL
               
               if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+                // Extract base64 data from data URL
+                const base64Data = imageData.split(',')[1];
+                
                 // First upload the image to server
                 ws.current.send(JSON.stringify({
-                  type: 'upload-image',
-                  imageData: imageData,
-                  fileName: fileName
+                  type: 'image',
+                  data: {
+                    filename: fileName,
+                    type: file.type,
+                    size: file.size,
+                    base64: base64Data
+                  }
                 }));
                 
-                // Do not print any upload feedback to terminal; flow goes to chat input
+                // Don't show processing message - keep terminal clean
               }
             };
             reader.readAsDataURL(file);
@@ -872,13 +879,19 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
           } else if (data.type === 'image-uploaded') {
             // Handle successful image upload
             const { path, fileName } = data;
-            // Do not print success feedback in terminal; we pipe to chat input
-            // Bridge to chat input: insert markdown/image link directly in the chat textarea
-            try {
-              const detail = { url: path, fileName };
-              window.dispatchEvent(new CustomEvent('chat:insert-from-shell', { detail }));
-            } catch (e) {
-              // no-op
+            
+            // Insert the image path into the current terminal input line
+            if (terminal.current && ws.current && ws.current.readyState === WebSocket.OPEN) {
+              // Simply type the path into the current line where the cursor is
+              // This will appear exactly where the user is typing
+              const pathToInsert = path;
+              
+              // Write to terminal and send to backend as a single input
+              terminal.current.write(pathToInsert);
+              ws.current.send(JSON.stringify({
+                type: 'input',
+                data: pathToInsert
+              }));
             }
           } else if (data.type === 'image-upload-error') {
             // Suppress error echo in terminal to keep UX clean
