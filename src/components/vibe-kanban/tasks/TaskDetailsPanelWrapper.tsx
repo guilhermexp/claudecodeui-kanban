@@ -20,7 +20,7 @@ export function TaskDetailsPanelWrapper({
   if (!task) return null;
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col min-h-0">
       <style>{`
         /* Override the fixed positioning from TaskDetailsPanel */
         .fixed.inset-y-0.right-0.z-50 {
@@ -42,9 +42,22 @@ export function TaskDetailsPanelWrapper({
           max-width: none !important;
         }
         
+        /* Remove any max-height constraints from overlay classes when embedded */
+        [class*="max-h-"] {
+          max-height: none !important;
+        }
+        [class*="sm:max-h-"],
+        [class*="md:max-h-"],
+        [class*="lg:max-h-"],
+        [class*="xl:max-h-"],
+        [class*="2xl:max-h-"] {
+          max-height: none !important;
+        }
+        
         /* Ensure content uses available space */
         .flex.flex-col.overflow-hidden {
           width: 100% !important;
+          min-height: 0 !important;
         }
         
         /* Adjust padding for better space usage */

@@ -149,7 +149,7 @@ function MainContent({
   }
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full min-h-0 flex flex-col">
       {/* Header with tabs */}
       <div className="bg-card border-b border-border p-3 md:p-4 flex-shrink-0">
         <div className="flex items-center justify-between">
@@ -301,7 +301,7 @@ function MainContent({
       </div>
 
       {/* Content Area */}
-      <div className="flex-1 flex flex-col min-h-0">
+      <div className="flex-1 min-h-0 flex flex-col">
         <div className={`h-full overflow-hidden ${activeTab === 'files' ? 'block' : 'hidden'}`}>
           <FileTree selectedProject={selectedProject} />
         </div>

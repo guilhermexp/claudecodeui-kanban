@@ -118,7 +118,7 @@ function MobileTaskKanban({
           
           <div className="flex flex-col items-center gap-1.5 flex-1">
             <h3 className="text-sm font-medium" style={{ color: statusBoardColors[currentStatus] }}>
-              {statusLabels[currentStatus]}
+              {statusLabels[currentStatus]} ({currentTasks?.length || 0})
             </h3>
             <div className="flex gap-1.5">
               {allTaskStatuses.map((_, index) => (

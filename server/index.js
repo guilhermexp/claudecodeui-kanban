@@ -524,6 +524,71 @@ function handleChatConnection(ws, request) {
     try {
       const data = JSON.parse(message);
       
+      // Handle image upload from Shell/Chat
+      if (data.type === 'upload-image') {
+        const { imageData, fileName } = data;
+        console.log('📸 Received image upload request:', fileName);
+        
+        try {
+          // Parse base64 data
+          const matches = imageData.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+          if (!matches) {
+            ws.send(JSON.stringify({
+              type: 'image-upload-error',
+              error: 'Invalid image data format'
+            }));
+            return;
+          }
+          
+          const mimeType = matches[1];
+          const base64Data = matches[2];
+          const buffer = Buffer.from(base64Data, 'base64');
+          
+          // Generate unique ID and save to temp
+          const imageId = `img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+          const uploadDir = path.join(os.tmpdir(), 'claude-ui-images');
+          await fsPromises.mkdir(uploadDir, { recursive: true });
+          
+          const ext = fileName.split('.').pop() || 'png';
+          const imagePath = path.join(uploadDir, `${imageId}.${ext}`);
+          
+          // Save image to disk
+          await fsPromises.writeFile(imagePath, buffer);
+          console.log('💾 Image saved to:', imagePath);
+          
+          // Store in global map
+          if (!global.uploadedImages) {
+            global.uploadedImages = new Map();
+          }
+          
+          const userContext = connectedClients.get(ws);
+          global.uploadedImages.set(imageId, {
+            path: imagePath,
+            mimetype: mimeType,
+            fileName: fileName,
+            userId: userContext?.userId || 'anonymous',
+            uploadedAt: new Date()
+          });
+          
+          // Return the actual file path for Claude to read
+          console.log('✅ Sending image path back to client:', imagePath);
+          ws.send(JSON.stringify({
+            type: 'image-uploaded',
+            imageId: imageId,
+            path: imagePath,  // Send actual file path
+            fileName: fileName
+          }));
+          
+        } catch (error) {
+          console.error('Error uploading image:', error);
+          ws.send(JSON.stringify({
+            type: 'image-upload-error',
+            error: 'Failed to upload image'
+          }));
+        }
+        return;
+      }
+      
       if (data.type === 'claude-command') {
         
         // Register user's active project for smart broadcasting
@@ -1248,6 +1313,26 @@ app.get('/api/vibe-kanban/images/:imageId', (req, res) => {
   res.contentType(imageData.mimetype);
   res.sendFile(imageData.path);
 });
+
+// General image server for Shell/Chat uploads (public access for Claude)
+app.get('/api/images/:imageId', (req, res) => {
+  const imageId = req.params.imageId;
+  
+  if (!global.uploadedImages || !global.uploadedImages.has(imageId)) {
+    return res.status(404).json({ error: 'Image not found' });
+  }
+  
+  const imageData = global.uploadedImages.get(imageId);
+  
+  // Send the image file (no auth required for Claude to access)
+  res.contentType(imageData.mimetype);
+  res.sendFile(imageData.path);
+});
+
+// Initialize global image storage
+if (!global.uploadedImages) {
+  global.uploadedImages = new Map();
+}
 
 // Proxy VibeKanban API requests to Rust backend
 app.use('/api/vibe-kanban', express.json(), async (req, res) => {

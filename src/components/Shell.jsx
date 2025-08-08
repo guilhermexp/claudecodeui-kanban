@@ -230,28 +230,24 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
         try {
           // Process each image file
           for (const file of files) {
-            // Create a temporary path or save to temp directory
             const fileName = file.name;
             
             // Convert to base64 for sending
             const reader = new FileReader();
             reader.onload = () => {
+              const imageData = reader.result; // This is already a data URL
+              
               if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-                // Send command to save image to temp and add to Claude
-                const tempPath = `/tmp/${Date.now()}_${fileName}`;
-                
-                // First save the image data (you might need to handle this on backend)
-                // For now, just notify that we need to save and use the image
-                const command = `echo "Image: ${fileName}" && claude add-image "${tempPath}"\n`;
-                
+                // First upload the image to server
                 ws.current.send(JSON.stringify({
-                  type: 'input',
-                  data: command
+                  type: 'upload-image',
+                  imageData: imageData,
+                  fileName: fileName
                 }));
                 
                 // Show feedback in terminal
                 if (terminal.current) {
-                  terminal.current.write(`\r\n\x1b[32m✓ Adicionando imagem: ${fileName}\x1b[0m\r\n`);
+                  terminal.current.write(`\r\n\x1b[33m⏳ Uploading image: ${fileName}...\x1b[0m\r\n`);
                 }
               }
             };
@@ -259,7 +255,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
           }
         } catch (error) {
           if (terminal.current) {
-            terminal.current.write(`\r\n\x1b[31m✗ Erro ao processar imagens\x1b[0m\r\n`);
+            terminal.current.write(`\r\n\x1b[31m✗ Error processing images\x1b[0m\r\n`);
           }
         }
       }
@@ -857,6 +853,27 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
             // If URLs found, log them for potential opening
             
             terminal.current.write(output);
+          } else if (data.type === 'image-uploaded') {
+            // Handle successful image upload
+            const { path, fileName } = data;
+            if (terminal.current) {
+              terminal.current.write(`\r\n\x1b[32m✓ Image uploaded: ${fileName}\x1b[0m\r\n`);
+              terminal.current.write(`\x1b[36mPath: ${path}\x1b[0m\r\n`);
+              
+              // Send the file path to Claude
+              if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+                const command = `${path}\n`;
+                ws.current.send(JSON.stringify({
+                  type: 'input',
+                  data: command
+                }));
+              }
+            }
+          } else if (data.type === 'image-upload-error') {
+            // Handle image upload error
+            if (terminal.current) {
+              terminal.current.write(`\r\n\x1b[31m✗ Image upload failed: ${data.error}\x1b[0m\r\n`);
+            }
           } else if (data.type === 'url_open') {
             // Handle explicit URL opening requests from server
             window.open(data.url, '_blank');
@@ -941,7 +958,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   }
 
   return (
-    <div className="h-full flex flex-col bg-card w-full pb-16 md:pb-0" {...getRootProps({onClick: e => e.stopPropagation()})}>
+    <div className="h-full min-h-0 flex flex-col bg-card w-full" {...getRootProps({onClick: e => e.stopPropagation()})}>
       <input {...getInputProps()} />
       {/* Status Bar */}
       <div className="flex-shrink-0 border-b border-border px-3 py-1.5">
@@ -1021,7 +1038,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       </div>
 
       {/* Terminal */}
-      <div className="flex-1 p-1 sm:p-2 overflow-hidden relative">
+      <div className="flex-1 min-h-0 p-1 sm:p-2 overflow-hidden relative">
         <div ref={terminalRef} className="h-full w-full focus:outline-none" style={{ outline: 'none' }} />
         
         {/* Drag overlay for images */}

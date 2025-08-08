@@ -80,7 +80,7 @@ export function TaskDetailsPanel({
           <div className={getBackdropClasses()} onClick={onClose} />
 
           {/* Panel */}
-          <div className={getTaskPanelClasses()}>
+          <div className={`${getTaskPanelClasses()} h-full min-h-0`}>
             <TaskDetailsHeader
               onClose={onClose}
               onEditTask={onEditTask}
@@ -96,7 +96,9 @@ export function TaskDetailsPanel({
 
             {/* Tab Content */}
             <div
-              className={`flex-1 overflow-hidden flex flex-col ${activeTab === 'logs' ? 'p-2 sm:p-4 dark:bg-black' : 'pt-2 sm:pt-4'}`}
+              className={`flex-1 overflow-hidden flex flex-col min-h-0 ${
+                activeTab === 'logs' ? 'p-2 sm:p-4 dark:bg-black' : 'pt-2 sm:pt-4'
+              }`}
             >
               {activeTab === 'diffs' ? (
                 <DiffTab />

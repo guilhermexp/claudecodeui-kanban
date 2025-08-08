@@ -187,7 +187,8 @@ function TaskKanbanBoard({
       {Object.entries(groupedTasks).map(([status, statusTasks]) => (
         <KanbanBoard key={status} id={status as TaskStatus}>
           <KanbanHeader
-            name={statusLabels[status as TaskStatus]}
+            className="justify-between"
+            name={`${statusLabels[status as TaskStatus]} (${statusTasks.length})`}
             color={statusBoardColors[status as TaskStatus]}
           />
           <KanbanCards>
