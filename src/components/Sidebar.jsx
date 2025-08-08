@@ -28,7 +28,6 @@ function Sidebar({
   isLoading,
   onRefresh,
   onShowSettings,
-  onShowDashboard,
   updateAvailable,
   latestVersion,
   currentVersion,
@@ -440,21 +439,21 @@ function Sidebar({
   });
 
   return (
-    <div className="h-full flex flex-col bg-card border-r border-border md:select-none">
+    <div className="h-full flex flex-col bg-card/95 backdrop-blur-sm border-r border-border md:select-none">
       {/* Header */}
-      <div className="py-3 md:py-4 px-3 md:px-4 border-b border-border">
+      <div className="h-12 md:h-14 px-3 md:px-4 border-b border-border flex items-center">
         {/* Desktop Header */}
-          <div className="hidden md:flex items-center justify-between">
+          <div className="hidden md:flex items-center justify-between w-full">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-muted rounded-lg flex items-center justify-center">
+            <div className="w-8 h-8 bg-muted rounded-md flex items-center justify-center">
               <ClaudeLogo className="w-5 h-5" />
             </div>
             <div>
-              <h1 className="text-base font-semibold text-foreground">Claude Code UI</h1>
-              <p className="text-xs text-muted-foreground">AI coding assistant</p>
+              <h1 className="text-base font-semibold text-foreground">CodeUI</h1>
+              
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-3">
             <Button
               variant="ghost"
               size="icon"
@@ -473,7 +472,7 @@ function Sidebar({
               <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
             </Button>
             <Button
-              variant="default"
+              variant="ghost"
               size="icon"
               className="h-8 w-8"
               onClick={() => setShowNewProject(true)}
@@ -503,11 +502,11 @@ function Sidebar({
                 <ClaudeLogo className="w-6 h-6" />
               </div>
               <div>
-                <h1 className="text-base font-semibold text-foreground">Claude Code UI</h1>
+                <h1 className="text-base font-semibold text-foreground">CodeUI</h1>
                 <p className="text-xs text-muted-foreground">Projects</p>
               </div>
             </div>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-3">
               <Button
                 variant="ghost"
                 size="icon"
@@ -559,7 +558,7 @@ function Sidebar({
                 if (e.key === 'Escape') cancelNewProject();
               }}
             />
-            <div className="flex gap-2">
+            <div className="flex items-center gap-3">
               <Button
                 size="sm"
                 onClick={createNewProject}
@@ -614,7 +613,7 @@ function Sidebar({
                   }}
                 />
                 
-                <div className="flex gap-2">
+                <div className="flex items-center gap-3">
                   <Button
                     onClick={cancelNewProject}
                     disabled={creatingProject}
@@ -642,20 +641,20 @@ function Sidebar({
       
       {/* Search Filter */}
       {projects.length > 0 && !isLoading && (
-        <div className="px-3 py-3 border-b border-border">
+        <div className="px-3 py-2 border-b border-border/80">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/70" />
             <Input
               type="text"
               placeholder="Search projects..."
               value={searchFilter}
               onChange={(e) => setSearchFilter(e.target.value)}
-              className="pl-9 h-9 text-sm bg-background border-input"
+              className="pl-9 h-8 rounded-full text-sm bg-muted/40 border-transparent focus-visible:ring-1 focus-visible:ring-primary/30 focus-visible:border-transparent"
             />
             {searchFilter && (
               <button
                 onClick={() => setSearchFilter('')}
-                className="absolute right-2 top-1/2 transform -translate-y-1/2 p-1 hover:bg-accent rounded"
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-full opacity-60 hover:opacity-100"
               >
                 <X className="w-3 h-3 text-muted-foreground" />
               </button>
@@ -1344,17 +1343,6 @@ function Sidebar({
       <div className="border-t border-border flex-shrink-0">
         {/* Desktop Footer */}
         <div className="hidden md:block p-3 space-y-2">
-          {/* Dashboard Button */}
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full justify-start gap-2 h-8"
-            onClick={onShowDashboard}
-          >
-            <BarChart3 className="w-4 h-4" />
-            <span>Dashboard</span>
-          </Button>
-          
           {/* VibeKanban Button */}
           <Button
             variant="outline"
@@ -1367,7 +1355,7 @@ function Sidebar({
           </Button>
           
           {/* Settings and Theme Row */}
-          <div className="flex gap-2">
+          <div className="flex items-center gap-3">
             {/* Tools Settings Button */}
             <Button
               variant="ghost"
@@ -1398,16 +1386,6 @@ function Sidebar({
         
         {/* Mobile Footer */}
         <div className="md:hidden p-3 pb-safe-area-inset-bottom space-y-2">
-          {/* Dashboard Button */}
-          <Button
-            variant="outline"
-            className="w-full h-10 justify-center gap-2"
-            onClick={onShowDashboard}
-          >
-            <BarChart3 className="w-4 h-4" />
-            <span>Dashboard</span>
-          </Button>
-          
           {/* VibeKanban Button */}
           <Button
             variant="outline"
@@ -1419,7 +1397,7 @@ function Sidebar({
           </Button>
           
           {/* Settings and Theme Row */}
-          <div className="flex gap-2">
+          <div className="flex items-center gap-3">
             {/* Tools Settings Button */}
             <Button
               variant="ghost"

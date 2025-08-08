@@ -11,6 +11,7 @@ import { EditorView, Decoration } from '@codemirror/view';
 import { StateField, StateEffect, RangeSetBuilder } from '@codemirror/state';
 import { X, Save, Download, Maximize2, Minimize2, Eye, EyeOff, Copy } from 'lucide-react';
 import { api } from '../utils/api';
+import { formatFileSize } from '../utils/formatters';
 
 function CodeEditor({ file, onClose, projectPath, inline = false }) {
   const [content, setContent] = useState('');
@@ -241,6 +242,7 @@ function CodeEditor({ file, onClose, projectPath, inline = false }) {
     setIsFullscreen(!isFullscreen);
   };
 
+
   // Handle keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -313,7 +315,69 @@ function CodeEditor({ file, onClose, projectPath, inline = false }) {
   if (inline) {
     return (
       <div className="h-full flex flex-col bg-background">
-        {/* Editor content without modal wrapper */}
+        {/* Toolbar with action buttons */}
+        <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-muted/10">
+          <div className="flex items-center gap-2">
+            {/* Copy button */}
+            <button
+              onClick={handleCopy}
+              className={`p-1.5 rounded hover:bg-accent transition-colors ${
+                copySuccess ? 'text-green-600' : 'text-muted-foreground hover:text-foreground'
+              }`}
+              title="Copy to clipboard"
+            >
+              {copySuccess ? (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              ) : (
+                <Copy className="w-4 h-4" />
+              )}
+            </button>
+            
+            {/* Download button */}
+            <button
+              onClick={handleDownload}
+              className="p-1.5 text-muted-foreground hover:text-foreground rounded hover:bg-accent transition-colors"
+              title="Download file"
+            >
+              <Download className="w-4 h-4" />
+            </button>
+            
+            {/* Save button */}
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className={`px-2 py-1 text-xs font-medium rounded transition-colors disabled:opacity-50 ${
+                saveSuccess 
+                  ? 'bg-green-600 hover:bg-green-700 text-white' 
+                  : 'bg-primary hover:bg-primary/90 text-primary-foreground'
+              }`}
+            >
+              {saveSuccess ? (
+                <span className="flex items-center gap-1">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Saved
+                </span>
+              ) : (
+                <span className="flex items-center gap-1">
+                  <Save className="w-3.5 h-3.5" />
+                  {saving ? 'Saving...' : 'Save'}
+                </span>
+              )}
+            </button>
+          </div>
+          
+          {/* File info */}
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <span>Lines: {content.split('\n').length}</span>
+            <span>{formatFileSize(content.length)}</span>
+          </div>
+        </div>
+        
+        {/* Editor content */}
         <div className="flex-1 min-h-0 overflow-hidden">
           <CodeMirror
             value={content}
