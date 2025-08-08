@@ -47,6 +47,12 @@ const xtermStyles = `
     .xterm .xterm-screen {
       min-width: 100% !important;
     }
+    
+    /* Fix for input helper textarea position on mobile */
+    .xterm .xterm-helper-textarea {
+      bottom: 80px !important; /* Move above mobile navigation */
+      position: fixed !important;
+    }
   }
   
   /* Prevent text from overflowing */
