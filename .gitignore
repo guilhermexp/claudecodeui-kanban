@@ -111,6 +111,8 @@ temp/
 *.db
 *.sqlite
 *.sqlite3
+*.db-shm
+*.db-wal
 
 # Test and documentation obsolescence prevention
 test-results/
