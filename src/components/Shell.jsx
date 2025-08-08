@@ -533,6 +533,11 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
 
     // Add keyboard shortcuts for copy/paste
     terminal.current.attachCustomKeyEventHandler((event) => {
+      // Allow Tab and Shift+Tab to bubble up for navigation
+      if (event.key === 'Tab') {
+        return true; // Let the browser handle tab navigation
+      }
+      
       // Ctrl+C or Cmd+C for copy (when text is selected)
       if ((event.ctrlKey || event.metaKey) && event.key === 'c' && terminal.current.hasSelection()) {
         document.execCommand('copy');
@@ -1100,7 +1105,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
 
       {/* Terminal */}
       <div className="flex-1 min-h-0 p-2 md:p-3 overflow-hidden relative">
-        <div ref={terminalRef} className="h-full w-full focus:outline-none" style={{ outline: 'none' }} />
+        <div ref={terminalRef} className="h-full w-full focus:outline-none" style={{ outline: 'none' }} tabIndex={-1} />
         
         {/* Drag overlay for images */}
         {(isDragActive || isDraggedImageOver) && (
