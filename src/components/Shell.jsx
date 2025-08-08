@@ -462,7 +462,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       convertEol: true,
       scrollback: isMobile ? 3000 : 10000,
       tabStopWidth: 4,
-      ...(isMobile && { cols: 80, rows: 24 }), // Only set cols/rows for mobile to prevent horizontal scroll
+      ...(isMobile && { cols: 80, rows: 20 }), // Reduced rows for mobile to account for navigation bar
       // Enable full color support
       windowsMode: false,
       macOptionIsMeta: true,
@@ -1104,7 +1104,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       </div>
 
       {/* Terminal */}
-      <div className="flex-1 min-h-0 p-2 md:p-3 overflow-hidden relative">
+      <div className="flex-1 min-h-0 p-2 md:p-3 pb-20 md:pb-3 overflow-hidden relative">
         <div ref={terminalRef} className="h-full w-full focus:outline-none" style={{ outline: 'none' }} tabIndex={-1} />
         
         {/* Drag overlay for images */}
