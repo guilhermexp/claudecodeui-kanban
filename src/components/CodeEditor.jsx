@@ -12,7 +12,7 @@ import { StateField, StateEffect, RangeSetBuilder } from '@codemirror/state';
 import { X, Save, Download, Maximize2, Minimize2, Eye, EyeOff, Copy } from 'lucide-react';
 import { api } from '../utils/api';
 
-function CodeEditor({ file, onClose, projectPath }) {
+function CodeEditor({ file, onClose, projectPath, inline = false }) {
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -260,6 +260,18 @@ function CodeEditor({ file, onClose, projectPath }) {
   }, [content]);
 
   if (loading) {
+    // For inline mode, show a simpler loading state
+    if (inline) {
+      return (
+        <div className="h-full flex items-center justify-center bg-background">
+          <div className="flex items-center gap-3">
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary"></div>
+            <span className="text-muted-foreground">Loading {file.name}...</span>
+          </div>
+        </div>
+      );
+    }
+    
     return (
       <>
         <style>
@@ -281,6 +293,51 @@ function CodeEditor({ file, onClose, projectPath }) {
           </div>
         </div>
       </>
+    );
+  }
+
+  // Setup extensions for CodeMirror
+  const extensions = [
+    ...getLanguageExtension(file.name),
+    diffField,
+    diffTheme,
+    EditorView.theme({
+      '&': {
+        fontSize: '14px'
+      }
+    }),
+    ...(wordWrap ? [EditorView.lineWrapping] : [])
+  ];
+
+  // For inline mode, remove the modal wrapper
+  if (inline) {
+    return (
+      <div className="h-full flex flex-col bg-background">
+        {/* Editor content without modal wrapper */}
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <CodeMirror
+            value={content}
+            onChange={(value) => setContent(value)}
+            theme={isDarkMode ? oneDark : undefined}
+            extensions={extensions}
+            className="h-full overflow-auto"
+            basicSetup={{
+              lineNumbers: true,
+              foldGutter: true,
+              dropCursor: false,
+              allowMultipleSelections: false,
+              indentOnInput: true,
+              bracketMatching: true,
+              closeBrackets: true,
+              autocompletion: true,
+              rectangularSelection: false,
+              crosshairCursor: false,
+              highlightSelectionMatches: true,
+              searchKeymap: true
+            }}
+          />
+        </div>
+      </div>
     );
   }
 

@@ -50,6 +50,7 @@ function MainContent({
   const [openShellSessions, setOpenShellSessions] = useState(0);
   const [contextWindowPercentage, setContextWindowPercentage] = useState(null);
   const [isVibeTaskPanelOpen, setIsVibeTaskPanelOpen] = useState(false);
+  const [shellResizeTrigger, setShellResizeTrigger] = useState(0);
   // Shell terminals state removed - single terminal mode only
   
   // Expose tab switching globally for Shell image drops
@@ -264,7 +265,17 @@ function MainContent({
                 </span>
               </button>
               <button
-                onClick={() => setIsVibeTaskPanelOpen(!isVibeTaskPanelOpen)}
+                onClick={() => {
+                  setIsVibeTaskPanelOpen(!isVibeTaskPanelOpen);
+                  // Close sidebar when opening tasks panel to fit everything on screen
+                  if (!isVibeTaskPanelOpen && sidebarOpen && onSidebarOpen) {
+                    onSidebarOpen(); // This toggles the sidebar
+                  }
+                  // Trigger shell resize after a small delay to allow panel animation
+                  setTimeout(() => {
+                    setShellResizeTrigger(prev => prev + 1);
+                  }, 350);
+                }}
                 className={`relative px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
                   isVibeTaskPanelOpen
                     ? 'bg-background text-foreground shadow-sm'
@@ -300,8 +311,10 @@ function MainContent({
         {/* Shell Terminal Tabs removed - single terminal mode only */}
       </div>
 
-      {/* Content Area */}
-      <div className="flex-1 min-h-0 flex flex-col">
+      {/* Content Area - Shrinks when Tasks panel is open */}
+      <div className={`flex-1 min-h-0 flex flex-col transition-all duration-300 ${
+        isVibeTaskPanelOpen ? 'md:mr-[420px] lg:mr-[480px]' : ''
+      }`}>
         <div className={`h-full overflow-hidden ${activeTab === 'files' ? 'block' : 'hidden'}`}>
           <FileTree selectedProject={selectedProject} />
         </div>
@@ -313,6 +326,7 @@ function MainContent({
             onSessionCountChange={setOpenShellSessions}
             onConnectionChange={onShellConnectionChange}
             isMobile={isMobile}
+            resizeTrigger={shellResizeTrigger}
           />
         </div>
         <div className={`h-full overflow-hidden ${activeTab === 'git' ? 'block' : 'hidden'}`}>
@@ -355,22 +369,14 @@ function MainContent({
         />
       )}
 
-      {/* Vibe Kanban Sliding Panel */}
+      {/* Vibe Kanban Sliding Panel - Optimized size */}
       <div 
-        className={`fixed top-0 right-0 h-full w-80 sm:w-96 bg-background border-l border-border shadow-xl transform transition-transform duration-300 ease-in-out z-50 ${
+        className={`fixed top-0 right-0 h-full w-80 sm:w-96 md:w-[420px] lg:w-[480px] bg-background border-l border-border shadow-xl transform transition-transform duration-300 ease-in-out z-50 ${
           isVibeTaskPanelOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
         <VibeTaskPanel isVisible={isVibeTaskPanelOpen} onClose={() => setIsVibeTaskPanelOpen(false)} />
       </div>
-
-      {/* Overlay */}
-      {isVibeTaskPanelOpen && (
-        <div 
-          className="fixed inset-0 bg-black/20 z-40 transition-opacity duration-300"
-          onClick={() => setIsVibeTaskPanelOpen(false)}
-        />
-      )}
     </div>
   );
 }

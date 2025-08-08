@@ -67,7 +67,7 @@ if (typeof document !== 'undefined') {
 // Global store for shell sessions to persist across tab switches AND project switches
 const shellSessions = new Map();
 
-function Shell({ selectedProject, selectedSession, isActive, onConnectionChange, isMobile }) {
+function Shell({ selectedProject, selectedSession, isActive, onConnectionChange, isMobile, resizeTrigger }) {
   const terminalRef = useRef(null);
   const terminal = useRef(null);
   const fitAddon = useRef(null);
@@ -721,23 +721,74 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     }
   }, [isActive, isInitialized]);
 
-  // Handle window resize events for immediate responsiveness
+  // Handle window resize events and container resize for immediate responsiveness
   useEffect(() => {
-    if (!isInitialized || !fitAddon.current) return;
+    if (!isInitialized || !fitAddon.current || !terminalRef.current) return;
 
     let resizeDebounceTimer = null;
     
-    const handleWindowResize = () => {
+    const handleResize = () => {
       // Immediate visual update
+      if (fitAddon.current && terminal.current) {
+        // Force terminal to recalculate size
+        requestAnimationFrame(() => {
+          fitAddon.current.fit();
+          
+          // Debounce backend notification
+          if (resizeDebounceTimer) {
+            clearTimeout(resizeDebounceTimer);
+          }
+          
+          resizeDebounceTimer = setTimeout(() => {
+            if (ws.current && ws.current.readyState === WebSocket.OPEN && terminal.current) {
+              ws.current.send(JSON.stringify({
+                type: 'resize',
+                cols: terminal.current.cols,
+                rows: terminal.current.rows
+              }));
+            }
+          }, 100);
+        });
+      }
+    };
+
+    // Use ResizeObserver to detect container size changes (e.g., when Tasks panel opens/closes)
+    const resizeObserver = new ResizeObserver(() => {
+      handleResize();
+    });
+    
+    // Observe the terminal container
+    if (terminalRef.current) {
+      resizeObserver.observe(terminalRef.current);
+    }
+
+    // Also listen for window resize
+    window.addEventListener('resize', handleResize);
+    
+    // Also listen for orientation change on mobile
+    window.addEventListener('orientationchange', handleResize);
+
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleResize);
+      if (resizeDebounceTimer) {
+        clearTimeout(resizeDebounceTimer);
+      }
+    };
+  }, [isInitialized]);
+
+  // Trigger resize when Tasks panel opens/closes
+  useEffect(() => {
+    if (!isInitialized || !fitAddon.current || !terminal.current) return;
+    
+    // Force terminal resize when trigger changes
+    requestAnimationFrame(() => {
       if (fitAddon.current && terminal.current) {
         fitAddon.current.fit();
         
-        // Debounce backend notification
-        if (resizeDebounceTimer) {
-          clearTimeout(resizeDebounceTimer);
-        }
-        
-        resizeDebounceTimer = setTimeout(() => {
+        // Notify backend of new size
+        setTimeout(() => {
           if (ws.current && ws.current.readyState === WebSocket.OPEN && terminal.current) {
             ws.current.send(JSON.stringify({
               type: 'resize',
@@ -745,23 +796,10 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
               rows: terminal.current.rows
             }));
           }
-        }, 150);
+        }, 50);
       }
-    };
-
-    window.addEventListener('resize', handleWindowResize);
-    
-    // Also listen for orientation change on mobile
-    window.addEventListener('orientationchange', handleWindowResize);
-
-    return () => {
-      window.removeEventListener('resize', handleWindowResize);
-      window.removeEventListener('orientationchange', handleWindowResize);
-      if (resizeDebounceTimer) {
-        clearTimeout(resizeDebounceTimer);
-      }
-    };
-  }, [isInitialized]);
+    });
+  }, [resizeTrigger, isInitialized]);
 
   // WebSocket connection function (called manually)
   const connectWebSocket = async () => {

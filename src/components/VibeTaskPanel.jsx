@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { projectsApi, tasksApi } from '../lib/vibe-kanban/api';
 import { TaskFormDialog } from './vibe-kanban/tasks/TaskFormDialog';
 import { ConfigProvider } from './vibe-kanban/config-provider';
+import { TaskDetailsPanel } from './vibe-kanban/tasks/TaskDetailsPanel';
 
 function VibeTaskPanel({ isVisible, onClose }) {
   const [projects, setProjects] = useState([]);
@@ -9,6 +10,13 @@ function VibeTaskPanel({ isVisible, onClose }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [isTaskDialogOpen, setIsTaskDialogOpen] = useState(false);
+  
+  // Task listing and details
+  const [tasks, setTasks] = useState([]);
+  const [selectedTask, setSelectedTask] = useState(null);
+  const [showTaskDetails, setShowTaskDetails] = useState(false);
+  const [tasksLoading, setTasksLoading] = useState(false);
+  const [showTaskList, setShowTaskList] = useState(true); // Control whether to show task list or details
 
   // Fetch projects on mount
   useEffect(() => {
@@ -35,6 +43,29 @@ function VibeTaskPanel({ isVisible, onClose }) {
       setLoading(false);
     }
   }, [selectedProject]);
+
+  // Fetch tasks when project is selected
+  const fetchTasks = useCallback(async () => {
+    if (!selectedProject) return;
+    
+    setTasksLoading(true);
+    try {
+      const result = await tasksApi.getAll(selectedProject.id);
+      setTasks(result);
+    } catch (err) {
+      console.error('Failed to fetch tasks:', err);
+      setTasks([]);
+    } finally {
+      setTasksLoading(false);
+    }
+  }, [selectedProject]);
+
+  // Fetch tasks when project changes
+  useEffect(() => {
+    if (selectedProject && isVisible) {
+      fetchTasks();
+    }
+  }, [selectedProject, isVisible, fetchTasks]);
 
   const handleCreateTask = useCallback(async (title, description) => {
     if (!selectedProject) return;
@@ -70,19 +101,48 @@ function VibeTaskPanel({ isVisible, onClose }) {
       
       // Show success message
       setError(null);
-      // Could add a success toast here
+      // Refresh tasks list
+      fetchTasks();
     } catch (err) {
       // Failed to create and start task
       setError('Failed to create and start task: ' + (err.message || ''));
     }
-  }, [selectedProject]);
+  }, [selectedProject, fetchTasks]);
+
+  // Handle task selection
+  const handleTaskClick = useCallback((task) => {
+    setSelectedTask(task);
+    setShowTaskDetails(true);
+    setShowTaskList(false); // Hide task list when showing details
+  }, []);
+
+  // Handle closing task details
+  const handleCloseTaskDetails = useCallback(() => {
+    setShowTaskDetails(false);
+    setSelectedTask(null);
+    setShowTaskList(true); // Show task list again
+    // Refresh tasks in case status changed
+    fetchTasks();
+  }, [fetchTasks]);
+
+  // Get task status color
+  const getStatusColor = (status) => {
+    const statusColors = {
+      pending: 'bg-gray-500',
+      running: 'bg-blue-500',
+      complete: 'bg-green-500',
+      failed: 'bg-red-500',
+      stopped: 'bg-yellow-500'
+    };
+    return statusColors[status?.toLowerCase()] || 'bg-gray-400';
+  };
 
   if (!isVisible) {
     return null;
   }
 
   return (
-    <div className="h-full flex flex-col bg-background">
+    <div className="h-full flex flex-col bg-background relative">
       {/* Header */}
       <div className="flex-shrink-0 border-b border-border p-4">
         <div className="flex items-center justify-between">
@@ -103,7 +163,7 @@ function VibeTaskPanel({ isVisible, onClose }) {
       </div>
 
       {/* Content */}
-      <div className="flex-1 p-3 space-y-3">
+      <div className="flex-1 overflow-y-auto p-3 space-y-3">
         {loading && (
           <div className="flex items-center justify-center py-6">
             <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
@@ -172,6 +232,63 @@ function VibeTaskPanel({ isVisible, onClose }) {
               </div>
             )}
 
+            {/* Tasks List */}
+            {selectedProject && showTaskList && (
+              <div className="space-y-2 mt-3">
+                <div className="flex items-center justify-between">
+                  <h5 className="text-xs font-medium text-foreground">Tasks</h5>
+                  <button
+                    onClick={fetchTasks}
+                    className="p-1 text-muted-foreground hover:text-foreground rounded transition-colors"
+                    title="Refresh tasks"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                  </button>
+                </div>
+                
+                {tasksLoading ? (
+                  <div className="flex items-center justify-center py-4">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+                    <span className="ml-2 text-xs text-muted-foreground">Loading tasks...</span>
+                  </div>
+                ) : tasks.length === 0 ? (
+                  <div className="text-center py-4">
+                    <p className="text-xs text-muted-foreground">No tasks yet</p>
+                  </div>
+                ) : (
+                  <div className="max-h-96 overflow-y-auto space-y-1">
+                    {tasks.map((task) => (
+                      <button
+                        key={task.id}
+                        onClick={() => handleTaskClick(task)}
+                        className="w-full text-left p-2 bg-muted/20 hover:bg-muted/40 rounded-md transition-colors"
+                      >
+                        <div className="flex items-start gap-2">
+                          <div className={`w-2 h-2 rounded-full mt-1 ${getStatusColor(task.status)}`} />
+                          <div className="flex-1 min-w-0">
+                            <h6 className="text-xs font-medium text-foreground truncate">{task.title}</h6>
+                            {task.description && (
+                              <p className="text-xs text-muted-foreground truncate">{task.description}</p>
+                            )}
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="text-xs text-muted-foreground capitalize">{task.status}</span>
+                              {task.created_at && (
+                                <span className="text-xs text-muted-foreground">
+                                  {new Date(task.created_at).toLocaleDateString()}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Create Task Button */}
             {selectedProject && (
               <div className="space-y-2">
@@ -233,6 +350,20 @@ function VibeTaskPanel({ isVisible, onClose }) {
             onCreateAndStartTask={handleCreateAndStartTask}
           />
         </ConfigProvider>
+      )}
+
+      {/* Task Details Panel - Inline within the same panel */}
+      {showTaskDetails && selectedTask && selectedProject && (
+        <div className="absolute inset-0 bg-background z-10">
+          <ConfigProvider>
+            <TaskDetailsPanel
+              task={selectedTask}
+              projectId={selectedProject.id}
+              onClose={handleCloseTaskDetails}
+              isDialogOpen={false}
+            />
+          </ConfigProvider>
+        </div>
       )}
     </div>
   );
