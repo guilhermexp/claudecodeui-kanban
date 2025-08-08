@@ -31,7 +31,7 @@ import {
   getMainContainerClasses,
 } from '../../lib/vibe-kanban/responsive-config';
 
-import TaskKanbanBoard from '../../components/vibe-kanban/tasks/TaskKanbanBoard';
+import TaskKanbanBoard, { statusLabels, statusBoardColors, allTaskStatuses } from '../../components/vibe-kanban/tasks/TaskKanbanBoard';
 import { TaskDetailsPanel } from '../../components/vibe-kanban/tasks/TaskDetailsPanel';
 import type {
   CreateTaskAndStart,
@@ -623,6 +623,8 @@ export function ProjectTasks() {
         ) : (
           <div className="px-0 sm:px-8 overflow-x-auto sm:overflow-x-scroll my-0 sm:my-4">
             <div className="sm:min-w-[900px] sm:max-w-[2000px] relative sm:py-1">
+              {/* Summary Bar */}
+              <KanbanStatusSummary tasks={tasks} searchQuery={searchQuery} />
               <TaskKanbanBoard
                 tasks={tasks}
                 searchQuery={searchQuery}
@@ -696,6 +698,79 @@ export function ProjectTasks() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// Lightweight summary component for status distribution
+function KanbanStatusSummary({ tasks, searchQuery }: { tasks: any[]; searchQuery: string }) {
+  const filteredTasks = (tasks || []).filter((t) => {
+    if (!searchQuery?.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      t.title?.toLowerCase().includes(q) ||
+      (t.description && t.description.toLowerCase().includes(q))
+    );
+  });
+
+  const total = filteredTasks.length;
+  const counts: Record<string, number> = Object.fromEntries(
+    (allTaskStatuses as string[]).map((s) => [s, 0])
+  );
+
+  filteredTasks.forEach((t) => {
+    const s = (t.status || 'todo').toLowerCase();
+    if (counts[s] != null) counts[s] += 1;
+  });
+
+  if (total === 0) return null;
+
+  return (
+    <div className="px-4 sm:px-0 mb-3 sm:mb-4">
+      {/* Proportional bar */}
+      <div className="h-1.5 w-full rounded-full bg-secondary overflow-hidden">
+        <div className="flex h-full w-full">
+          {(allTaskStatuses as string[]).map((s) => {
+            const count = counts[s] || 0;
+            if (count === 0) return null;
+            const width = `${Math.round((count / total) * 100)}%`;
+            return (
+              <div
+                key={s}
+                className="h-full"
+                style={{ width, backgroundColor: (statusBoardColors as any)[s] }}
+                aria-label={`${statusLabels[s as keyof typeof statusLabels]}: ${count}`}
+                title={`${statusLabels[s as keyof typeof statusLabels]}: ${count}`}
+              />
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Chips */}
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {(allTaskStatuses as string[]).map((s) => (
+          <div
+            key={s}
+            className="inline-flex items-center gap-1.5 rounded-md border bg-background px-2 py-1 text-xs"
+            title={statusLabels[s as keyof typeof statusLabels]}
+          >
+            <span
+              className="h-2 w-2 rounded-full"
+              style={{ backgroundColor: (statusBoardColors as any)[s] }}
+            />
+            <span className="font-medium">
+              {statusLabels[s as keyof typeof statusLabels]}
+            </span>
+            <span className="text-muted-foreground">{counts[s] || 0}</span>
+          </div>
+        ))}
+        {searchQuery?.trim() && (
+          <span className="ml-auto text-xs text-muted-foreground">
+            Filtered by search
+          </span>
+        )}
+      </div>
     </div>
   );
 }

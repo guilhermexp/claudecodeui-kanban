@@ -6,6 +6,7 @@ import { MicButton } from '../../components/MicButton';
 import { ProjectForm } from '../../components/vibe-kanban/projects/project-form';
 import { TaskDetailsPanelWrapper } from '../../components/vibe-kanban/tasks/TaskDetailsPanelWrapper';
 import { EXECUTOR_TYPES, EXECUTOR_LABELS } from '../../lib/vibe-kanban/shared-types';
+import { allTaskStatuses, statusLabels, statusBoardColors } from '../../components/vibe-kanban/tasks/TaskKanbanBoard';
 import { useConfig } from '../../components/vibe-kanban/config-provider';
 import { cn } from '../../lib/utils';
 import { useDropzone } from 'react-dropzone';
@@ -846,6 +847,8 @@ export function VibeChat() {
                 </div>
               ) : (
                 <div className="space-y-3">
+                  {/* Status summary across all tasks */}
+                  <TasksStatusSummary tasks={allTasks.filter(t => t.status !== 'archived')} />
                   {allTasks
                     .filter(task => task.status !== 'archived')
                     .map((task) => {
@@ -1025,6 +1028,62 @@ export function VibeChat() {
         onSuccess={handleProjectFormSuccess}
         project={null}
       />
+    </div>
+  );
+}
+
+// Summary bar similar to Kanban page, aggregating tasks by status
+function TasksStatusSummary({ tasks }: { tasks: Array<{ status: string; title: string; description?: string | null }>; }) {
+  const total = tasks.length;
+  const counts: Record<string, number> = Object.fromEntries(
+    (allTaskStatuses as string[]).map((s) => [s, 0])
+  );
+
+  tasks.forEach((t) => {
+    const s = (t.status || 'todo').toLowerCase();
+    if (counts[s] != null) counts[s] += 1;
+  });
+
+  if (total === 0) return null;
+
+  return (
+    <div className="px-1 sm:px-0 mb-2 sm:mb-3">
+      <div className="h-1.5 w-full rounded-full bg-secondary overflow-hidden">
+        <div className="flex h-full w-full">
+          {(allTaskStatuses as string[]).map((s) => {
+            const count = counts[s] || 0;
+            if (count === 0) return null;
+            const width = `${Math.round((count / total) * 100)}%`;
+            return (
+              <div
+                key={s}
+                className="h-full"
+                style={{ width, backgroundColor: (statusBoardColors as any)[s] }}
+                aria-label={`${statusLabels[s as keyof typeof statusLabels]}: ${count}`}
+                title={`${statusLabels[s as keyof typeof statusLabels]}: ${count}`}
+              />
+            );
+          })}
+        </div>
+      </div>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {(allTaskStatuses as string[]).map((s) => (
+          <div
+            key={s}
+            className="inline-flex items-center gap-1.5 rounded-md border bg-background px-2 py-1 text-xs"
+            title={statusLabels[s as keyof typeof statusLabels]}
+          >
+            <span
+              className="h-2 w-2 rounded-full"
+              style={{ backgroundColor: (statusBoardColors as any)[s] }}
+            />
+            <span className="font-medium">
+              {statusLabels[s as keyof typeof statusLabels]}
+            </span>
+            <span className="text-muted-foreground">{counts[s] || 0}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

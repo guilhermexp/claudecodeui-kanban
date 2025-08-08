@@ -145,7 +145,7 @@ function AppContent() {
           onComplete={handlePrivacyOptInComplete}
         />
         {showNavbar && <Navbar />}
-        <div className="flex-1 overflow-y-auto pb-safe">
+        <div className="flex-1 overflow-y-auto pb-safe sm:pb-0">
           <Routes>
             <Route path="/" element={<VibeChat />} />
             <Route path="/chat" element={<VibeChat />} />

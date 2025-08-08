@@ -665,7 +665,7 @@ function Sidebar({
       )}
       
       {/* Projects List */}
-      <ScrollArea className="flex-1 px-3 py-2 overflow-y-auto overscroll-contain">
+      <ScrollArea className="flex-1 px-3 py-2 overflow-y-auto overscroll-contain scrollbar-thin">
         <div className="space-y-1 pb-safe-area-inset-bottom">
           {isLoading ? (
             <div className="text-center py-12 md:py-8 px-4">

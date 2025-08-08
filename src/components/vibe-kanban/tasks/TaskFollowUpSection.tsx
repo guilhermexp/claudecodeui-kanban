@@ -72,7 +72,7 @@ export function TaskFollowUpSection() {
 
   return (
     selectedAttempt && (
-      <div className="border-t p-3 sm:p-4 bg-background w-full">
+      <div className="border-t p-3 sm:p-4 bg-background w-full flex-shrink-0 ios-bottom-safe">
         <div className="space-y-3 w-full">
           {followUpError && (
             <Alert variant="destructive" className="w-full">
