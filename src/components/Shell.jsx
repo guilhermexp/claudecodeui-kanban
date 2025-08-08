@@ -534,17 +534,19 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
               // Convert blob to base64
               const reader = new FileReader();
               reader.onload = () => {
+                const imageData = reader.result; // This is already a data URL
+                
                 if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-                  // Send notification about pasted image
-                  const command = `echo "Imagem colada: ${fileName}"\n`;
-                  
+                  // Upload the image just like drag & drop
                   ws.current.send(JSON.stringify({
-                    type: 'input',
-                    data: command
+                    type: 'upload-image',
+                    imageData: imageData,
+                    fileName: fileName
                   }));
                   
+                  // Show feedback in terminal
                   if (terminal.current) {
-                    terminal.current.write(`\r\n\x1b[32m✓ Imagem colada do clipboard: ${fileName}\x1b[0m\r\n`);
+                    terminal.current.write(`\r\n\x1b[33m⏳ Uploading pasted image: ${fileName}...\x1b[0m\r\n`);
                   }
                 }
               };
@@ -856,18 +858,24 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
           } else if (data.type === 'image-uploaded') {
             // Handle successful image upload
             const { path, fileName } = data;
-            if (terminal.current) {
+            if (terminal.current && ws.current && ws.current.readyState === WebSocket.OPEN) {
+              // Show upload success
               terminal.current.write(`\r\n\x1b[32m✓ Image uploaded: ${fileName}\x1b[0m\r\n`);
-              terminal.current.write(`\x1b[36mPath: ${path}\x1b[0m\r\n`);
               
-              // Send the file path to Claude
-              if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-                const command = `${path}\n`;
+              // Insert the image path directly into the current Claude prompt
+              // This will appear as if the user typed it
+              const pathToInsert = path + ' ';
+              
+              // Send each character to make it appear naturally in the terminal
+              for (const char of pathToInsert) {
                 ws.current.send(JSON.stringify({
                   type: 'input',
-                  data: command
+                  data: char
                 }));
               }
+              
+              // Visual feedback that path was inserted
+              terminal.current.write(`\x1b[33m📸 Image path inserted in prompt. Add your message and press Enter.\x1b[0m\r\n`);
             }
           } else if (data.type === 'image-upload-error') {
             // Handle image upload error
@@ -1048,12 +1056,12 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
               <svg className="w-8 h-8 text-blue-500 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
               </svg>
-              <p className="text-sm font-medium text-blue-600 dark:text-blue-400 mb-1">Solte as imagens aqui</p>
+              <p className="text-sm font-medium text-blue-600 dark:text-blue-400 mb-1">Drop images here</p>
               <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
-                Imagens serão enviadas para o chat do Claude
+                Images will be uploaded for Claude to read
               </p>
               <p className="text-xs text-gray-400 dark:text-gray-500 text-center mt-1">
-                Ou pressione ⌘V para colar da área de transferência
+                Or press Ctrl+V / ⌘V to paste from clipboard
               </p>
             </div>
           </div>
@@ -1088,7 +1096,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
                 )}
               </p>
               <p className="text-muted-foreground text-xs mt-1 px-2 text-center">
-                Arraste imagens ou pressione ⌘V para adicionar ao chat
+                Drag images or press Ctrl+V / ⌘V to add to chat
               </p>
               {isBypassingPermissions && (
                 <p className="text-yellow-400 text-xs mt-2 px-2 flex items-center justify-center space-x-1 flex-wrap">
