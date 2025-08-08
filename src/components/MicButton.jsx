@@ -96,8 +96,13 @@ export function MicButton({ onTranscript, className = '', isChat = false, hasCha
             setShowChatButtons(true);
           }
         } catch (err) {
-          // Error: 'Transcription error:', err
-          setError(err.message);
+          console.error('Transcription error:', err);
+          // Check for API key error
+          if (err.message && err.message.includes('API key')) {
+            setError('OpenAI API key não configurada. Configure OPENAI_API_KEY no servidor.');
+          } else {
+            setError(err.message || 'Erro na transcrição');
+          }
         } finally {
           if (processingTimer) {
             clearTimeout(processingTimer);
