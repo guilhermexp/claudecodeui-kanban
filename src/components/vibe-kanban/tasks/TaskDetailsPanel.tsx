@@ -76,11 +76,8 @@ export function TaskDetailsPanel({
           setShowEditorDialog={setShowEditorDialog}
           projectHasDevScript={projectHasDevScript}
         >
-          {/* Backdrop - only on smaller screens (overlay mode) */}
-          <div className={getBackdropClasses()} onClick={onClose} />
-
-          {/* Panel */}
-          <div className={`${getTaskPanelClasses()} h-full min-h-0`}>
+          {/* Panel - simplified for inline display */}
+          <div className="h-full min-h-0 flex flex-col bg-background">
             <TaskDetailsHeader
               onClose={onClose}
               onEditTask={onEditTask}

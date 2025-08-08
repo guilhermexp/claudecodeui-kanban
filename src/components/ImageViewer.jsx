@@ -2,8 +2,39 @@ import React from 'react';
 import { Button } from './ui/button';
 import { X } from 'lucide-react';
 
-function ImageViewer({ file, onClose }) {
+function ImageViewer({ file, onClose, inline = false }) {
   const imagePath = `/api/projects/${file.projectName}/files/content?path=${encodeURIComponent(file.path)}`;
+
+  // For inline mode, no modal wrapper
+  if (inline) {
+    return (
+      <div className="h-full flex flex-col bg-background">
+        <div className="flex-1 p-4 flex justify-center items-center bg-muted/20">
+          <img
+            src={imagePath}
+            alt={file.name}
+            className="max-w-full max-h-full object-contain rounded-lg"
+            onError={(e) => {
+              e.target.style.display = 'none';
+              e.target.nextSibling.style.display = 'block';
+            }}
+          />
+          <div
+            className="text-center text-muted-foreground"
+            style={{ display: 'none' }}
+          >
+            <p>Unable to load image</p>
+            <p className="text-sm mt-2">{file.path}</p>
+          </div>
+        </div>
+        <div className="p-3 border-t bg-muted/10">
+          <p className="text-xs text-muted-foreground">
+            {file.path}
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">

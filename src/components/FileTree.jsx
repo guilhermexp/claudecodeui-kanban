@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { ScrollArea } from './ui/scroll-area';
 import { Button } from './ui/button';
 import { Folder, FolderOpen, File, FileText, FileCode, List, TableProperties, Eye } from 'lucide-react';
@@ -14,6 +14,7 @@ function FileTree({ selectedProject }) {
   const [selectedFile, setSelectedFile] = useState(null);
   const [selectedImage, setSelectedImage] = useState(null);
   const [viewMode, setViewMode] = useState('detailed'); // 'simple', 'detailed', 'compact'
+  const [showFilePanel, setShowFilePanel] = useState(false);
 
   useEffect(() => {
     if (selectedProject) {
@@ -30,6 +31,7 @@ function FileTree({ selectedProject }) {
   }, []);
 
   const fetchFiles = async () => {
+    if (loading) return; // Prevent multiple simultaneous fetches
     setLoading(true);
     try {
       const response = await api.getFiles(selectedProject.name);
@@ -51,21 +53,23 @@ function FileTree({ selectedProject }) {
     }
   };
 
-  const toggleDirectory = (path) => {
-    const newExpanded = new Set(expandedDirs);
-    if (newExpanded.has(path)) {
-      newExpanded.delete(path);
-    } else {
-      newExpanded.add(path);
-    }
-    setExpandedDirs(newExpanded);
-  };
+  const toggleDirectory = useCallback((path) => {
+    setExpandedDirs(prev => {
+      const newExpanded = new Set(prev);
+      if (newExpanded.has(path)) {
+        newExpanded.delete(path);
+      } else {
+        newExpanded.add(path);
+      }
+      return newExpanded;
+    });
+  }, []);
 
   // Change view mode and save preference
-  const changeViewMode = (mode) => {
+  const changeViewMode = useCallback((mode) => {
     setViewMode(mode);
     localStorage.setItem('file-tree-view-mode', mode);
-  };
+  }, []);
 
   // Format file size
   const formatFileSize = (bytes) => {
@@ -192,6 +196,7 @@ function FileTree({ selectedProject }) {
                 projectPath: selectedProject.path,
                 projectName: selectedProject.name
               });
+              setTimeout(() => setShowFilePanel(true), 10);
             } else {
               setSelectedFile({
                 name: item.name,
@@ -199,6 +204,7 @@ function FileTree({ selectedProject }) {
                 projectPath: selectedProject.path,
                 projectName: selectedProject.name
               });
+              setTimeout(() => setShowFilePanel(true), 10);
             }
           }}
         >
@@ -254,6 +260,7 @@ function FileTree({ selectedProject }) {
                 projectPath: selectedProject.path,
                 projectName: selectedProject.name
               });
+              setTimeout(() => setShowFilePanel(true), 10);
             } else {
               setSelectedFile({
                 name: item.name,
@@ -261,6 +268,7 @@ function FileTree({ selectedProject }) {
                 projectPath: selectedProject.path,
                 projectName: selectedProject.name
               });
+              setTimeout(() => setShowFilePanel(true), 10);
             }
           }}
         >
@@ -307,7 +315,11 @@ function FileTree({ selectedProject }) {
   }
 
   return (
-    <div className="h-full flex flex-col bg-card">
+    <div className="h-full flex bg-card overflow-hidden">
+      {/* Files List */}
+      <div className={`flex flex-col transition-all duration-500 ease-in-out ${
+        showFilePanel ? 'w-full md:w-[40%] lg:w-[35%]' : 'flex-1'
+      }`}>
       {/* View Mode Toggle */}
       <div className="py-3 px-3 md:px-4 border-b border-border flex items-center justify-between">
         <h3 className="text-sm font-medium text-foreground">Files</h3>
@@ -373,23 +385,85 @@ function FileTree({ selectedProject }) {
           </div>
         )}
       </ScrollArea>
+      </div>
       
-      {/* Code Editor Modal */}
-      {selectedFile && (
-        <CodeEditor
-          file={selectedFile}
-          onClose={() => setSelectedFile(null)}
-          projectPath={selectedFile.projectPath}
-        />
-      )}
-      
-      {/* Image Viewer Modal */}
-      {selectedImage && (
-        <ImageViewer
-          file={selectedImage}
-          onClose={() => setSelectedImage(null)}
-        />
-      )}
+      {/* File Viewer Panel - Integrated Side Panel */}
+      <div className={`border-l border-border bg-background overflow-hidden transition-all duration-500 ease-in-out ${
+        showFilePanel && (selectedFile || selectedImage) ? 'flex-1 opacity-100' : 'w-0 opacity-0'
+      }`}>
+          {selectedFile && (
+            <div className="h-full flex flex-col">
+              {/* File Header */}
+              <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-muted/30">
+                <div className="flex items-center gap-2 min-w-0">
+                  {getFileIcon(selectedFile.name)}
+                  <span className="text-sm font-medium truncate">{selectedFile.name}</span>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowFilePanel(false);
+                    setTimeout(() => {
+                      setSelectedFile(null);
+                    }, 500);
+                  }}
+                  className="p-1 hover:bg-accent rounded"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              {/* Code Editor Inline */}
+              <div className="flex-1 overflow-hidden">
+                <CodeEditor
+                  file={selectedFile}
+                  onClose={() => {
+                    setSelectedFile(null);
+                    setShowFilePanel(false);
+                  }}
+                  projectPath={selectedFile.projectPath}
+                  inline={true}
+                />
+              </div>
+            </div>
+          )}
+          
+          {selectedImage && (
+            <div className="h-full flex flex-col">
+              {/* Image Header */}
+              <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-muted/30">
+                <div className="flex items-center gap-2 min-w-0">
+                  {getFileIcon(selectedImage.name)}
+                  <span className="text-sm font-medium truncate">{selectedImage.name}</span>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowFilePanel(false);
+                    setTimeout(() => {
+                      setSelectedImage(null);
+                    }, 500);
+                  }}
+                  className="p-1 hover:bg-accent rounded"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              {/* Image Viewer Inline */}
+              <div className="flex-1 overflow-auto">
+                <ImageViewer
+                  file={selectedImage}
+                  onClose={() => {
+                    setSelectedImage(null);
+                    setShowFilePanel(false);
+                  }}
+                  inline={true}
+                />
+              </div>
+            </div>
+          )}
+      </div>
     </div>
   );
 }
