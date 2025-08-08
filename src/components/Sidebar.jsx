@@ -442,7 +442,7 @@ function Sidebar({
   return (
     <div className="h-full flex flex-col bg-card border-r border-border md:select-none">
       {/* Header */}
-      <div className="p-3 md:p-4 border-b border-border">
+      <div className="py-3 md:py-4 px-3 md:px-4 border-b border-border">
         {/* Desktop Header */}
           <div className="hidden md:flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -642,7 +642,7 @@ function Sidebar({
       
       {/* Search Filter */}
       {projects.length > 0 && !isLoading && (
-        <div className="px-3 py-2 border-b border-border">
+        <div className="px-3 py-3 border-b border-border">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
@@ -650,7 +650,7 @@ function Sidebar({
               placeholder="Search projects..."
               value={searchFilter}
               onChange={(e) => setSearchFilter(e.target.value)}
-              className="pl-9 h-8 text-sm bg-background border-input"
+              className="pl-9 h-9 text-sm bg-background border-input"
             />
             {searchFilter && (
               <button

@@ -309,7 +309,7 @@ function FileTree({ selectedProject }) {
   return (
     <div className="h-full flex flex-col bg-card">
       {/* View Mode Toggle */}
-      <div className="p-4 border-b border-border flex items-center justify-between">
+      <div className="py-3 px-3 md:px-4 border-b border-border flex items-center justify-between">
         <h3 className="text-sm font-medium text-foreground">Files</h3>
         <div className="flex gap-1">
           <Button
@@ -344,8 +344,8 @@ function FileTree({ selectedProject }) {
 
       {/* Column Headers for Detailed View */}
       {viewMode === 'detailed' && files.length > 0 && (
-        <div className="px-4 pt-2 pb-1 border-b border-border">
-          <div className="grid grid-cols-12 gap-2 px-2 text-xs font-medium text-muted-foreground">
+        <div className="px-3 md:px-4 pt-2 pb-1 border-b border-border">
+          <div className="grid grid-cols-12 gap-2 px-1 md:px-2 text-xs font-medium text-muted-foreground">
             <div className="col-span-5">Name</div>
             <div className="col-span-2">Size</div>
             <div className="col-span-3">Modified</div>
