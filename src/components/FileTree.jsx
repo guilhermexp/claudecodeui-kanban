@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { ScrollArea } from './ui/scroll-area';
 import { Button } from './ui/button';
 import { Folder, FolderOpen, File, FileText, FileCode, List, TableProperties, Eye } from 'lucide-react';
@@ -6,6 +6,7 @@ import { cn } from '../lib/utils';
 import CodeEditor from './CodeEditor';
 import ImageViewer from './ImageViewer';
 import { api } from '../utils/api';
+import { formatFileSize, formatRelativeTime } from '../utils/formatters';
 
 function FileTree({ selectedProject }) {
   const [files, setFiles] = useState([]);
@@ -71,28 +72,6 @@ function FileTree({ selectedProject }) {
     localStorage.setItem('file-tree-view-mode', mode);
   }, []);
 
-  // Format file size
-  const formatFileSize = (bytes) => {
-    if (!bytes || bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-  };
-
-  // Format date as relative time
-  const formatRelativeTime = (date) => {
-    if (!date) return '-';
-    const now = new Date();
-    const past = new Date(date);
-    const diffInSeconds = Math.floor((now - past) / 1000);
-    
-    if (diffInSeconds < 60) return 'just now';
-    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} min ago`;
-    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hours ago`;
-    if (diffInSeconds < 2592000) return `${Math.floor(diffInSeconds / 86400)} days ago`;
-    return past.toLocaleDateString();
-  };
 
   const renderFileTree = (items, level = 0) => {
     return items.map((item) => (
@@ -315,7 +294,7 @@ function FileTree({ selectedProject }) {
   }
 
   return (
-    <div className="h-full flex bg-card overflow-hidden">
+    <div className="h-full flex bg-card rounded-xl border border-border overflow-hidden">
       {/* Files List */}
       <div className={`flex flex-col transition-all duration-500 ease-in-out ${
         showFilePanel ? 'w-full md:w-[40%] lg:w-[35%]' : 'flex-1'

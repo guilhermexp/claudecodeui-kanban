@@ -17,6 +17,7 @@ import CodeEditor from './CodeEditor';
 import Shell from './Shell';
 import GitPanel from './GitPanel';
 import VibeTaskPanel from './VibeTaskPanel';
+import Dashboard from './Dashboard';
 import ErrorBoundary from './ErrorBoundary';
 
 function MainContent({ 
@@ -150,11 +151,11 @@ function MainContent({
   }
 
   return (
-    <div className="h-full min-h-0 flex flex-col">
+    <div className="h-full min-h-0 flex flex-col relative">
       {/* Header with tabs */}
-      <div className="bg-card border-b border-border py-3 md:py-4 px-3 md:px-4 flex-shrink-0">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2 sm:space-x-3 flex-1">
+      <div className="bg-card/95 backdrop-blur-sm border-b border-border h-12 md:h-14 px-3 md:px-4 flex items-center flex-shrink-0 relative z-50">
+        <div className="flex items-center justify-between gap-4 md:gap-6 w-full">
+          <div className="flex items-center space-x-2 sm:space-x-3 flex-1 order-1">
             {isMobile && (
               <button
                 onClick={onMenuClick}
@@ -180,17 +181,18 @@ function MainContent({
                 </svg>
               </button>
             )}
-            <div className="min-w-0">
+            <div className="min-w-0 max-w-[200px] md:max-w-[250px]">
               {
                 <div>
-                  <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">
+                  <h2 className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white">
                     {activeTab === 'shell' ? 'Shell' :
                      activeTab === 'files' ? 'Project Files' : 
                      activeTab === 'git' ? 'Source Control' : 
+                     activeTab === 'dashboard' ? 'Usage Dashboard' :
                      'Project'}
                   </h2>
                   <div className="text-xs truncate">
-                    <span className="inline-block px-2 py-1 rounded-full bg-gradient-to-r from-blue-500/20 to-purple-500/20 dark:from-blue-400/30 dark:to-purple-400/30 text-blue-700 dark:text-blue-300 font-medium">
+                    <span className="inline-block px-2 py-0.5 rounded-full bg-gradient-to-r from-blue-500/20 to-purple-500/20 dark:from-blue-400/30 dark:to-purple-400/30 text-blue-700 dark:text-blue-300 font-medium">
                       {selectedProject.displayName}
                     </span>
                   </div>
@@ -202,7 +204,7 @@ function MainContent({
 
           {/* Context Window Display - shows on all screen sizes */}
           {contextWindowPercentage !== null && (
-            <div className={`px-2 py-1 rounded text-xs sm:text-sm ${
+            <div className={`order-2 ml-2 px-2 py-1 rounded text-xs sm:text-sm ${
               contextWindowPercentage >= 90 ? 'bg-red-500/20 text-red-400' :
               contextWindowPercentage >= 70 ? 'bg-yellow-500/20 text-yellow-400' :
               'bg-green-500/20 text-green-400'
@@ -212,17 +214,17 @@ function MainContent({
           )}
           
           {/* Modern Tab Navigation - Right Side */}
-          <div className="flex-shrink-0 hidden sm:block">
-            <div className="relative flex bg-muted rounded-lg p-1">
+          <div className="flex-shrink-0 hidden sm:block order-3">
+            <div className="relative flex bg-muted rounded-lg p-1 gap-1">
               <button
                 onClick={() => setActiveTab('shell')}
-                className={`relative px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
+                className={`relative inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
                   activeTab === 'shell'
                     ? 'bg-background text-foreground shadow-sm'
                     : 'text-muted-foreground hover:text-foreground hover:bg-accent'
                 }`}
               >
-                <span className="flex items-center gap-1 sm:gap-1.5">
+                <span className="flex items-center gap-1 sm:gap-1.5 leading-none">
                   <svg className="w-3 sm:w-3.5 h-3 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z" />
                   </svg>
@@ -236,13 +238,13 @@ function MainContent({
               </button>
               <button
                 onClick={() => setActiveTab('files')}
-                className={`relative px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
+                className={`relative inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
                   activeTab === 'files'
                     ? 'bg-background text-foreground shadow-sm'
                     : 'text-muted-foreground hover:text-foreground hover:bg-accent'
                 }`}
               >
-                <span className="flex items-center gap-1 sm:gap-1.5">
+                <span className="flex items-center gap-1 sm:gap-1.5 leading-none">
                   <svg className="w-3 sm:w-3.5 h-3 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-5l-2-2H5a2 2 0 00-2 2z" />
                   </svg>
@@ -251,13 +253,13 @@ function MainContent({
               </button>
               <button
                 onClick={() => setActiveTab('git')}
-                className={`relative px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
+                className={`relative inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
                   activeTab === 'git'
                     ? 'bg-background text-foreground shadow-sm'
                     : 'text-muted-foreground hover:text-foreground hover:bg-accent'
                 }`}
               >
-                <span className="flex items-center gap-1 sm:gap-1.5">
+                <span className="flex items-center gap-1 sm:gap-1.5 leading-none">
                   <svg className="w-3 sm:w-3.5 h-3 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                   </svg>
@@ -276,34 +278,34 @@ function MainContent({
                     setShellResizeTrigger(prev => prev + 1);
                   }, 350);
                 }}
-                className={`relative px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
+                className={`relative inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
                   isVibeTaskPanelOpen
                     ? 'bg-background text-foreground shadow-sm'
                     : 'text-muted-foreground hover:text-foreground hover:bg-accent'
                 }`}
               >
-                <span className="flex items-center gap-1 sm:gap-1.5">
+                <span className="flex items-center gap-1 sm:gap-1.5 leading-none">
                   <svg className="w-3 sm:w-3.5 h-3 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
                   </svg>
                   <span className="hidden sm:inline">Tasks</span>
                 </span>
               </button>
-               {/* <button
-                onClick={() => setActiveTab('preview')}
-                className={`relative px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
-                  activeTab === 'preview'
-                    ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-gray-700'
+              <button
+                onClick={() => setActiveTab('dashboard')}
+                className={`relative inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
+                  activeTab === 'dashboard'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
                 }`}
-              > 
-                <span className="flex items-center gap-1 sm:gap-1.5">
+              >
+                <span className="flex items-center gap-1 sm:gap-1.5 leading-none">
                   <svg className="w-3 sm:w-3.5 h-3 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                   </svg>
-                  <span className="hidden sm:inline">Preview</span>
+                  <span className="hidden sm:inline">Dashboard</span>
                 </span>
-              </button> */}
+              </button>
             </div>
           </div>
         </div>
@@ -311,52 +313,41 @@ function MainContent({
         {/* Shell Terminal Tabs removed - single terminal mode only */}
       </div>
 
-      {/* Content Area - Shrinks when Tasks panel is open */}
-      <div className={`flex-1 min-h-0 flex flex-col transition-all duration-300 ${
-        isVibeTaskPanelOpen ? 'md:mr-[420px] lg:mr-[480px]' : ''
-      }`}>
-        <div className={`h-full overflow-hidden ${activeTab === 'files' ? 'block' : 'hidden'}`}>
-          <FileTree selectedProject={selectedProject} />
+      {/* Main content wrapper with Tasks panel */}
+      <div className="flex-1 min-h-0 flex relative">
+        {/* Content Area - Shrinks when Tasks panel is open */}
+        <div className={`flex-1 min-h-0 flex flex-col transition-all duration-300 px-2 md:px-4 ${
+          isVibeTaskPanelOpen ? 'md:mr-[420px] lg:mr-[480px]' : ''
+        }`}>
+          <div className={`h-full overflow-hidden ${activeTab === 'files' ? 'block' : 'hidden'} mt-2`}>
+            <FileTree selectedProject={selectedProject} />
+          </div>
+          <div className={`h-full overflow-hidden ${activeTab === 'shell' ? 'block' : 'hidden'} mt-2`}>
+            <Shell 
+              selectedProject={selectedProject} 
+              selectedSession={selectedSession}
+              isActive={activeTab === 'shell'}
+              onSessionCountChange={setOpenShellSessions}
+              onConnectionChange={onShellConnectionChange}
+              isMobile={isMobile}
+              resizeTrigger={shellResizeTrigger}
+            />
+          </div>
+          <div className={`h-full overflow-hidden ${activeTab === 'git' ? 'block' : 'hidden'} mt-2`}>
+            <GitPanel selectedProject={selectedProject} isMobile={isMobile} isVisible={activeTab === 'git'} />
+          </div>
+          <div className={`h-full overflow-hidden ${activeTab === 'dashboard' ? 'block' : 'hidden'} mt-2`}>
+            <Dashboard onBack={() => setActiveTab('shell')} />
+          </div>
         </div>
-        <div className={`h-full overflow-hidden ${activeTab === 'shell' ? 'block' : 'hidden'}`}>
-          <Shell 
-            selectedProject={selectedProject} 
-            selectedSession={selectedSession}
-            isActive={activeTab === 'shell'}
-            onSessionCountChange={setOpenShellSessions}
-            onConnectionChange={onShellConnectionChange}
-            isMobile={isMobile}
-            resizeTrigger={shellResizeTrigger}
-          />
-        </div>
-        <div className={`h-full overflow-hidden ${activeTab === 'git' ? 'block' : 'hidden'}`}>
-          <GitPanel selectedProject={selectedProject} isMobile={isMobile} isVisible={activeTab === 'git'} />
-        </div>
-        <div className={`h-full overflow-hidden ${activeTab === 'preview' ? 'block' : 'hidden'}`}>
-          {/* <LivePreviewPanel
-            selectedProject={selectedProject}
-            serverStatus={serverStatus}
-            serverUrl={serverUrl}
-            availableScripts={availableScripts}
-            onStartServer={(script) => {
-              sendMessage({
-                type: 'server:start',
-                projectPath: selectedProject?.fullPath,
-                script: script
-              });
-            }}
-            onStopServer={() => {
-              sendMessage({
-                type: 'server:stop',
-                projectPath: selectedProject?.fullPath
-              });
-            }}
-            onScriptSelect={setCurrentScript}
-            currentScript={currentScript}
-            isMobile={isMobile}
-            serverLogs={serverLogs}
-            onClearLogs={() => setServerLogs([])}
-          /> */}
+
+        {/* Vibe Kanban Sliding Panel - Inside content area */}
+        <div 
+          className={`absolute top-0 right-0 h-full w-80 sm:w-96 md:w-[420px] lg:w-[480px] bg-background border-l border-border shadow-xl transform transition-transform duration-300 ease-in-out ${
+            isVibeTaskPanelOpen ? 'translate-x-0' : 'translate-x-full'
+          }`}
+        >
+          <VibeTaskPanel isVisible={isVibeTaskPanelOpen} onClose={() => setIsVibeTaskPanelOpen(false)} />
         </div>
       </div>
 
@@ -368,15 +359,6 @@ function MainContent({
           projectPath={selectedProject?.path}
         />
       )}
-
-      {/* Vibe Kanban Sliding Panel - Optimized size */}
-      <div 
-        className={`fixed top-0 right-0 h-full w-80 sm:w-96 md:w-[420px] lg:w-[480px] bg-background border-l border-border shadow-xl transform transition-transform duration-300 ease-in-out z-50 ${
-          isVibeTaskPanelOpen ? 'translate-x-0' : 'translate-x-full'
-        }`}
-      >
-        <VibeTaskPanel isVisible={isVibeTaskPanelOpen} onClose={() => setIsVibeTaskPanelOpen(false)} />
-      </div>
     </div>
   );
 }

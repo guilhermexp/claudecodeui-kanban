@@ -51,7 +51,7 @@ const Dashboard = memo(({ onBack }) => {
     }
   }, []);
 
-  const loadUsageStats = useCallback(async (forceReload = false) => {
+  const loadUsageStats = useCallback(async (forceReload = false, loadSpecificTab = null) => {
     try {
       setLoading(true);
       setError(null);
@@ -69,7 +69,7 @@ const Dashboard = memo(({ onBack }) => {
           });
           if (importResponse.ok) {
             const importResult = await importResponse.json();
-            console.log('Import result:', importResult);
+            // Import completed successfully
             localStorage.setItem('lastUsageImport', new Date().toISOString());
           }
         } catch (importErr) {
@@ -113,8 +113,11 @@ const Dashboard = memo(({ onBack }) => {
         data: data
       }));
 
-      // Load session stats only when needed (when sessions tab is active)
-      if (activeTab === 'sessions' && !tabsLoaded.sessions) {
+      // Load specific tab data if requested
+      const tabToLoad = loadSpecificTab || activeTab;
+
+      // Load session stats
+      if (tabToLoad === 'sessions') {
         const sessionResponse = await authenticatedFetch('/api/usage/sessions' + (queryString ? `?${queryString}` : ''));
         if (sessionResponse.ok) {
           const sessionData = await sessionResponse.json();
@@ -123,12 +126,12 @@ const Dashboard = memo(({ onBack }) => {
         }
       }
 
-      // Load time usage stats only when needed (when time usage tab is active)
-      if (activeTab === 'usage-time' && !tabsLoaded['usage-time']) {
+      // Load time usage stats
+      if (tabToLoad === 'usage-time') {
         const timeResponse = await authenticatedFetch('/api/usage/time' + (queryString ? `?${queryString}` : ''));
         if (timeResponse.ok) {
           const timeData = await timeResponse.json();
-          console.log('Time stats loaded:', timeData);
+          // Time stats loaded successfully
           setTimeStats(timeData);
           setTabsLoaded(prev => ({ ...prev, 'usage-time': true }));
         }
@@ -139,7 +142,7 @@ const Dashboard = memo(({ onBack }) => {
     } finally {
       setLoading(false);
     }
-  }, [isImporting, activeTab, selectedDateRange, tabsLoaded]);
+  }, [isImporting, selectedDateRange]);
 
   const generateSampleData = useCallback(async () => {
     try {
@@ -208,15 +211,16 @@ const Dashboard = memo(({ onBack }) => {
   // Load usage stats when component mounts and when date range changes
   useEffect(() => {
     loadUsageStats();
-  }, [selectedDateRange, loadUsageStats]);
+  }, [selectedDateRange]);
 
   // Load tab-specific data when tab changes
   useEffect(() => {
-    if ((activeTab === 'sessions' && !sessionStats) || 
-        (activeTab === 'usage-time' && !timeStats)) {
-      loadUsageStats();
+    if (activeTab === 'sessions' && !sessionStats && !tabsLoaded.sessions) {
+      loadUsageStats(false, 'sessions');
+    } else if (activeTab === 'usage-time' && !timeStats && !tabsLoaded['usage-time']) {
+      loadUsageStats(false, 'usage-time');
     }
-  }, [activeTab, sessionStats, timeStats, loadUsageStats]);
+  }, [activeTab]);
 
   return (
     <div className="dashboard-container">
@@ -375,12 +379,19 @@ const Dashboard = memo(({ onBack }) => {
               )}
 
               {/* Time Usage Tab */}
-              {activeTab === 'usage-time' && timeStats && (
+              {activeTab === 'usage-time' && (
                 <Suspense fallback={<div className="dashboard-loading"><Loader2 className="dashboard-spinner" size={24} /></div>}>
-                  <TimeUsageTab 
-                    timeStats={timeStats} 
-                    formatDuration={formatDuration}
-                  />
+                  {timeStats ? (
+                    <TimeUsageTab 
+                      timeStats={timeStats} 
+                      formatDuration={formatDuration}
+                    />
+                  ) : (
+                    <div className="dashboard-loading">
+                      <Loader2 className="dashboard-spinner" size={24} />
+                      <p>Loading time usage data...</p>
+                    </div>
+                  )}
                 </Suspense>
               )}
 
@@ -409,12 +420,19 @@ const Dashboard = memo(({ onBack }) => {
               )}
 
               {/* Sessions Tab */}
-              {activeTab === 'sessions' && sessionStats && (
+              {activeTab === 'sessions' && (
                 <Suspense fallback={<div className="dashboard-loading"><Loader2 className="dashboard-spinner" size={24} /></div>}>
-                  <SessionsTab 
-                    sessionStats={sessionStats} 
-                    formatCurrency={formatCurrency}
-                  />
+                  {sessionStats ? (
+                    <SessionsTab 
+                      sessionStats={sessionStats} 
+                      formatCurrency={formatCurrency}
+                    />
+                  ) : (
+                    <div className="dashboard-loading">
+                      <Loader2 className="dashboard-spinner" size={24} />
+                      <p>Loading session data...</p>
+                    </div>
+                  )}
                 </Suspense>
               )}
 

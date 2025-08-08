@@ -1019,7 +1019,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   }
 
   return (
-    <div className="h-full min-h-0 flex flex-col bg-card/60 backdrop-blur-md supports-[backdrop-filter]:backdrop-saturate-150 w-full" {...getRootProps({onClick: e => e.stopPropagation()})}>
+    <div className="h-full min-h-0 flex flex-col bg-card rounded-xl border border-border w-full" {...getRootProps({onClick: e => e.stopPropagation()})}>
       <input {...getInputProps()} />
       {/* Status Bar (aligned with Files header) */}
       <div className="flex-shrink-0 border-b border-border px-3 py-3">
@@ -1099,7 +1099,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       </div>
 
       {/* Terminal */}
-      <div className="flex-1 min-h-0 p-1 sm:p-2 overflow-hidden relative">
+      <div className="flex-1 min-h-0 p-2 md:p-3 overflow-hidden relative">
         <div ref={terminalRef} className="h-full w-full focus:outline-none" style={{ outline: 'none' }} />
         
         {/* Drag overlay for images */}

@@ -3,7 +3,7 @@
   <h1>Claude Code UI + Vibe Kanban</h1>
   <p><strong>Web interface for Claude Code CLI with integrated task management</strong></p>
   
-  [![Version](https://img.shields.io/badge/version-1.5.0-blue.svg)](https://github.com/yourusername/claude-code-ui)
+  [![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](https://github.com/yourusername/claude-code-ui)
   [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
   [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org)
   [![Rust](https://img.shields.io/badge/rust-%3E%3D1.70.0-orange.svg)](https://www.rust-lang.org)
@@ -17,12 +17,13 @@ Claude Code UI is a modern, responsive web interface for [Claude Code CLI](https
 
 ### ✨ Key Features
 
-- **🏗️ Dual Backend Architecture** - Node.js (Express) + Rust (Actix-web)
+- **🏗️ Triple Backend Architecture** - Node.js (Express) + Rust (Actix-web) for optimal performance
 - **📱 Fully Responsive** - Desktop, tablet, and mobile with PWA support
-- **🎯 Vibe Kanban Integration** - Complete task management system
+- **🎯 Vibe Kanban Integration** - Complete task management with quick access panel
+- **📊 Usage Dashboard** - Integrated analytics for Claude Code usage and costs
 - **💬 Enhanced Chat** - Voice transcription, file uploads, and smart suggestions
-- **🔧 Advanced Terminal** - Shell integration with bypass permissions
-- **📁 File Explorer** - Live editing with syntax highlighting
+- **🔧 Advanced Terminal** - Shell integration with responsive resizing
+- **📁 File Explorer** - Split-view file browsing with inline editing
 - **🔀 Git Integration** - Visual branch management, commits, and PRs
 - **🎨 Theme Support** - Light/dark modes with system preference detection
 - **🔒 Security** - JWT authentication and tool permission management
@@ -35,7 +36,7 @@ Claude Code UI is a modern, responsive web interface for [Claude Code CLI](https
 <td align="center">
 <h3>Desktop Interface</h3>
 <img src="docs/images/desktop-main.png" alt="Desktop Interface" width="400">
-<br><em>Full-featured desktop experience</em>
+<br><em>Full-featured desktop experience with integrated tabs</em>
 </td>
 <td align="center">
 <h3>Mobile Experience</h3>
@@ -45,14 +46,14 @@ Claude Code UI is a modern, responsive web interface for [Claude Code CLI](https
 </tr>
 <tr>
 <td align="center">
-<h3>Vibe Kanban Board</h3>
-<img src="docs/images/vibe-kanban.png" alt="Vibe Kanban" width="400">
-<br><em>Drag-and-drop task management</em>
+<h3>Usage Dashboard</h3>
+<img src="docs/images/dashboard.png" alt="Usage Dashboard" width="400">
+<br><em>Track usage, costs, and analytics</em>
 </td>
 <td align="center">
-<h3>Integrated Terminal</h3>
-<img src="docs/images/terminal.png" alt="Terminal" width="400">
-<br><em>Full terminal with Claude integration</em>
+<h3>Vibe Kanban Panel</h3>
+<img src="docs/images/vibe-panel.png" alt="Vibe Kanban Panel" width="400">
+<br><em>Quick task creation and management</em>
 </td>
 </tr>
 </table>
@@ -103,32 +104,49 @@ npm start
 
 ## 🎯 Features
 
+### Main Navigation Tabs
+- **Shell** - Full terminal emulation with Claude integration
+- **Files** - Project file browser with split-view editing
+- **Source Control** - Git operations and visual management
+- **Tasks** - Quick access Vibe Kanban panel
+- **Dashboard** - Usage analytics and cost tracking
+
 ### Chat Interface
 - **Voice Transcription** - Speak commands using Whisper API
 - **File Uploads** - Drag & drop files and images
 - **Code Highlighting** - Syntax highlighting for code blocks
 - **Markdown Support** - Full markdown rendering
 - **Session Management** - Save and resume conversations
+- **Session Protection** - Prevents interruption during active conversations
 
 ### Terminal Integration
 - **XTerm.js** - Full terminal emulation
 - **Claude Integration** - Direct CLI access
-- **Bypass Permissions** - Toggle dangerous operations
+- **Responsive Resizing** - Adapts to panel changes
 - **Session Persistence** - Maintain terminal sessions
 - **Mobile Optimized** - Touch-friendly controls
 
-### Vibe Kanban
-- **Task Boards** - Organize tasks in columns
-- **Drag & Drop** - Intuitive task management
-- **Git Integration** - Link tasks to commits
-- **Real-time Sync** - Updates across all clients
-- **Markdown Editor** - Rich text task descriptions
+### Vibe Kanban Panel
+- **Quick Task Creation** - Create tasks without leaving main interface
+- **Inline Task Details** - View and edit tasks in the same panel
+- **Project Integration** - Tasks linked to current project
+- **Real-time Updates** - Syncs with full Vibe Kanban board
+- **Status Tracking** - Visual status indicators
 
 ### File Management
-- **Tree View** - Navigate project structure
-- **Live Editing** - Edit files with syntax highlighting
-- **Search** - Find files and content quickly
-- **Preview** - View images and documents
+- **Split View** - Browse files while editing
+- **Inline Editing** - Edit files without modal dialogs
+- **Syntax Highlighting** - CodeMirror 6 integration
+- **Image Preview** - Built-in image viewer
+- **View Modes** - Simple, Compact, and Detailed views
+
+### Usage Dashboard
+- **Cost Tracking** - Monitor Claude Code API costs
+- **Token Usage** - Track token consumption by model
+- **Session Analytics** - View session statistics
+- **Time Tracking** - Monitor usage over time
+- **Project Breakdown** - Costs per project
+- **Timeline View** - Historical usage patterns
 
 ### Git Features
 - **Visual Branches** - See branch structure
@@ -178,13 +196,13 @@ Tools are disabled by default for security. Enable them in Settings:
 ### Progressive Web App
 - Install as native app on mobile devices
 - Offline support with service workers
-- Push notifications (coming soon)
+- Responsive layouts for all screen sizes
 
 ### Touch Optimizations
 - Bottom navigation bar
 - Swipe gestures
 - Touch-friendly buttons
-- Responsive layouts
+- Adaptive UI elements
 
 ## 🔒 Security
 
@@ -207,6 +225,9 @@ Tools are disabled by default for security. Enable them in Settings:
 claude-code-ui/
 ├── src/                    # React frontend
 │   ├── components/        # UI components
+│   │   ├── Dashboard/    # Dashboard components
+│   │   ├── vibe-kanban/  # Vibe Kanban integration
+│   │   └── ui/           # Shared UI components
 │   ├── hooks/            # Custom React hooks
 │   ├── utils/            # Utility functions
 │   └── contexts/         # React contexts
@@ -233,21 +254,15 @@ npm run tunnel           # Create Cloudflare tunnel
 npm run ngrok            # Create ngrok tunnel
 ```
 
-### Testing
+### Recent Improvements
 
-```bash
-# Unit tests
-npm run test:unit
-
-# Integration tests
-npm run test:integration
-
-# E2E tests
-npm run test:e2e
-
-# Coverage report
-npm run test:coverage
-```
+- **Dashboard Integration** - Dashboard now available as main navigation tab
+- **Vibe Kanban Panel** - Quick access panel with responsive design
+- **File Browser Split View** - Browse and edit files side-by-side
+- **Session Protection** - Prevents project updates during active conversations
+- **Improved Responsiveness** - Better adaptation to panel state changes
+- **UI Polish** - Cleaner transitions and animations
+- **Code Cleanup** - Removed dead code and consolidated utilities
 
 ## 🤝 Contributing
 
@@ -287,6 +302,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - [Anthropic](https://anthropic.com) for Claude and Claude Code CLI
 - [XTerm.js](https://xtermjs.org) for terminal emulation
+- [CodeMirror](https://codemirror.net) for code editing
 - [Vite](https://vitejs.dev) for build tooling
 - [Tailwind CSS](https://tailwindcss.com) for styling
 

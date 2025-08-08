@@ -119,15 +119,6 @@
   color: hsl(var(--primary));
 }
 
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 /* Error State */
 .dashboard-error {
   display: flex;

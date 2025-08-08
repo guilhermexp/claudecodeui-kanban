@@ -127,14 +127,15 @@ function VibeTaskPanel({ isVisible, onClose }) {
 
   // Get task status color
   const getStatusColor = (status) => {
+    const normalized = (status || '').toLowerCase();
     const statusColors = {
-      pending: 'bg-gray-500',
-      running: 'bg-blue-500',
-      complete: 'bg-green-500',
-      failed: 'bg-red-500',
-      stopped: 'bg-yellow-500'
+      todo: 'bg-gray-400',
+      inprogress: 'bg-blue-500',
+      inreview: 'bg-amber-500',
+      done: 'bg-green-500',
+      cancelled: 'bg-red-500'
     };
-    return statusColors[status?.toLowerCase()] || 'bg-gray-400';
+    return statusColors[normalized] || 'bg-gray-400';
   };
 
   if (!isVisible) {
@@ -144,7 +145,7 @@ function VibeTaskPanel({ isVisible, onClose }) {
   return (
     <div className="h-full flex flex-col bg-background relative">
       {/* Header */}
-      <div className="flex-shrink-0 border-b border-border p-4">
+      <div className="flex-shrink-0 border-b border-border h-12 md:h-14 px-3 md:px-4 flex items-center">
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-lg font-semibold text-foreground">Vibe Kanban</h3>
@@ -152,7 +153,7 @@ function VibeTaskPanel({ isVisible, onClose }) {
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent rounded-md transition-colors"
+            className="h-8 w-8 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent rounded-md transition-colors"
             title="Close panel"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -163,7 +164,7 @@ function VibeTaskPanel({ isVisible, onClose }) {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-3">
+      <div className="flex-1 overflow-y-auto p-3 md:p-3 space-y-3">
         {loading && (
           <div className="flex items-center justify-center py-6">
             <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
