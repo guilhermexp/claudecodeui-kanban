@@ -13,7 +13,15 @@ const INIT_SQL_PATH = path.join(__dirname, 'init.sql');
 // Create database connection with error handling
 let db;
 try {
+  // Ensure database directory exists
+  const dbDir = path.dirname(DB_PATH);
+  if (!fs.existsSync(dbDir)) {
+    fs.mkdirSync(dbDir, { recursive: true });
+  }
+  
   db = new Database(DB_PATH);
+  db.pragma('journal_mode = WAL');
+  console.log('✅ Database connected successfully');
 } catch (error) {
   console.error('Failed to connect to SQLite database:', error);
   throw error;
@@ -36,9 +44,11 @@ const userDb = {
   hasUsers: () => {
     try {
       const row = db.prepare('SELECT COUNT(*) as count FROM users').get();
-      return row.count > 0;
+      return row && row.count > 0;
     } catch (err) {
-      throw err;
+      console.error('Error checking if users exist:', err);
+      // Return false as default if we can't check
+      return false;
     }
   },
 

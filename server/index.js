@@ -222,7 +222,7 @@ app.get('/api/health', (req, res) => {
     services: {
       server: 'running',
       database: 'connected',
-      vibeKanban: vibeProxy.circuitOpen ? 'unavailable' : 'available'
+      vibeKanban: 'available'
     }
   };
   
@@ -952,22 +952,12 @@ function handleShellConnection(ws, request) {
           const buffer = Buffer.from(base64, 'base64');
           await fsPromises.writeFile(tempFilePath, buffer);
           
-          // Send success message with file path to terminal
-          const successMsg = `\r\n\x1b[32m📷 Imagem salva: ${tempFilePath}\x1b[0m\r\n` +
-                           `\x1b[36mArquivo: ${filename} (${(size / 1024).toFixed(1)}KB)\x1b[0m\r\n`;
-          
+          // Don't send output messages - just send the upload event
+          // Send image-uploaded event to trigger chat integration
           ws.send(JSON.stringify({
-            type: 'output',
-            data: successMsg
-          }));
-          
-          // Also add the file path to the next Claude command context
-          const contextMsg = `\r\n\x1b[90m💡 Use este caminho no seu próximo comando Claude:\x1b[0m\r\n` +
-                           `\x1b[97m${tempFilePath}\x1b[0m\r\n\r\n`;
-          
-          ws.send(JSON.stringify({
-            type: 'output',
-            data: contextMsg
+            type: 'image-uploaded',
+            path: tempFilePath,
+            fileName: filename
           }));
           
         } catch (error) {

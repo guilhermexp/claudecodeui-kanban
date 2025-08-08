@@ -5,10 +5,17 @@ import { generateToken, authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
 
+// Simple test route
+router.get('/test', (req, res) => {
+  res.json({ message: 'Auth route working' });
+});
+
 // Check auth status and setup requirements
 router.get('/status', async (req, res) => {
   try {
-    const hasUsers = await userDb.hasUsers();
+    console.log('Auth status route called');
+    const hasUsers = userDb.hasUsers();
+    console.log('Has users:', hasUsers);
     res.json({ 
       needsSetup: !hasUsers,
       isAuthenticated: false // Will be overridden by frontend if token exists
@@ -17,7 +24,7 @@ router.get('/status', async (req, res) => {
     console.error('Auth status error:', error);
     // Ensure we always return valid JSON
     res.status(500).json({ 
-      error: 'Internal server error',
+      error: error.message || 'Internal server error',
       needsSetup: true,
       isAuthenticated: false
     });
