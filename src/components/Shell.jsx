@@ -245,10 +245,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
                   fileName: fileName
                 }));
                 
-                // Show feedback in terminal
-                if (terminal.current) {
-                  terminal.current.write(`\r\n\x1b[33m⏳ Uploading image: ${fileName}...\x1b[0m\r\n`);
-                }
+                // Do not print any upload feedback to terminal; flow goes to chat input
               }
             };
             reader.readAsDataURL(file);
@@ -272,7 +269,26 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   // Set up global function for MicButton to send to terminal
   useEffect(() => {
     if (isActive && isConnected) {
+      // Helper to print a framed message (liquid-box style) for assistant-bound inputs
+      const printFramedMessage = (message) => {
+        if (!terminal.current) return;
+        const text = String(message || '').replace(/\r?\n/g, ' ').trim();
+        if (!text) return;
+        const maxCols = Math.max(20, Math.min(terminal.current.cols || 80, 120));
+        const content = text.length > maxCols - 4 ? text.slice(0, maxCols - 7) + '…' : text;
+        const width = Math.min(maxCols, content.length + 4);
+        const horiz = '─'.repeat(Math.max(2, width - 2));
+        const pad = ' '.repeat(Math.max(0, width - 4 - content.length));
+        const start = `\r\n`;
+        const top = `\x1b[38;5;244m┌${horiz}┐\x1b[0m\r\n`;
+        const mid = `\x1b[38;5;244m│\x1b[0m \x1b[37m${content}\x1b[0m${pad} \x1b[38;5;244m│\x1b[0m\r\n`;
+        const bot = `\x1b[38;5;244m└${horiz}┘\x1b[0m\r\n`;
+        terminal.current.write(start + top + mid + bot);
+      };
+
       window.sendToActiveTerminal = (data) => {
+        // Visual echo: frame the message the user is sending to the assistant
+        printFramedMessage(data);
         if (ws.current && ws.current.readyState === WebSocket.OPEN) {
           ws.current.send(JSON.stringify({
             type: 'input',
@@ -856,24 +872,16 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
           } else if (data.type === 'image-uploaded') {
             // Handle successful image upload
             const { path, fileName } = data;
-            if (terminal.current) {
-              terminal.current.write(`\r\n\x1b[32m✓ Image uploaded: ${fileName}\x1b[0m\r\n`);
-              terminal.current.write(`\x1b[36mPath: ${path}\x1b[0m\r\n`);
-              
-              // Send the file path to Claude
-              if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-                const command = `${path}\n`;
-                ws.current.send(JSON.stringify({
-                  type: 'input',
-                  data: command
-                }));
-              }
+            // Do not print success feedback in terminal; we pipe to chat input
+            // Bridge to chat input: insert markdown/image link directly in the chat textarea
+            try {
+              const detail = { url: path, fileName };
+              window.dispatchEvent(new CustomEvent('chat:insert-from-shell', { detail }));
+            } catch (e) {
+              // no-op
             }
           } else if (data.type === 'image-upload-error') {
-            // Handle image upload error
-            if (terminal.current) {
-              terminal.current.write(`\r\n\x1b[31m✗ Image upload failed: ${data.error}\x1b[0m\r\n`);
-            }
+            // Suppress error echo in terminal to keep UX clean
           } else if (data.type === 'url_open') {
             // Handle explicit URL opening requests from server
             window.open(data.url, '_blank');
@@ -958,10 +966,10 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   }
 
   return (
-    <div className="h-full min-h-0 flex flex-col bg-card w-full" {...getRootProps({onClick: e => e.stopPropagation()})}>
+    <div className="h-full min-h-0 flex flex-col bg-card/60 backdrop-blur-md supports-[backdrop-filter]:backdrop-saturate-150 w-full" {...getRootProps({onClick: e => e.stopPropagation()})}>
       <input {...getInputProps()} />
-      {/* Status Bar */}
-      <div className="flex-shrink-0 border-b border-border px-3 py-1.5">
+      {/* Status Bar (aligned with Files header) */}
+      <div className="flex-shrink-0 border-b border-border px-3 py-3">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center space-x-2 flex-1 min-w-0">
             <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />

@@ -151,7 +151,7 @@ function MainContent({
   return (
     <div className="h-full min-h-0 flex flex-col">
       {/* Header with tabs */}
-      <div className="bg-card border-b border-border p-3 md:p-4 flex-shrink-0">
+      <div className="bg-card border-b border-border py-3 md:py-4 px-3 md:px-4 flex-shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2 sm:space-x-3 flex-1">
             {isMobile && (

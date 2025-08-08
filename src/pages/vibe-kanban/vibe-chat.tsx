@@ -123,6 +123,27 @@ export function VibeChat() {
     }
   }, [config]);
 
+  // Listen to Shell image insert events and push into chat input
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const custom = e as CustomEvent<{ url: string; fileName?: string }>
+      const { url } = custom.detail || ({} as any);
+      if (!url) return;
+      // Append URL to the textarea content, with a space/newline depending on current state
+      setTaskDescription((prev) => {
+        const sep = prev && !prev.endsWith('\n') ? '\n' : '';
+        // Prefer markdown image if it looks like an image path; otherwise plain URL
+        const isImage = /\.(png|jpe?g|gif|webp|svg|bmp|ico)$/i.test(url);
+        const snippet = isImage ? `![image](${url})` : url;
+        return `${prev || ''}${sep}${snippet}`;
+      });
+      // Focus textarea for immediate send
+      requestAnimationFrame(() => textareaRef.current?.focus());
+    };
+    window.addEventListener('chat:insert-from-shell', handler as EventListener);
+    return () => window.removeEventListener('chat:insert-from-shell', handler as EventListener);
+  }, []);
+
   // Load tasks when project changes
   useEffect(() => {
     if (selectedProject) {
