@@ -444,10 +444,10 @@ function Sidebar({
       {/* Header */}
       <div className="p-3 md:p-4 border-b border-border">
         {/* Desktop Header */}
-        <div className="hidden md:flex items-center justify-between">
+          <div className="hidden md:flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
-              <MessageSquare className="w-4 h-4 text-primary" />
+            <div className="w-8 h-8 bg-muted rounded-lg flex items-center justify-center">
+              <ClaudeLogo className="w-5 h-5" />
             </div>
             <div>
               <h1 className="text-base font-semibold text-foreground">Claude Code UI</h1>
@@ -496,11 +496,11 @@ function Sidebar({
         </div>
         
         {/* Mobile Header */}
-        <div className="md:hidden">
+          <div className="md:hidden">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 bg-primary/10 rounded-lg flex items-center justify-center">
-                <MessageSquare className="w-5 h-5 text-primary" />
+              <div className="w-9 h-9 bg-muted rounded-lg flex items-center justify-center">
+                <ClaudeLogo className="w-6 h-6" />
               </div>
               <div>
                 <h1 className="text-base font-semibold text-foreground">Claude Code UI</h1>
@@ -707,8 +707,8 @@ function Sidebar({
               return (
                 <div key={project.name} className="md:space-y-1">
                   {/* Project Header */}
-                  <div className="group md:group">
-                    {/* Mobile Project Item */}
+                  <div className="group">
+                    {/* Unified Project Item (mobile + desktop share same layout) */}
                     <div className="md:hidden">
                       <div
                         className={cn(
@@ -867,24 +867,15 @@ function Sidebar({
                       </div>
                     </div>
                     
-                    {/* Desktop Project Item */}
+                    {/* Desktop/Tablet Project Item */}
                     <Button
                       variant="ghost"
                       className={cn(
                         "hidden md:flex w-full justify-between px-3 py-2 h-auto font-normal hover:text-accent-foreground relative rounded-lg",
-                        isVibeKanban(project) && !isSelected && "bg-gray-100 dark:bg-black/30 hover:bg-gray-200 dark:hover:bg-black/40",
-                        !isVibeKanban(project) && !isSelected && "hover:bg-accent",
-                        isSelected && "bg-accent text-accent-foreground",
-                        isStarred && !isSelected && !isVibeKanban(project) && "bg-blue-50/10 dark:bg-blue-950/10 hover:bg-blue-100/20 dark:hover:bg-blue-950/20",
-                        isStarred && !isSelected && isVibeKanban(project) && "bg-gray-100/50 dark:bg-black/40 hover:bg-gray-200/50 dark:hover:bg-black/50"
+                        isSelected ? "bg-accent text-accent-foreground" : "hover:bg-accent"
                       )}
-                      onClick={() => {
-                        // Desktop behavior: only toggle dropdown
-                        toggleProject(project.name);
-                      }}
-                      onTouchEnd={handleTouchClick(() => {
-                        toggleProject(project.name);
-                      })}
+                      onClick={() => toggleProject(project.name)}
+                      onTouchEnd={handleTouchClick(() => toggleProject(project.name))}
                     >
                       {/* Active session indicator for desktop */}
                       {hasActive && (
@@ -922,22 +913,33 @@ function Sidebar({
                               </div>
                             </div>
                           ) : (
-                            <div>
-                              <div className="text-sm font-semibold truncate text-foreground" title={project.displayName}>
-                                {project.displayName}
-                              </div>
-                              <div className="text-xs text-muted-foreground">
-                                {(() => {
-                                  const sessionCount = getAllSessions(project).length;
-                                  const hasMore = project.sessionMeta?.hasMore !== false;
-                                  return hasMore && sessionCount >= 2 ? `${sessionCount}+` : sessionCount;
-                                })()}
-                                {project.fullPath !== project.displayName && (
-                                  <span className="ml-1 opacity-60" title={project.fullPath}>
-                                    • {project.fullPath.length > 25 ? '...' + project.fullPath.slice(-22) : project.fullPath}
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="min-w-0 flex-1">
+                                <div className="text-sm font-semibold truncate text-foreground" title={project.displayName}>
+                                  {project.displayName}
+                                </div>
+                                <div className="text-[11px] text-muted-foreground flex items-center gap-1">
+                                  <span className="inline-flex items-center gap-1">
+                                    <MessageSquare className="w-3 h-3 opacity-70" />
+                                    {(() => {
+                                      const sessionCount = getAllSessions(project).length;
+                                      const hasMore = project.sessionMeta?.hasMore !== false;
+                                      return hasMore && sessionCount >= 2 ? `${sessionCount}+` : sessionCount;
+                                    })()}
                                   </span>
-                                )}
+                                  {project.fullPath !== project.displayName && (
+                                    <span className="ml-1 opacity-60 truncate" title={project.fullPath}>
+                                      • {project.fullPath.length > 28 ? '…' + project.fullPath.slice(-25) : project.fullPath}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
+                              {hasActive && (
+                                <span className="ml-auto shrink-0 inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-green-500/10 text-green-600 dark:text-green-400">
+                                  <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+                                  active
+                                </span>
+                              )}
                             </div>
                           )}
                         </div>
