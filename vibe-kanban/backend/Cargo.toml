@@ -48,7 +48,7 @@ openssl-sys = { workspace = true }
 rmcp = { version = "0.2.1", features = ["server", "transport-io"] }
 schemars = "0.8"
 regex = "1.11.1"
-notify-rust = "4.11"
+# notify-rust = "4.11"  # Temporarily disabled due to macOS compilation issues
 octocrab = "0.44"
 os_info = "3.12.0"
 sentry = { version = "0.41.0", features = ["anyhow", "backtrace", "panic", "debug-images"] }

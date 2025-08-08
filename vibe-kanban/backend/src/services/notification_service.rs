@@ -144,24 +144,13 @@ impl NotificationService {
             .spawn();
     }
 
-    /// Send Linux notification using notify-rust
+    /// Send Linux notification using notify-send command
     async fn send_linux_notification(&self, title: &str, message: &str) {
-        use notify_rust::Notification;
-
-        let title = title.to_string();
-        let message = message.to_string();
-
-        let _handle = tokio::task::spawn_blocking(move || {
-            if let Err(e) = Notification::new()
-                .summary(&title)
-                .body(&message)
-                .timeout(10000)
-                .show()
-            {
-                tracing::error!("Failed to send Linux notification: {}", e);
-            }
-        });
-        drop(_handle); // Don't await, fire-and-forget
+        // Use notify-send command as fallback for Linux notifications
+        let _ = tokio::process::Command::new("notify-send")
+            .arg(title)
+            .arg(message)
+            .spawn();
     }
 
     /// Send Windows/WSL notification using PowerShell toast script
