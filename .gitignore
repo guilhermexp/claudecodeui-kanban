@@ -91,6 +91,7 @@ jspm_packages/
 tmp/
 temp/
 .tmp/
+.claude-images/
 
 # Backup files
 *.backup

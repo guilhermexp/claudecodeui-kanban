@@ -880,11 +880,13 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
             // Handle successful image upload
             const { path, fileName } = data;
             
+            // Show success message
+            terminal.current.write(`\r\n\x1b[32m✅ Imagem processada: ${fileName}\x1b[0m\r\n`);
+            
             // Insert the image path into the current terminal input line
             if (terminal.current && ws.current && ws.current.readyState === WebSocket.OPEN) {
-              // Simply type the path into the current line where the cursor is
-              // This will appear exactly where the user is typing
-              const pathToInsert = path;
+              // Write the path and add a space for user convenience
+              const pathToInsert = `${path} `;
               
               // Write to terminal and send to backend as a single input
               terminal.current.write(pathToInsert);

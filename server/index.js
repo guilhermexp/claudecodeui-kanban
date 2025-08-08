@@ -938,25 +938,26 @@ function handleShellConnection(ws, request) {
           const imageData = data.data;
           const { filename, type, size, base64 } = imageData;
           
-          // Create temporary directory for images if it doesn't exist
-          const tempDir = path.join(os.tmpdir(), 'claude-code-images');
-          await fsPromises.mkdir(tempDir, { recursive: true });
+          // Create images directory in project root for better accessibility
+          const projectRoot = process.cwd();
+          const imagesDir = path.join(projectRoot, '.claude-images');
+          await fsPromises.mkdir(imagesDir, { recursive: true });
           
           // Generate unique filename
           const timestamp = Date.now();
           const ext = path.extname(filename) || '.png';
           const tempFilename = `image_${timestamp}${ext}`;
-          const tempFilePath = path.join(tempDir, tempFilename);
+          const imagePath = path.join(imagesDir, tempFilename);
           
-          // Save image to temporary file
+          // Save image to file with proper permissions
           const buffer = Buffer.from(base64, 'base64');
-          await fsPromises.writeFile(tempFilePath, buffer);
+          await fsPromises.writeFile(imagePath, buffer, { mode: 0o644 });
           
           // Don't send output messages - just send the upload event
           // Send image-uploaded event to trigger chat integration
           ws.send(JSON.stringify({
             type: 'image-uploaded',
-            path: tempFilePath,
+            path: imagePath,
             fileName: filename
           }));
           
