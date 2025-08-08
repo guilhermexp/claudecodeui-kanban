@@ -40,19 +40,19 @@
     --card-foreground: 0 0% 5%;           /* Preto quase puro para texto em cards */
     --popover: 0 0% 100%;
     --popover-foreground: 0 0% 5%;        /* Preto quase puro para popups */
-    --primary: 215.4 16.3% 46.9%;
-    --primary-foreground: 210 40% 98%;
+    --primary: 262.1 83.3% 57.8%;           /* Vibrant purple for clearer CTAs */
+    --primary-foreground: 0 0% 100%;        /* White */
     --secondary: 210 40% 96.1%;
     --secondary-foreground: 0 0% 10%;     /* Preto para texto secundário */
     --muted: 210 40% 96.1%;
     --muted-foreground: 0 0% 30%;         /* Cinza escuro para texto menos importante */
-    --accent: 210 40% 96.1%;
+    --accent: 210 40% 97%;
     --accent-foreground: 0 0% 10%;        /* Preto para texto de destaque */
     --destructive: 0 60% 50%;             /* Vermelho mais visível */
     --destructive-foreground: 0 0% 100%;  /* Branco sobre vermelho */
     --border: 214.3 31.8% 85%;            /* Bordas mais visíveis */
     --input: 214.3 31.8% 91.4%;
-    --ring: 215.4 16.3% 46.9%;
+    --ring: 262.1 83.3% 57.8%;
     --radius: 0.5rem;
 
     /* VibeKanban specific status colors for light mode */
@@ -84,8 +84,8 @@
     --console-error: 0 65% 48%;
   }
 
-  .dark {
-    /* ChatGPT-like dark theme with greyish tones */
+.dark {
+    /* ChatGPT-like dark theme with greyish tones (original) */
     --background: 0 0% 0%;            /* Pure black background */
     --foreground: 0 0% 95%;           /* White text */
     --card: 0 0% 5%;                  /* Dark grey for cards - matching Files tab */
