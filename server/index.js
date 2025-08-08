@@ -904,6 +904,68 @@ function handleShellConnection(ws, request) {
             data: restartMsg
           }));
         }
+      } else if (data.type === 'upload-image') {
+        // Handle image upload from Shell drop zone
+        const { imageData, fileName } = data;
+        console.log('📸 Shell: Received image upload request:', fileName);
+        
+        try {
+          // Parse base64 data
+          const matches = imageData.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+          if (!matches) {
+            ws.send(JSON.stringify({
+              type: 'image-upload-error',
+              error: 'Invalid image data format'
+            }));
+            return;
+          }
+          
+          const mimeType = matches[1];
+          const base64Data = matches[2];
+          const buffer = Buffer.from(base64Data, 'base64');
+          
+          // Generate unique ID and save to temp
+          const imageId = `img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+          const uploadDir = path.join(os.tmpdir(), 'claude-shell-images');
+          await fsPromises.mkdir(uploadDir, { recursive: true });
+          
+          const ext = fileName.split('.').pop() || 'png';
+          const imagePath = path.join(uploadDir, `${imageId}.${ext}`);
+          
+          // Save image to disk
+          await fsPromises.writeFile(imagePath, buffer);
+          console.log('💾 Shell: Image saved to:', imagePath);
+          
+          // Store in global map for potential web access
+          if (!global.uploadedImages) {
+            global.uploadedImages = new Map();
+          }
+          
+          global.uploadedImages.set(imageId, {
+            path: imagePath,
+            mimetype: mimeType,
+            fileName: fileName,
+            userId: user?.userId || 'anonymous',
+            uploadedAt: new Date()
+          });
+          
+          // Return the actual file path for Claude to read
+          console.log('✅ Shell: Sending image path back to client:', imagePath);
+          ws.send(JSON.stringify({
+            type: 'image-uploaded',
+            imageId: imageId,
+            path: imagePath,
+            fileName: fileName
+          }));
+          
+        } catch (error) {
+          console.error('Shell: Error uploading image:', error);
+          ws.send(JSON.stringify({
+            type: 'image-upload-error',
+            error: 'Failed to upload image'
+          }));
+        }
+        return;
       } else if (data.type === 'image') {
         // Handle image upload
         try {
