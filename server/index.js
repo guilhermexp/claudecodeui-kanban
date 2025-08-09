@@ -44,6 +44,24 @@ import { validateApiKey, authenticateToken, authenticateWebSocket } from './midd
 
 // File system watcher for projects folder
 let projectsWatcher = null;
+// Simple in-memory caches
+const projectLogoCache = new Map(); // key: projectDir, value: { data, ts }
+const projectAnalysisCache = new Map(); // key: projectDir, value: { data, ts }
+const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+function getCached(map, key) {
+  const item = map.get(key);
+  if (!item) return null;
+  if (Date.now() - item.ts > CACHE_TTL_MS) {
+    map.delete(key);
+    return null;
+  }
+  return item.data;
+}
+
+function setCached(map, key, data) {
+  map.set(key, { data, ts: Date.now() });
+}
 // Enhanced client tracking with user context for session isolation
 const connectedClients = new Map(); // ws -> { userId, username, activeProject, lastActivity }
 
@@ -139,6 +157,9 @@ async function setupProjectsWatcher() {
           
           // Clear project directory cache when files change
           clearProjectDirectoryCache();
+          // Also clear our local caches to avoid stale logos/analysis
+          projectLogoCache.clear();
+          projectAnalysisCache.clear();
           
           // Get updated projects list
           const updatedProjects = await getProjects();
@@ -260,6 +281,175 @@ app.get('/api/projects', authenticateToken, async (req, res) => {
     res.json(projects);
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// Get best logo/favicon for a project
+app.get('/api/projects/:projectName/logo', authenticateToken, async (req, res) => {
+  try {
+    // Resolve actual project directory from encoded name/id
+    let projectDir;
+    try {
+      projectDir = await extractProjectDirectory(req.params.projectName);
+    } catch (error) {
+      // Fallback to simple dash replacement
+      projectDir = req.params.projectName.replace(/-/g, '/');
+    }
+
+    // Cache lookup
+    const cached = getCached(projectLogoCache, projectDir);
+    if (cached) return res.json(cached);
+
+    // Candidate logo paths relative to project root
+    const candidates = [
+      'logo.svg', 'logo.png', 'logo.jpg', 'logo.jpeg',
+      'icon.svg', 'icon.png', 'icon.jpg', 'icon.jpeg', 'icon.ico',
+      'favicon.svg', 'favicon.png', 'favicon.jpg', 'favicon.jpeg', 'favicon.ico',
+      'public/logo.svg', 'public/logo.png', 'public/favicon.svg', 'public/favicon.png', 'public/favicon.ico', 'public/apple-touch-icon.png',
+      'src/assets/logo.svg', 'src/assets/logo.png', 'assets/logo.svg', 'assets/logo.png',
+      'images/logo.svg', 'images/logo.png', 'static/logo.svg', 'static/logo.png'
+    ];
+
+    for (const rel of candidates) {
+      const absPath = path.join(projectDir, rel);
+      try {
+        await fsPromises.access(absPath);
+        const mimeType = mime.lookup(absPath) || 'application/octet-stream';
+        const url = `/api/projects/${encodeURIComponent(req.params.projectName)}/files/content?path=${encodeURIComponent(absPath)}`;
+        const result = { found: true, url, path: absPath, mimeType, relativePath: rel };
+        setCached(projectLogoCache, projectDir, result);
+        return res.json(result);
+      } catch (e) {
+        // continue
+      }
+    }
+
+    const result = { found: false };
+    setCached(projectLogoCache, projectDir, result);
+    res.json(result);
+  } catch (error) {
+    console.error('Error locating project logo:', error);
+    res.status(500).json({ error: 'Failed to locate project logo' });
+  }
+});
+
+// Analyze project contents to infer dominant technology/language
+app.get('/api/projects/analyze', authenticateToken, async (req, res) => {
+  try {
+    const projectPath = req.query.path;
+    if (!projectPath || !path.isAbsolute(projectPath)) {
+      return res.status(400).json({ error: 'Absolute project path required' });
+    }
+
+    const cached = getCached(projectAnalysisCache, projectPath);
+    if (cached) return res.json(cached);
+
+    const stats = {
+      python: 0,
+      react: 0,
+      vue: 0,
+      svelte: 0,
+      nodejs: 0,
+      rust: 0,
+      go: 0,
+      java: 0,
+      php: 0,
+      reactnative: 0,
+      flutter: 0,
+      database: 0,
+      docker: 0,
+      web: 0,
+      api: 0
+    };
+
+    const ignoredDirs = new Set(['node_modules', 'dist', 'build', '.git', '.next', '.turbo', 'target']);
+
+    async function walk(dir, depth = 0) {
+      if (depth > 4) return;
+      let entries = [];
+      try {
+        entries = await fsPromises.readdir(dir, { withFileTypes: true });
+      } catch (e) {
+        return;
+      }
+      for (const entry of entries) {
+        if (ignoredDirs.has(entry.name)) continue;
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          await walk(full, depth + 1);
+        } else {
+          const ext = path.extname(entry.name).toLowerCase();
+          switch (ext) {
+            case '.py': stats.python++; break;
+            case '.rs': stats.rust++; break;
+            case '.go': stats.go++; break;
+            case '.java': stats.java++; break;
+            case '.php': stats.php++; break;
+            case '.sql': stats.database++; break;
+            case '.dart': stats.flutter++; break;
+            case '.js':
+            case '.jsx': stats.web++; break;
+            case '.ts':
+            case '.tsx': stats.web++; break;
+            case '.yml':
+            case '.yaml':
+            case '.dockerfile': stats.docker++; break;
+          }
+          // Lightweight package.json check for React/React Native/Vue
+          if (entry.name === 'package.json') {
+            try {
+              const pkgRaw = await fsPromises.readFile(full, 'utf8');
+              const pkg = JSON.parse(pkgRaw);
+              const allDeps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
+              if (allDeps['react'] || allDeps['next']) stats.react += 20; // boost
+              if (allDeps['react-native']) stats.reactnative += 30; // strong signal
+              if (allDeps['vue'] || allDeps['nuxt']) stats.vue += 20;
+              if (allDeps['svelte']) stats.svelte += 20;
+              if (allDeps['express'] || allDeps['fastify'] || allDeps['koa']) stats.nodejs += 10;
+            } catch (_) {}
+          }
+        }
+      }
+    }
+
+    await walk(projectPath);
+
+    // Decide predominant
+    const entries = Object.entries(stats);
+    entries.sort((a, b) => b[1] - a[1]);
+    const [bestType, bestScore] = entries[0] || ['web', 0];
+
+    const typeToPresentation = {
+      python: { icon: '🐍', color: '#3776AB' },
+      react: { icon: '⚛️', color: '#61DAFB' },
+      vue: { icon: '🟢', color: '#4FC08D' },
+      svelte: { icon: '🧡', color: '#FF3E00' },
+      nodejs: { icon: '💚', color: '#339933' },
+      rust: { icon: '🦀', color: '#CE422B' },
+      go: { icon: '🐹', color: '#00ADD8' },
+      java: { icon: '☕', color: '#ED8B00' },
+      php: { icon: '🐘', color: '#777BB4' },
+      reactnative: { icon: '📱', color: '#61DAFB' },
+      flutter: { icon: '🐦', color: '#02569B' },
+      database: { icon: '🗄️', color: '#336791' },
+      docker: { icon: '🐳', color: '#2496ED' },
+      web: { icon: '🎨', color: '#6366f1' },
+      api: { icon: '🌐', color: '#666666' }
+    };
+
+    const presentation = typeToPresentation[bestType] || typeToPresentation.web;
+    const result = {
+      type: bestType,
+      confidence: Math.min(0.99, bestScore / 50 + 0.3),
+      icon: presentation.icon,
+      color: presentation.color
+    };
+
+    setCached(projectAnalysisCache, projectPath, result);
+    res.json(result);
+  } catch (error) {
+    console.error('Error analyzing project:', error);
+    res.status(500).json({ error: 'Failed to analyze project' });
   }
 });
 

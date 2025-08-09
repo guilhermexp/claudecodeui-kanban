@@ -561,8 +561,6 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       
       // Ctrl+V or Cmd+V for paste
       if ((event.ctrlKey || event.metaKey) && event.key === 'v') {
-        event.preventDefault();
-        event.stopPropagation();
         
         // First try to read images from clipboard
         navigator.clipboard.read().then(async (items) => {
@@ -655,6 +653,11 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     });
     
     setIsInitialized(true);
+    
+    // Focus terminal after initialization
+    if (terminal.current) {
+      terminal.current.focus();
+    }
 
     // Handle terminal input
     terminal.current.onData((data) => {
@@ -879,6 +882,13 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
         
         // Reset reconnection attempts on successful connection
         reconnectAttempts.current = 0;
+        
+        // Focus terminal when connected
+        if (terminal.current) {
+          setTimeout(() => {
+            terminal.current.focus();
+          }, 100);
+        }
         
         // Start heartbeat to keep connection alive
         if (heartbeatInterval.current) {
@@ -1130,7 +1140,16 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
 
       {/* Terminal */}
       <div className="flex-1 min-h-0 p-2 md:p-3 pb-2 md:pb-3 overflow-hidden relative">
-        <div ref={terminalRef} className="h-full w-full focus:outline-none" style={{ outline: 'none' }} />
+        <div 
+          ref={terminalRef} 
+          className="h-full w-full focus:outline-none" 
+          style={{ outline: 'none' }}
+          onClick={() => {
+            if (terminal.current) {
+              terminal.current.focus();
+            }
+          }}
+        />
         
         {/* Drag overlay for images */}
         {(isDragActive || isDraggedImageOver) && (

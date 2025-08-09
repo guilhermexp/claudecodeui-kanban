@@ -7,8 +7,7 @@
  */
 export const analyzeProjectFiles = async (projectPath) => {
   try {
-    // This would typically make an API call to the backend
-    // to read and analyze files in the project directory
+    // Call backend analyzer with caching
     const response = await fetch(`/api/projects/analyze?path=${encodeURIComponent(projectPath)}`);
     
     if (response.ok) {
