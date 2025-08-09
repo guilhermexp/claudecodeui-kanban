@@ -21,7 +21,7 @@ import {
   Laptop
 } from 'lucide-react';
 import { getEnhancedProjectAnalysis } from './projectAnalyzer.js';
-import { api } from './api';
+import { api, authenticatedFetch } from './api';
 
 // Technology detection patterns based on files/dependencies
 const TECH_PATTERNS = {
@@ -293,10 +293,17 @@ export const getProjectIcon = async (project, isExpanded = false) => {
       if (res.ok) {
         const data = await res.json();
         if (data?.found && data.url) {
-          return {
-            type: 'image',
-            src: data.url
-          };
+          // Fetch the binary with auth header and create an object URL
+          try {
+            const imgRes = await authenticatedFetch(data.url);
+            if (imgRes.ok) {
+              const blob = await imgRes.blob();
+              const objectUrl = URL.createObjectURL(blob);
+              return { type: 'image', src: objectUrl };
+            }
+          } catch (_) {
+            // ignore
+          }
         }
       }
     } catch (e) {
@@ -306,6 +313,15 @@ export const getProjectIcon = async (project, isExpanded = false) => {
     // 3. Fallback to technology-detected icon
     const techConfig = await detectProjectTechnology(project);
     if (techConfig) {
+      // Use lucide laptop for Mac projects instead of emoji
+      if (techConfig.isMacProject) {
+        return {
+          type: 'lucide',
+          lucideIcon: Laptop,
+          color: '#111827',
+          tech: techConfig
+        };
+      }
       return {
         type: 'emoji',
         icon: techConfig.icon,

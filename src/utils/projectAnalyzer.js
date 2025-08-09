@@ -5,24 +5,23 @@
  * Analyzes project files to better determine technology stack
  * This would ideally be called from the backend to read actual files
  */
+import { authenticatedFetch } from './api';
+
 export const analyzeProjectFiles = async (projectPath) => {
   try {
-    // Call backend analyzer with caching
-    const response = await fetch(`/api/projects/analyze?path=${encodeURIComponent(projectPath)}`);
+    // Call backend analyzer with caching and auth
+    const response = await authenticatedFetch(`/api/projects/analyze?path=${encodeURIComponent(projectPath)}`);
     
     if (response.ok) {
       const contentType = response.headers.get('content-type');
       if (contentType && contentType.includes('application/json')) {
         return await response.json();
       }
-      // If response is not JSON (e.g., HTML 404 page), return null
       return null;
     }
-    
     return null;
   } catch (error) {
-    // Only log if it's not a network error (endpoint doesn't exist yet)
-    if (!error.message.includes('Failed to fetch')) {
+    if (!error.message?.includes('Failed to fetch')) {
       console.warn('Failed to analyze project files:', error);
     }
     return null;

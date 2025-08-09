@@ -116,8 +116,8 @@ ${colors.reset}`);
 
   console.log(`${colors.green}🚀 Iniciando servidores...${colors.reset}\n`);
 
-  // Start the development server with network access
-  const devProcess = spawn('npm', ['run', 'dev:old'], {
+  // Start the smart dev orchestrator with network access
+  const devProcess = spawn('npm', ['run', 'dev'], {
     stdio: 'inherit',
     env,
     shell: true
