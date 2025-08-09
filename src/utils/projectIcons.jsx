@@ -17,9 +17,11 @@ import {
   Package,
   Layers,
   Zap,
-  Command // For Mac/Apple icon
+  Command, // Keyboard Command key
+  Laptop
 } from 'lucide-react';
 import { getEnhancedProjectAnalysis } from './projectAnalyzer.js';
+import { api } from './api';
 
 // Technology detection patterns based on files/dependencies
 const TECH_PATTERNS = {
@@ -143,8 +145,8 @@ const TECH_PATTERNS = {
     files: [],
     patterns: [/^mac$/i, /^macos$/i, /^darwin$/i],
     icon: '🍎',
-    lucideIcon: Command,
-    color: '#000000',
+    lucideIcon: Laptop,
+    color: '#111827',
     isMacProject: true
   },
   vibe: {
@@ -298,8 +300,21 @@ export const getProjectIcon = async (project, isExpanded = false) => {
       };
     }
 
-    // 2. TODO: Future - check for actual logo files in project
-    // This would require a backend endpoint to check file existence
+    // 2. Try to fetch an actual logo from the project (favicon/logo)
+    try {
+      const res = await api.getProjectLogo(encodeURIComponent(project.name));
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.found && data.url) {
+          return {
+            type: 'image',
+            src: data.url
+          };
+        }
+      }
+    } catch (e) {
+      // Ignore network errors and fall back to icons
+    }
     
     // 3. Fallback to default folder icons
     if (isVibeKanbanProject(project)) {
