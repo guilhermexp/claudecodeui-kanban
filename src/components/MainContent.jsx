@@ -189,6 +189,7 @@ function MainContent({
                      activeTab === 'files' ? 'Project Files' : 
                      activeTab === 'git' ? 'Source Control' : 
                      activeTab === 'dashboard' ? 'Usage Dashboard' :
+                     activeTab === 'tasks' ? 'Tasks' :
                      'Project'}
                   </h2>
                   <div className="text-xs truncate">
@@ -266,31 +267,34 @@ function MainContent({
                   <span className="hidden sm:inline">Source Control</span>
                 </span>
               </button>
-              <button
-                onClick={() => {
-                  setIsVibeTaskPanelOpen(!isVibeTaskPanelOpen);
-                  // Close sidebar when opening tasks panel to fit everything on screen
-                  if (!isVibeTaskPanelOpen && sidebarOpen && onSidebarOpen) {
-                    onSidebarOpen(); // This toggles the sidebar
-                  }
-                  // Trigger shell resize after a small delay to allow panel animation
-                  setTimeout(() => {
-                    setShellResizeTrigger(prev => prev + 1);
-                  }, 350);
-                }}
-                className={`relative inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
-                  isVibeTaskPanelOpen
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-                }`}
-              >
+              {/* Tasks button - Only show on desktop */}
+              {!isMobile && (
+                <button
+                  onClick={() => {
+                    setIsVibeTaskPanelOpen(!isVibeTaskPanelOpen);
+                    // Close sidebar when opening tasks panel to fit everything on screen
+                    if (!isVibeTaskPanelOpen && sidebarOpen && onSidebarOpen) {
+                      onSidebarOpen(); // This toggles the sidebar
+                    }
+                    // Trigger shell resize after a small delay to allow panel animation
+                    setTimeout(() => {
+                      setShellResizeTrigger(prev => prev + 1);
+                    }, 350);
+                  }}
+                  className={`relative inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
+                    isVibeTaskPanelOpen
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                  }`}
+                >
                 <span className="flex items-center gap-1 sm:gap-1.5 leading-none">
                   <svg className="w-3 sm:w-3.5 h-3 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
                   </svg>
                   <span className="hidden sm:inline">Tasks</span>
                 </span>
-              </button>
+                </button>
+              )}
               <button
                 onClick={() => setActiveTab('dashboard')}
                 className={`relative inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
@@ -339,16 +343,24 @@ function MainContent({
           <div className={`h-full overflow-hidden ${activeTab === 'dashboard' ? 'block' : 'hidden'} mt-2`}>
             <Dashboard onBack={() => setActiveTab('shell')} />
           </div>
+          {/* Tasks Panel - Only visible on mobile when tasks tab is active */}
+          {isMobile && (
+            <div className={`h-full overflow-hidden ${activeTab === 'tasks' ? 'block' : 'hidden'} mt-2`}>
+              <VibeTaskPanel isVisible={activeTab === 'tasks'} onClose={() => setActiveTab('shell')} isMobile={true} />
+            </div>
+          )}
         </div>
 
-        {/* Vibe Kanban Sliding Panel - Inside content area */}
-        <div 
-          className={`absolute top-0 right-0 h-full w-80 sm:w-96 md:w-[420px] lg:w-[480px] bg-background border-l border-border shadow-xl transform transition-transform duration-300 ease-in-out ${
-            isVibeTaskPanelOpen ? 'translate-x-0' : 'translate-x-full'
-          }`}
-        >
-          <VibeTaskPanel isVisible={isVibeTaskPanelOpen} onClose={() => setIsVibeTaskPanelOpen(false)} />
-        </div>
+        {/* Vibe Kanban Sliding Panel - Only on desktop */}
+        {!isMobile && (
+          <div 
+            className={`absolute top-0 right-0 h-full w-80 sm:w-96 md:w-[420px] lg:w-[480px] bg-background border-l border-border shadow-xl transform transition-transform duration-300 ease-in-out ${
+              isVibeTaskPanelOpen ? 'translate-x-0' : 'translate-x-full'
+            }`}
+          >
+            <VibeTaskPanel isVisible={isVibeTaskPanelOpen} onClose={() => setIsVibeTaskPanelOpen(false)} />
+          </div>
+        )}
       </div>
 
       {/* Code Editor Modal */}

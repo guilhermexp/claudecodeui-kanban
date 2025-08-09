@@ -26,12 +26,12 @@ import MobileNav from './components/MobileNav';
 import ToolsSettings from './components/ToolsSettings';
 import VibeKanbanApp from './components/VibeKanbanApp';
 import SessionKeepAlive from './components/SessionKeepAlive';
+import { FloatingMicMenu } from './components/FloatingMicMenu';
 
 import { useWebSocket } from './utils/websocket';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
-import { useVersionCheck } from './hooks/useVersionCheck';
 import { api } from './utils/api';
 import { authPersistence } from './utils/auth-persistence';
 import { appStatePersistence } from './utils/app-state-persistence';
@@ -41,8 +41,7 @@ function AppContent() {
   const navigate = useNavigate();
   const { sessionId } = useParams();
   
-  const { updateAvailable, latestVersion, currentVersion } = useVersionCheck('siteboon', 'claudecodeui');
-  const [showVersionModal, setShowVersionModal] = useState(false);
+  // Version check removido - não é usado no app
   
   // Load persisted state on mount
   const loadPersistedState = () => {
@@ -553,94 +552,10 @@ function AppContent() {
     }
   };
 
-  // Version Upgrade Modal Component
-  const VersionUpgradeModal = () => {
-    if (!showVersionModal) return null;
-
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center">
-        {/* Backdrop */}
-        <div 
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm"
-          onClick={() => setShowVersionModal(false)}
-        />
-        
-        {/* Modal */}
-        <div className="relative bg-white dark:bg-gray-950 rounded-lg shadow-xl border border-gray-200 dark:border-gray-800 w-full max-w-md mx-4 p-6 space-y-4">
-          {/* Header */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
-                <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
-                </svg>
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Update Available</h2>
-                <p className="text-sm text-gray-500 dark:text-gray-400">A new version is ready</p>
-              </div>
-            </div>
-            <button
-              onClick={() => setShowVersionModal(false)}
-              className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-
-          {/* Version Info */}
-          <div className="space-y-3">
-            <div className="flex justify-between items-center p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Current Version</span>
-              <span className="text-sm text-gray-900 dark:text-white font-mono">{currentVersion}</span>
-            </div>
-            <div className="flex justify-between items-center p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
-              <span className="text-sm font-medium text-blue-700 dark:text-blue-300">Latest Version</span>
-              <span className="text-sm text-blue-900 dark:text-blue-100 font-mono">{latestVersion}</span>
-            </div>
-          </div>
-
-          {/* Upgrade Instructions */}
-          <div className="space-y-3">
-            <h3 className="text-sm font-medium text-gray-900 dark:text-white">How to upgrade:</h3>
-            <div className="bg-gray-100 dark:bg-gray-900 rounded-lg p-3 border">
-              <code className="text-sm text-gray-800 dark:text-gray-200 font-mono">
-                git checkout main && git pull && npm install
-              </code>
-            </div>
-            <p className="text-xs text-gray-600 dark:text-gray-400">
-              Run this command in your Claude Code UI directory to update to the latest version.
-            </p>
-          </div>
-
-          {/* Actions */}
-          <div className="flex gap-2 pt-2">
-            <button
-              onClick={() => setShowVersionModal(false)}
-              className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-md transition-colors"
-            >
-              Later
-            </button>
-            <button
-              onClick={() => {
-                // Copy command to clipboard
-                navigator.clipboard.writeText('git checkout main && git pull && npm install');
-                setShowVersionModal(false);
-              }}
-              className="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
-            >
-              Copy Command
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  };
+  // Version Upgrade Modal removed along with version checking
 
   return (
-    <div className="fixed inset-0 flex bg-background">
+    <div className="fixed inset-x-0 top-0 bottom-0 flex bg-background" style={{ height: '100%' }}>
       {/* Desktop Sidebar - keeps open for Tools Settings */}
       {!isMobile && (sidebarOpen || showToolsSettings) && (
         <div className="w-64 flex-shrink-0 border-r border-border bg-card">
@@ -657,10 +572,6 @@ function AppContent() {
               isLoading={isLoadingProjects}
               onRefresh={handleSidebarRefresh}
               onShowSettings={() => setShowToolsSettings(true)}
-              updateAvailable={updateAvailable}
-              latestVersion={latestVersion}
-              currentVersion={currentVersion}
-              onShowVersionModal={() => setShowVersionModal(true)}
               onSidebarClose={() => setSidebarOpen(false)}
             />
           </div>
@@ -703,10 +614,6 @@ function AppContent() {
               isLoading={isLoadingProjects}
               onRefresh={handleSidebarRefresh}
               onShowSettings={() => setShowToolsSettings(true)}
-              updateAvailable={updateAvailable}
-              latestVersion={latestVersion}
-              currentVersion={currentVersion}
-              onShowVersionModal={() => setShowVersionModal(true)}
               onSidebarClose={() => setSidebarOpen(false)}
             />
           </div>
@@ -747,6 +654,20 @@ function AppContent() {
           isShellConnected={isShellConnected}
         />
       )}
+      
+      {/* Floating Mic Menu for Mobile Shell */}
+      {isMobile && activeTab === 'shell' && !isInputFocused && (
+        <div className="fixed bottom-20 right-4 z-50">
+          <FloatingMicMenu 
+            onTranscript={(text) => {
+              // Send the transcribed text to the terminal via the global handler
+              if (window.sendToActiveTerminal && typeof window.sendToActiveTerminal === 'function') {
+                window.sendToActiveTerminal(text);
+              }
+            }}
+          />
+        </div>
+      )}
 
       {/* Tools Settings Modal */}
       <ToolsSettings
@@ -755,9 +676,6 @@ function AppContent() {
       />
       
 
-      {/* Version Upgrade Modal */}
-      <VersionUpgradeModal />
-      
       {/* Session Keep Alive Component */}
       <SessionKeepAlive />
     </div>

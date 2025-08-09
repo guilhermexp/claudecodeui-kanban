@@ -2,6 +2,38 @@
 @tailwind components;
 @tailwind utilities;
 
+/* iOS PWA Safe Area Support */
+html {
+  height: 100%;
+  height: -webkit-fill-available;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+  min-height: -webkit-fill-available;
+  overflow: hidden;
+}
+
+#root {
+  height: 100%;
+  min-height: 100vh;
+  min-height: -webkit-fill-available;
+  position: relative;
+}
+
+/* Only in PWA mode (standalone), add padding for status bar */
+@supports (padding: env(safe-area-inset-top)) {
+  @media (display-mode: standalone) {
+    #root {
+      padding-top: env(safe-area-inset-top);
+      padding-left: env(safe-area-inset-left);
+      padding-right: env(safe-area-inset-right);
+    }
+  }
+}
+
 /* Hide scrollbar for Chrome, Safari and Opera */
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
@@ -568,7 +600,8 @@
   @media (max-width: 768px) {
     * {
       touch-action: manipulation;
-      -webkit-tap-highlight-color: transparent;
+      /* keep tap highlight off safely */
+      -webkit-tap-highlight-color: rgba(0,0,0,0);
     }
     
     /* Allow vertical scrolling in scroll containers */
@@ -588,7 +621,7 @@
     .clickable,
     a,
     .cursor-pointer {
-      -webkit-tap-highlight-color: transparent;
+      -webkit-tap-highlight-color: rgba(0,0,0,0);
       user-select: none;
       -webkit-user-select: none;
       touch-action: manipulation;
@@ -666,7 +699,7 @@
     
     /* Completely disable hover states on touch devices */
     * {
-      -webkit-tap-highlight-color: transparent !important;
+      -webkit-tap-highlight-color: rgba(0,0,0,0) !important;
     }
     
     /* Preserve checkbox visibility on touch devices */
@@ -924,6 +957,22 @@
   
   .animate-fade-in-subtle {
     animation: fade-in-subtle 0.15s ease-out;
+  }
+  
+  /* Fade in up animation for floating menu */
+  @keyframes fade-in-up {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  .animate-fade-in-up {
+    animation: fade-in-up 0.2s ease-out;
   }
   
   /* Prevent drag flickering in chat interface */
