@@ -473,7 +473,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     // Initialize new terminal with responsive settings
     terminal.current = new Terminal({
       cursorBlink: true,
-      fontSize: isMobile ? 11 : 14,
+      fontSize: isMobile ? 14 : 14,  // Increased mobile font size for better readability
       fontFamily: 'Menlo, Monaco, "Courier New", monospace',
       allowProposedApi: true, // Required for clipboard addon
       allowTransparency: false,
