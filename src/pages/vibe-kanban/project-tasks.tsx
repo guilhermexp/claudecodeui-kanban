@@ -11,7 +11,6 @@ import { ProjectForm } from '../../components/vibe-kanban/projects/project-form'
 import { TaskTemplateManager } from '../../components/vibe-kanban/TaskTemplateManager';
 import { useKeyboardShortcuts } from '../../lib/vibe-kanban/keyboard-shortcuts';
 import { useTaskPlan } from '../../components/vibe-kanban/context/TaskPlanContext';
-import { DiagramViewer } from '../../components/vibe-kanban/DiagramViewer';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -638,9 +637,6 @@ export function ProjectTasks() {
             </div>
           </div>
         )}
-        
-        {/* Diagram Viewer */}
-        <DiagramViewer projectId={projectId} />
       </div>
 
       {/* Right Column - Task Details Panel */}
