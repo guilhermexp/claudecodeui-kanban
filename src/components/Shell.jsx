@@ -100,6 +100,9 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   const reconnectAttempts = useRef(0);
   const maxReconnectAttempts = 5;
   
+  // Track if init command was already sent to prevent duplicates
+  const hasInitialized = useRef(false);
+  
   // Scroll to bottom functionality
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const scrollCheckRef = useRef(null);
@@ -899,6 +902,9 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       // Include token in WebSocket URL as query parameter
       const wsUrl = `${wsBaseUrl}/shell?token=${encodeURIComponent(token)}`;
       
+      // Reset initialization flag before creating new connection
+      hasInitialized.current = false;
+      
       ws.current = new WebSocket(wsUrl);
 
       ws.current.onopen = () => {
@@ -927,17 +933,21 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
             
             // Wait a bit more for fit to complete, then send dimensions
             setTimeout(() => {
-              const initPayload = {
-                type: 'init',
-                projectPath: selectedProject.fullPath || selectedProject.path,
-                sessionId: selectedSession?.id,
-                hasSession: !!selectedSession,
-                cols: terminal.current.cols,
-                rows: terminal.current.rows,
-                bypassPermissions: isBypassingPermissions
-              };
-              
-              ws.current.send(JSON.stringify(initPayload));
+              // Only send init if not already initialized for this connection
+              if (!hasInitialized.current) {
+                const initPayload = {
+                  type: 'init',
+                  projectPath: selectedProject.fullPath || selectedProject.path,
+                  sessionId: selectedSession?.id,
+                  hasSession: !!selectedSession,
+                  cols: terminal.current.cols,
+                  rows: terminal.current.rows,
+                  bypassPermissions: isBypassingPermissions
+                };
+                
+                ws.current.send(JSON.stringify(initPayload));
+                hasInitialized.current = true;
+              }
               
               // Also send resize message immediately after init
               setTimeout(() => {
@@ -1006,6 +1016,9 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       ws.current.onclose = (event) => {
         setIsConnected(false);
         setIsConnecting(false);
+        
+        // Reset initialization flag for next connection
+        hasInitialized.current = false;
         
         // Clear heartbeat interval
         if (heartbeatInterval.current) {

@@ -18,7 +18,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "start": "npm run build && npm run server",
-    "ngrok": "./start-ngrok.sh"
+    "ngrok": "echo 'Deprecated. Use ./start-background-prod.sh'"
   },
   "keywords": [
     "claude",
