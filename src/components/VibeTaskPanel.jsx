@@ -143,7 +143,7 @@ function VibeTaskPanel({ isVisible, onClose }) {
   }
 
   return (
-    <div className="h-full flex flex-col bg-background relative">
+    <div className="h-full flex flex-col bg-background relative max-w-full min-w-0">
       {/* Header */}
       <div className="flex-shrink-0 border-b border-border h-12 md:h-14 px-3 md:px-4 flex items-center">
         <div className="flex items-center justify-between">
@@ -164,7 +164,7 @@ function VibeTaskPanel({ isVisible, onClose }) {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-3 md:p-3 space-y-3">
+      <div className="flex-1 overflow-y-auto p-3 md:p-3 space-y-3 min-w-0">
         {loading && (
           <div className="flex items-center justify-center py-6">
             <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
