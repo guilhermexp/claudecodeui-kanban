@@ -1148,7 +1148,7 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
 
       {/* File List - Changes View - Only show when git is available */}
       {activeView === 'changes' && !gitStatus?.error && (
-        <div className={`flex-1 overflow-y-auto ${isMobile ? 'pb-20' : ''}`}>
+        <div className={`flex-1 overflow-y-auto`}>
           {isLoading ? (
             <div className="flex items-center justify-center h-32">
               <RefreshCw className="w-6 h-6 animate-spin text-muted-foreground" />
@@ -1171,7 +1171,7 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
 
       {/* History View - Only show when git is available */}
       {activeView === 'history' && !gitStatus?.error && (
-        <div className={`flex-1 overflow-y-auto ${isMobile ? 'pb-20' : ''}`}>
+        <div className={`flex-1 overflow-y-auto`}>
           {isLoading ? (
             <div className="flex items-center justify-center h-32">
               <RefreshCw className="w-6 h-6 animate-spin text-muted-foreground" />

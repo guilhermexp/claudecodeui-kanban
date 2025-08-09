@@ -49,9 +49,12 @@ const xtermStyles = `
     }
     
     /* Fix for input helper textarea position on mobile */
-    .xterm .xterm-helper-textarea {
-      bottom: 80px !important; /* Move above mobile navigation */
-      position: fixed !important;
+    @media (max-width: 768px) {
+      .xterm .xterm-helper-textarea {
+        bottom: 80px !important; /* Move above mobile navigation */
+        position: fixed !important;
+        z-index: 10;
+      }
     }
   }
   
@@ -300,8 +303,14 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       };
 
       window.sendToActiveTerminal = (data) => {
-        // Visual echo: frame the message the user is sending to the assistant
-        printFramedMessage(data);
+        // Don't frame control characters like backspace and escape
+        const isControlChar = data.length === 1 && (data.charCodeAt(0) < 32 || data.charCodeAt(0) === 127);
+        
+        if (!isControlChar) {
+          // Visual echo: frame the message the user is sending to the assistant
+          printFramedMessage(data);
+        }
+        
         if (ws.current && ws.current.readyState === WebSocket.OPEN) {
           ws.current.send(JSON.stringify({
             type: 'input',
@@ -552,6 +561,9 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       
       // Ctrl+V or Cmd+V for paste
       if ((event.ctrlKey || event.metaKey) && event.key === 'v') {
+        event.preventDefault();
+        event.stopPropagation();
+        
         // First try to read images from clipboard
         navigator.clipboard.read().then(async (items) => {
           let hasImage = false;
@@ -589,29 +601,36 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
           // If no image found, try to paste text
           if (!hasImage) {
             navigator.clipboard.readText().then(text => {
-              if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+              if (text && ws.current && ws.current.readyState === WebSocket.OPEN) {
                 ws.current.send(JSON.stringify({
                   type: 'input',
                   data: text
                 }));
               }
             }).catch(() => {
-              // Failed to read text
+              // If clipboard API fails, let XTerm handle paste
+              if (terminal.current) {
+                // Trigger native paste behavior
+                const pasteEvent = new Event('paste', { bubbles: true });
+                terminal.current.element.dispatchEvent(pasteEvent);
+              }
             });
           }
         }).catch(() => {
-          // Fallback to text-only paste if clipboard API fails
+          // Fallback: try text-only paste, or let XTerm handle it
           navigator.clipboard.readText().then(text => {
-            if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+            if (text && ws.current && ws.current.readyState === WebSocket.OPEN) {
               ws.current.send(JSON.stringify({
                 type: 'input',
                 data: text
               }));
             }
           }).catch(() => {
-            // Failed to read clipboard
+            // Let XTerm's clipboard addon handle the paste
+            return true;
           });
         });
+        
         return false;
       }
       
@@ -1110,8 +1129,8 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       </div>
 
       {/* Terminal */}
-      <div className="flex-1 min-h-0 p-2 md:p-3 pb-20 md:pb-3 overflow-hidden relative">
-        <div ref={terminalRef} className="h-full w-full focus:outline-none" style={{ outline: 'none' }} tabIndex={-1} />
+      <div className="flex-1 min-h-0 p-2 md:p-3 pb-2 md:pb-3 overflow-hidden relative">
+        <div ref={terminalRef} className="h-full w-full focus:outline-none" style={{ outline: 'none' }} />
         
         {/* Drag overlay for images */}
         {(isDragActive || isDraggedImageOver) && (

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, Loader2, Brain } from 'lucide-react';
+import { Mic, Loader2, Brain, Delete } from 'lucide-react';
 import { transcribeWithWhisper } from '../utils/whisper';
 
 export function MicButton({ onTranscript, className = '', isChat = false, hasChatText = false }) {
@@ -194,7 +194,7 @@ export function MicButton({ onTranscript, className = '', isChat = false, hasCha
       // Delete character from chat input
       window.deleteChatCharacter();
     } else if (!isChat && window.sendToActiveTerminal) {
-      // Send backspace character to terminal
+      // Send DEL character to terminal (standard for terminal delete)
       window.sendToActiveTerminal('\x7f');
     }
   };

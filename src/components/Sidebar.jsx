@@ -707,170 +707,11 @@ function Sidebar({
                 <div key={project.name} className="md:space-y-1">
                   {/* Project Header */}
                   <div className="group">
-                    {/* Unified Project Item (mobile + desktop share same layout) */}
-                    <div className="md:hidden">
-                      <div
-                        className={cn(
-                          "p-3 mx-3 my-1 rounded-lg border border-border active:scale-[0.98] transition-all duration-150 relative",
-                          isVibeKanban(project) && !isSelected && "bg-gray-100 dark:bg-black/30",
-                          !isVibeKanban(project) && !isSelected && "bg-card",
-                          isSelected && "bg-accent",
-                          isStarred && !isSelected && !isVibeKanban(project) && "bg-blue-50/10 dark:bg-blue-950/10",
-                          isStarred && !isSelected && isVibeKanban(project) && "bg-gray-100/50 dark:bg-black/40"
-                        )}
-                        onClick={() => {
-                          // On mobile, just toggle the folder - don't select the project
-                          toggleProject(project.name);
-                        }}
-                        onTouchEnd={handleTouchClick(() => toggleProject(project.name))}
-                      >
-                        {/* Active session indicator for mobile */}
-                        {hasActive && (
-                          <div className="absolute top-2 right-2">
-                            <Loader2 className="h-3 w-3 animate-spin text-green-500" />
-                          </div>
-                        )}
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3 min-w-0 flex-1">
-                            <div className={cn(
-                              "w-8 h-8 rounded-2xl flex items-center justify-center transition-colors",
-                              isExpanded ? "bg-muted" : "bg-muted/50"
-                            )}>
-                              <ProjectIcon 
-                                project={project} 
-                                isExpanded={isExpanded}
-                                size={16}
-                                className={cn(
-                                  "transition-colors",
-                                  isExpanded ? "text-primary" : "text-muted-foreground"
-                                )}
-                              />
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              {editingProject === project.name ? (
-                                <input
-                                  type="text"
-                                  value={editingName}
-                                  onChange={(e) => setEditingName(e.target.value)}
-                                  className="w-full px-3 py-2 text-sm border-2 border-primary/40 focus:border-primary rounded-lg bg-background text-foreground shadow-gray-200/30 dark:shadow-gray-800/30 focus:shadow-primary/20 transition-all duration-200 focus:outline-none"
-                                  placeholder="Project name"
-                                  autoFocus
-                                  autoComplete="off"
-                                  onClick={(e) => e.stopPropagation()}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') saveProjectName(project.name);
-                                    if (e.key === 'Escape') cancelEditing();
-                                  }}
-                                  style={{
-                                    fontSize: '16px', // Prevents zoom on iOS
-                                    WebkitAppearance: 'none',
-                                    borderRadius: '8px'
-                                  }}
-                                />
-                              ) : (
-                                <>
-                                  <h3 className="text-sm font-medium text-foreground truncate">
-                                    {project.displayName}
-                                  </h3>
-                                  <p className="text-xs text-muted-foreground">
-                                    {(() => {
-                                      const sessionCount = getAllSessions(project).length;
-                                      const hasMore = project.sessionMeta?.hasMore !== false;
-                                      const count = hasMore && sessionCount >= 2 ? `${sessionCount}+` : sessionCount;
-                                      return `${count} session${count === 1 ? '' : 's'}`;
-                                    })()}
-                                  </p>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            {editingProject === project.name ? (
-                              <>
-                                <button
-                                  className="w-8 h-8 rounded-lg bg-green-500 dark:bg-green-600 flex items-center justify-center active:scale-90 transition-all duration-150 shadow-green-200/50 dark:shadow-green-800/50 active:shadow-none"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    saveProjectName(project.name);
-                                  }}
-                                >
-                                  <Check className="w-4 h-4 text-white" />
-                                </button>
-                                <button
-                                  className="w-8 h-8 rounded-lg bg-gray-500 dark:bg-gray-600 flex items-center justify-center active:scale-90 transition-all duration-150 shadow-gray-200/50 dark:shadow-gray-800/50 active:shadow-none"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    cancelEditing();
-                                  }}
-                                >
-                                  <X className="w-4 h-4 text-white" />
-                                </button>
-                              </>
-                            ) : (
-                              <>
-                                {/* Star button */}
-                                <button
-                                  className={cn(
-                                    "w-7 h-7 rounded-lg flex items-center justify-center active:scale-90 transition-all duration-150 border",
-                                    isStarred 
-                                      ? "bg-transparent border-blue-400/50 dark:border-blue-500/50" 
-                                      : "bg-transparent border-gray-300/30 dark:border-gray-700/30"
-                                  )}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    toggleStarProject(project.name);
-                                  }}
-                                  onTouchEnd={handleTouchClick(() => toggleStarProject(project.name))}
-                                  title={isStarred ? "Remove from favorites" : "Add to favorites"}
-                                >
-                                  <Star className={cn(
-                                    "w-3 h-3 transition-colors",
-                                    isStarred 
-                                      ? "text-blue-500 dark:text-blue-400 fill-none stroke-2" 
-                                      : "text-gray-500/60 dark:text-gray-500/60 fill-none stroke-1"
-                                  )} />
-                                </button>
-                                {getAllSessions(project).length === 0 && (
-                                  <button
-                                    className="w-8 h-8 rounded-lg bg-red-500/10 dark:bg-red-900/30 flex items-center justify-center active:scale-90 border border-red-200 dark:border-red-800"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      deleteProject(project.name);
-                                    }}
-                                    onTouchEnd={handleTouchClick(() => deleteProject(project.name))}
-                                  >
-                                    <Trash2 className="w-4 h-4 text-red-600 dark:text-red-400" />
-                                  </button>
-                                )}
-                                <button
-                                  className="w-8 h-8 rounded-lg bg-primary/10 dark:bg-primary/20 flex items-center justify-center active:scale-90 border border-primary/20 dark:border-primary/30"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    startEditing(project);
-                                  }}
-                                  onTouchEnd={handleTouchClick(() => startEditing(project))}
-                                >
-                                  <Edit3 className="w-4 h-4 text-primary" />
-                                </button>
-                                <div className="w-6 h-6 rounded-md bg-muted/30 flex items-center justify-center">
-                                  {isExpanded ? (
-                                    <ChevronDown className="w-3 h-3 text-muted-foreground" />
-                                  ) : (
-                                    <ChevronRight className="w-3 h-3 text-muted-foreground" />
-                                  )}
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    {/* Desktop/Tablet Project Item */}
+                    {/* Single Project Item (mobile + desktop unified) */}
                     <Button
                       variant="ghost"
                       className={cn(
-                        "hidden md:flex w-full justify-between px-3 py-2 h-auto font-normal hover:text-accent-foreground relative rounded-lg",
+                        "flex w-full justify-between px-3 py-2 h-auto font-normal hover:text-accent-foreground relative rounded-lg",
                         isSelected ? "bg-accent text-accent-foreground" : "hover:bg-accent"
                       )}
                       onClick={() => toggleProject(project.name)}
@@ -1051,70 +892,8 @@ function Sidebar({
                           
                           return (
                           <div key={session.id} className="group relative">
-                            {/* Mobile Session Item */}
-                            <div className="md:hidden">
-                              <div
-                                className={cn(
-                                  "p-1 mx-3 my-0.5 rounded-sm bg-transparent hover:bg-card/30 border-0 hover:border active:scale-[0.98] transition-all duration-150 relative",
-                                  selectedSession?.id === session.id ? "bg-primary/5 border-primary/20 shadow-primary/5" :
-                                  isActive ? "border-green-500/30 bg-green-50/5 dark:bg-green-900/5 shadow-green-200/20 dark:shadow-green-800/20" : "border-border/30 hover:shadow-gray-200/30 dark:hover:shadow-gray-800/30"
-                                )}
-                                onClick={() => {
-                                  onProjectSelect(project);
-                                  onSessionSelect(session);
-                                }}
-                                onTouchEnd={handleTouchClick(() => {
-                                  onProjectSelect(project);
-                                  onSessionSelect(session);
-                                })}
-                              >
-                                <div className="flex items-center gap-1.5">
-                                  <div className={cn(
-                                    "w-3 h-3 rounded-sm flex items-center justify-center flex-shrink-0",
-                                    selectedSession?.id === session.id ? "bg-primary/10" : "bg-muted/30"
-                                  )}>
-                                    <MessageSquare className={cn(
-                                      "w-2 h-2",
-                                      selectedSession?.id === session.id ? "text-primary" : "text-muted-foreground"
-                                    )} />
-                                  </div>
-                                  <div className="min-w-0 flex-1">
-                                    <div className="text-xs font-normal truncate text-muted-foreground leading-tight">
-                                      {session.summary || 'New Session'}
-                                    </div>
-                                    <div className="flex items-center gap-1 mt-0.5">
-                                      <Clock className="w-2 h-2 text-muted-foreground/70" />
-                                      <span className="text-xs text-muted-foreground/70 leading-none">
-                                        {formatTimeAgo(session.lastActivity, currentTime)}
-                                      </span>
-                                      {/* Active session indicator */}
-                                      {isActive && (
-                                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse ml-1" />
-                                      )}
-                                      {session.messageCount > 0 && (
-                                        <Badge variant="secondary" className="text-xs px-1 py-0 ml-auto opacity-60">
-                                          {session.messageCount}
-                                        </Badge>
-                                      )}
-                                      {/* Mobile delete button na mesma linha */}
-                                      <div
-                                        className="w-4 h-4 rounded-sm bg-red-50/50 dark:bg-red-900/10 flex items-center justify-center active:scale-95 transition-transform opacity-60 ml-1 cursor-pointer"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          deleteSession(project.name, session.id);
-                                        }}
-                                        onTouchEnd={handleTouchClick(() => deleteSession(project.name, session.id))}
-                                      >
-                                        <Trash2 className="w-2 h-2 text-red-600/70 dark:text-red-400/70" />
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                            
-                            {/* Desktop Session Item */}
-                            <div className="hidden md:block relative">
+                            {/* Unified Session Item (mobile + desktop) */}
+                            <div className="block relative">
                               <div
                                 className={cn(
                                   "w-full px-3 py-1.5 rounded-md cursor-pointer hover:bg-accent/30 transition-colors duration-200 group",
@@ -1261,27 +1040,15 @@ function Sidebar({
                         );
                       })()}
                       
-                      {/* New Session Button */}
-                      <div className="md:hidden px-3 pb-2">
-                        <Button
-                          variant="default"
-                          size="sm"
-                          className="w-full h-8 text-xs"
-                          onClick={() => {
-                            onProjectSelect(project);
-                            onNewSession(project);
-                          }}
-                        >
-                          <Plus className="w-3 h-3" />
-                          New Session
-                        </Button>
-                      </div>
-                      
+                      {/* New Session Button (unified) */}
                       <Button
                         variant="default"
                         size="sm"
-                        className="hidden md:flex w-full justify-start gap-2 mt-2 h-8 text-sm"
-                        onClick={() => onNewSession(project)}
+                        className="w-full justify-start gap-2 mt-2 h-10 md:h-8 text-sm"
+                        onClick={() => {
+                          onProjectSelect(project);
+                          onNewSession(project);
+                        }}
                       >
                         <Plus className="w-3 h-3" />
                         New Session
