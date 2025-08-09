@@ -715,7 +715,11 @@ function Sidebar({
                         isSelected ? "bg-accent text-accent-foreground" : "hover:bg-accent"
                       )}
                       onClick={() => toggleProject(project.name)}
-                      onTouchEnd={handleTouchClick(() => toggleProject(project.name))}
+                      onTouchStart={(e) => { e.currentTarget.style.transform = 'scale(0.98)'; }}
+                      onTouchEnd={handleTouchClick(() => { toggleProject(project.name); })}
+                      onTouchCancel={(e) => { e.currentTarget.style.transform = ''; }}
+                      onMouseDown={(e) => { if (!window.matchMedia('(hover:hover)').matches) e.currentTarget.style.transform = 'scale(0.99)'; }}
+                      onMouseUp={(e) => { e.currentTarget.style.transform = ''; }}
                     >
                       {/* Active session indicator for desktop */}
                       {hasActive && (
@@ -723,7 +727,7 @@ function Sidebar({
                           <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
                         </div>
                       )}
-                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className="flex items-center gap-3 min-w-0 flex-1 transition-transform duration-150 will-change-transform">
                         <ProjectIcon 
                           project={project} 
                           isExpanded={isExpanded}
@@ -755,7 +759,7 @@ function Sidebar({
                           ) : (
                             <div className="flex items-center gap-2 min-w-0">
                               <div className="min-w-0 flex-1">
-                                <div className="text-sm font-semibold truncate text-foreground" title={project.displayName}>
+                                <div className="text-sm font-semibold truncate text-foreground select-none" title={project.displayName}>
                                   {project.displayName}
                                 </div>
                                 <div className="text-[11px] text-muted-foreground flex items-center gap-1">

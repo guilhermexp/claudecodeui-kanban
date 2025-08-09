@@ -300,6 +300,26 @@ app.get('/api/projects/:projectName/logo', authenticateToken, async (req, res) =
     const cached = getCached(projectLogoCache, projectDir);
     if (cached) return res.json(cached);
 
+    // Check for persistent cached icon inside project directory
+    const cacheDir = path.join(projectDir, '.claude-ui');
+    const cachedIcons = [
+      'project-icon.svg',
+      'project-icon.png',
+      'project-icon.jpg',
+      'project-icon.jpeg',
+      'project-icon.ico'
+    ];
+    for (const name of cachedIcons) {
+      const p = path.join(cacheDir, name);
+      try {
+        await fsPromises.access(p);
+        const url = `/api/projects/${encodeURIComponent(req.params.projectName)}/files/content?path=${encodeURIComponent(p)}`;
+        const result = { found: true, url, path: p, mimeType: mime.lookup(p) || 'application/octet-stream', relativePath: path.relative(projectDir, p), persisted: true };
+        setCached(projectLogoCache, projectDir, result);
+        return res.json(result);
+      } catch (_) {}
+    }
+
     // Candidate logo paths relative to project root
     const candidates = [
       'logo.svg', 'logo.png', 'logo.jpg', 'logo.jpeg',
@@ -315,10 +335,29 @@ app.get('/api/projects/:projectName/logo', authenticateToken, async (req, res) =
       try {
         await fsPromises.access(absPath);
         const mimeType = mime.lookup(absPath) || 'application/octet-stream';
-        const url = `/api/projects/${encodeURIComponent(req.params.projectName)}/files/content?path=${encodeURIComponent(absPath)}`;
-        const result = { found: true, url, path: absPath, mimeType, relativePath: rel };
-        setCached(projectLogoCache, projectDir, result);
-        return res.json(result);
+
+        // Persist a copy inside project to avoid future scans
+        try {
+          await fsPromises.mkdir(cacheDir, { recursive: true });
+          const ext = path.extname(absPath) || '.png';
+          const cachedCopy = path.join(cacheDir, `project-icon${ext}`);
+          // Only copy if not exists
+          try {
+            await fsPromises.access(cachedCopy);
+          } catch (_) {
+            await fsPromises.copyFile(absPath, cachedCopy);
+          }
+          const url = `/api/projects/${encodeURIComponent(req.params.projectName)}/files/content?path=${encodeURIComponent(cachedCopy)}`;
+          const result = { found: true, url, path: cachedCopy, mimeType: mime.lookup(cachedCopy) || mimeType, relativePath: path.relative(projectDir, cachedCopy), persisted: true };
+          setCached(projectLogoCache, projectDir, result);
+          return res.json(result);
+        } catch (copyError) {
+          // Fall back to serving original if copy fails
+          const url = `/api/projects/${encodeURIComponent(req.params.projectName)}/files/content?path=${encodeURIComponent(absPath)}`;
+          const result = { found: true, url, path: absPath, mimeType, relativePath: rel, persisted: false };
+          setCached(projectLogoCache, projectDir, result);
+          return res.json(result);
+        }
       } catch (e) {
         // continue
       }
