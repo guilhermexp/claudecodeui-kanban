@@ -40,20 +40,16 @@ export function MicButton({ onTranscript, className = '', isChat = false, hasCha
 
   // Start recording
   const startRecording = async () => {
-    console.log('startRecording called, current state:', state);
     try {
       setError(null);
       chunksRef.current = [];
 
       // Check if getUserMedia is available
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        console.error('getUserMedia not available');
         throw new Error('Microphone access not available. Please use HTTPS or a supported browser.');
       }
 
-      console.log('Requesting microphone permission...');
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      console.log('Microphone stream obtained');
       streamRef.current = stream;
 
       const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4';
@@ -99,8 +95,7 @@ export function MicButton({ onTranscript, className = '', isChat = false, hasCha
             setShowChatButtons(true);
           }
         } catch (err) {
-          console.error('Transcription error:', err);
-          // Check for API key error
+            // Check for API key error
           if (err.message && err.message.includes('API key')) {
             setError('OpenAI API key não configurada. Configure OPENAI_API_KEY no servidor.');
           } else {
@@ -115,11 +110,9 @@ export function MicButton({ onTranscript, className = '', isChat = false, hasCha
       };
 
       recorder.start();
-      console.log('Recorder started, setting state to recording');
       setState('recording');
 
     } catch (err) {
-      console.error('Failed to start recording:', err);
       
       // Provide specific error messages based on error type
       let errorMessage = 'Microphone access failed';
@@ -139,7 +132,6 @@ export function MicButton({ onTranscript, className = '', isChat = false, hasCha
         errorMessage = err.message;
       }
       
-      console.error('Error details:', { name: err.name, message: err.message });
       setError(errorMessage);
       setState('idle');
     }
@@ -172,7 +164,6 @@ export function MicButton({ onTranscript, className = '', isChat = false, hasCha
     
     // Don't proceed if microphone is not supported
     if (!isSupported) {
-      console.error('Microphone not supported');
       setError('Microphone not supported in this browser');
       return;
     }
@@ -180,21 +171,16 @@ export function MicButton({ onTranscript, className = '', isChat = false, hasCha
     // Debounce for mobile double-tap issue
     const now = Date.now();
     if (now - lastTapRef.current < 300) {
-      console.log('Debounce: Too quick, ignoring click');
       return;
     }
     lastTapRef.current = now;
     
-    console.log('MicButton clicked, current state:', state);
 
     if (state === 'idle') {
-      console.log('Starting recording...');
       startRecording();
     } else if (state === 'recording') {
-      console.log('Stopping recording...');
       stopRecording();
     } else {
-      console.log('State is', state, '- ignoring click');
     }
   };
 
