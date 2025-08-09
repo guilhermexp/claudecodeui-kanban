@@ -317,7 +317,7 @@ function MainContent({
       <div className="flex-1 min-h-0 flex relative">
         {/* Content Area - Shrinks when Tasks panel is open */}
         <div className={`flex-1 min-h-0 flex flex-col transition-all duration-300 px-2 md:px-4 ${
-          isVibeTaskPanelOpen ? 'md:mr-[420px] lg:mr-[480px]' : ''
+          isVibeTaskPanelOpen ? 'mr-80 sm:mr-96 md:mr-[420px] lg:mr-[480px]' : ''
         }`}>
           <div className={`h-full overflow-hidden ${activeTab === 'files' ? 'block' : 'hidden'} mt-2`}>
             <FileTree selectedProject={selectedProject} />

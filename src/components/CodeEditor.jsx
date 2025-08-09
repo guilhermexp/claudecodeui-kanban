@@ -407,13 +407,10 @@ function CodeEditor({ file, onClose, projectPath, inline = false }) {
 
   return (
     <div className={`fixed inset-0 z-50 ${
-      // Mobile: native fullscreen, Desktop: modal with backdrop
       'md:bg-black/50 md:flex md:items-center md:justify-center md:p-4'
     } ${isFullscreen ? 'md:p-0' : ''}`}>
-      <div className={`bg-white shadow-2xl flex flex-col ${
-        // Mobile: always fullscreen, Desktop: modal sizing
-        'w-full h-full md:rounded-lg md:shadow-2xl' +
-        (isFullscreen ? ' md:w-full md:h-full md:rounded-none' : ' md:w-full md:max-w-6xl md:h-[80vh] md:max-h-[80vh]')
+      <div className={`bg-white shadow-2xl flex flex-col w-full h-full md:rounded-lg md:shadow-2xl ${
+        isFullscreen ? '' : 'md:max-w-[min(96vw,1200px)] md:h-[85vh] md:max-h-[85vh]'
       }`}>
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200 flex-shrink-0 min-w-0">

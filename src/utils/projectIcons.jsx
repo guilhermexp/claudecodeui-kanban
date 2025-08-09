@@ -17,8 +17,7 @@ import {
   Package,
   Layers,
   Zap,
-  Command, // Keyboard Command key
-  Laptop
+  Command // Keyboard Command key
 } from 'lucide-react';
 import { getEnhancedProjectAnalysis } from './projectAnalyzer.js';
 import { api, authenticatedFetch } from './api';
@@ -145,7 +144,7 @@ const TECH_PATTERNS = {
     files: [],
     patterns: [/^mac$/i, /^macos$/i, /^darwin$/i],
     icon: '🍎',
-    lucideIcon: Laptop,
+    lucideIcon: null,
     color: '#111827',
     isMacProject: true
   },
@@ -313,13 +312,9 @@ export const getProjectIcon = async (project, isExpanded = false) => {
     // 3. Fallback to technology-detected icon
     const techConfig = await detectProjectTechnology(project);
     if (techConfig) {
-      // Use lucide laptop for Mac projects instead of emoji
       if (techConfig.isMacProject) {
         return {
-          type: 'lucide',
-          lucideIcon: Laptop,
-          color: '#111827',
-          tech: techConfig
+          type: 'mac-apple'
         };
       }
       return {
@@ -404,6 +399,18 @@ export const ProjectIcon = ({ project, isExpanded = false, size = 16, className 
           height: size,
           objectFit: 'contain'
         }}
+      />
+    );
+  }
+  
+  // Mac special-case: render bundled Apple logo SVG
+  if (iconConfig.type === 'mac-apple') {
+    return (
+      <img
+        src="/icons/apple-logo.svg"
+        alt="Apple"
+        className={className}
+        style={{ width: size * 1.2, height: size * 1.2, objectFit: 'contain' }}
       />
     );
   }
