@@ -278,31 +278,18 @@ export const isVibeKanbanProject = (project) => {
  */
 export const getProjectIcon = async (project, isExpanded = false) => {
   try {
-    // 1. Try to detect technology first
-    const techConfig = await detectProjectTechnology(project);
-    
-    if (techConfig) {
-      // Prefer Trello icon for Vibe Kanban projects instead of emoji clipboard
-      if (techConfig.isVibeProject || isVibeKanbanProject(project)) {
-        return {
-          type: 'lucide',
-          lucideIcon: Trello,
-          color: '#0079BF',
-          tech: techConfig
-        };
-      }
+    // 1. Special case: Vibe Kanban always uses Trello icon
+    if (isVibeKanbanProject(project)) {
       return {
-        type: 'emoji',
-        icon: techConfig.icon,
-        lucideIcon: techConfig.lucideIcon,
-        color: techConfig.color,
-        tech: techConfig
+        type: 'lucide',
+        lucideIcon: Trello,
+        color: '#0079BF'
       };
     }
 
-    // 2. Try to fetch an actual logo from the project (favicon/logo)
+    // 2. Prefer real project logo (favicon/logo) when available
     try {
-      const res = await api.getProjectLogo(encodeURIComponent(project.name));
+      const res = await api.getProjectLogo(project.name);
       if (res.ok) {
         const data = await res.json();
         if (data?.found && data.url) {
@@ -316,15 +303,19 @@ export const getProjectIcon = async (project, isExpanded = false) => {
       // Ignore network errors and fall back to icons
     }
     
-    // 3. Fallback to default folder icons
-    if (isVibeKanbanProject(project)) {
+    // 3. Fallback to technology-detected icon
+    const techConfig = await detectProjectTechnology(project);
+    if (techConfig) {
       return {
-        type: 'lucide',
-        lucideIcon: Trello,
-        color: '#0079BF'
+        type: 'emoji',
+        icon: techConfig.icon,
+        lucideIcon: techConfig.lucideIcon,
+        color: techConfig.color,
+        tech: techConfig
       };
     }
     
+    // 4. Final fallback to folder icons
     return {
       type: 'lucide',
       lucideIcon: isExpanded ? FolderOpen : Folder,

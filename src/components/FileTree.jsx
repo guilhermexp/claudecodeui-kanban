@@ -373,7 +373,7 @@ function FileTree({ selectedProject }) {
     <div className="h-full flex bg-card rounded-xl border border-border overflow-hidden">
       {/* Files List */}
       <div className={`flex flex-col transition-all duration-300 ease-in-out ${
-        showFilePanel && (selectedFile || selectedImage) ? 'hidden md:block md:w-[40%] lg:w-[35%]' : 'w-full'
+        showFilePanel ? 'hidden md:flex md:w-[40%] lg:w-[35%]' : 'flex-1'
       }`}>
       {/* View Mode Toggle */}
       <div className="py-3 px-3 md:px-4 border-b border-border flex items-center justify-between">
@@ -443,8 +443,9 @@ function FileTree({ selectedProject }) {
       </div>
       
       {/* File Viewer Panel - Integrated Side Panel */}
-      {showFilePanel && (selectedFile || selectedImage) && (
-        <div className="flex-1 md:border-l border-border bg-background overflow-hidden transition-all duration-300 ease-in-out">
+      <div className={`md:border-l border-border bg-background overflow-hidden transition-all duration-300 ease-in-out ${
+        showFilePanel && (selectedFile || selectedImage) ? 'flex-1 opacity-100' : 'w-0 opacity-0 md:w-0'
+      }`}>
           {selectedFile && (
             <div className="h-full flex flex-col">
               {/* File Header */}
@@ -537,8 +538,7 @@ function FileTree({ selectedProject }) {
               </div>
             </div>
           )}
-        </div>
-      )}
+      </div>
     </div>
   );
 }
