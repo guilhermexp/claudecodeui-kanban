@@ -280,6 +280,15 @@ export const getProjectIcon = async (project, isExpanded = false) => {
     const techConfig = await detectProjectTechnology(project);
     
     if (techConfig) {
+      // Prefer Trello icon for Vibe Kanban projects instead of emoji clipboard
+      if (techConfig.isVibeProject || isVibeKanbanProject(project)) {
+        return {
+          type: 'lucide',
+          lucideIcon: Trello,
+          color: '#0079BF',
+          tech: techConfig
+        };
+      }
       return {
         type: 'emoji',
         icon: techConfig.icon,

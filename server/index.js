@@ -19,6 +19,7 @@ try {
     }
   });
 } catch (e) {
+  // .env file is optional
 }
 
 

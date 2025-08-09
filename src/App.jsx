@@ -714,7 +714,7 @@ function AppContent() {
       )}
 
       {/* Main Content Area - Flexible */}
-      <div className="flex-1 flex flex-col min-w-0 relative">
+      <div className={`flex-1 flex flex-col min-w-0 relative ${isMobile ? 'pb-14' : ''}`}>
         <MainContent
           selectedProject={selectedProject}
           selectedSession={selectedSession}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ScrollArea } from './ui/scroll-area';
 import { Button } from './ui/button';
 import { Folder, FolderOpen, File, FileText, FileCode, List, TableProperties, Eye } from 'lucide-react';
@@ -16,11 +16,23 @@ function FileTree({ selectedProject }) {
   const [selectedImage, setSelectedImage] = useState(null);
   const [viewMode, setViewMode] = useState('detailed'); // 'simple', 'detailed', 'compact'
   const [showFilePanel, setShowFilePanel] = useState(false);
+  const fetchTimeoutRef = useRef(null);
 
   useEffect(() => {
     if (selectedProject) {
-      fetchFiles();
+      // Debounce fetchFiles to avoid multiple calls
+      if (fetchTimeoutRef.current) {
+        clearTimeout(fetchTimeoutRef.current);
+      }
+      fetchTimeoutRef.current = setTimeout(() => {
+        fetchFiles();
+      }, 100);
     }
+    return () => {
+      if (fetchTimeoutRef.current) {
+        clearTimeout(fetchTimeoutRef.current);
+      }
+    };
   }, [selectedProject]);
 
   // Load view mode preference from localStorage
@@ -39,16 +51,54 @@ function FileTree({ selectedProject }) {
       
       if (!response.ok) {
         const errorText = await response.text();
-        // Error: '❌ File fetch failed:', response.status, errorText
-        setFiles([]);
+        console.error('❌ File fetch failed:', response.status, errorText);
+        
+        // Try to parse error as JSON for better error message
+        let errorMessage = 'Failed to load files';
+        try {
+          const errorData = JSON.parse(errorText);
+          if (errorData.error) {
+            errorMessage = errorData.error;
+          }
+        } catch (e) {
+          // Use raw error text if not JSON
+          errorMessage = errorText;
+        }
+        
+        // Show user-friendly error for inaccessible projects
+        if (response.status === 404) {
+          if (errorMessage.includes('not found')) {
+            errorMessage = 'Project directory not accessible from current session';
+          }
+        }
+        
+        setFiles([{ 
+          name: '⚠️ Error', 
+          type: 'error',
+          path: '__error__',
+          children: [{ 
+            name: errorMessage, 
+            type: 'error-message',
+            path: '__error_message__'
+          }] 
+        }]);
         return;
       }
       
       const data = await response.json();
       setFiles(data);
     } catch (error) {
-      // Error: '❌ Error fetching files:', error
-      setFiles([]);
+      console.error('❌ Error fetching files:', error);
+      setFiles([{ 
+        name: '⚠️ Connection Error', 
+        type: 'error',
+        path: '__connection_error__',
+        children: [{ 
+          name: 'Unable to connect to server', 
+          type: 'error-message',
+          path: '__connection_error_message__'
+        }] 
+      }]);
     } finally {
       setLoading(false);
     }
@@ -79,11 +129,20 @@ function FileTree({ selectedProject }) {
         <Button
           variant="ghost"
           className={cn(
-            "w-full justify-start p-2 h-auto font-normal text-left hover:bg-accent",
+            "w-full justify-start p-2 md:p-2 h-auto font-normal text-left hover:bg-accent",
+            "touch-manipulation active:bg-accent/80 min-h-[44px] md:min-h-0",
           )}
           style={{ paddingLeft: `${level * 16 + 12}px` }}
-          onClick={() => {
-            if (item.type === 'directory') {
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (item.type === 'error-message') {
+              // Don't do anything for error messages
+              return;
+            } else if (item.type === 'error') {
+              // Allow expanding error items to show details
+              toggleDirectory(item.path);
+            } else if (item.type === 'directory') {
               toggleDirectory(item.path);
             } else if (isImageFile(item.name)) {
               // Open image in viewer
@@ -93,6 +152,7 @@ function FileTree({ selectedProject }) {
                 projectPath: selectedProject.path,
                 projectName: selectedProject.name
               });
+              setShowFilePanel(true);
             } else {
               // Open file in editor
               setSelectedFile({
@@ -101,11 +161,16 @@ function FileTree({ selectedProject }) {
                 projectPath: selectedProject.path,
                 projectName: selectedProject.name
               });
+              setShowFilePanel(true);
             }
           }}
         >
           <div className="flex items-center gap-2 min-w-0 w-full">
-            {item.type === 'directory' ? (
+            {item.type === 'error' ? (
+              <span className="w-4 h-4 text-red-500 flex-shrink-0">⚠️</span>
+            ) : item.type === 'error-message' ? (
+              <span className="w-4 h-4 text-orange-500 flex-shrink-0">•</span>
+            ) : item.type === 'directory' ? (
               expandedDirs.has(item.path) ? (
                 <FolderOpen className="w-4 h-4 text-blue-500 flex-shrink-0" />
               ) : (
@@ -114,13 +179,18 @@ function FileTree({ selectedProject }) {
             ) : (
               getFileIcon(item.name)
             )}
-            <span className="text-sm truncate text-foreground">
+            <span className={cn(
+              "text-sm truncate",
+              item.type === 'error' ? "text-red-500 font-medium" :
+              item.type === 'error-message' ? "text-orange-400 text-xs" :
+              "text-foreground"
+            )}>
               {item.name}
             </span>
           </div>
         </Button>
         
-        {item.type === 'directory' && 
+        {(item.type === 'directory' || item.type === 'error') && 
          expandedDirs.has(item.path) && 
          item.children && 
          item.children.length > 0 && (
@@ -163,9 +233,12 @@ function FileTree({ selectedProject }) {
         <div
           className={cn(
             "grid grid-cols-12 gap-2 p-2 hover:bg-accent cursor-pointer items-center",
+            "touch-manipulation active:bg-accent/80 min-h-[44px] md:min-h-0",
           )}
           style={{ paddingLeft: `${level * 16 + 12}px` }}
-          onClick={() => {
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
             if (item.type === 'directory') {
               toggleDirectory(item.path);
             } else if (isImageFile(item.name)) {
@@ -175,7 +248,7 @@ function FileTree({ selectedProject }) {
                 projectPath: selectedProject.path,
                 projectName: selectedProject.name
               });
-              setTimeout(() => setShowFilePanel(true), 10);
+              setShowFilePanel(true);
             } else {
               setSelectedFile({
                 name: item.name,
@@ -183,7 +256,7 @@ function FileTree({ selectedProject }) {
                 projectPath: selectedProject.path,
                 projectName: selectedProject.name
               });
-              setTimeout(() => setShowFilePanel(true), 10);
+              setShowFilePanel(true);
             }
           }}
         >
@@ -227,9 +300,12 @@ function FileTree({ selectedProject }) {
         <div
           className={cn(
             "flex items-center justify-between p-2 hover:bg-accent cursor-pointer",
+            "touch-manipulation active:bg-accent/80 min-h-[44px] md:min-h-0",
           )}
           style={{ paddingLeft: `${level * 16 + 12}px` }}
-          onClick={() => {
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
             if (item.type === 'directory') {
               toggleDirectory(item.path);
             } else if (isImageFile(item.name)) {
@@ -239,7 +315,7 @@ function FileTree({ selectedProject }) {
                 projectPath: selectedProject.path,
                 projectName: selectedProject.name
               });
-              setTimeout(() => setShowFilePanel(true), 10);
+              setShowFilePanel(true);
             } else {
               setSelectedFile({
                 name: item.name,
@@ -247,7 +323,7 @@ function FileTree({ selectedProject }) {
                 projectPath: selectedProject.path,
                 projectName: selectedProject.name
               });
-              setTimeout(() => setShowFilePanel(true), 10);
+              setShowFilePanel(true);
             }
           }}
         >
@@ -296,8 +372,8 @@ function FileTree({ selectedProject }) {
   return (
     <div className="h-full flex bg-card rounded-xl border border-border overflow-hidden">
       {/* Files List */}
-      <div className={`flex flex-col transition-all duration-500 ease-in-out ${
-        showFilePanel ? 'w-full md:w-[40%] lg:w-[35%]' : 'flex-1'
+      <div className={`flex flex-col transition-all duration-300 ease-in-out ${
+        showFilePanel ? 'hidden md:flex md:w-[40%] lg:w-[35%]' : 'flex-1'
       }`}>
       {/* View Mode Toggle */}
       <div className="py-3 px-3 md:px-4 border-b border-border flex items-center justify-between">
@@ -367,25 +443,35 @@ function FileTree({ selectedProject }) {
       </div>
       
       {/* File Viewer Panel - Integrated Side Panel */}
-      <div className={`border-l border-border bg-background overflow-hidden transition-all duration-500 ease-in-out ${
-        showFilePanel && (selectedFile || selectedImage) ? 'flex-1 opacity-100' : 'w-0 opacity-0'
+      <div className={`md:border-l border-border bg-background overflow-hidden transition-all duration-300 ease-in-out ${
+        showFilePanel && (selectedFile || selectedImage) ? 'flex-1 opacity-100' : 'w-0 opacity-0 md:w-0'
       }`}>
           {selectedFile && (
             <div className="h-full flex flex-col">
               {/* File Header */}
               <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-muted/30">
                 <div className="flex items-center gap-2 min-w-0">
+                  {/* Back button for mobile */}
+                  <button
+                    onClick={() => {
+                      setShowFilePanel(false);
+                      setSelectedFile(null);
+                    }}
+                    className="p-1 hover:bg-accent rounded md:hidden"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                  </button>
                   {getFileIcon(selectedFile.name)}
                   <span className="text-sm font-medium truncate">{selectedFile.name}</span>
                 </div>
                 <button
                   onClick={() => {
                     setShowFilePanel(false);
-                    setTimeout(() => {
-                      setSelectedFile(null);
-                    }, 500);
+                    setSelectedFile(null);
                   }}
-                  className="p-1 hover:bg-accent rounded"
+                  className="p-1 hover:bg-accent rounded hidden md:block"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -412,17 +498,27 @@ function FileTree({ selectedProject }) {
               {/* Image Header */}
               <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-muted/30">
                 <div className="flex items-center gap-2 min-w-0">
+                  {/* Back button for mobile */}
+                  <button
+                    onClick={() => {
+                      setShowFilePanel(false);
+                      setSelectedImage(null);
+                    }}
+                    className="p-1 hover:bg-accent rounded md:hidden"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                  </button>
                   {getFileIcon(selectedImage.name)}
                   <span className="text-sm font-medium truncate">{selectedImage.name}</span>
                 </div>
                 <button
                   onClick={() => {
                     setShowFilePanel(false);
-                    setTimeout(() => {
-                      setSelectedImage(null);
-                    }, 500);
+                    setSelectedImage(null);
                   }}
-                  className="p-1 hover:bg-accent rounded"
+                  className="p-1 hover:bg-accent rounded hidden md:block"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
