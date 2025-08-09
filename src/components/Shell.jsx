@@ -668,26 +668,42 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
 
     // Add resize observer to handle container size changes with debouncing
     let resizeTimeout = null;
-    const resizeObserver = new ResizeObserver(() => {
-      if (fitAddon.current && terminal.current) {
-        // Immediate fit for visual responsiveness
-        fitAddon.current.fit();
+    let lastWidth = 0;
+    let lastHeight = 0;
+    
+    const resizeObserver = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      
+      const { width, height } = entry.contentRect;
+      
+      // Only resize if dimensions actually changed (avoid unnecessary resizes)
+      if (Math.abs(width - lastWidth) > 1 || Math.abs(height - lastHeight) > 1) {
+        lastWidth = width;
+        lastHeight = height;
         
-        // Debounce the backend notification to avoid flooding
-        if (resizeTimeout) {
-          clearTimeout(resizeTimeout);
-        }
-        
-        resizeTimeout = setTimeout(() => {
-          // Send updated terminal size to backend after resize
-          if (ws.current && ws.current.readyState === WebSocket.OPEN && terminal.current) {
-            ws.current.send(JSON.stringify({
-              type: 'resize',
-              cols: terminal.current.cols,
-              rows: terminal.current.rows
-            }));
+        if (fitAddon.current && terminal.current) {
+          // Clear any pending resize
+          if (resizeTimeout) {
+            clearTimeout(resizeTimeout);
           }
-        }, 100);
+          
+          // Debounce the resize to avoid too frequent updates
+          resizeTimeout = setTimeout(() => {
+            if (fitAddon.current && terminal.current) {
+              fitAddon.current.fit();
+              
+              // Send updated terminal size to backend after resize
+              if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+                ws.current.send(JSON.stringify({
+                  type: 'resize',
+                  cols: terminal.current.cols,
+                  rows: terminal.current.rows
+                }));
+              }
+            }
+          }, 150); // Slightly increased debounce time
+        }
       }
     });
 
@@ -812,23 +828,35 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   useEffect(() => {
     if (!isInitialized || !fitAddon.current || !terminal.current) return;
     
-    // Force terminal resize when trigger changes
-    requestAnimationFrame(() => {
-      if (fitAddon.current && terminal.current) {
-        fitAddon.current.fit();
-        
-        // Notify backend of new size
-        setTimeout(() => {
-          if (ws.current && ws.current.readyState === WebSocket.OPEN && terminal.current) {
-            ws.current.send(JSON.stringify({
-              type: 'resize',
-              cols: terminal.current.cols,
-              rows: terminal.current.rows
-            }));
+    // Add a longer delay to allow smooth animation and avoid message accumulation
+    const resizeTimer = setTimeout(() => {
+      requestAnimationFrame(() => {
+        if (fitAddon.current && terminal.current) {
+          // Store current scroll position
+          const scrollback = terminal.current.buffer.active.viewportY;
+          
+          fitAddon.current.fit();
+          
+          // Restore scroll position after fit
+          if (scrollback > 0) {
+            terminal.current.scrollToLine(scrollback);
           }
-        }, 50);
-      }
-    });
+          
+          // Notify backend of new size
+          setTimeout(() => {
+            if (ws.current && ws.current.readyState === WebSocket.OPEN && terminal.current) {
+              ws.current.send(JSON.stringify({
+                type: 'resize',
+                cols: terminal.current.cols,
+                rows: terminal.current.rows
+              }));
+            }
+          }, 100);
+        }
+      });
+    }, 400); // Increased delay to match animation duration
+    
+    return () => clearTimeout(resizeTimer);
   }, [resizeTrigger, isInitialized]);
 
   // WebSocket connection function (called manually)
@@ -1212,7 +1240,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
         {showScrollToBottom && isConnected && (
           <button
             onClick={scrollToBottom}
-            className="absolute bottom-4 right-4 z-10 bg-muted hover:bg-accent text-white rounded-full p-3 shadow-lg transition-all duration-200 hover:scale-105 active:scale-95 border border-border"
+            className="absolute bottom-4 left-4 z-10 bg-muted hover:bg-accent text-white rounded-full p-3 shadow-lg transition-all duration-200 hover:scale-105 active:scale-95 border border-border"
             title="Scroll to bottom"
             aria-label="Scroll to bottom"
           >

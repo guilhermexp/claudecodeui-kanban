@@ -1,6 +1,5 @@
 import React from 'react';
-import { Folder, Terminal, GitBranch } from 'lucide-react';
-import { MicButton } from './MicButton';
+import { Folder, Terminal, GitBranch, CheckSquare } from 'lucide-react';
 
 function MobileNav({ activeTab, setActiveTab, isInputFocused, isShellConnected }) {
   const navItems = [
@@ -18,33 +17,31 @@ function MobileNav({ activeTab, setActiveTab, isInputFocused, isShellConnected }
       id: 'git',
       icon: GitBranch,
       onClick: () => setActiveTab('git')
+    },
+    {
+      id: 'tasks',
+      icon: CheckSquare,
+      onClick: () => setActiveTab('tasks')
     }
   ];
 
-  // Handler for voice transcription
-  const handleVoiceTranscript = (text) => {
-    if (activeTab === 'shell') {
-      // Send the transcribed text to the terminal via the global handler
-      if (window.sendToActiveTerminal && typeof window.sendToActiveTerminal === 'function') {
-        window.sendToActiveTerminal(text);
-      } else {
-      }
-    }
-  };
 
   return (
     <div 
       className={`fixed bottom-0 left-0 right-0 bg-card border-t border-border z-40 transform transition-transform duration-300 ease-in-out ${
         isInputFocused ? 'translate-y-full' : 'translate-y-0'
       }`}
+      style={{
+        // Ensure the bar background covers the iOS home indicator area in PWA
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        paddingLeft: 'env(safe-area-inset-left, 0px)',
+        paddingRight: 'env(safe-area-inset-right, 0px)'
+      }}
     >
       <div 
         className="flex items-center justify-around"
         style={{
-          minHeight: '56px',
-          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-          paddingLeft: 'env(safe-area-inset-left, 0px)',
-          paddingRight: 'env(safe-area-inset-right, 0px)'
+          minHeight: '56px'
         }}>
         {navItems.map((item) => {
           const Icon = item.icon;
@@ -72,16 +69,6 @@ function MobileNav({ activeTab, setActiveTab, isInputFocused, isShellConnected }
             </button>
           );
         })}
-        
-        {/* Voice button - show when in shell tab */}
-        {activeTab === 'shell' && (
-          <MicButton 
-            onTranscript={handleVoiceTranscript}
-            className="p-2 rounded-lg min-h-[40px] min-w-[40px] bg-accent hover:bg-accent/80 text-accent-foreground transition-colors"
-            isChat={false}
-            hasChatText={false}
-          />
-        )}
       </div>
     </div>
   );
