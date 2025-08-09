@@ -8,6 +8,8 @@
     "dev": "node scripts/dev.js",
     "dev:network": "node scripts/network-access.js",
     "dev:ngrok": "node scripts/network-access-with-ngrok.js",
+    "dev:https": "node scripts/dev-https.js",
+    "setup:https": "./scripts/setup-https.sh",
     "server": "node server/index.js",
     "server:network": "HOST=0.0.0.0 node server/index.js",
     "client": "vite --host",
