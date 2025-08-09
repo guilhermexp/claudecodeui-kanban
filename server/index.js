@@ -605,33 +605,6 @@ app.get('/api/projects/:projectName/files/content', authenticateToken, async (re
   }
 });
 
-// Get diagram.md content for a project
-app.get('/api/projects/:projectId/diagram', authenticateToken, async (req, res) => {
-  try {
-    const { projectId } = req.params;
-    
-    // Extract the actual project directory from the projectId
-    const actualProjectDir = await extractProjectDirectory(projectId);
-    
-    // Look for diagrama.md in the project root
-    const diagramPath = path.join(actualProjectDir, 'diagrama.md');
-    
-    try {
-      const content = await fsPromises.readFile(diagramPath, 'utf8');
-      res.json({ content, path: diagramPath });
-    } catch (error) {
-      if (error.code === 'ENOENT') {
-        // File doesn't exist - return 404
-        res.status(404).json({ error: 'Diagram file not found' });
-      } else {
-        throw error;
-      }
-    }
-  } catch (error) {
-    console.error('Error reading diagram file:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
 
 // Save file content endpoint
 app.put('/api/projects/:projectName/file', authenticateToken, async (req, res) => {
