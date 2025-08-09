@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "node scripts/dev.js",
     "dev:network": "node scripts/network-access.js",
+    "dev:ngrok": "node scripts/network-access-with-ngrok.js",
     "server": "node server/index.js",
     "server:network": "HOST=0.0.0.0 node server/index.js",
     "client": "vite --host",
@@ -14,7 +15,8 @@
     "vibe-backend": "cd vibe-kanban && PORT=8081 cargo run --release",
     "build": "vite build",
     "preview": "vite preview",
-    "start": "npm run build && npm run server"
+    "start": "npm run build && npm run server",
+    "ngrok": "./start-ngrok.sh"
   },
   "keywords": [
     "claude",
