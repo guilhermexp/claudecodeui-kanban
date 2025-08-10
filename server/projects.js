@@ -539,6 +539,26 @@ async function deleteProject(projectName) {
   }
 }
 
+// Delete a project completely, including all sessions
+async function deleteProjectCompletely(projectName) {
+  const projectDir = path.join(process.env.HOME, '.claude', 'projects', projectName);
+  
+  try {
+    // Remove the entire project directory with all sessions
+    await fs.rm(projectDir, { recursive: true, force: true });
+    
+    // Remove from project config
+    const config = await loadProjectConfig();
+    delete config[projectName];
+    await saveProjectConfig(config);
+    
+    return true;
+  } catch (error) {
+    console.error(`Error deleting project completely ${projectName}:`, error);
+    throw error;
+  }
+}
+
 // Add a project manually to the config (without creating folders)
 async function addProjectManually(projectPath, displayName = null) {
   const absolutePath = path.resolve(projectPath);
@@ -603,6 +623,7 @@ export {
   deleteSession,
   isProjectEmpty,
   deleteProject,
+  deleteProjectCompletely,
   addProjectManually,
   loadProjectConfig,
   saveProjectConfig,

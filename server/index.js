@@ -33,7 +33,7 @@ import pty from 'node-pty';
 import fetch from 'node-fetch';
 import mime from 'mime-types';
 
-import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } from './projects.js';
+import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, deleteProjectCompletely, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } from './projects.js';
 import { spawnClaude, abortClaudeSession } from './claude-cli.js';
 import gitRoutes from './routes/git.js';
 import authRoutes from './routes/auth.js';
@@ -548,6 +548,17 @@ app.delete('/api/projects/:projectName', authenticateToken, async (req, res) => 
   try {
     const { projectName } = req.params;
     await deleteProject(projectName);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete project completely (including all sessions)
+app.delete('/api/projects/:projectName/force', authenticateToken, async (req, res) => {
+  try {
+    const { projectName } = req.params;
+    await deleteProjectCompletely(projectName);
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });

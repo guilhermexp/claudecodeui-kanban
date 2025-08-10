@@ -5,7 +5,7 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
 
-import { FolderOpen, Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, Edit3, Check, X, Trash2, Settings, FolderPlus, RefreshCw, Sparkles, Moon, Sun, Trello, Search, Star, Edit2, Loader2, BarChart3, FolderSearch } from 'lucide-react';
+import { FolderOpen, Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, Edit3, Check, X, Trash2, Settings, FolderPlus, RefreshCw, Sparkles, Moon, Sun, Trello, Search, Star, Edit2, Loader2, BarChart3, FolderSearch, Filter, Layers, Terminal, Kanban } from 'lucide-react';
 import { ProjectIcon, isVibeKanbanProject as isVibeKanban } from '../utils/projectIcons.jsx';
 import { cn } from '../lib/utils';
 import ClaudeLogo from './ClaudeLogo';
@@ -54,6 +54,9 @@ function Sidebar({
   const [searchFilter, setSearchFilter] = useState('');
   const [showFolderPicker, setShowFolderPicker] = useState(false);
   const [deletingSessions, setDeletingSessions] = useState(new Set());
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [projectFilter, setProjectFilter] = useState('all'); // 'all', 'claude', 'vibe'
+  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const { isDarkMode, toggleDarkMode } = useTheme();
 
   // Starred projects state - persisted in localStorage
@@ -88,6 +91,18 @@ function Sidebar({
 
     return () => clearInterval(timer);
   }, []);
+
+  // Close filter dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showFilterDropdown && !event.target.closest('.filter-dropdown-container')) {
+        setShowFilterDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showFilterDropdown]);
 
   // Clear additional sessions when projects list changes (e.g., after refresh)
   useEffect(() => {
@@ -350,6 +365,40 @@ function Sidebar({
     }
   };
 
+  const deleteProjectCompletely = async (projectName) => {
+    const project = projects.find(p => p.name === projectName);
+    const sessionCount = getAllSessions(project).length;
+    
+    const message = sessionCount > 0 
+      ? `Are you sure you want to delete this project and ALL ${sessionCount} sessions? This action cannot be undone!`
+      : 'Are you sure you want to delete this project? This action cannot be undone.';
+      
+    if (!confirm(message)) {
+      return;
+    }
+
+    // Double confirmation for projects with sessions
+    if (sessionCount > 0 && !confirm(`This will permanently delete ${sessionCount} sessions. Are you absolutely sure?`)) {
+      return;
+    }
+
+    try {
+      const response = await api.deleteProjectCompletely(projectName);
+
+      if (response.ok) {
+        // Call parent callback if provided
+        if (onProjectDelete) {
+          onProjectDelete(projectName);
+        }
+      } else {
+        const error = await response.json();
+        alert(error.error || 'Failed to delete project. Please try again.');
+      }
+    } catch (error) {
+      alert('Error deleting project. Please try again.');
+    }
+  };
+
   const createNewProject = async () => {
     if (!newProjectPath.trim()) {
       alert('Please enter a project path');
@@ -446,8 +495,19 @@ function Sidebar({
     }
   };
 
-  // Filter projects based on search input
+  // Filter projects based on search input and project type
   const filteredProjects = sortedProjects.filter(project => {
+    // First apply type filter
+    if (projectFilter === 'vibe') {
+      // Show only Vibe Kanban projects (those with Trello icon)
+      if (!isVibeKanban(project)) return false;
+    } else if (projectFilter === 'claude') {
+      // Show only Claude Code projects (those WITHOUT Trello icon)
+      if (isVibeKanban(project)) return false;
+    }
+    // If projectFilter is 'all', show everything
+    
+    // Then apply search filter
     if (!searchFilter.trim()) return true;
     
     const searchLower = searchFilter.toLowerCase();
@@ -473,11 +533,73 @@ function Sidebar({
               
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5">
+            <div className="relative filter-dropdown-container">
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn(
+                  "h-7 w-7 hover:bg-accent hover:text-accent-foreground",
+                  projectFilter !== 'all' && "text-primary"
+                )}
+                onClick={() => setShowFilterDropdown(!showFilterDropdown)}
+                title="Filter projects"
+              >
+                <Filter className="w-3.5 h-3.5" />
+                {projectFilter !== 'all' && (
+                  <div className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-primary rounded-full" />
+                )}
+              </Button>
+              {showFilterDropdown && (
+                <div className="absolute top-full left-0 mt-1 w-48 bg-popover border border-border rounded-md shadow-lg z-50">
+                  <div className="py-1">
+                    <button
+                      className={cn(
+                        "w-full px-3 py-2 text-sm text-left hover:bg-accent hover:text-accent-foreground flex items-center gap-2",
+                        projectFilter === 'all' && "bg-accent text-accent-foreground"
+                      )}
+                      onClick={() => {
+                        setProjectFilter('all');
+                        setShowFilterDropdown(false);
+                      }}
+                    >
+                      <Layers className="w-4 h-4" />
+                      All Projects
+                    </button>
+                    <button
+                      className={cn(
+                        "w-full px-3 py-2 text-sm text-left hover:bg-accent hover:text-accent-foreground flex items-center gap-2",
+                        projectFilter === 'claude' && "bg-accent text-accent-foreground"
+                      )}
+                      onClick={() => {
+                        setProjectFilter('claude');
+                        setShowFilterDropdown(false);
+                      }}
+                    >
+                      <Terminal className="w-4 h-4" />
+                      Claude Code Projects
+                    </button>
+                    <button
+                      className={cn(
+                        "w-full px-3 py-2 text-sm text-left hover:bg-accent hover:text-accent-foreground flex items-center gap-2",
+                        projectFilter === 'vibe' && "bg-accent text-accent-foreground"
+                      )}
+                      onClick={() => {
+                        setProjectFilter('vibe');
+                        setShowFilterDropdown(false);
+                      }}
+                    >
+                      <Trello className="w-4 h-4" />
+                      Vibe Kanban Projects
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 hover:bg-accent hover:text-accent-foreground"
+              className="h-7 w-7 hover:bg-accent hover:text-accent-foreground"
               onClick={async () => {
                 setIsRefreshing(true);
                 try {
@@ -489,26 +611,38 @@ function Sidebar({
               disabled={isRefreshing}
               title="Refresh projects and sessions (Ctrl+R)"
             >
-              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
             </Button>
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8"
+              className="h-7 w-7"
               onClick={() => setShowNewProject(true)}
               title="Create new project (Ctrl+N)"
             >
-              <FolderPlus className="w-4 h-4" />
+              <FolderPlus className="w-3.5 h-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn(
+                "h-7 w-7",
+                isEditMode ? "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400" : ""
+              )}
+              onClick={() => setIsEditMode(!isEditMode)}
+              title={isEditMode ? "Exit edit mode" : "Enter edit mode (delete projects)"}
+            >
+              <Edit3 className="w-3.5 h-3.5" />
             </Button>
             {onSidebarClose && (
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 hover:bg-accent hover:text-accent-foreground"
+                className="h-7 w-7 hover:bg-accent hover:text-accent-foreground"
                 onClick={onSidebarClose}
                 title="Close sidebar"
               >
-                <X className="w-4 h-4" />
+                <X className="w-3.5 h-3.5" />
               </Button>
             )}
           </div>
@@ -527,6 +661,36 @@ function Sidebar({
               </div>
             </div>
             <div className="flex items-center gap-3">
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn(
+                  "h-9 w-9 relative",
+                  projectFilter !== 'all' && "text-primary"
+                )}
+                onClick={() => {
+                  // Cycle through filters: all -> claude -> vibe -> all
+                  if (projectFilter === 'all') {
+                    setProjectFilter('claude');
+                  } else if (projectFilter === 'claude') {
+                    setProjectFilter('vibe');
+                  } else {
+                    setProjectFilter('all');
+                  }
+                }}
+                title={`Filter: ${projectFilter === 'all' ? 'All' : projectFilter === 'claude' ? 'Claude' : 'Vibe'}`}
+              >
+                {projectFilter === 'all' ? (
+                  <Layers className="w-4 h-4" />
+                ) : projectFilter === 'claude' ? (
+                  <Terminal className="w-4 h-4" />
+                ) : (
+                  <Kanban className="w-4 h-4" />
+                )}
+                {projectFilter !== 'all' && (
+                  <div className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full" />
+                )}
+              </Button>
               <Button
                 variant="ghost"
                 size="icon"
@@ -677,6 +841,16 @@ function Sidebar({
               {/* Safe area for mobile */}
               <div className="h-4" />
             </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Edit Mode Indicator */}
+      {isEditMode && (
+        <div className="px-3 py-2 bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-800">
+          <div className="flex items-center gap-2 text-sm text-red-700 dark:text-red-400">
+            <Trash2 className="w-4 h-4" />
+            <span className="font-medium">Edit Mode: Click trash icon to delete projects</span>
           </div>
         </div>
       )}
@@ -895,16 +1069,28 @@ function Sidebar({
                             >
                               <Edit3 className="w-3 h-3" />
                             </div>
-                            {getAllSessions(project).length === 0 && (
+                            {(getAllSessions(project).length === 0 || isEditMode) && (
                               <div
-                                className="w-5 h-5 opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center justify-center rounded cursor-pointer touch:opacity-100"
+                                className={cn(
+                                  "w-5 h-5 transition-all duration-200 flex items-center justify-center rounded cursor-pointer",
+                                  isEditMode 
+                                    ? "opacity-100 hover:bg-red-50 dark:hover:bg-red-900/20" 
+                                    : "opacity-0 group-hover:opacity-100 hover:bg-red-50 dark:hover:bg-red-900/20 touch:opacity-100"
+                                )}
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  deleteProject(project.name);
+                                  if (isEditMode) {
+                                    deleteProjectCompletely(project.name);
+                                  } else {
+                                    deleteProject(project.name);
+                                  }
                                 }}
-                                title="Delete empty project (Delete)"
+                                title={isEditMode ? "Delete project and ALL sessions" : "Delete empty project (Delete)"}
                               >
-                                <Trash2 className="w-3 h-3 text-red-600 dark:text-red-400" />
+                                <Trash2 className={cn(
+                                  "w-3 h-3",
+                                  isEditMode ? "text-red-700 dark:text-red-500" : "text-red-600 dark:text-red-400"
+                                )} />
                               </div>
                             )}
                             {isExpanded ? (
