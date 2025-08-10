@@ -41,8 +41,6 @@ function AppContent() {
   const navigate = useNavigate();
   const { sessionId } = useParams();
   
-  // Version check removido - não é usado no app
-  
   // Load persisted state on mount
   const loadPersistedState = () => {
     const savedState = appStatePersistence.loadState();
@@ -92,6 +90,14 @@ function AppContent() {
   // until the conversation completes or is aborted.
   const [activeSessions, setActiveSessions] = useState(new Set()); // Track sessions with active conversations
   
+  // Sidebar resizing states
+  const [isResizing, setIsResizing] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    // Load saved width from localStorage or use default
+    const saved = localStorage.getItem('sidebar-width');
+    return saved ? parseInt(saved, 10) : 280;
+  });
+  
   // Get auth context to know when auth is ready
   const { isLoading: authLoading, user } = useAuth();
   const authReady = !authLoading && !!user;
@@ -124,6 +130,36 @@ function AppContent() {
     };
     appStatePersistence.saveState(stateToSave);
   }, [selectedProject, selectedSession, activeTab, sidebarOpen, isMobile]);
+  
+  // Handle sidebar resizing
+  useEffect(() => {
+    if (!isResizing) return;
+    
+    const handleMouseMove = (e) => {
+      const newWidth = e.clientX;
+      // Set min and max width limits
+      const minWidth = 200; // Minimum 200px
+      const maxWidth = 500; // Maximum 500px
+      
+      if (newWidth >= minWidth && newWidth <= maxWidth) {
+        setSidebarWidth(newWidth);
+      }
+    };
+    
+    const handleMouseUp = () => {
+      setIsResizing(false);
+      // Save to localStorage when resize ends
+      localStorage.setItem('sidebar-width', sidebarWidth.toString());
+    };
+    
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing, sidebarWidth]);
 
   // Save navigation context when navigating away
   useEffect(() => {
@@ -555,10 +591,19 @@ function AppContent() {
   // Version Upgrade Modal removed along with version checking
 
   return (
-    <div className="fixed inset-x-0 top-0 bottom-0 flex bg-background" style={{ height: '100%' }}>
+    <div 
+      className="fixed inset-x-0 top-0 bottom-0 flex bg-background" 
+      style={{ 
+        height: '100%',
+        cursor: isResizing ? 'col-resize' : 'default'
+      }}
+    >
       {/* Desktop Sidebar - keeps open for Tools Settings */}
       {!isMobile && (sidebarOpen || showToolsSettings) && (
-        <div className="w-64 flex-shrink-0 border-r border-border bg-card">
+        <div 
+          className="flex-shrink-0 border-r border-border bg-card relative"
+          style={{ width: `${sidebarWidth}px` }}
+        >
           <div className="h-full overflow-y-auto">
             <Sidebar
               projects={projects}
@@ -574,6 +619,17 @@ function AppContent() {
               onShowSettings={() => setShowToolsSettings(true)}
               onSidebarClose={() => setSidebarOpen(false)}
             />
+          </div>
+          
+          {/* Resize Handle */}
+          <div
+            className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/20 active:bg-primary/30 transition-colors group"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              setIsResizing(true);
+            }}
+          >
+            <div className="absolute inset-y-0 -left-1 -right-1 group-hover:bg-primary/10" />
           </div>
         </div>
       )}

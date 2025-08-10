@@ -5,13 +5,14 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
 
-import { FolderOpen, Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, Edit3, Check, X, Trash2, Settings, FolderPlus, RefreshCw, Sparkles, Moon, Sun, Trello, Search, Star, Edit2, Loader2, BarChart3 } from 'lucide-react';
+import { FolderOpen, Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, Edit3, Check, X, Trash2, Settings, FolderPlus, RefreshCw, Sparkles, Moon, Sun, Trello, Search, Star, Edit2, Loader2, BarChart3, FolderSearch } from 'lucide-react';
 import { ProjectIcon, isVibeKanbanProject as isVibeKanban } from '../utils/projectIcons.jsx';
 import { cn } from '../lib/utils';
 import ClaudeLogo from './ClaudeLogo';
 import { api } from '../utils/api';
 import { useTheme } from '../contexts/ThemeContext';
 import { formatTimeAgo } from '../utils/time';
+import { FolderPicker } from './vibe-kanban/ui/folder-picker';
 
 // Using isVibeKanban from projectIcons utility
 
@@ -51,6 +52,8 @@ function Sidebar({
   const [editingSessionName, setEditingSessionName] = useState('');
   const [generatingSummary, setGeneratingSummary] = useState({});
   const [searchFilter, setSearchFilter] = useState('');
+  const [showFolderPicker, setShowFolderPicker] = useState(false);
+  const [deletingSessions, setDeletingSessions] = useState(new Set());
   const { isDarkMode, toggleDarkMode } = useTheme();
 
   // Starred projects state - persisted in localStorage
@@ -288,21 +291,38 @@ function Sidebar({
       return;
     }
 
+    // Mark session as being deleted for visual feedback
+    setDeletingSessions(prev => new Set([...prev, sessionId]));
+
+    // Immediately update UI for responsiveness
+    if (onSessionDelete) {
+      onSessionDelete(sessionId);
+    }
+
     try {
       const response = await api.deleteSession(projectName, sessionId);
 
-      if (response.ok) {
-        // Call parent callback if provided
-        if (onSessionDelete) {
-          onSessionDelete(sessionId);
+      if (!response.ok) {
+        // If deletion failed, we need to restore the session
+        // For now, just refresh to restore the correct state
+        alert('Failed to delete session. Refreshing...');
+        if (onRefresh) {
+          await onRefresh();
         }
-      } else {
-        // Error: 'Failed to delete session'
-        alert('Failed to delete session. Please try again.');
       }
     } catch (error) {
-      // Error: 'Error deleting session:', error
-      alert('Error deleting session. Please try again.');
+      // If deletion failed, refresh to restore state
+      alert('Error deleting session. Refreshing...');
+      if (onRefresh) {
+        await onRefresh();
+      }
+    } finally {
+      // Remove from deleting set
+      setDeletingSessions(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(sessionId);
+        return newSet;
+      });
     }
   };
 
@@ -547,17 +567,28 @@ function Sidebar({
               <FolderPlus className="w-4 h-4" />
               Create New Project
             </div>
-            <Input
-              value={newProjectPath}
-              onChange={(e) => setNewProjectPath(e.target.value)}
-              placeholder="/path/to/project or relative/path"
-              className="text-sm focus:ring-2 focus:ring-primary/20"
-              autoFocus
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') createNewProject();
-                if (e.key === 'Escape') cancelNewProject();
-              }}
-            />
+            <div className="flex gap-2">
+              <Input
+                value={newProjectPath}
+                onChange={(e) => setNewProjectPath(e.target.value)}
+                placeholder="/path/to/project or relative/path"
+                className="text-sm focus:ring-2 focus:ring-primary/20 flex-1"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') createNewProject();
+                  if (e.key === 'Escape') cancelNewProject();
+                }}
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setShowFolderPicker(true)}
+                className="h-9 px-3"
+                title="Browse folders"
+              >
+                <FolderSearch className="w-4 h-4" />
+              </Button>
+            </div>
             <div className="flex items-center gap-3">
               <Button
                 size="sm"
@@ -601,17 +632,28 @@ function Sidebar({
               </div>
               
               <div className="space-y-3">
-                <Input
-                  value={newProjectPath}
-                  onChange={(e) => setNewProjectPath(e.target.value)}
-                  placeholder="/path/to/project or relative/path"
-                  className="text-sm h-10 rounded-xl"
-                  autoFocus
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') createNewProject();
-                    if (e.key === 'Escape') cancelNewProject();
-                  }}
-                />
+                <div className="flex gap-2">
+                  <Input
+                    value={newProjectPath}
+                    onChange={(e) => setNewProjectPath(e.target.value)}
+                    placeholder="/path/to/project or relative/path"
+                    className="text-sm h-10 rounded-xl flex-1"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') createNewProject();
+                      if (e.key === 'Escape') cancelNewProject();
+                    }}
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setShowFolderPicker(true)}
+                    className="h-10 px-3 rounded-xl"
+                    title="Browse folders"
+                  >
+                    <FolderSearch className="w-4 h-4" />
+                  </Button>
+                </div>
                 
                 <div className="flex items-center gap-3">
                   <Button
@@ -766,9 +808,18 @@ function Sidebar({
                                   <span className="inline-flex items-center gap-1">
                                     <MessageSquare className="w-3 h-3 opacity-70" />
                                     {(() => {
-                                      const sessionCount = getAllSessions(project).length;
+                                      // Use total count from server if available, otherwise count loaded sessions
+                                      const totalCount = project.sessionMeta?.total;
+                                      const loadedCount = getAllSessions(project).length;
+                                      
+                                      // If we have a total from server, use it
+                                      if (totalCount !== undefined && totalCount !== null) {
+                                        return totalCount;
+                                      }
+                                      
+                                      // Otherwise use loaded count with + if there might be more
                                       const hasMore = project.sessionMeta?.hasMore !== false;
-                                      return hasMore && sessionCount >= 2 ? `${sessionCount}+` : sessionCount;
+                                      return hasMore && loadedCount >= 2 ? `${loadedCount}+` : loadedCount;
                                     })()}
                                   </span>
                                   {project.fullPath !== project.displayName && (
@@ -895,7 +946,13 @@ function Sidebar({
                           const isActive = diffInMinutes < 1;
                           
                           return (
-                          <div key={session.id} className="group relative">
+                          <div 
+                            key={session.id} 
+                            className={cn(
+                              "group relative transition-all duration-300",
+                              deletingSessions.has(session.id) && "opacity-50 scale-95"
+                            )}
+                          >
                             {/* Unified Session Item (mobile + desktop) */}
                             <div className="block relative">
                               <div
@@ -966,14 +1023,21 @@ function Sidebar({
                                               <Edit2 className="w-2 h-2 text-gray-600 dark:text-gray-400" />
                                             </button>
                                             <button
-                                              className="w-4 h-4 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 rounded flex items-center justify-center"
+                                              className="w-4 h-4 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 rounded flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                                               onClick={(e) => {
                                                 e.stopPropagation();
-                                                deleteSession(project.name, session.id);
+                                                if (!deletingSessions.has(session.id)) {
+                                                  deleteSession(project.name, session.id);
+                                                }
                                               }}
-                                              title="Delete session"
+                                              disabled={deletingSessions.has(session.id)}
+                                              title={deletingSessions.has(session.id) ? "Deleting..." : "Delete session"}
                                             >
-                                              <Trash2 className="w-2 h-2 text-red-600 dark:text-red-400" />
+                                              {deletingSessions.has(session.id) ? (
+                                                <Loader2 className="w-2 h-2 text-red-600 dark:text-red-400 animate-spin" />
+                                              ) : (
+                                                <Trash2 className="w-2 h-2 text-red-600 dark:text-red-400" />
+                                              )}
                                             </button>
                                           </>
                                         )}
@@ -1196,6 +1260,19 @@ function Sidebar({
           </div>
         </div>
       </div>
+      
+      {/* Folder Picker Dialog */}
+      <FolderPicker
+        open={showFolderPicker}
+        onClose={() => setShowFolderPicker(false)}
+        onSelect={(path) => {
+          setNewProjectPath(path);
+          setShowFolderPicker(false);
+        }}
+        value={newProjectPath}
+        title="Select Git Repository"
+        description="Choose an existing git repository"
+      />
     </div>
   );
 }
