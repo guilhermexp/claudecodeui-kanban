@@ -640,6 +640,28 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       return true;
     });
     
+    // Add native paste event listener for better mobile support
+    const handlePaste = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      const pastedText = e.clipboardData?.getData('text/plain') || e.clipboardData?.getData('Text');
+      if (pastedText && ws.current && ws.current.readyState === WebSocket.OPEN) {
+        ws.current.send(JSON.stringify({
+          type: 'input',
+          data: pastedText
+        }));
+      }
+    };
+    
+    // Store reference to paste handler for cleanup
+    const pasteHandler = handlePaste;
+    
+    // Attach paste listener to terminal element for mobile support
+    if (terminal.current.element) {
+      terminal.current.element.addEventListener('paste', pasteHandler, { passive: false });
+    }
+    
     // Ensure terminal takes full space immediately
     requestAnimationFrame(() => {
       if (fitAddon.current) {
@@ -718,6 +740,11 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       resizeObserver.disconnect();
       if (resizeTimeout) {
         clearTimeout(resizeTimeout);
+      }
+      
+      // Remove paste event listener
+      if (terminal.current && terminal.current.element) {
+        terminal.current.element.removeEventListener('paste', pasteHandler);
       }
       
       // Clear intervals on unmount
