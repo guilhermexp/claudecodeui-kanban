@@ -384,9 +384,10 @@ export function ProjectTasks() {
   }
 
   return (
-    <div className={getMainContainerClasses(isPanelOpen)}>
-      {/* Left Column - Kanban Section */}
-      <div className={getKanbanSectionClasses(isPanelOpen)}>
+    <>
+      <div className="flex h-[calc(100vh-4rem)]">
+        {/* Left Column - Kanban Section */}
+        <div className={`flex-1 overflow-y-auto ${isPanelOpen ? 'xl:mr-0' : ''}`}>
         {/* Header */}
         <div className="px-4 sm:px-8 my-4 sm:my-12">
           {/* Mobile layout */}
@@ -639,21 +640,32 @@ export function ProjectTasks() {
         )}
       </div>
 
-      {/* Right Column - Task Details Panel */}
-      {isPanelOpen && (
-        <TaskDetailsPanel
-          task={selectedTask}
-          projectHasDevScript={!!project?.dev_script}
-          projectId={projectId!}
-          onClose={handleClosePanel}
-          onEditTask={handleEditTask}
-          onDeleteTask={handleDeleteTask}
-          isDialogOpen={isTaskDialogOpen || isProjectSettingsOpen}
-        />
-      )}
+        {/* Right Column - Task Details Panel */}
+        {isPanelOpen && (
+          <div className="w-full xl:w-[450px] 2xl:w-[500px] h-full border-l border-border bg-background fixed inset-y-0 right-0 z-50 xl:relative xl:inset-auto xl:z-auto shadow-lg xl:shadow-none">
+            <TaskDetailsPanel
+              task={selectedTask}
+              projectHasDevScript={!!project?.dev_script}
+              projectId={projectId!}
+              onClose={handleClosePanel}
+              onEditTask={handleEditTask}
+              onDeleteTask={handleDeleteTask}
+              isDialogOpen={isTaskDialogOpen || isProjectSettingsOpen}
+            />
+          </div>
+        )}
+      </div>
 
-      {/* Dialogs - rendered at main container level to avoid stacking issues */}
-      <TaskFormDialog
+    {/* Backdrop for mobile when panel is open */}
+    {isPanelOpen && (
+      <div 
+        className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm xl:hidden"
+        onClick={handleClosePanel}
+      />
+    )}
+
+    {/* Dialogs - rendered at main container level to avoid stacking issues */}
+    <TaskFormDialog
         isOpen={isTaskDialogOpen}
         onOpenChange={(open) => {
           setIsTaskDialogOpen(open);
@@ -698,7 +710,7 @@ export function ProjectTasks() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
 }
 
