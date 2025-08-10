@@ -141,7 +141,8 @@ class VibeKanbanProxy {
         signal: controller.signal
       };
       
-      if (options.body) {
+      // Only add body for methods that support it
+      if (options.body && fetchOptions.method !== 'GET' && fetchOptions.method !== 'HEAD') {
         fetchOptions.body = typeof options.body === 'string' 
           ? options.body 
           : JSON.stringify(options.body);

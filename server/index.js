@@ -1571,12 +1571,25 @@ app.use('/api/vibe-kanban', express.json(), async (req, res) => {
       body: req.body
     });
     
-    // Set response headers
-    Object.entries(response.headers.raw()).forEach(([key, value]) => {
-      if (key.toLowerCase() !== 'content-encoding') {
-        res.setHeader(key, value);
+    // Set response headers - handle both raw() method and direct headers object
+    const headers = response.headers.raw ? response.headers.raw() : response.headers;
+    if (headers) {
+      // If headers is a Headers object, iterate properly
+      if (headers.forEach) {
+        headers.forEach((value, key) => {
+          if (key.toLowerCase() !== 'content-encoding') {
+            res.setHeader(key, value);
+          }
+        });
+      } else if (typeof headers === 'object') {
+        // Handle plain object
+        Object.entries(headers).forEach(([key, value]) => {
+          if (key.toLowerCase() !== 'content-encoding') {
+            res.setHeader(key, value);
+          }
+        });
       }
-    });
+    }
     
     // Send response
     res.status(response.status);
