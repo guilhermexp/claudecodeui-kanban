@@ -63,6 +63,10 @@ export const api = {
     authenticatedFetch(`/api/projects/${projectName}`, {
       method: 'DELETE',
     }),
+  deleteProjectCompletely: (projectName) =>
+    authenticatedFetch(`/api/projects/${projectName}/force`, {
+      method: 'DELETE',
+    }),
   createProject: (path) =>
     authenticatedFetch('/api/projects/create', {
       method: 'POST',
