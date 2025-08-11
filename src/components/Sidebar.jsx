@@ -55,7 +55,7 @@ function Sidebar({
   const [showFolderPicker, setShowFolderPicker] = useState(false);
   const [deletingSessions, setDeletingSessions] = useState(new Set());
   const [isEditMode, setIsEditMode] = useState(false);
-  const [projectFilter, setProjectFilter] = useState('all'); // 'all', 'claude', 'vibe'
+  const [projectFilter, setProjectFilter] = useState('claude'); // 'all', 'claude', 'vibe'
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const { isDarkMode, toggleDarkMode } = useTheme();
 
@@ -1121,8 +1121,20 @@ function Sidebar({
                           </div>
                         ))
                       ) : getAllSessions(project).length === 0 && !loadingSessions[project.name] ? (
-                        <div className="py-2 px-4 text-left">
+                        <div className="py-2 px-4 text-left space-y-2">
                           <p className="text-xs text-muted-foreground">No sessions yet</p>
+                          <Button
+                            variant="default"
+                            size="sm"
+                            className="w-full justify-start gap-2 h-8 text-sm"
+                            onClick={() => {
+                              onProjectSelect(project);
+                              onNewSession(project);
+                            }}
+                          >
+                            <Plus className="w-3 h-3" />
+                            Create First Session
+                          </Button>
                         </div>
                       ) : (
                         getDisplayedSessions(project).map((session) => {
