@@ -76,7 +76,7 @@ if (typeof document !== 'undefined') {
 // Global store for shell sessions to persist across tab switches AND project switches
 const shellSessions = new Map();
 
-function Shell({ selectedProject, selectedSession, isActive, onConnectionChange, isMobile, resizeTrigger }) {
+function Shell({ selectedProject, selectedSession, isActive, onConnectionChange, onSessionStateChange, isMobile, resizeTrigger }) {
   const terminalRef = useRef(null);
   const terminal = useRef(null);
   const fitAddon = useRef(null);
@@ -98,10 +98,49 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   // Reconnection state
   const reconnectTimeout = useRef(null);
   const reconnectAttempts = useRef(0);
+  
+  // Session activity tracking for protection system
+  const [hasActiveSession, setHasActiveSession] = useState(false);
+  const activityTimeout = useRef(null);
+  const lastActivityTime = useRef(null);
   const maxReconnectAttempts = 5;
   
   // Track if init command was already sent to prevent duplicates
   const hasInitialized = useRef(false);
+  
+  // Session activity tracking functions
+  const markSessionActive = () => {
+    lastActivityTime.current = Date.now();
+    if (!hasActiveSession) {
+      setHasActiveSession(true);
+      if (onSessionStateChange) {
+        onSessionStateChange(true);
+      }
+    }
+    
+    // Clear existing timeout and set new one (30 seconds of inactivity)
+    if (activityTimeout.current) {
+      clearTimeout(activityTimeout.current);
+    }
+    
+    activityTimeout.current = setTimeout(() => {
+      setHasActiveSession(false);
+      if (onSessionStateChange) {
+        onSessionStateChange(false);
+      }
+    }, 30000); // 30 seconds of inactivity
+  };
+  
+  const markSessionInactive = () => {
+    if (activityTimeout.current) {
+      clearTimeout(activityTimeout.current);
+      activityTimeout.current = null;
+    }
+    setHasActiveSession(false);
+    if (onSessionStateChange) {
+      onSessionStateChange(false);
+    }
+  };
   
   // Scroll to bottom functionality
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
@@ -315,6 +354,8 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
         }
         
         if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+          // Mark session as active when user sends input
+          markSessionActive();
           ws.current.send(JSON.stringify({
             type: 'input',
             data: data
@@ -684,6 +725,8 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     // Handle terminal input
     terminal.current.onData((data) => {
       if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+        // Mark session as active when user types in terminal
+        markSessionActive();
         ws.current.send(JSON.stringify({
           type: 'input',
           data: data
@@ -756,6 +799,12 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       if (reconnectTimeout.current) {
         clearTimeout(reconnectTimeout.current);
         reconnectTimeout.current = null;
+      }
+      
+      // Clear activity timeout
+      if (activityTimeout.current) {
+        clearTimeout(activityTimeout.current);
+        activityTimeout.current = null;
       }
       
       // Store session for reuse instead of disposing
@@ -995,6 +1044,8 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
         try {
           const data = JSON.parse(event.data);
           if (data.type === 'output') {
+            // Mark session as active when receiving output from Claude
+            markSessionActive();
             // Check for URLs in the output and make them clickable
             const urlRegex = /(https?:\/\/[^\s\x1b\x07]+)/g;
             let output = data.data;
@@ -1041,6 +1092,8 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       ws.current.onclose = (event) => {
         setIsConnected(false);
         setIsConnecting(false);
+        // Mark session as inactive when WebSocket disconnects
+        markSessionInactive();
         
         // Reset initialization flag for next connection
         hasInitialized.current = false;
