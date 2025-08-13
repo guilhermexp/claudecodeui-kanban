@@ -45,7 +45,9 @@ function MainContent({
   showRawParameters,      // Show raw parameters in tool accordions
   autoScrollToBottom,     // Auto-scroll to bottom when new messages arrive
   sendByCtrlEnter,        // Send by Ctrl+Enter mode for East Asian language input
-  onShellConnectionChange // Handle shell connection state changes
+  onShellConnectionChange, // Handle shell connection state changes
+  shellHasActiveSession,   // Current Shell session protection state
+  onShellSessionStateChange // Function to update Shell session protection state
 }) {
   const [editingFile, setEditingFile] = useState(null);
   const [openShellSessions, setOpenShellSessions] = useState(0);
@@ -75,6 +77,13 @@ function MainContent({
 
   const handleCloseEditor = () => {
     setEditingFile(null);
+  };
+
+  // Shell session protection handler - now uses prop function
+  const handleShellSessionStateChange = (isActive) => {
+    if (onShellSessionStateChange) {
+      onShellSessionStateChange(isActive);
+    }
   };
   if (isLoading) {
     return (
@@ -230,6 +239,10 @@ function MainContent({
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z" />
                   </svg>
                   <span className="hidden sm:inline">Shell</span>
+                  {/* Show active session indicator */}
+                  {shellHasActiveSession && activeTab !== 'shell' && (
+                    <span className="ml-1 w-2 h-2 bg-green-500 rounded-full animate-pulse" title="Active session running"></span>
+                  )}
                   {openShellSessions > 0 && (
                     <span className="ml-1 px-1.5 py-0.5 text-xs bg-blue-500 text-white rounded-full">
                       {openShellSessions}
@@ -330,9 +343,10 @@ function MainContent({
             <Shell 
               selectedProject={selectedProject} 
               selectedSession={selectedSession}
-              isActive={activeTab === 'shell'}
+              isActive={activeTab === 'shell' || shellHasActiveSession}
               onSessionCountChange={setOpenShellSessions}
               onConnectionChange={onShellConnectionChange}
+              onSessionStateChange={handleShellSessionStateChange}
               isMobile={isMobile}
               resizeTrigger={shellResizeTrigger}
             />

@@ -84,6 +84,8 @@ function AppContent() {
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [isShellConnected, setIsShellConnected] = useState(false);
   const [showToolsSettings, setShowToolsSettings] = useState(false);
+  // Shell session protection - tracks when Claude is actively working
+  const [shellHasActiveSession, setShellHasActiveSession] = useState(false);
   // Session Protection System: Track sessions with active conversations to prevent
   // automatic project updates from interrupting ongoing chats. When a user sends
   // a message, the session is marked as "active" and project updates are paused
@@ -698,6 +700,8 @@ function AppContent() {
           onNavigateToSession={(sessionId) => navigate(`/session/${sessionId}`)}
           onShowSettings={() => setShowToolsSettings(true)}
           onShellConnectionChange={setIsShellConnected}
+          shellHasActiveSession={shellHasActiveSession}
+          onShellSessionStateChange={setShellHasActiveSession}
         />
       </div>
 
@@ -708,6 +712,7 @@ function AppContent() {
           setActiveTab={setActiveTab}
           isInputFocused={isInputFocused}
           isShellConnected={isShellConnected}
+          shellHasActiveSession={shellHasActiveSession}
         />
       )}
       
