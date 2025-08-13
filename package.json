@@ -19,6 +19,10 @@
     "preview": "vite preview",
     "start": "npm run build && npm run server",
     "protect-ports": "node scripts/port-protection.js",
+    "port-status": "node scripts/port-management.js detect",
+    "switch-to-prod": "node scripts/port-management.js switch-to-prod",
+    "switch-to-dev": "node scripts/port-management.js switch-to-dev",
+    "stop-all": "node scripts/port-management.js stop-all",
     "ngrok": "echo 'Deprecated. Use ./start-background-prod.sh'"
   },
   "keywords": [

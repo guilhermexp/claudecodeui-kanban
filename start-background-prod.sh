@@ -25,7 +25,24 @@ if [ -z "${NGROK_BIN}" ]; then
   fi
 fi
 
-# Mata processos anteriores
+# Verifica e para modo desenvolvimento se necessário
+echo "🔍 Verificando modo atual..."
+if command -v node >/dev/null 2>&1 && [ -f "scripts/port-management.js" ]; then
+  CURRENT_MODE=$(node scripts/port-management.js detect 2>/dev/null | grep "Current mode:" | cut -d: -f2 | xargs || echo "UNKNOWN")
+  
+  if [ "$CURRENT_MODE" = "DEVELOPMENT" ]; then
+    echo "⚠️  Modo desenvolvimento detectado. Parando para evitar conflitos..."
+    node scripts/port-management.js stop-dev
+    sleep 3
+  elif [ "$CURRENT_MODE" = "MIXED" ]; then
+    echo "⚠️  Processos conflitantes detectados. Limpando..."
+    node scripts/port-management.js stop-all
+    sleep 3
+  fi
+fi
+
+# Mata processos anteriores (método tradicional como backup)
+echo "🧹 Limpando processos anteriores..."
 pkill -f "node.*server/index.js" 2>/dev/null || true
 pkill -f "cargo.*vibe-kanban" 2>/dev/null || true
 pkill -f "vibe-kanban.*target/release" 2>/dev/null || true
