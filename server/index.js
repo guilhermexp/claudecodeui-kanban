@@ -393,7 +393,8 @@ app.get('/api/projects/:projectName/logo', authenticateToken, async (req, res) =
     res.json(result);
   } catch (error) {
     console.error('Error locating project logo:', error);
-    res.status(500).json({ error: 'Failed to locate project logo' });
+    // Return not found instead of error to prevent 404 spam
+    res.json({ found: false });
   }
 });
 
@@ -1691,6 +1692,17 @@ app.use((err, req, res, next) => {
   
   // For non-API routes, send generic error
   res.status(err.status || 500).send('Internal Server Error');
+});
+
+// API fallback routes to prevent 404 spam in console
+app.get('/api/files', (req, res) => {
+  res.json({ error: 'Files API not available', files: [] });
+});
+
+// Catch all unhandled API routes that don't exist  
+app.use('/api/*', (req, res) => {
+  console.warn(`API 404: ${req.method} ${req.path}`);
+  res.status(404).json({ error: 'API endpoint not found', path: req.path });
 });
 
 // Serve React app for all other routes

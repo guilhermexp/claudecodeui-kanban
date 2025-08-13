@@ -63,7 +63,7 @@ async function getProcessOnPort(port) {
   });
 }
 
-// Get process info
+// Get process info including working directory  
 async function getProcessInfo(pid) {
   return new Promise((resolve) => {
     const ps = spawn('ps', ['-p', pid.toString(), '-o', 'pid,ppid,comm,args']);
@@ -73,15 +73,53 @@ async function getProcessInfo(pid) {
       info += data.toString();
     });
     
-    ps.on('close', () => {
+    ps.on('close', async () => {
       const lines = info.trim().split('\n');
       if (lines.length > 1) {
         const parts = lines[1].trim().split(/\s+/);
+        
+        // Get working directory using lsof (more reliable on macOS)
+        let cwd = '';
+        try {
+          const lsof = spawn('lsof', ['-p', pid.toString(), '-Fn']);
+          let lsofInfo = '';
+          
+          lsof.stdout.on('data', (data) => {
+            lsofInfo += data.toString();
+          });
+          
+          await new Promise((resolveCmd) => {
+            lsof.on('close', () => {
+              // Parse lsof output to find working directory (cwd)
+              const lines = lsofInfo.split('\n');
+              let foundCwd = false;
+              for (const line of lines) {
+                if (line === 'fcwd') {
+                  foundCwd = true;
+                  continue;
+                }
+                if (foundCwd && line.startsWith('n')) {
+                  cwd = line.substring(1); // Remove 'n' prefix to get path
+                  break;
+                }
+              }
+              resolveCmd();
+            });
+            
+            lsof.on('error', () => {
+              resolveCmd();
+            });
+          });
+        } catch (e) {
+          // lsof might not be available
+        }
+        
         resolve({
           pid: parseInt(parts[0]),
           ppid: parseInt(parts[1]),
           command: parts[2],
-          args: parts.slice(3).join(' ')
+          args: parts.slice(3).join(' '),
+          cwd: cwd
         });
       } else {
         resolve(null);
@@ -107,14 +145,19 @@ async function killUnauthorizedProcess(port, allowedProcess = null) {
   // Check if it's an allowed process (Claude Code UI components)
   const isAllowed = allowedProcess && (
     processInfo.pid === allowedProcess ||
-    processInfo.ppid === allowedProcess ||
-    processInfo.command.includes('node') && processInfo.args.includes('server/index.js') ||
-    processInfo.command.includes('vite') ||
-    processInfo.command.includes('cargo')
+    processInfo.ppid === allowedProcess
+  ) || (
+    // Only allow processes from our specific claudecodeui directory
+    processInfo.cwd && processInfo.cwd.includes('claudecodeui-main') && (
+      (processInfo.command.includes('node') && processInfo.args.includes('server/index.js')) ||
+      (processInfo.command.includes('node') && processInfo.args.includes('vite')) ||
+      (processInfo.args && processInfo.args.includes('vite')) ||
+      (processInfo.command.includes('cargo') && processInfo.args.includes('vibe-kanban'))
+    )
   );
   
   if (isAllowed) {
-    log('PORT-GUARD', `Authorized process found on port ${port}: ${processInfo.command}`, colors.green);
+    log('PORT-GUARD', `✅ Authorized process on port ${port}: ${processInfo.command} (CWD: ${processInfo.cwd})`, colors.green);
     return false;
   }
   
@@ -122,6 +165,7 @@ async function killUnauthorizedProcess(port, allowedProcess = null) {
   log('PORT-GUARD', `🚫 UNAUTHORIZED ACCESS DETECTED on port ${port}!`, colors.red);
   log('PORT-GUARD', `Process: ${processInfo.command} (PID: ${processInfo.pid})`, colors.red);
   log('PORT-GUARD', `Command: ${processInfo.args}`, colors.red);
+  log('PORT-GUARD', `Working Directory: ${processInfo.cwd}`, colors.red);
   log('PORT-GUARD', `🔒 Terminating unauthorized process...`, colors.yellow);
   
   try {
