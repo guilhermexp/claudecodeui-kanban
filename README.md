@@ -1,5 +1,5 @@
-# Claude C<img width="1510" height="872" alt="09-git-integration-panel" src="https://github.com/user-attachments/assets/4aa14f00-366b-43e6-80c7-a2341a9aabe5" />
-ode UI![10-mobile-responsive-view](https://github.com/user-attachments/assets/8b55b546-f480-4826-ab93-583c6ecd0b50)
+# ClaudeUI <img width="1510" height="872" alt="09-git-integration-panel" src="https://github.com/user-attachments/assets/4aa14f00-366b-43e6-80c7-a2341a9aabe5" />
+ UI![10-mobile-responsive-view](https://github.com/user-attachments/assets/8b55b546-f480-4826-ab93-583c6ecd0b50)
 <img width="1505" height="865" alt="08-file-browser-interface" src="https://github.com/user-attachments/assets/886d4baf-b76c-464b-9f04-adec27fdbba3" />
 <img width="1512" height="875" alt="07-dashboard-analytics" src="https://github.com/user-attachments/assets/9dfe84ce-0e34-4b5e-a981-8d183a3c6aa8" />
 <img width="1512" height="875" alt="06-terminal-shell-interface" src="https://github.com/user-attachments/assets/46a0174e-4bcc<img width="1512" height="821" alt="05-main-interface-overview" src="https://github.com/user-attachments/assets/527dce0d-1ec1-4708-bdfa-3b11c303665b" />
