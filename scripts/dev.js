@@ -107,7 +107,17 @@ function spawnService(name, command, args, options = {}) {
       if (code !== 0 && service.restartCount < service.maxRestarts) {
         service.restartCount++;
         log(name, `Crashed (code: ${code}). Restarting... (${service.restartCount}/${service.maxRestarts})`, colors.yellow);
-        setTimeout(start, 2000);
+        setTimeout(() => {
+          start();
+          // Re-register the new process after restart
+          if (options.registerCallback) {
+            setTimeout(() => {
+              if (service.process && service.process.pid) {
+                options.registerCallback(service.process.pid);
+              }
+            }, 1000);
+          }
+        }, 2000);
       } else if (code !== 0) {
         log(name, `Failed after ${service.maxRestarts} attempts. Giving up.`, colors.red);
       }
@@ -122,12 +132,11 @@ function spawnService(name, command, args, options = {}) {
 async function main() {
   log('INIT', 'Starting Claude Code UI Development Environment', colors.cyan);
   
-  // Initialize Port Protection Service
+  // Initialize Port Protection Service (but don't start monitoring yet)
   const portProtector = new PortProtector(PORTS);
   log('INIT', '🛡️ Initializing Port Protection Service', colors.cyan);
-  await portProtector.start();
   
-  // Cleanup existing processes
+  // Cleanup existing processes first
   await killPortProcesses([PORTS.CLIENT, PORTS.SERVER, PORTS.VIBE_BACKEND]);
   
   // Wait a bit for cleanup
@@ -143,7 +152,8 @@ async function main() {
     ['server/index.js'],
     {
       color: colors.green,
-      env: { PORT: PORTS.SERVER }
+      env: { PORT: PORTS.SERVER },
+      registerCallback: (pid) => portProtector.registerAllowedProcess('SERVER', pid)
     }
   );
   services.push(serverService);
@@ -153,7 +163,7 @@ async function main() {
     if (serverService.process && serverService.process.pid) {
       portProtector.registerAllowedProcess('SERVER', serverService.process.pid);
     }
-  }, 2000);
+  }, 1000);
 
   // Start Client (Vite Frontend)
   const clientService = spawnService(
@@ -162,7 +172,8 @@ async function main() {
     ['vite', '--host', '--port', PORTS.CLIENT.toString()],
     {
       color: colors.blue,
-      env: { VITE_PORT: PORTS.CLIENT }
+      env: { VITE_PORT: PORTS.CLIENT },
+      registerCallback: (pid) => portProtector.registerAllowedProcess('CLIENT', pid)
     }
   );
   services.push(clientService);
@@ -172,7 +183,7 @@ async function main() {
     if (clientService.process && clientService.process.pid) {
       portProtector.registerAllowedProcess('CLIENT', clientService.process.pid);
     }
-  }, 2000);
+  }, 1000);
 
   // Start Vibe-Kanban Backend (if exists)
   if (checkVibeKanban()) {
@@ -186,7 +197,8 @@ async function main() {
         env: { 
           PORT: PORTS.VIBE_BACKEND,
           VIBE_NO_BROWSER: 'true'  // Prevent auto browser opening
-        }
+        },
+        registerCallback: (pid) => portProtector.registerAllowedProcess('VIBE_BACKEND', pid)
       }
     );
     services.push(vibeService);
@@ -196,7 +208,7 @@ async function main() {
       if (vibeService.process && vibeService.process.pid) {
         portProtector.registerAllowedProcess('VIBE_BACKEND', vibeService.process.pid);
       }
-    }, 3000); // Rust takes longer to start
+    }, 2000); // Rust takes longer to start
   }
 
   // Graceful shutdown
@@ -228,6 +240,12 @@ async function main() {
     process.exit(0);
   });
 
+  // Start port protection after all services are launched and registered
+  setTimeout(async () => {
+    log('INIT', '🛡️ Starting Port Protection monitoring...', colors.cyan);
+    await portProtector.start();
+  }, 4000); // Wait longer to ensure all processes are registered
+  
   // Keep the process alive
   log('READY', `Development servers starting on ports: Client(${PORTS.CLIENT}), Server(${PORTS.SERVER}), Vibe-Backend(${PORTS.VIBE_BACKEND})`, colors.cyan);
 }
