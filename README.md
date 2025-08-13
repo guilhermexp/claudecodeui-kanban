@@ -2,17 +2,34 @@
 
 🚀 **Interface web moderna e inteligente para Claude Code CLI** com sistema integrado de gerenciamento de tarefas, proteção de portas e acesso público via túnel.
 
+![Main Interface](./public/screenshots/05-main-interface-overview.png)
+
+## 📸 **Preview da Aplicação**
+
+<div align="center">
+
+| Terminal Integrado | Dashboard Analytics | Vibe Kanban Tasks |
+|:--:|:--:|:--:|
+| ![Terminal](./public/screenshots/06-terminal-shell-interface.png) | ![Dashboard](./public/screenshots/07-dashboard-analytics.png) | ![Tasks](./public/screenshots/03-vibe-kanban-tasks.png) |
+
+| File Browser | Git Integration | MCP Settings |
+|:--:|:--:|:--:|
+| ![Files](./public/screenshots/08-file-browser-interface.png) | ![Git](./public/screenshots/09-git-integration-panel.png) | ![MCP](./public/screenshots/01-mcp-servers-settings.png) |
+
+</div>
+
 ## ✨ **Recursos Principais**
 
 ### 🖥️ **Interface Completa**
-- **Terminal Integrado**: Execute Claude Code diretamente na interface web
-- **Explorador de Arquivos**: Navegue e edite arquivos com syntax highlighting  
-- **Git Integrado**: Gerencie branches, commits e operações git
-- **Dashboard Analytics**: Acompanhe tokens, custos e estatísticas de uso
-- **Sistema de Tarefas**: Vibe Kanban integrado para gerenciamento de projetos
+- **Terminal Integrado**: Execute Claude Code diretamente na interface web com XTerm.js
+- **Explorador de Arquivos**: Navegue e edite arquivos com syntax highlighting CodeMirror 6
+- **Git Integrado**: Gerencie branches, commits e operações git em tempo real
+- **Dashboard Analytics**: Acompanhe tokens, custos e estatísticas de uso detalhadas
+- **Sistema de Tarefas**: Vibe Kanban integrado para gerenciamento de projetos e workflows
 
-### 🛡️ **Proteção Inteligente** (NOVO)
+### 🛡️ **Proteção Inteligente**
 - **Proteção Automática de Portas**: Previne conflitos entre dev e produção
+- **Sistema de Limpeza**: Remove processos órfãos do Vibe Kanban automaticamente
 - **Detecção de Conflitos**: Identifica e resolve automaticamente interferências
 - **Troca Segura de Modos**: Switching inteligente entre desenvolvimento e produção
 - **Monitoramento Contínuo**: Supervisão em tempo real dos processos
@@ -21,12 +38,16 @@
 - **Túnel Ngrok**: Acesso global via `https://claudecode.ngrok.app`
 - **Modo Produção**: Deploy automático com build otimizado
 - **Verificação de Conectividade**: Ferramentas para testar acesso público
+- **HTTPS Ready**: Configuração para produção segura
 
 ### 📱 **Experiência Moderna**
 - **Totalmente Responsivo**: Interface otimizada para desktop e mobile
 - **PWA Support**: Instalação como app nativo
 - **Modo Escuro**: Tema adaptável automático
 - **Transcrição de Voz**: Comandos por voz com OpenAI Whisper
+- **Drop & Upload**: Drag-and-drop de imagens direto no terminal
+
+![Mobile View](./public/screenshots/10-mobile-responsive-view.jpg)
 
 ## 🚀 **Início Rápido**
 
@@ -56,7 +77,7 @@ npm run dev
 ```
 **Acesse de qualquer lugar:** https://claudecode.ngrok.app
 
-## 🔧 **Gerenciamento de Portas** 
+## 🔧 **Gerenciamento de Sistema** 
 
 ### Comandos de Proteção
 ```bash
@@ -71,6 +92,10 @@ npm run switch-to-dev
 
 # Parar tudo em caso de emergência
 npm run stop-all
+
+# Monitorar sistema de limpeza
+npm run cleanup-status
+npm run cleanup-force
 ```
 
 ### Por Que Isso é Importante?
@@ -78,6 +103,7 @@ Antes, executar `npm run dev` e depois `./start-background-prod.sh` causava:
 - ❌ Conflitos de porta (EADDRINUSE)
 - ❌ Processos interferindo uns com os outros
 - ❌ Necessidade de cleanup manual
+- ❌ Vibe Kanban ficando sobrecarregado com processos órfãos
 
 **Agora:** O sistema detecta automaticamente conflitos e resolve de forma inteligente.
 
@@ -110,12 +136,14 @@ Antes, executar `npm run dev` e depois `./start-background-prod.sh` causava:
 - JWT authentication
 - Proxy para Claude Code CLI
 - API RESTful completa
+- Sistema de limpeza de processos órfãos
 
 #### 3. **Vibe Kanban (Rust/Actix)** - Porto 8081
 - Sistema avançado de tarefas
 - Integração Git nativa
 - Database SQLite compartilhado
 - Performance otimizada
+- Limpeza automática de processos travados
 
 ### 📊 **Fluxo de Dados**
 ```
@@ -126,7 +154,81 @@ Frontend ←→ Backend ←→ Claude CLI
    PWA    SQLite DB
 ```
 
-## ⚙️ **Configuração**
+## ⭐ **Funcionalidades Principais**
+
+### 1. **Terminal Shell Integrado**
+![Terminal Interface](./public/screenshots/06-terminal-shell-interface.png)
+
+- **Claude Code Integration**: Execute comandos Claude diretamente
+- **Real-time Streaming**: Respostas em tempo real via WebSocket  
+- **Image Drop & Upload**: Drag-and-drop de imagens no terminal
+- **Voice Transcription**: Comandos por voz com Whisper API
+- **Session Management**: Múltiplas sessões de terminal
+- **Command History**: Histórico persistente de comandos
+
+### 2. **File Browser & Editor**
+![File Browser](./public/screenshots/08-file-browser-interface.png)
+
+- **Split-view Editing**: Browse e edite arquivos lado a lado
+- **Syntax Highlighting**: CodeMirror 6 com suporte a múltiplas linguagens
+- **File Tree Navigation**: Navegação hierárquica de arquivos
+- **Live Preview**: Preview de imagens e documentos
+- **Auto-save**: Salvamento automático durante edição
+- **Search & Replace**: Busca e substituição avançada
+
+![File Editor](./public/screenshots/02-file-editor-settings.png)
+
+### 3. **Git Integration**
+![Git Panel](./public/screenshots/09-git-integration-panel.png)
+
+- **Branch Management**: Criação, troca e merge de branches
+- **Commit Operations**: Staging, commits e push em tempo real
+- **Diff Viewer**: Visualização de diferenças com highlighting
+- **History Timeline**: Histórico de commits com navegação
+- **Conflict Resolution**: Resolução de conflitos integrada
+- **Remote Sync**: Sincronização com repositórios remotos
+
+### 4. **Vibe Kanban Tasks**
+![Vibe Kanban](./public/screenshots/03-vibe-kanban-tasks.png)
+
+- **Kanban Board**: Quadro visual de tarefas (To Do, In Progress, Done)
+- **Task Management**: CRUD completo de tarefas com categorias
+- **Project Integration**: Integração nativa com projetos Claude
+- **Git Workflow**: Branches automáticos por tarefa
+- **Quick Panel**: Painel lateral rápido no Claude Code UI
+- **Progress Tracking**: Acompanhamento detalhado de progresso
+
+### 5. **Dashboard Analytics**
+![Dashboard](./public/screenshots/07-dashboard-analytics.png)
+
+- **Token Usage**: Monitoramento de tokens input/output
+- **Cost Tracking**: Cálculo de custos baseado em preços Anthropic
+- **Session Analytics**: Duração, mensagens, taxa de sucesso
+- **Performance Metrics**: Tempo de resposta, taxa de erro
+- **Usage Trends**: Gráficos e tendências de uso
+- **Export Data**: Exportação de dados para análise
+
+### 6. **MCP Servers Integration**
+![MCP Settings](./public/screenshots/01-mcp-servers-settings.png)
+
+- **Context7 Integration**: Documentação de bibliotecas em tempo real
+- **GitHub Integration**: Acesso a repositórios e APIs
+- **Custom Servers**: Adição de servidores MCP personalizados
+- **Tool Management**: Habilitação/desabilitação de ferramentas
+- **Configuration UI**: Interface visual para configuração
+- **Server Health**: Monitoramento de status dos servidores
+
+### 7. **Project Selection & Management**
+![Project Selection](./public/screenshots/04-project-selection-screen.png)
+
+- **Multi-project Support**: Gerenciar múltiplos projetos Claude
+- **Session History**: Histórico completo de conversas
+- **Project Switching**: Troca rápida entre projetos
+- **Auto-detection**: Detecção automática de novos projetos
+- **Custom Icons**: Ícones personalizados por tipo de projeto
+- **Search & Filter**: Busca e filtros avançados
+
+## ⚙️ **Configuração Avançada**
 
 ### 🔐 **Variáveis de Ambiente** (Opcional)
 ```env
@@ -142,20 +244,14 @@ VIBE_PORT=8081         # Vibe Kanban
 - Primeiro acesso: Cria usuário automaticamente
 - JWT tokens com renovação automática
 - Sessions persistentes entre reinicializações
+- Proteção de rotas com middleware
 
-## 📊 **Dashboard de Analytics**
-
-### 📈 **Métricas Coletadas**
-- **Tokens**: Input, output, cache usage
-- **Custos**: Cálculo baseado em preços oficiais Anthropic
-- **Sessions**: Duração, mensagens, taxa de erro
-- **Performance**: Tempo de resposta, taxa de sucesso
-
-### 📋 **Dados Utilizados**
-Coleta dados reais de:
-- `~/.claude/projects/` - Projetos e sessões
-- Logs do Claude CLI
-- Métricas de API
+### 🛡️ **Segurança**
+- **Tools Disabled by Default**: Todas ferramentas precisam ser habilitadas explicitamente
+- **JWT Authentication**: Tokens seguros com renovação automática
+- **Port Protection**: Monitoramento contra processos não autorizados
+- **Input Validation**: Validação rigorosa de todas entradas
+- **HTTPS Ready**: Configuração para produção segura
 
 ## 🛠️ **Comandos Completos**
 
@@ -188,7 +284,9 @@ npm start                   # Produção local (sem túnel)
 ```bash
 npm run port-status       # Status atual dos processos
 npm run protect-ports     # Executar apenas proteção de portas
-node scripts/test-port-attack.js  # Testar sistema de proteção
+npm run cleanup-status    # Status do sistema de limpeza
+npm run cleanup-force     # Forçar limpeza de processos órfãos
+node scripts/test-cleanup-system.js  # Testar sistema de limpeza
 ```
 
 ## 🚨 **Resolução de Problemas**
@@ -207,7 +305,7 @@ npm run dev          # Ou ./start-background-prod.sh
 
 ### ❌ **Vibe Kanban não carrega**
 ```bash
-cd vibe-kanban/backend
+cd vibe-kanban
 cargo build --release
 npm run dev
 ```
@@ -217,74 +315,61 @@ npm run dev
 - Confirmar permissões em `~/.claude/projects/`
 - Usar Claude CLI pelo menos uma vez
 
+### ❌ **Processos órfãos Vibe Kanban**
+```bash
+npm run cleanup-status  # Verificar sistema de limpeza
+npm run cleanup-force   # Forçar limpeza manual
+```
+
 ## 📁 **Estrutura do Projeto**
 
 ```
 claudecodeui/
 ├── src/                    # Frontend React
 │   ├── components/         # Componentes React
+│   │   ├── Dashboard.jsx   # Dashboard de analytics
+│   │   ├── Shell.jsx       # Terminal integrado
+│   │   ├── FileTree.jsx    # Navegador de arquivos
+│   │   ├── GitPanel.jsx    # Painel Git
+│   │   ├── VibeTaskPanel.jsx # Painel Vibe Kanban
+│   │   └── ...
 │   ├── contexts/          # Context providers
 │   └── utils/             # Utilitários frontend
 ├── server/                # Backend Node.js  
 │   ├── routes/            # Endpoints API
 │   ├── database/          # SQLite management
+│   ├── cleanupService.js  # Sistema limpeza processos
 │   └── middleware/        # Express middleware
 ├── scripts/               # Scripts de automação
 │   ├── dev.js             # Orquestrador desenvolvimento
 │   ├── port-protection.js # Proteção de portas
-│   └── port-management.js # Gerenciamento inteligente
+│   ├── port-management.js # Gerenciamento inteligente
+│   └── test-cleanup-system.js # Testes limpeza
 ├── vibe-kanban/           # Sistema tarefas Rust
+├── public/
+│   └── screenshots/       # Screenshots da aplicação
 └── docs/                  # Documentação completa
 ```
-
-## 📚 **Documentação**
-
-### 📖 **Documentos Principais**
-- **CLAUDE.md** - Contexto completo para desenvolvimento
-- **PORT-MANAGEMENT.md** - Sistema de proteção de portas  
-- **docs/ARCHITECTURE.md** - Arquitetura detalhada
-- **docs/TROUBLESHOOTING.md** - Solução de problemas
-
-### 🔗 **Links Úteis**
-- [Guia do Usuário](docs/USER_GUIDE.md)
-- [API Reference](docs/API.md)  
-- [Vibe Kanban Guide](docs/VIBE_KANBAN_PANEL.md)
-- [Mobile Setup](SETUP-HTTPS-MOBILE.md)
-
-## 🔒 **Segurança**
-
-### 🛡️ **Recursos de Segurança**
-- **Tools Disabled by Default**: Todas ferramentas precisam ser habilitadas explicitamente
-- **JWT Authentication**: Tokens seguros com renovação automática
-- **Port Protection**: Monitoramento contra processos não autorizados
-- **Input Validation**: Validação rigorosa de todas entradas
-- **HTTPS Ready**: Configuração para produção segura
-
-### ⚠️ **Boas Práticas**
-- Configure HTTPS para produção
-- Use JWT_SECRET forte em produção
-- Monitore logs regularmente
-- Mantenha dependências atualizadas
 
 ## 🎯 **Casos de Uso**
 
 ### 👨‍💻 **Para Desenvolvedores**
-- Desenvolvimento com Claude Code em interface web
+- Desenvolvimento com Claude Code em interface web moderna
 - Gerenciamento visual de projetos e tarefas
-- Analytics de uso e custos  
-- Workflow git integrado
+- Analytics de uso e custos em tempo real
+- Workflow git integrado e automatizado
 
 ### 🌐 **Para Acesso Remoto** 
-- Trabalho remoto via túnel público
-- Demonstrações para clientes
-- Colaboração em equipe
-- Acesso mobile responsivo
+- Trabalho remoto via túnel público seguro
+- Demonstrações para clientes com interface profissional
+- Colaboração em equipe com sessões compartilhadas
+- Acesso mobile responsivo para desenvolvimento em movimento
 
 ### 🏢 **Para Times**
-- Sistema de tarefas colaborativo
-- Tracking de custos centralizados
-- Sessões compartilhadas
-- Monitoramento de uso
+- Sistema de tarefas colaborativo com Vibe Kanban
+- Tracking de custos centralizados e relatórios
+- Sessões compartilhadas para pair programming
+- Monitoramento de uso e produtividade
 
 ## 🤝 **Suporte & Contribuição**
 
@@ -292,12 +377,14 @@ claudecodeui/
 - Abra uma issue detalhada no GitHub
 - Inclua logs relevantes (`npm run dev` output)
 - Descreva steps para reproduzir
+- Anexe screenshots se relevante
 
 ### 🎉 **Contribuições**
 - Fork o repositório
 - Crie branch para feature/fix
 - Teste localmente com `npm run dev`
 - Abra Pull Request com descrição detalhada
+- Siga os padrões de código existentes
 
 ## 📄 **Licença**
 
@@ -308,16 +395,21 @@ MIT License - veja [LICENSE](LICENSE) para detalhes.
 ## ⭐ **Features em Desenvolvimento**
 
 - [ ] Multi-language support
-- [ ] Plugin system
-- [ ] Advanced analytics
-- [ ] Team collaboration features  
-- [ ] Docker containerization
-- [ ] Cloud deployment options
+- [ ] Plugin system para extensões
+- [ ] Advanced analytics com machine learning
+- [ ] Team collaboration features avançadas
+- [ ] Docker containerization completa
+- [ ] Cloud deployment options (AWS, GCP, Azure)
+- [ ] Real-time collaboration
+- [ ] Advanced file search e indexing
+- [ ] AI-powered code suggestions
+- [ ] Integration com mais MCP servers
 
 ---
 
-**🚀 Pronto para começar?**
+## 🚀 **Como Começar**
 
+**Desenvolvimento:**
 ```bash
 npm install && npm run dev
 ```
@@ -331,3 +423,11 @@ npm install && npm run dev
 ```bash
 npm run port-status && npm run stop-all
 ```
+
+**Precisa de ajuda?** Abra uma [issue](https://github.com/seu-usuario/claudecodeui/issues) ou consulte a [documentação completa](./CLAUDE.md).
+
+---
+
+<div align="center">
+  <strong>Desenvolvido com ❤️ para a comunidade Claude Code</strong>
+</div>
