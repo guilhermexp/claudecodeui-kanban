@@ -80,6 +80,15 @@ async function extractProjectDirectory(projectName) {
   let extractedPath;
   
   try {
+    // Check if project directory exists first
+    try {
+      await fs.access(projectDir);
+    } catch (accessError) {
+      // Project directory doesn't exist, return fallback path
+      console.log(`[INFO] Project directory doesn't exist: ${projectDir}`);
+      return projectName.replace(/-/g, '/');
+    }
+    
     const files = await fs.readdir(projectDir);
     const jsonlFiles = files.filter(file => file.endsWith('.jsonl'));
     

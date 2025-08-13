@@ -25,6 +25,8 @@ npm run switch-to-prod     # Safely switch from development to production
 npm run switch-to-dev      # Safely switch from production to development
 npm run stop-all          # Emergency stop of all Claude Code UI processes
 npm run protect-ports      # Run port protection service standalone
+npm run cleanup-status     # Check Vibe Kanban cleanup service status
+npm run cleanup-force      # Force cleanup of orphan processes
 ```
 
 ## 🏗️ **Architecture Overview**
@@ -67,6 +69,22 @@ The application now includes **intelligent port protection** that prevents confl
 - **Continuous Monitoring:** Checks ports every 5 seconds
 - **Process Whitelisting:** Automatically authorizes legitimate Claude Code UI processes
 - **Automatic Termination:** Kills unauthorized processes trying to use protected ports
+
+## 🧹 **Vibe Kanban Cleanup System (NEW)**
+
+### Critical Feature: Orphan Process Management
+Automatic cleanup system for Vibe Kanban backend processes that prevents server overload:
+
+- **Process Monitoring:** Continuously monitors Vibe Kanban processes (port 8081)
+- **Orphan Detection:** Identifies stuck processes from server crashes
+- **Automatic Cleanup:** Terminates orphaned processes to prevent queue buildup
+- **Health Checks:** Validates process responsiveness before cleanup
+- **Resource Management:** Prevents memory exhaustion and server overload
+
+**Why This Matters:**
+- Prevents the cycle: Process crashes → Orphan processes → Server overload → More crashes
+- Maintains system stability during development
+- Automatic recovery from port conflicts and crashes
 - **Mode Detection:** Intelligently detects development vs production mode
 
 ### Why This Matters

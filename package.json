@@ -23,6 +23,8 @@
     "switch-to-prod": "node scripts/port-management.js switch-to-prod",
     "switch-to-dev": "node scripts/port-management.js switch-to-dev",
     "stop-all": "node scripts/port-management.js stop-all",
+    "cleanup-status": "curl -s http://localhost:8080/api/cleanup/status | jq",
+    "cleanup-force": "curl -X POST http://localhost:8080/api/cleanup/force",
     "ngrok": "echo 'Deprecated. Use ./start-background-prod.sh'"
   },
   "keywords": [

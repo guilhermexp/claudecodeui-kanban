@@ -41,6 +41,7 @@ import mcpRoutes from './routes/mcp.js';
 import usageRoutes from './routes/usage.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
+import cleanupService from './cleanupService.js';
 
 // File system watcher for projects folder
 let projectsWatcher = null;
@@ -259,6 +260,30 @@ app.use('/api/mcp', authenticateToken, mcpRoutes);
 
 // Usage API Routes (protected)
 app.use('/api/usage', usageRoutes);
+
+// Vibe Kanban Cleanup API Routes
+app.get('/api/cleanup/status', authenticateToken, (req, res) => {
+  res.json(cleanupService.getStatus());
+});
+
+app.post('/api/cleanup/force', authenticateToken, async (req, res) => {
+  try {
+    await cleanupService.forceCleanup();
+    res.json({ success: true, message: 'Forced cleanup completed' });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/cleanup/restart', authenticateToken, (req, res) => {
+  try {
+    cleanupService.stop();
+    cleanupService.start();
+    res.json({ success: true, message: 'Cleanup service restarted' });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
 
 // Static files served after API routes
 app.use(express.static(path.join(__dirname, '../dist')));
@@ -1787,6 +1812,10 @@ async function startServer() {
       
       // Start watching the projects folder for changes
       await setupProjectsWatcher(); // Re-enabled with better-sqlite3
+      
+      // Start Vibe Kanban cleanup service
+      console.log('🧹 Starting Vibe Kanban cleanup service...');
+      cleanupService.start();
     });
   } catch (error) {
     console.error('❌ Failed to start server:', error);

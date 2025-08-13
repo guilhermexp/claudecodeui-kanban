@@ -1008,7 +1008,20 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
             
             // If URLs found, log them for potential opening
             
-            terminal.current.write(output);
+            // Sanitize output to prevent xterm parsing errors
+            try {
+              // Filter out malformed ANSI sequences and non-printable characters
+              const sanitizedOutput = output
+                .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // Remove control chars except \n, \r, \t
+                .replace(/\x1b\[[0-9;]*[^m]/g, '') // Remove incomplete ANSI sequences
+                .replace(/\x1b\[[\?0-9;]*[hlJ]/g, ''); // Remove problematic sequences
+              
+              terminal.current.write(sanitizedOutput);
+            } catch (error) {
+              console.warn('Terminal write error:', error);
+              // Fallback: write safe version
+              terminal.current.write(output.replace(/[\x00-\x1F\x7F]/g, ''));
+            }
           } else if (data.type === 'image-uploaded') {
             // Handle successful image upload
             const { path, fileName } = data;
