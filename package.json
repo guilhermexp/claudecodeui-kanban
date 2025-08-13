@@ -18,6 +18,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "start": "npm run build && npm run server",
+    "protect-ports": "node scripts/port-protection.js",
     "ngrok": "echo 'Deprecated. Use ./start-background-prod.sh'"
   },
   "keywords": [
