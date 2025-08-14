@@ -93,7 +93,9 @@ export default defineConfig(({ command, mode }) => {
       }
     },
     build: {
-      outDir: 'dist'
+      outDir: 'dist',
+      cssMinify: false, // Disable CSS minification to avoid syntax errors
+      target: 'es2020'
     }
   }
 })

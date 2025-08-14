@@ -91,7 +91,7 @@
 .date-filter-btn.active {
   background-color: hsl(var(--background));
   color: hsl(var(--foreground));
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
 }
 
 /* Content */
@@ -192,7 +192,7 @@
 
 .stat-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.08);
   border-color: hsl(var(--primary) / 0.3);
 }
 
@@ -236,7 +236,7 @@
   border: 1px solid hsl(var(--border));
   border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
 }
 
 .tabs-list {
@@ -270,7 +270,7 @@
 .tab-trigger.active {
   color: hsl(var(--foreground));
   background-color: hsl(var(--background));
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
 }
 
 .tab-content {
@@ -406,13 +406,13 @@
 .model-opus {
   color: #a855f7;
   border-color: #a855f7;
-  background-color: rgba(168, 85, 247, 0.1);
+  background-color: rgba(168,85,247,0.1);
 }
 
 .model-sonnet {
   color: #3b82f6;
   border-color: #3b82f6;
-  background-color: rgba(59, 130, 246, 0.1);
+  background-color: rgba(59,130,246,0.1);
 }
 
 .model-default {
@@ -461,7 +461,7 @@
 }
 
 .model-detail:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
   border-color: hsl(var(--primary) / 0.3);
 }
 
@@ -709,7 +709,7 @@
   transition: opacity 0.2s;
   white-space: nowrap;
   z-index: 10;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
 }
 
 .chart-bar:hover .chart-tooltip {
@@ -840,21 +840,21 @@
 
 /* Dark mode specific adjustments */
 .dark .stat-card:hover {
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3);
 }
 
 .dark .dashboard-tabs {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
 }
 
 .dark .chart-tooltip {
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
 }
 
 .dark .model-opus {
-  background-color: rgba(168, 85, 247, 0.15);
+  background-color: rgba(168,85,247,0.15);
 }
 
 .dark .model-sonnet {
-  background-color: rgba(59, 130, 246, 0.15);
+  background-color: rgba(59,130,246,0.15);
 }
