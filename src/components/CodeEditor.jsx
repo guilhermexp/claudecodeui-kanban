@@ -95,7 +95,7 @@ function CodeEditor({ file, onClose, projectPath, inline = false }) {
       borderLeft: '3px solid #ef4444'
     },
     '.diff-removed-dark': {
-      backgroundColor: 'rgba(239, 68, 68, 0.1)',
+      backgroundColor: 'rgba(239,68,68,0.1)',
       borderLeft: '3px solid #ef4444'
     },
     '.diff-added-light': {
@@ -103,7 +103,7 @@ function CodeEditor({ file, onClose, projectPath, inline = false }) {
       borderLeft: '3px solid #22c55e'
     },
     '.diff-added-dark': {
-      backgroundColor: 'rgba(34, 197, 94, 0.1)',
+      backgroundColor: 'rgba(34,197,94,0.1)',
       borderLeft: '3px solid #22c55e'
     }
   });

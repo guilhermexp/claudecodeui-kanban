@@ -19,10 +19,14 @@ const xtermStyles = `
     outline: none !important;
   }
   
-  /* Make terminal responsive */
+  /* Make terminal responsive with performance optimizations */
   .xterm {
     width: 100% !important;
     height: 100% !important;
+    /* Performance optimizations */
+    will-change: auto !important;
+    transform: translateZ(0) !important;
+    backface-visibility: hidden !important;
   }
   
   .xterm .xterm-viewport {
@@ -48,12 +52,12 @@ const xtermStyles = `
       min-width: 100% !important;
     }
     
-    /* Fix for input helper textarea position on mobile */
+    /* Optimized mobile input - remove layout interference */
     @media (max-width: 768px) {
       .xterm .xterm-helper-textarea {
-        bottom: 80px !important; /* Move above mobile navigation */
-        position: fixed !important;
-        z-index: 10;
+        position: absolute !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
       }
     }
   }
@@ -104,6 +108,9 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   const activityTimeout = useRef(null);
   const lastActivityTime = useRef(null);
   const maxReconnectAttempts = 5;
+  
+  // Scroll position persistence
+  const [savedScrollPosition, setSavedScrollPosition] = useState(null);
   
   // Track if init command was already sent to prevent duplicates
   const hasInitialized = useRef(false);
@@ -372,6 +379,44 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     };
   }, [isActive, isConnected]);
 
+  // Save and restore scroll position when switching tabs
+  useEffect(() => {
+    if (!terminal.current) return;
+
+    if (!isActive && terminal.current) {
+      // Save current scroll position when leaving Shell tab
+      const viewport = terminal.current.element?.querySelector('.xterm-viewport');
+      if (viewport) {
+        const scrollPosition = {
+          scrollTop: viewport.scrollTop,
+          viewportY: terminal.current.buffer.active.viewportY
+        };
+        setSavedScrollPosition(scrollPosition);
+      }
+    } else if (savedScrollPosition && isActive && terminal.current) {
+      // Restore scroll position when returning to Shell tab
+      const restorePosition = () => {
+        if (terminal.current) {
+          // Try using terminal's scroll method first
+          if (savedScrollPosition.viewportY > 0) {
+            terminal.current.scrollToLine(savedScrollPosition.viewportY);
+          }
+          
+          // Also try viewport scrollTop as fallback
+          const viewport = terminal.current.element?.querySelector('.xterm-viewport');
+          if (viewport && savedScrollPosition.scrollTop > 0) {
+            viewport.scrollTop = savedScrollPosition.scrollTop;
+          }
+        }
+      };
+      
+      // Use requestAnimationFrame to ensure DOM is ready
+      requestAnimationFrame(() => {
+        setTimeout(restorePosition, 50); // Small delay to ensure terminal is fully rendered
+      });
+    }
+  }, [isActive, savedScrollPosition]);
+
   // Restart shell function
   const restartShell = () => {
     setIsRestarting(true);
@@ -511,7 +556,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     }
 
 
-    // Initialize new terminal with responsive settings
+    // Initialize new terminal with responsive settings and performance optimizations
     terminal.current = new Terminal({
       cursorBlink: true,
       fontSize: isMobile ? 14 : 14,  // Increased mobile font size for better readability
@@ -519,8 +564,10 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       allowProposedApi: true, // Required for clipboard addon
       allowTransparency: false,
       convertEol: true,
-      scrollback: isMobile ? 3000 : 10000,
+      scrollback: isMobile ? 1000 : 5000, // Reduced for better performance
       tabStopWidth: 4,
+      fastScrollModifier: 'alt', // Optimize scrolling
+      scrollSensitivity: 1,
       ...(isMobile && { cols: 80, rows: 20 }), // Reduced rows for mobile to account for navigation bar
       // Enable full color support
       windowsMode: false,
@@ -722,11 +769,13 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     
     setIsInitialized(true);
 
-    // Handle terminal input
+    // Handle terminal input with optimized session tracking
     terminal.current.onData((data) => {
       if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-        // Mark session as active when user types in terminal
-        markSessionActive();
+        // Mark session as active only if not already active (avoid excessive calls)
+        if (!hasActiveSession) {
+          markSessionActive();
+        }
         ws.current.send(JSON.stringify({
           type: 'input',
           data: data
