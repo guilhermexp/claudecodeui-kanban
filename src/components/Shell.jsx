@@ -5,6 +5,7 @@ import { ClipboardAddon } from '@xterm/addon-clipboard';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { useDropzone } from 'react-dropzone';
+import { useTheme } from '../contexts/ThemeContext';
 import 'xterm/css/xterm.css';
 
 // CSS to make xterm responsive and remove focus outline
@@ -80,7 +81,89 @@ if (typeof document !== 'undefined') {
 // Global store for shell sessions to persist across tab switches AND project switches
 const shellSessions = new Map();
 
+// Function to get terminal theme based on dark/light mode
+const getTerminalTheme = (isDarkMode) => {
+  if (isDarkMode) {
+    // Dark mode theme (keep the existing dark theme unchanged)
+    return {
+      background: '#0d0d0d',
+      foreground: '#f2f2f2',
+      cursor: '#ffffff',
+      cursorAccent: '#0d0d0d',
+      selection: '#333333',
+      selectionForeground: '#ffffff',
+      
+      // Standard ANSI colors
+      black: '#000000',
+      red: '#cd3131',
+      green: '#0dbc79',
+      yellow: '#e5e510',
+      blue: '#2472c8',
+      magenta: '#bc3fbc',
+      cyan: '#11a8cd',
+      white: '#e5e5e5',
+      
+      // Bright ANSI colors
+      brightBlack: '#666666',
+      brightRed: '#f14c4c',
+      brightGreen: '#23d18b',
+      brightYellow: '#f5f543',
+      brightBlue: '#3b8eea',
+      brightMagenta: '#d670d6',
+      brightCyan: '#29b8db',
+      brightWhite: '#ffffff',
+      
+      // Extended colors
+      extendedAnsi: [
+        '#000000', '#800000', '#008000', '#808000',
+        '#000080', '#800080', '#008080', '#c0c0c0',
+        '#808080', '#ff0000', '#00ff00', '#ffff00',
+        '#0000ff', '#ff00ff', '#00ffff', '#ffffff'
+      ]
+    };
+  } else {
+    // Light mode theme with lighter background
+    return {
+      background: '#f8f9fa',  // Light gray background
+      foreground: '#212529',   // Dark text for better contrast
+      cursor: '#212529',
+      cursorAccent: '#f8f9fa',
+      selection: '#dee2e6',    // Light gray selection
+      selectionForeground: '#212529',
+      
+      // Standard ANSI colors (adjusted for light background)
+      black: '#000000',
+      red: '#dc3545',
+      green: '#28a745',
+      yellow: '#ffc107',
+      blue: '#007bff',
+      magenta: '#e83e8c',
+      cyan: '#17a2b8',
+      white: '#f8f9fa',
+      
+      // Bright ANSI colors
+      brightBlack: '#6c757d',
+      brightRed: '#dc3545',
+      brightGreen: '#28a745',
+      brightYellow: '#ffc107',
+      brightBlue: '#007bff',
+      brightMagenta: '#e83e8c',
+      brightCyan: '#17a2b8',
+      brightWhite: '#ffffff',
+      
+      // Extended colors
+      extendedAnsi: [
+        '#000000', '#800000', '#008000', '#808000',
+        '#000080', '#800080', '#008080', '#c0c0c0',
+        '#808080', '#ff0000', '#00ff00', '#ffff00',
+        '#0000ff', '#ff00ff', '#00ffff', '#ffffff'
+      ]
+    };
+  }
+};
+
 function Shell({ selectedProject, selectedSession, isActive, onConnectionChange, onSessionStateChange, isMobile, resizeTrigger }) {
+  const { isDarkMode } = useTheme();
   const terminalRef = useRef(null);
   const terminal = useRef(null);
   const fitAddon = useRef(null);
@@ -573,45 +656,8 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       windowsMode: false,
       macOptionIsMeta: true,
       macOptionClickForcesSelection: false,
-      // Enhanced theme with full 16-color ANSI support + true colors
-      theme: {
-        // Basic colors
-        background: '#0d0d0d',  // Dark gray background matching bg-card
-        foreground: '#f2f2f2',  // White text matching foreground color
-        cursor: '#ffffff',
-        cursorAccent: '#0d0d0d',
-        selection: '#333333',   // Neutral gray selection
-        selectionForeground: '#ffffff',
-        
-        // Standard ANSI colors (0-7)
-        black: '#000000',
-        red: '#cd3131',
-        green: '#0dbc79',
-        yellow: '#e5e510',
-        blue: '#2472c8',
-        magenta: '#bc3fbc',
-        cyan: '#11a8cd',
-        white: '#e5e5e5',
-        
-        // Bright ANSI colors (8-15)
-        brightBlack: '#666666',
-        brightRed: '#f14c4c',
-        brightGreen: '#23d18b',
-        brightYellow: '#f5f543',
-        brightBlue: '#3b8eea',
-        brightMagenta: '#d670d6',
-        brightCyan: '#29b8db',
-        brightWhite: '#ffffff',
-        
-        // Extended colors for better Claude output
-        extendedAnsi: [
-          // 16-color palette extension for 256-color support
-          '#000000', '#800000', '#008000', '#808000',
-          '#000080', '#800080', '#008080', '#c0c0c0',
-          '#808080', '#ff0000', '#00ff00', '#ffff00',
-          '#0000ff', '#ff00ff', '#00ffff', '#ffffff'
-        ]
-      }
+      // Use dynamic theme based on current mode
+      theme: getTerminalTheme(isDarkMode)
     });
 
     fitAddon.current = new FitAddon();
@@ -873,6 +919,14 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       }
     };
   }, [terminalRef.current, selectedProject, selectedSession, isRestarting]);
+
+  // Update terminal theme when dark mode changes
+  useEffect(() => {
+    if (!terminal.current) return;
+    
+    // Update the terminal theme dynamically
+    terminal.current.options.theme = getTerminalTheme(isDarkMode);
+  }, [isDarkMode]);
 
   // Fit terminal when tab becomes active
   useEffect(() => {
