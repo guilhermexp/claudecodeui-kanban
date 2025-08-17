@@ -14,7 +14,7 @@ class Config {
     
     // Server configuration
     this.server = {
-      port: parseInt(process.env.PORT || '8080', 10),
+      port: parseInt(process.env.PORT || '7347', 10),
       host: process.env.HOST || '0.0.0.0',
       sessionSecret: process.env.SESSION_SECRET || 'dev-secret-change-in-production',
       jwtSecret: process.env.JWT_SECRET || 'dev-jwt-secret-change-in-production'
@@ -22,15 +22,15 @@ class Config {
     
     // Client configuration
     this.client = {
-      port: parseInt(process.env.VITE_PORT || '9000', 10),
-      url: process.env.VITE_SERVER_URL || 'http://localhost:8080',
-      wsUrl: process.env.VITE_WS_URL || 'ws://localhost:8080'
+      port: parseInt(process.env.VITE_PORT || '5892', 10),
+      url: process.env.VITE_SERVER_URL || 'http://localhost:7347',
+      wsUrl: process.env.VITE_WS_URL || 'ws://localhost:7347'
     };
     
     // Vibe Kanban configuration
     this.vibeKanban = {
-      port: parseInt(process.env.VIBE_PORT || '8081', 10),
-      url: process.env.VIBE_URL || 'http://localhost:8081',
+      port: parseInt(process.env.VIBE_PORT || '6734', 10),
+      url: process.env.VIBE_URL || 'http://localhost:6734',
       timeout: parseInt(process.env.VIBE_TIMEOUT || '30000', 10),
       retries: parseInt(process.env.VIBE_RETRIES || '3', 10),
       healthCheckInterval: parseInt(process.env.VIBE_HEALTH_CHECK_INTERVAL || '30000', 10)

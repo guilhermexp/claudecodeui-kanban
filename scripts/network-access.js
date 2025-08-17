@@ -93,10 +93,10 @@ ${colors.reset}`);
   console.log(`${colors.green}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${colors.reset}\n`);
   
   console.log(`${colors.bright}Deste computador:${colors.reset}`);
-  console.log(`  ${colors.blue}http://localhost:9000${colors.reset}\n`);
+  console.log(`  ${colors.blue}http://localhost:5892${colors.reset}\n`);
   
   console.log(`${colors.bright}De outros dispositivos na rede:${colors.reset}`);
-  console.log(`  ${colors.blue}http://${localIP}:9000${colors.reset}\n`);
+  console.log(`  ${colors.blue}http://${localIP}:5892${colors.reset}\n`);
   
   console.log(`${colors.bright}Seu IP na rede local:${colors.reset} ${localIP}`);
   console.log(`${colors.bright}Nome do computador:${colors.reset} ${os.hostname()}\n`);
@@ -108,10 +108,10 @@ ${colors.reset}`);
     ...process.env,
     HOST: '0.0.0.0',
     VITE_HOST: '0.0.0.0',
-    VITE_API_URL: `http://${localIP}:8080`,
-    VITE_WS_URL: `ws://${localIP}:8080`,
-    PORT: '8080',
-    VITE_PORT: '9000'
+    VITE_API_URL: `http://${localIP}:7347`,
+    VITE_WS_URL: `ws://${localIP}:7347`,
+    PORT: '7347',
+    VITE_PORT: '5892'
   };
 
   console.log(`${colors.green}🚀 Iniciando servidores...${colors.reset}\n`);

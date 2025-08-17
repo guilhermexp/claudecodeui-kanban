@@ -6,7 +6,7 @@
 import { spawn } from 'child_process';
 import net from 'net';
 
-const PROTECTED_PORTS = [8080, 9000, 8081];
+const PROTECTED_PORTS = [7347, 5892, 6734];
 
 console.log('🚀 Testing Port Protection...');
 console.log(`Attempting to occupy Claude Code UI ports: ${PROTECTED_PORTS.join(', ')}`);

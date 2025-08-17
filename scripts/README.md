@@ -13,9 +13,9 @@ Intelligent development script that manages all three services with enhanced fea
 - **🌐 Browser Control**: Only opens frontend browser, skips backend browsers
 
 ### Port Configuration
-- **Frontend (Vite)**: Port 9000
-- **Server (Claude Code UI)**: Port 8080  
-- **Backend (VibeKanban)**: Port 8081
+- **Frontend (Vite)**: Port 5892
+- **Server (Claude Code UI)**: Port 7347  
+- **Backend (VibeKanban)**: Port 6734
 
 ### Service Colors
 - 🟢 **SERVER** - Claude Code UI Backend

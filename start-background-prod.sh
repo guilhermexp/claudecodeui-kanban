@@ -8,8 +8,8 @@ ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT_DIR"
 
 # Configurações
-SERVER_PORT=8080
-VIBE_PORT=8081
+SERVER_PORT=7347
+VIBE_PORT=6734
 DOMAIN="claudecode.ngrok.app"
 
 # Localiza binário do ngrok
@@ -94,7 +94,7 @@ echo "🛡️  Ngrok iniciado (PID: ${NGROK_PID})"
 # Aguarda ngrok conectar (até 30s)
 echo "⏳ Aguardando ngrok conectar..."
 for i in {1..30}; do
-  if curl -sf "http://localhost:4040/api/tunnels" | grep -q "${SERVER_PORT}"; then
+  if curl -s http://localhost:4040/api/tunnels | grep -q "${SERVER_PORT}"; then
     echo "✅ Ngrok conectado"
     break
   fi
@@ -103,8 +103,8 @@ done
 
 echo ""
 echo "✅ Ambiente de PRODUÇÃO rodando em background!"
-echo "🌐 URL pública: https://${DOMAIN}/"
-echo "📊 Dashboard ngrok: http://localhost:4040"
+echo "🌐 Server will be available at: http://$LOCAL_IP:7347"
+echo "🌐 Server will be available at: http://localhost:7347"
 echo ""
 echo "📜 Logs:"
 echo "  - Servidor: tail -f prod-server.log"

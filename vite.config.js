@@ -17,15 +17,15 @@ export default defineConfig(({ command, mode }) => {
       },
     },
     server: {
-      port: 9000,
+      port: 5892,
       host: true, // Allow access from network
       hmr: {
         overlay: true,
         // Configuração para trabalhar com ngrok
         protocol: isNgrok ? 'wss' : 'ws',
         host: isNgrok ? isNgrok.replace('https://', '').replace('http://', '') : 'localhost',
-        port: isNgrok ? 443 : 9000,
-        clientPort: isNgrok ? 443 : 9000
+        port: isNgrok ? 443 : 5892,
+        clientPort: isNgrok ? 443 : 5892
       },
       // Permite requisições do ngrok
       strictPort: true,
@@ -46,13 +46,13 @@ export default defineConfig(({ command, mode }) => {
       proxy: {
         // VibeKanban API routes - proxy to Rust backend (MUST BE FIRST!)
         '/api/vibe-kanban': {
-          target: 'http://localhost:8081',
+          target: 'http://localhost:6734',
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api\/vibe-kanban/, '/api')
         },
         // VibeKanban SSE streams for real-time logs
         '/api/vibe-kanban/projects/.+/execution-processes/.+/normalized-logs/stream': {
-          target: 'http://localhost:8081',
+          target: 'http://localhost:6734',
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api\/vibe-kanban/, '/api'),
           configure: (proxy, options) => {
@@ -69,24 +69,24 @@ export default defineConfig(({ command, mode }) => {
         },
         // VibeKanban WebSocket for real-time updates
         '/api/vibe-kanban/stream': {
-          target: 'ws://localhost:8081',
+          target: 'ws://localhost:6734',
           ws: true,
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api\/vibe-kanban/, '/api')
         },
         // Claude Code UI API routes (original)
         '/api': {
-          target: 'http://localhost:8080',
+          target: 'http://localhost:7347',
           changeOrigin: true
         },
         '/ws': {
-          target: 'ws://localhost:8080',
+          target: 'ws://localhost:7347',
           ws: true,
           changeOrigin: true
         },
         // Shell WebSocket
         '/shell': {
-          target: 'ws://localhost:8080',
+          target: 'ws://localhost:7347',
           ws: true,
           changeOrigin: true
         }
