@@ -387,4 +387,8 @@ npm run server  # Production server only (no tunnel)
 7. **Verify Vibe Kanban** - Rust backend must be compiled
 8. **Monitor WebSocket connections** - critical for terminal functionality
 
-This application is actively used for development work, so **stability and reliability are paramount**. When in doubt, ask the user before making significant changes.
+This application is actively used for development work, so **stability and reliability are paramount**. When in doubt, ask the user before making significant changes.[byterover-mcp]
+
+# important 
+always use byterover-retrieve-knowledge tool to get the related context before any tasks 
+always use byterover-store-knowledge to store all the critical informations after sucessful tasks

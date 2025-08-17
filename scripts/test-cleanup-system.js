@@ -13,7 +13,7 @@ const execAsync = promisify(exec);
 class CleanupSystemTester {
   constructor() {
     this.testProcesses = [];
-    this.vibeKanbanPort = 8081;
+    this.vibeKanbanPort = 6734;
   }
 
   async runTests() {
@@ -77,7 +77,7 @@ class CleanupSystemTester {
   async testCleanupAPI() {
     console.log('\n3️⃣ Testing Cleanup API endpoints...');
     
-    const baseUrl = 'http://localhost:8080';
+    const baseUrl = 'http://localhost:7347';
     const endpoints = [
       '/api/cleanup/status',
       '/api/cleanup/force'  

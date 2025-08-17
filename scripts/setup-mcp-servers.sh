@@ -110,7 +110,7 @@ main() {
     echo "🎉 Setup complete!"
     echo ""
     echo "Next steps:"
-    echo "1. Open Claude Code UI at http://localhost:9000"
+    echo "1. Open Claude Code UI at http://localhost:5892"
     echo "2. Go to Settings → Tools"
     echo "3. Enable the tools for your new MCP servers"
     echo ""

@@ -57,8 +57,8 @@ console.log('');
 // Environment setup
 const env = { ...process.env };
 env.HOST = '0.0.0.0';
-env.PORT = '8080';
-env.VITE_PORT = '9000';
+env.PORT = '7347';
+env.VITE_PORT = '5892';
 
 // Warning about authentication
 if (!hasUsers) {
@@ -75,8 +75,8 @@ const server = spawn('node', ['server/index.js'], {
 });
 
 // Start client
-console.log(`${colors.blue}[${new Date().toLocaleTimeString()}] [CLIENT] Starting: npx vite --host 0.0.0.0 --port 9000${colors.reset}`);
-const client = spawn('npx', ['vite', '--host', '0.0.0.0', '--port', '9000'], { 
+console.log(`${colors.blue}[${new Date().toLocaleTimeString()}] [CLIENT] Starting: npx vite --host 0.0.0.0 --port 5892${colors.reset}`);
+const client = spawn('npx', ['vite', '--host', '0.0.0.0', '--port', '5892'], { 
   env,
   stdio: 'pipe'
 });
@@ -85,13 +85,13 @@ const client = spawn('npx', ['vite', '--host', '0.0.0.0', '--port', '9000'], {
 console.log(`${colors.magenta}[${new Date().toLocaleTimeString()}] [VIBE-BACKEND] Starting: cargo run --release${colors.reset}`);
 const vibeBackend = spawn('cargo', ['run', '--release'], {
   cwd: path.join(__dirname, '..', 'vibe-kanban'),
-  env: { ...env, PORT: '8081', VIBE_NO_BROWSER: 'true' },
+  env: { ...env, PORT: '6734', VIBE_NO_BROWSER: 'true' },
   stdio: 'pipe'
 });
 
 // Start ngrok tunnel
-console.log(`${colors.bright}${colors.magenta}[${new Date().toLocaleTimeString()}] [NGROK] Starting: ngrok http --domain=claudecode.ngrok.app 9000${colors.reset}`);
-const ngrok = spawn('ngrok', ['http', '--domain=claudecode.ngrok.app', '9000'], {
+console.log(`${colors.bright}${colors.magenta}[${new Date().toLocaleTimeString()}] [NGROK] Starting: ngrok http --domain=claudecode.ngrok.app 5892${colors.reset}`);
+const ngrok = spawn('ngrok', ['http', '--domain=claudecode.ngrok.app', '5892'], {
   env,
   stdio: 'pipe'
 });
@@ -100,8 +100,8 @@ const ngrok = spawn('ngrok', ['http', '--domain=claudecode.ngrok.app', '9000'], 
 console.log(`${colors.cyan}[${new Date().toLocaleTimeString()}] [READY] Development servers starting...${colors.reset}`);
 console.log('');
 console.log(`${colors.bright}📱 Access URLs:${colors.reset}`);
-console.log(`${colors.green}  Local:    http://localhost:9000${colors.reset}`);
-console.log(`${colors.green}  Network:  http://${localIP}:9000${colors.reset}`);
+console.log(`${colors.green}  Local:    http://localhost:5892${colors.reset}`);
+console.log(`${colors.green}  Network:  http://${localIP}:5892${colors.reset}`);
 console.log(`${colors.bright}${colors.magenta}  🔒 HTTPS:   https://claudecode.ngrok.app/${colors.reset}`);
 console.log('');
 console.log(`${colors.yellow}💡 Use the HTTPS URL for microphone access on mobile devices${colors.reset}`);

@@ -5,9 +5,9 @@ import net from 'net';
 
 // Claude Code UI Protected Ports
 const PROTECTED_PORTS = {
-  CLIENT: 9000,
-  SERVER: 8080,
-  VIBE_BACKEND: 8081
+  CLIENT: 5892,
+  SERVER: 7347,
+  VIBE_BACKEND: 6734
 };
 
 // Colors for output

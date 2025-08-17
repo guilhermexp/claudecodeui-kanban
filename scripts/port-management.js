@@ -8,13 +8,13 @@ import net from 'net';
 
 const MODES = {
   DEVELOPMENT: {
-    CLIENT: 9000,
-    SERVER: 8080, 
-    VIBE_BACKEND: 8081
+    CLIENT: 5892,
+    SERVER: 7347, 
+    VIBE_BACKEND: 6734
   },
   PRODUCTION: {
-    SERVER: 8080,
-    VIBE_BACKEND: 8081
+    SERVER: 7347,
+    VIBE_BACKEND: 6734
     // Production doesn't use CLIENT port (serves static files via SERVER)
   }
 };
@@ -197,10 +197,10 @@ async function main() {
       
       if (mode === 'DEVELOPMENT') {
         log('MODE-MANAGER', 'Development mode detected (npm run dev)', colors.blue);
-        log('MODE-MANAGER', 'Ports: CLIENT(9000), SERVER(8080), VIBE_BACKEND(8081)', colors.blue);
+        log('MODE-MANAGER', 'Ports: CLIENT(5892), SERVER(7347), VIBE_BACKEND(6734)', colors.blue);
       } else if (mode === 'PRODUCTION') {
         log('MODE-MANAGER', 'Production mode detected (start-background-prod.sh)', colors.magenta);
-        log('MODE-MANAGER', 'Ports: SERVER(8080), VIBE_BACKEND(8081)', colors.magenta);
+        log('MODE-MANAGER', 'Ports: SERVER(7347), VIBE_BACKEND(6734)', colors.magenta);
       } else if (mode === 'MIXED') {
         log('MODE-MANAGER', 'Mixed/conflicting processes detected', colors.red);
         log('MODE-MANAGER', 'Use "stop-all" to clean up', colors.red);

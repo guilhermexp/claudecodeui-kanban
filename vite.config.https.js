@@ -7,7 +7,7 @@ import path from 'path';
 export default defineConfig({
   plugins: [react()],
   server: {
-    port: 9000,
+    port: 5892,
     host: '0.0.0.0',
     https: {
       key: fs.readFileSync('./certs/localhost-key.pem'),
@@ -15,12 +15,12 @@ export default defineConfig({
     },
     proxy: {
       '/api': {
-        target: 'http://localhost:8080',
+        target: 'http://localhost:7347',
         changeOrigin: true,
         secure: false
       },
       '/ws': {
-        target: 'ws://localhost:8080',
+        target: 'ws://localhost:7347',
         ws: true,
         changeOrigin: true,
         secure: false

@@ -58,8 +58,8 @@ console.log('');
 // Environment setup
 const env = { ...process.env };
 env.HOST = '0.0.0.0';
-env.PORT = '8080';
-env.VITE_PORT = '9000';
+env.PORT = '7347';
+env.VITE_PORT = '5892';
 
 // Start server
 console.log(`${colors.green}[${new Date().toLocaleTimeString()}] [SERVER] Starting: node server/index.js${colors.reset}`);
@@ -79,7 +79,7 @@ const client = spawn('npx', ['vite', '--config', 'vite.config.https.js'], {
 console.log(`${colors.magenta}[${new Date().toLocaleTimeString()}] [VIBE-BACKEND] Starting: cargo run --release${colors.reset}`);
 const vibeBackend = spawn('cargo', ['run', '--release'], {
   cwd: path.join(__dirname, '..', 'vibe-kanban'),
-  env: { ...env, PORT: '8081', VIBE_NO_BROWSER: 'true' },
+  env: { ...env, PORT: '6734', VIBE_NO_BROWSER: 'true' },
   stdio: 'pipe'
 });
 
@@ -89,8 +89,8 @@ setTimeout(() => {
   console.log(`${colors.bright}✅ HTTPS Local Configurado!${colors.reset}`);
   console.log('');
   console.log(`${colors.bright}📱 URLs de Acesso (com HTTPS):${colors.reset}`);
-  console.log(`${colors.green}  🔒 https://localhost:9000${colors.reset}`);
-  console.log(`${colors.green}  🔒 https://${localIP}:9000${colors.reset}`);
+  console.log(`${colors.green}  🔒 https://localhost:5892${colors.reset}`);
+  console.log(`${colors.green}  🔒 https://${localIP}:5892${colors.reset}`);
   console.log('');
   console.log(`${colors.yellow}⚠️  Primeira vez: Aceite o certificado no navegador${colors.reset}`);
   console.log(`${colors.cyan}🎤 Microfone funcionará em ambas URLs!${colors.reset}`);
