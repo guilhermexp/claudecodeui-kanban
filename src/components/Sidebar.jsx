@@ -533,21 +533,21 @@ function Sidebar({
               
             </div>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1 sm:gap-1.5 lg:gap-2">
             <div className="relative filter-dropdown-container">
               <Button
                 variant="ghost"
                 size="icon"
                 className={cn(
-                  "h-7 w-7 hover:bg-accent hover:text-accent-foreground",
+                  "h-7 w-7 sm:h-8 sm:w-8 lg:h-9 lg:w-9 hover:bg-accent hover:text-accent-foreground transition-all",
                   projectFilter !== 'all' && "text-primary"
                 )}
                 onClick={() => setShowFilterDropdown(!showFilterDropdown)}
                 title="Filter projects"
               >
-                <Filter className="w-3.5 h-3.5" />
+                <Filter className="w-3.5 h-3.5 sm:w-4 sm:h-4 lg:w-4.5 lg:h-4.5" />
                 {projectFilter !== 'all' && (
-                  <div className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-primary rounded-full" />
+                  <div className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 sm:w-2 sm:h-2 bg-primary rounded-full" />
                 )}
               </Button>
               {showFilterDropdown && (
@@ -599,7 +599,7 @@ function Sidebar({
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7 hover:bg-accent hover:text-accent-foreground"
+              className="h-7 w-7 sm:h-8 sm:w-8 lg:h-9 lg:w-9 hover:bg-accent hover:text-accent-foreground transition-all"
               onClick={async () => {
                 setIsRefreshing(true);
                 try {
@@ -611,38 +611,38 @@ function Sidebar({
               disabled={isRefreshing}
               title="Refresh projects and sessions (Ctrl+R)"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 sm:w-4 sm:h-4 lg:w-4.5 lg:h-4.5 ${isRefreshing ? 'animate-spin' : ''}`} />
             </Button>
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7"
+              className="h-7 w-7 sm:h-8 sm:w-8 lg:h-9 lg:w-9 hover:bg-accent hover:text-accent-foreground transition-all"
               onClick={() => setShowNewProject(true)}
               title="Create new project (Ctrl+N)"
             >
-              <FolderPlus className="w-3.5 h-3.5" />
+              <FolderPlus className="w-3.5 h-3.5 sm:w-4 sm:h-4 lg:w-4.5 lg:h-4.5" />
             </Button>
             <Button
               variant="ghost"
               size="icon"
               className={cn(
-                "h-7 w-7",
+                "h-7 w-7 sm:h-8 sm:w-8 lg:h-9 lg:w-9 hover:bg-accent hover:text-accent-foreground transition-all",
                 isEditMode ? "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400" : ""
               )}
               onClick={() => setIsEditMode(!isEditMode)}
               title={isEditMode ? "Exit edit mode" : "Enter edit mode (delete projects)"}
             >
-              <Edit3 className="w-3.5 h-3.5" />
+              <Edit3 className="w-3.5 h-3.5 sm:w-4 sm:h-4 lg:w-4.5 lg:h-4.5" />
             </Button>
             {onSidebarClose && (
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7 hover:bg-accent hover:text-accent-foreground"
+                className="h-7 w-7 sm:h-8 sm:w-8 lg:h-9 lg:w-9 hover:bg-accent hover:text-accent-foreground transition-all"
                 onClick={onSidebarClose}
                 title="Close sidebar"
               >
-                <X className="w-3.5 h-3.5" />
+                <X className="w-3.5 h-3.5 sm:w-4 sm:h-4 lg:w-4.5 lg:h-4.5" />
               </Button>
             )}
           </div>

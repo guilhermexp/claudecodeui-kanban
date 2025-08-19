@@ -52,8 +52,9 @@ function MainContent({
   const [editingFile, setEditingFile] = useState(null);
   const [openShellSessions, setOpenShellSessions] = useState(0);
   const [contextWindowPercentage, setContextWindowPercentage] = useState(null);
-  const [isVibeTaskPanelOpen, setIsVibeTaskPanelOpen] = useState(false);
   const [shellResizeTrigger, setShellResizeTrigger] = useState(0);
+  // Panel states - only one can be open at a time
+  const [activeSidePanel, setActiveSidePanel] = useState(null); // 'files' | 'git' | 'tasks' | 'dashboard' | null
   // Shell terminals state removed - single terminal mode only
   
   // Expose tab switching globally for Shell image drops
@@ -194,12 +195,10 @@ function MainContent({
               {
                 <div>
                   <h2 className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white">
-                    {activeTab === 'shell' ? 'Shell' :
-                     activeTab === 'files' ? 'Project Files' : 
-                     activeTab === 'git' ? 'Source Control' : 
-                     activeTab === 'dashboard' ? 'Usage Dashboard' :
-                     activeTab === 'tasks' ? 'Tasks' :
-                     'Project'}
+                    Shell {activeSidePanel && `+ ${activeSidePanel === 'files' ? 'Files' : 
+                                                    activeSidePanel === 'git' ? 'Source Control' :
+                                                    activeSidePanel === 'tasks' ? 'Tasks' :
+                                                    activeSidePanel === 'dashboard' ? 'Dashboard' : ''}`}
                   </h2>
                   <div className="text-xs truncate">
                     <span className="inline-block px-2 py-0.5 rounded-full bg-gradient-to-r from-blue-500/20 to-purple-500/20 dark:from-blue-400/30 dark:to-purple-400/30 text-blue-700 dark:text-blue-300 font-medium">
@@ -224,36 +223,24 @@ function MainContent({
           )}
           
           {/* Modern Tab Navigation - Right Side */}
+          {/* Modern Tab Navigation - Right Side */}
           <div className="flex-shrink-0 hidden sm:block order-3">
             <div className="relative flex bg-muted rounded-lg p-1 gap-1">
               <button
-                onClick={() => setActiveTab('shell')}
+                onClick={() => {
+                  // Toggle Files panel
+                  if (activeSidePanel === 'files') {
+                    setActiveSidePanel(null);
+                  } else {
+                    setActiveSidePanel('files');
+                    if (sidebarOpen && onSidebarOpen) {
+                      onSidebarOpen();
+                    }
+                  }
+                  setTimeout(() => setShellResizeTrigger(prev => prev + 1), 350);
+                }}
                 className={`relative inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
-                  activeTab === 'shell'
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-                }`}
-              >
-                <span className="flex items-center gap-1 sm:gap-1.5 leading-none">
-                  <svg className="w-3 sm:w-3.5 h-3 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                  </svg>
-                  <span className="hidden sm:inline">Shell</span>
-                  {/* Show active session indicator */}
-                  {shellHasActiveSession && activeTab !== 'shell' && (
-                    <span className="ml-1 w-2 h-2 bg-green-500 rounded-full animate-pulse" title="Active session running"></span>
-                  )}
-                  {openShellSessions > 0 && (
-                    <span className="ml-1 px-1.5 py-0.5 text-xs bg-blue-500 text-white rounded-full">
-                      {openShellSessions}
-                    </span>
-                  )}
-                </span>
-              </button>
-              <button
-                onClick={() => setActiveTab('files')}
-                className={`relative inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
-                  activeTab === 'files'
+                  activeSidePanel === 'files'
                     ? 'bg-background text-foreground shadow-sm'
                     : 'text-muted-foreground hover:text-foreground hover:bg-accent'
                 }`}
@@ -266,9 +253,20 @@ function MainContent({
                 </span>
               </button>
               <button
-                onClick={() => setActiveTab('git')}
+                onClick={() => {
+                  // Toggle Git panel
+                  if (activeSidePanel === 'git') {
+                    setActiveSidePanel(null);
+                  } else {
+                    setActiveSidePanel('git');
+                    if (sidebarOpen && onSidebarOpen) {
+                      onSidebarOpen();
+                    }
+                  }
+                  setTimeout(() => setShellResizeTrigger(prev => prev + 1), 350);
+                }}
                 className={`relative inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
-                  activeTab === 'git'
+                  activeSidePanel === 'git'
                     ? 'bg-background text-foreground shadow-sm'
                     : 'text-muted-foreground hover:text-foreground hover:bg-accent'
                 }`}
@@ -284,18 +282,19 @@ function MainContent({
               {!isMobile && (
                 <button
                   onClick={() => {
-                    setIsVibeTaskPanelOpen(!isVibeTaskPanelOpen);
-                    // Close sidebar when opening tasks panel to fit everything on screen
-                    if (!isVibeTaskPanelOpen && sidebarOpen && onSidebarOpen) {
-                      onSidebarOpen(); // This toggles the sidebar
+                    // Toggle Tasks panel
+                    if (activeSidePanel === 'tasks') {
+                      setActiveSidePanel(null);
+                    } else {
+                      setActiveSidePanel('tasks');
+                      if (sidebarOpen && onSidebarOpen) {
+                        onSidebarOpen();
+                      }
                     }
-                    // Trigger shell resize after a small delay to allow panel animation
-                    setTimeout(() => {
-                      setShellResizeTrigger(prev => prev + 1);
-                    }, 350);
+                    setTimeout(() => setShellResizeTrigger(prev => prev + 1), 350);
                   }}
                   className={`relative inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
-                    isVibeTaskPanelOpen
+                    activeSidePanel === 'tasks'
                       ? 'bg-background text-foreground shadow-sm'
                       : 'text-muted-foreground hover:text-foreground hover:bg-accent'
                   }`}
@@ -309,12 +308,23 @@ function MainContent({
                 </button>
               )}
               <button
-                onClick={() => setActiveTab('dashboard')}
+                onClick={() => {
+                  // Toggle Dashboard panel
+                  if (activeSidePanel === 'dashboard') {
+                    setActiveSidePanel(null);
+                  } else {
+                    setActiveSidePanel('dashboard');
+                    if (sidebarOpen && onSidebarOpen) {
+                      onSidebarOpen();
+                    }
+                  }
+                  setTimeout(() => setShellResizeTrigger(prev => prev + 1), 350);
+                }}
                 className={`relative inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
-                  activeTab === 'dashboard'
+                  activeSidePanel === 'dashboard'
                     ? 'bg-background text-foreground shadow-sm'
                     : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-                }`}
+                  }`}
               >
                 <span className="flex items-center gap-1 sm:gap-1.5 leading-none">
                   <svg className="w-3 sm:w-3.5 h-3 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -330,50 +340,142 @@ function MainContent({
         {/* Shell Terminal Tabs removed - single terminal mode only */}
       </div>
 
-      {/* Main content wrapper with Tasks panel */}
+      {/* Main content wrapper with side panels */}
       <div className="flex-1 min-h-0 flex relative">
-        {/* Content Area - Shrinks when Tasks panel is open */}
+        {/* Shell Area - Always visible, shrinks when panels open */}
         <div className={`flex-1 min-h-0 flex flex-col transition-all duration-300 px-2 md:px-4 ${
-          isVibeTaskPanelOpen ? 'mr-80 sm:mr-96 md:mr-[420px] lg:mr-[480px]' : ''
+          activeSidePanel ? 'mr-96 sm:mr-[440px] md:mr-[520px] lg:mr-[600px]' : ''
         }`}>
-          <div className={`h-full overflow-hidden ${activeTab === 'files' ? 'block' : 'hidden'} mt-2`}>
-            <FileTree selectedProject={selectedProject} />
-          </div>
-          <div className={`h-full overflow-hidden ${activeTab === 'shell' ? 'block' : 'hidden'} mt-2`}>
+          <div className="h-full overflow-hidden mt-2">
             <Shell 
               selectedProject={selectedProject} 
               selectedSession={selectedSession}
-              isActive={activeTab === 'shell' || shellHasActiveSession}
+              isActive={true}
               onSessionCountChange={setOpenShellSessions}
               onConnectionChange={onShellConnectionChange}
               onSessionStateChange={handleShellSessionStateChange}
               isMobile={isMobile}
               resizeTrigger={shellResizeTrigger}
+              onSidebarClose={() => {
+                if (sidebarOpen && onSidebarOpen) {
+                  onSidebarOpen(); // This toggles the sidebar
+                }
+                setActiveSidePanel(null); // Close any active side panel
+              }}
             />
           </div>
-          <div className={`h-full overflow-hidden ${activeTab === 'git' ? 'block' : 'hidden'} mt-2`}>
-            <GitPanel selectedProject={selectedProject} isMobile={isMobile} isVisible={activeTab === 'git'} />
-          </div>
-          <div className={`h-full overflow-hidden ${activeTab === 'dashboard' ? 'block' : 'hidden'} mt-2`}>
-            <Dashboard onBack={() => setActiveTab('shell')} />
-          </div>
-          {/* Tasks Panel - Only visible on mobile when tasks tab is active */}
-          {isMobile && (
-            <div className={`h-full overflow-hidden ${activeTab === 'tasks' ? 'block' : 'hidden'} mt-2`}>
-              <VibeTaskPanel isVisible={activeTab === 'tasks'} onClose={() => setActiveTab('shell')} isMobile={true} />
-            </div>
-          )}
         </div>
 
-        {/* Vibe Kanban Sliding Panel - Only on desktop */}
+        {/* Side Panels - Only one visible at a time on desktop */}
         {!isMobile && (
-          <div 
-            className={`absolute top-0 right-0 h-full w-80 sm:w-96 md:w-[420px] lg:w-[480px] bg-background border-l border-border shadow-xl transform transition-transform duration-300 ease-in-out ${
-              isVibeTaskPanelOpen ? 'translate-x-0' : 'translate-x-full'
-            }`}
-          >
-            <VibeTaskPanel isVisible={isVibeTaskPanelOpen} onClose={() => setIsVibeTaskPanelOpen(false)} />
-          </div>
+          <>
+            {/* Files Panel */}
+            <div 
+              className={`absolute top-0 right-0 h-full w-96 sm:w-[440px] md:w-[520px] lg:w-[600px] bg-background border-l border-border shadow-xl transform transition-transform duration-300 ease-in-out ${
+                activeSidePanel === 'files' ? 'translate-x-0' : 'translate-x-full'
+              }`}
+            >
+              <div className="h-full flex flex-col">
+                <div className="flex-shrink-0 border-b border-border h-12 md:h-14 px-3 md:px-4 flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-foreground">Files</h3>
+                  <button
+                    onClick={() => setActiveSidePanel(null)}
+                    className="h-8 w-8 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent rounded-md transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="flex-1 overflow-hidden">
+                  <FileTree selectedProject={selectedProject} />
+                </div>
+              </div>
+            </div>
+
+            {/* Git Panel */}
+            <div 
+              className={`absolute top-0 right-0 h-full w-96 sm:w-[440px] md:w-[520px] lg:w-[600px] bg-background border-l border-border shadow-xl transform transition-transform duration-300 ease-in-out ${
+                activeSidePanel === 'git' ? 'translate-x-0' : 'translate-x-full'
+              }`}
+            >
+              <div className="h-full flex flex-col">
+                <div className="flex-shrink-0 border-b border-border h-12 md:h-14 px-3 md:px-4 flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-foreground">Source Control</h3>
+                  <button
+                    onClick={() => setActiveSidePanel(null)}
+                    className="h-8 w-8 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent rounded-md transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="flex-1 overflow-hidden">
+                  <GitPanel selectedProject={selectedProject} isMobile={false} isVisible={activeSidePanel === 'git'} />
+                </div>
+              </div>
+            </div>
+
+            {/* Tasks Panel */}
+            <div 
+              className={`absolute top-0 right-0 h-full w-96 sm:w-[440px] md:w-[520px] lg:w-[600px] bg-background border-l border-border shadow-xl transform transition-transform duration-300 ease-in-out ${
+                activeSidePanel === 'tasks' ? 'translate-x-0' : 'translate-x-full'
+              }`}
+            >
+              <VibeTaskPanel isVisible={activeSidePanel === 'tasks'} onClose={() => setActiveSidePanel(null)} />
+            </div>
+
+            {/* Dashboard Panel */}
+            <div 
+              className={`absolute top-0 right-0 h-full w-96 sm:w-[440px] md:w-[520px] lg:w-[600px] bg-background border-l border-border shadow-xl transform transition-transform duration-300 ease-in-out ${
+                activeSidePanel === 'dashboard' ? 'translate-x-0' : 'translate-x-full'
+              }`}
+            >
+              <div className="h-full flex flex-col">
+                <div className="flex-shrink-0 border-b border-border h-12 md:h-14 px-3 md:px-4 flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-foreground">Dashboard</h3>
+                  <button
+                    onClick={() => setActiveSidePanel(null)}
+                    className="h-8 w-8 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent rounded-md transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="flex-1 overflow-hidden">
+                  <Dashboard onBack={() => setActiveSidePanel(null)} />
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Mobile support - keeping existing tabs behavior */}
+        {isMobile && (
+          <>
+            {activeTab === 'files' && (
+              <div className="absolute inset-0 bg-background z-10">
+                <FileTree selectedProject={selectedProject} />
+              </div>
+            )}
+            {activeTab === 'git' && (
+              <div className="absolute inset-0 bg-background z-10">
+                <GitPanel selectedProject={selectedProject} isMobile={true} isVisible={true} />
+              </div>
+            )}
+            {activeTab === 'tasks' && (
+              <div className="absolute inset-0 bg-background z-10">
+                <VibeTaskPanel isVisible={true} onClose={() => setActiveTab('shell')} isMobile={true} />
+              </div>
+            )}
+            {activeTab === 'dashboard' && (
+              <div className="absolute inset-0 bg-background z-10">
+                <Dashboard onBack={() => setActiveTab('shell')} />
+              </div>
+            )}
+          </>
         )}
       </div>
 

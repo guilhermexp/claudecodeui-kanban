@@ -5,6 +5,8 @@ import { ClipboardAddon } from '@xterm/addon-clipboard';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { useDropzone } from 'react-dropzone';
+import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
+import PreviewPanel from './PreviewPanel';
 import 'xterm/css/xterm.css';
 
 // CSS to make xterm responsive and remove focus outline
@@ -80,7 +82,7 @@ if (typeof document !== 'undefined') {
 // Global store for shell sessions to persist across tab switches AND project switches
 const shellSessions = new Map();
 
-function Shell({ selectedProject, selectedSession, isActive, onConnectionChange, onSessionStateChange, isMobile, resizeTrigger }) {
+function Shell({ selectedProject, selectedSession, isActive, onConnectionChange, onSessionStateChange, isMobile, resizeTrigger, onSidebarClose }) {
   const terminalRef = useRef(null);
   const terminal = useRef(null);
   const fitAddon = useRef(null);
@@ -92,6 +94,11 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   const [isConnecting, setIsConnecting] = useState(false);
   const [isBypassingPermissions, setIsBypassingPermissions] = useState(false);
   const [isManualDisconnect, setIsManualDisconnect] = useState(false);
+  
+  // Preview panel states
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState('');
+  const [detectedUrls, setDetectedUrls] = useState(new Set());
   
   // Image drag & drop states
   const [isDraggedImageOver, setIsDraggedImageOver] = useState(false);
@@ -147,6 +154,64 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     if (onSessionStateChange) {
       onSessionStateChange(false);
     }
+  };
+  
+  // URL detection and preview helpers
+  const isLocalhostUrl = (url) => {
+    try {
+      const urlObj = new URL(url);
+      const validHosts = ['localhost', '127.0.0.1', '0.0.0.0', '[::1]'];
+      return validHosts.includes(urlObj.hostname);
+    } catch {
+      return false;
+    }
+  };
+
+  const handlePreviewUrl = (url) => {
+    // Prevent preview from opening on mobile devices
+    if (isMobile) {
+      return;
+    }
+    
+    setPreviewUrl(url);
+    setShowPreview(true);
+    detectUrlsInTerminal();
+    // Close sidebar when preview opens to maximize space
+    if (onSidebarClose) {
+      onSidebarClose();
+    }
+  };
+
+  const detectUrlsInTerminal = () => {
+    if (!terminal.current) return;
+    
+    const urls = new Set();
+    const patterns = [
+      /https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]):(\d+)/gi,
+      /Server.*?running.*?on.*?(https?:\/\/[^\s]+)/gi,
+      /Listening.*?on.*?(https?:\/\/[^\s]+)/gi,
+      /Available.*?at.*?(https?:\/\/[^\s]+)/gi
+    ];
+    
+    // Get terminal buffer content
+    const buffer = terminal.current.buffer.active;
+    for (let i = 0; i < buffer.length; i++) {
+      const line = buffer.getLine(i);
+      if (line) {
+        const text = line.translateToString();
+        patterns.forEach(pattern => {
+          let match;
+          while ((match = pattern.exec(text)) !== null) {
+            const url = match[1] || match[0];
+            if (isLocalhostUrl(url)) {
+              urls.add(url);
+            }
+          }
+        });
+      }
+    }
+    
+    setDetectedUrls(urls);
   };
   
   // Scroll to bottom functionality
@@ -617,7 +682,23 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     fitAddon.current = new FitAddon();
     const clipboardAddon = new ClipboardAddon();
     const webglAddon = new WebglAddon();
-    const webLinksAddon = new WebLinksAddon();
+    
+    // Configure WebLinksAddon with custom handler for localhost URLs
+    const webLinksAddon = new WebLinksAddon((event, uri) => {
+      // Check if it's a localhost URL
+      if (isLocalhostUrl(uri)) {
+        event.preventDefault();
+        // On mobile, open localhost URLs in new tab instead of preview
+        if (isMobile) {
+          window.open(uri, '_blank');
+        } else {
+          handlePreviewUrl(uri);
+        }
+      } else {
+        // Let non-localhost URLs open normally
+        window.open(uri, '_blank');
+      }
+    });
     
     terminal.current.loadAddon(fitAddon.current);
     terminal.current.loadAddon(clipboardAddon);
@@ -635,6 +716,14 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       if (fitAddon.current) {
         fitAddon.current.fit();
       }
+    });
+    
+    // Listen for terminal data to detect URLs
+    terminal.current.onData(() => {
+      // Debounce URL detection
+      setTimeout(() => {
+        detectUrlsInTerminal();
+      }, 500);
     });
 
     // Add keyboard shortcuts for copy/paste
@@ -900,35 +989,70 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     if (!isInitialized || !fitAddon.current || !terminalRef.current) return;
 
     let resizeDebounceTimer = null;
+    let lastDimensions = { width: 0, height: 0 };
     
-    const handleResize = () => {
+    const handleResize = (forceRefresh = false) => {
       // Immediate visual update
       if (fitAddon.current && terminal.current) {
+        // Clear any rendering artifacts before resize
+        if (forceRefresh && terminal.current.element) {
+          const viewport = terminal.current.element.querySelector('.xterm-viewport');
+          if (viewport) {
+            // Force a reflow to clear rendering artifacts
+            viewport.style.display = 'none';
+            viewport.offsetHeight; // Trigger reflow
+            viewport.style.display = '';
+          }
+        }
+        
         // Force terminal to recalculate size
         requestAnimationFrame(() => {
-          fitAddon.current.fit();
-          
-          // Debounce backend notification
-          if (resizeDebounceTimer) {
-            clearTimeout(resizeDebounceTimer);
-          }
-          
-          resizeDebounceTimer = setTimeout(() => {
-            if (ws.current && ws.current.readyState === WebSocket.OPEN && terminal.current) {
-              ws.current.send(JSON.stringify({
-                type: 'resize',
-                cols: terminal.current.cols,
-                rows: terminal.current.rows
-              }));
+          try {
+            // Fit the terminal to the new dimensions
+            fitAddon.current.fit();
+            
+            // Force a refresh of the terminal renderer
+            if (terminal.current.element) {
+              terminal.current.refresh(0, terminal.current.rows - 1);
             }
-          }, 100);
+            
+            // Debounce backend notification
+            if (resizeDebounceTimer) {
+              clearTimeout(resizeDebounceTimer);
+            }
+            
+            resizeDebounceTimer = setTimeout(() => {
+              if (ws.current && ws.current.readyState === WebSocket.OPEN && terminal.current) {
+                ws.current.send(JSON.stringify({
+                  type: 'resize',
+                  cols: terminal.current.cols,
+                  rows: terminal.current.rows
+                }));
+              }
+            }, 100);
+          } catch (error) {
+            console.error('Error during terminal resize:', error);
+          }
         });
       }
     };
 
     // Use ResizeObserver to detect container size changes (e.g., when Tasks panel opens/closes)
-    const resizeObserver = new ResizeObserver(() => {
-      handleResize();
+    const resizeObserver = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      
+      const { width, height } = entry.contentRect;
+      
+      // Check if dimensions actually changed significantly
+      const widthChanged = Math.abs(width - lastDimensions.width) > 5;
+      const heightChanged = Math.abs(height - lastDimensions.height) > 5;
+      
+      if (widthChanged || heightChanged) {
+        lastDimensions = { width, height };
+        // Force refresh when dimensions change significantly (panel opened/closed)
+        handleResize(true);
+      }
     });
     
     // Observe the terminal container
@@ -937,7 +1061,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     }
 
     // Also listen for window resize
-    window.addEventListener('resize', handleResize);
+    window.addEventListener('resize', () => handleResize(false));
     
     // Also listen for orientation change on mobile
     window.addEventListener('orientationchange', handleResize);
@@ -952,6 +1076,42 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     };
   }, [isInitialized]);
 
+  // Handle sidebar close to fix rendering artifacts
+  useEffect(() => {
+    if (!isInitialized || !fitAddon.current || !terminal.current) return;
+    
+    if (onSidebarClose) {
+      // When sidebar closes, force a complete terminal refresh without clearing content
+      const cleanupTimer = setTimeout(() => {
+        if (terminal.current && fitAddon.current) {
+          // Clear the viewport to remove artifacts
+          const viewport = terminal.current.element?.querySelector('.xterm-viewport');
+          if (viewport) {
+            // Force GPU acceleration reset
+            viewport.style.transform = 'translateZ(0)';
+            void viewport.offsetHeight; // Force reflow
+            viewport.style.transform = '';
+          }
+          
+          // Refit and refresh without clearing content
+          fitAddon.current.fit();
+          terminal.current.refresh(0, terminal.current.rows - 1);
+          
+          // Update backend with new dimensions
+          if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+            ws.current.send(JSON.stringify({
+              type: 'resize',
+              cols: terminal.current.cols,
+              rows: terminal.current.rows
+            }));
+          }
+        }
+      }, 500);
+      
+      return () => clearTimeout(cleanupTimer);
+    }
+  }, [onSidebarClose, isInitialized]);
+  
   // Trigger resize when Tasks panel opens/closes
   useEffect(() => {
     if (!isInitialized || !fitAddon.current || !terminal.current) return;
@@ -963,7 +1123,32 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
           // Store current scroll position
           const scrollback = terminal.current.buffer.active.viewportY;
           
+          // Clear any rendering artifacts before resize
+          if (terminal.current.element) {
+            const viewport = terminal.current.element.querySelector('.xterm-viewport');
+            const screen = terminal.current.element.querySelector('.xterm-screen');
+            
+            if (viewport && screen) {
+              // Force a reflow to clear rendering artifacts
+              viewport.style.opacity = '0.99';
+              screen.style.transform = 'translateZ(0)';
+              
+              // Trigger reflow
+              void viewport.offsetHeight;
+              
+              // Restore after a frame
+              requestAnimationFrame(() => {
+                viewport.style.opacity = '1';
+                screen.style.transform = '';
+              });
+            }
+          }
+          
+          // Fit terminal to new dimensions
           fitAddon.current.fit();
+          
+          // Force a complete refresh of the terminal display
+          terminal.current.refresh(0, terminal.current.rows - 1);
           
           // Restore scroll position after fit
           if (scrollback > 0) {
@@ -1216,57 +1401,79 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     );
   }
 
-  return (
-    <div className="h-full min-h-0 flex flex-col bg-card rounded-xl border border-border w-full" {...getRootProps({onClick: e => e.stopPropagation()})}>
-      <input {...getInputProps()} />
-      {/* Status Bar (aligned with Files header) */}
-      <div className="flex-shrink-0 border-b border-border px-3 py-3">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center space-x-2 flex-1 min-w-0">
-            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
-            {selectedSession && (
-              <span className="text-xs text-blue-300 truncate">
-                ({selectedSession.summary.slice(0, isMobile ? 20 : 30)}...)
-              </span>
-            )}
-            {!selectedSession && (
-              <span className="text-xs text-muted-foreground hidden xs:inline">(New Session)</span>
-            )}
-            {!isInitialized && (
-              <span className="text-xs text-yellow-400">
-                {isMobile ? 'Init...' : '(Initializing...)'}
-              </span>
-            )}
-            {isRestarting && (
-              <span className="text-xs text-blue-400">
-                {isMobile ? 'Restart...' : '(Restarting...)'}
-              </span>
-            )}
-          </div>
-          <div className="flex items-center space-x-1 sm:space-x-2">
+  // Use resizable panels only when preview is shown on desktop
+  if (showPreview && !isMobile) {
+    return (
+      <PanelGroup direction="horizontal" className="h-full w-full flex gap-3">
+        {/* Terminal Panel */}
+        <Panel defaultSize={50} minSize={30} className="h-full">
+          <div className="h-full min-h-0 flex flex-col bg-card rounded-xl border border-border" {...getRootProps({onClick: e => e.stopPropagation()})}>
+            <input {...getInputProps()} />
+            {/* Status Bar (aligned with Files header) */}
+            <div className="flex-shrink-0 border-b border-border px-3 py-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center space-x-2 flex-1 min-w-0">
+                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
+                  {selectedSession && (
+                    <span className="text-xs text-blue-300 truncate">
+                      ({selectedSession.summary.slice(0, isMobile ? 20 : 30)}...)
+                    </span>
+                  )}
+                  {!selectedSession && (
+                    <span className="text-xs text-muted-foreground hidden xs:inline">(New Session)</span>
+                  )}
+                  {!isInitialized && (
+                    <span className="text-xs text-yellow-400">
+                      {isMobile ? 'Init...' : '(Initializing...)'}
+                    </span>
+                  )}
+                  {isRestarting && (
+                    <span className="text-xs text-blue-400">
+                      {isMobile ? 'Restart...' : '(Restarting...)'}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center space-x-1 sm:space-x-2">
+                  
+                  {/* Bypass Permissions Toggle */}
+                  <button
+                    onClick={toggleBypassPermissions}
+                    className={`px-1.5 sm:px-3 py-1 text-xs rounded flex items-center space-x-1 transition-colors ${
+                      isBypassingPermissions 
+                        ? 'bg-yellow-600 text-white hover:bg-yellow-700' 
+                        : 'bg-muted text-muted-foreground hover:bg-accent'
+                    }`}
+                    title={isBypassingPermissions ? "Disable bypass permissions" : "Enable bypass permissions"}
+                  >
+                    <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                        d={isBypassingPermissions 
+                          ? "M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" 
+                          : "M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                        } 
+                      />
+                    </svg>
+                    <span className="hidden sm:inline whitespace-nowrap">
+                      {isBypassingPermissions ? 'Bypass ON' : 'Bypass OFF'}
+                    </span>
+                  </button>
             
-            {/* Bypass Permissions Toggle */}
-            <button
-              onClick={toggleBypassPermissions}
-              className={`px-1.5 sm:px-3 py-1 text-xs rounded flex items-center space-x-1 transition-colors ${
-                isBypassingPermissions 
-                  ? 'bg-yellow-600 text-white hover:bg-yellow-700' 
-                  : 'bg-muted text-muted-foreground hover:bg-accent'
-              }`}
-              title={isBypassingPermissions ? "Disable bypass permissions" : "Enable bypass permissions"}
+            {/* Preview Close Button - Only shows when preview is open */}
+            {!isMobile && showPreview && (
+              <button
+              onClick={() => {
+                setShowPreview(false);
+                setPreviewUrl('');
+              }}
+              className="px-1.5 sm:px-3 py-1 text-xs bg-blue-600 text-white hover:bg-blue-700 rounded flex items-center space-x-1 transition-colors"
+              title="Close preview panel"
             >
               <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                  d={isBypassingPermissions 
-                    ? "M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" 
-                    : "M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-                  } 
-                />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
-              <span className="hidden sm:inline whitespace-nowrap">
-                {isBypassingPermissions ? 'Bypass ON' : 'Bypass OFF'}
-              </span>
-            </button>
+              <span className="hidden sm:inline">Close Preview</span>
+              </button>
+            )}
             
             {isConnected && (
               <button
@@ -1292,12 +1499,12 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
               </svg>
               <span className="hidden sm:inline">Restart</span>
             </button>
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Terminal */}
-      <div className="flex-1 min-h-0 p-2 md:p-3 pb-2 md:pb-3 overflow-hidden relative">
+        {/* Terminal */}
+        <div className="flex-1 min-h-0 p-2 md:p-3 pb-2 md:pb-3 overflow-hidden relative">
         <div ref={terminalRef} className="h-full w-full focus:outline-none" style={{ outline: 'none' }} />
         
         {/* Drag overlay for images */}
@@ -1400,6 +1607,232 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
           </button>
         )}
       </div>
+    </div>
+    </Panel>
+        
+    {/* Resize Handle with spacing */}
+    <PanelResizeHandle className="w-3 bg-transparent hover:bg-accent/10 transition-colors cursor-col-resize relative">
+      <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-1 bg-border hover:bg-accent transition-colors" />
+    </PanelResizeHandle>
+    
+    {/* Preview Panel */}
+    <Panel defaultSize={50} minSize={20} className="h-full">
+          <PreviewPanel
+            url={previewUrl}
+            onClose={() => setShowPreview(false)}
+            onRefresh={() => detectUrlsInTerminal()}
+            isMobile={false}
+          />
+        </Panel>
+    </PanelGroup>
+  );
+}
+  
+  // Default layout without preview
+  return (
+    <div className="h-full min-h-0 flex w-full">
+      {/* Terminal Panel */}
+      <div className="w-full h-full min-h-0 flex flex-col bg-card rounded-xl border border-border" {...getRootProps({onClick: e => e.stopPropagation()})}>
+        <input {...getInputProps()} />
+        {/* Status Bar (aligned with Files header) */}
+        <div className="flex-shrink-0 border-b border-border px-3 py-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center space-x-2 flex-1 min-w-0">
+              <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
+            {selectedSession && (
+              <span className="text-xs text-blue-300 truncate">
+                ({selectedSession.summary.slice(0, isMobile ? 20 : 30)}...)
+              </span>
+            )}
+            {!selectedSession && (
+              <span className="text-xs text-muted-foreground hidden xs:inline">(New Session)</span>
+            )}
+            {!isInitialized && (
+              <span className="text-xs text-yellow-400">
+                {isMobile ? 'Init...' : '(Initializing...)'}
+              </span>
+            )}
+            {isRestarting && (
+              <span className="text-xs text-blue-400">
+                {isMobile ? 'Restart...' : '(Restarting...)'}
+              </span>
+            )}
+            </div>
+            <div className="flex items-center space-x-1 sm:space-x-2">
+            
+            {/* Bypass Permissions Toggle */}
+            <button
+              onClick={toggleBypassPermissions}
+              className={`px-1.5 sm:px-3 py-1 text-xs rounded flex items-center space-x-1 transition-colors ${
+                isBypassingPermissions 
+                  ? 'bg-yellow-600 text-white hover:bg-yellow-700' 
+                  : 'bg-muted text-muted-foreground hover:bg-accent'
+              }`}
+              title={isBypassingPermissions ? "Disable bypass permissions" : "Enable bypass permissions"}
+            >
+              <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                  d={isBypassingPermissions 
+                    ? "M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" 
+                    : "M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                  } 
+                />
+              </svg>
+              <span className="hidden sm:inline whitespace-nowrap">
+                {isBypassingPermissions ? 'Bypass ON' : 'Bypass OFF'}
+              </span>
+            </button>
+            
+            {/* Preview Close Button - Only shows when preview is open */}
+            {!isMobile && showPreview && (
+              <button
+              onClick={() => {
+                setShowPreview(false);
+                setPreviewUrl('');
+              }}
+              className="px-1.5 sm:px-3 py-1 text-xs bg-blue-600 text-white hover:bg-blue-700 rounded flex items-center space-x-1 transition-colors"
+              title="Close preview panel"
+            >
+              <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+              <span className="hidden sm:inline">Close Preview</span>
+              </button>
+            )}
+            
+            {isConnected && (
+              <button
+                onClick={disconnectFromShell}
+                className="px-1.5 sm:px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 flex items-center space-x-1"
+                title="Disconnect from shell"
+              >
+                <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                <span className="hidden sm:inline">Disconnect</span>
+              </button>
+            )}
+            
+            <button
+              onClick={restartShell}
+              disabled={isRestarting || isConnected}
+              className="p-1 sm:px-2 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1"
+              title="Restart Shell (disconnect first)"
+            >
+              <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              <span className="hidden sm:inline">Restart</span>
+            </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Terminal */}
+        <div className="flex-1 min-h-0 p-2 md:p-3 pb-2 md:pb-3 overflow-hidden relative">
+        <div ref={terminalRef} className="h-full w-full focus:outline-none" style={{ outline: 'none' }} />
+        
+        {/* Drag overlay for images */}
+        {(isDragActive || isDraggedImageOver) && (
+          <div className="absolute inset-0 bg-blue-500/20 border-2 border-dashed border-blue-500 rounded-lg flex items-center justify-center z-50 pointer-events-none">
+            <div className="bg-white dark:bg-card rounded-lg p-4 shadow-lg pointer-events-none">
+              <svg className="w-8 h-8 text-blue-500 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+              <p className="text-sm font-medium text-blue-600 dark:text-blue-400 mb-1">Solte as imagens aqui</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
+                Imagens serão enviadas para o chat do Claude
+              </p>
+              <p className="text-xs text-gray-400 dark:text-gray-500 text-center mt-1">
+                Ou pressione ⌘V para colar da área de transferência
+              </p>
+            </div>
+          </div>
+        )}
+        
+        {/* Loading state */}
+        {!isInitialized && (
+          <div className="absolute inset-0 flex items-center justify-center bg-card bg-opacity-90">
+            <div className="text-white text-sm sm:text-base">Loading terminal...</div>
+          </div>
+        )}
+        
+        {/* Connect button when not connected */}
+        {isInitialized && !isConnected && !isConnecting && (
+          <div className="absolute inset-0 flex items-center justify-center bg-card bg-opacity-90 p-3 sm:p-4">
+            <div className="text-center max-w-sm w-full">
+              <button
+                onClick={connectToShell}
+                className="px-4 sm:px-6 py-2 sm:py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center space-x-2 text-sm sm:text-base font-medium w-full"
+                title="Connect to shell"
+              >
+                <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                <span>Continue in Shell</span>
+              </button>
+              <p className="text-muted-foreground text-xs sm:text-sm mt-2 sm:mt-3 px-2 break-words">
+                {selectedSession ? (
+                  <>Resume session: {selectedSession.summary.slice(0, isMobile ? 30 : 50)}...</>
+                ) : (
+                  'Start a new Claude session'
+                )}
+              </p>
+              <p className="text-muted-foreground text-xs mt-1 px-2 text-center">
+                Arraste imagens ou pressione ⌘V para adicionar ao chat
+              </p>
+              {isBypassingPermissions && (
+                <p className="text-yellow-400 text-xs mt-2 px-2 flex items-center justify-center space-x-1 flex-wrap">
+                  <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+                  </svg>
+                  <span className="text-center">Bypass permissions enabled</span>
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+        
+        {/* Connecting state */}
+        {isConnecting && (
+          <div className="absolute inset-0 flex items-center justify-center bg-card bg-opacity-90 p-3 sm:p-4">
+            <div className="text-center max-w-sm w-full">
+              <div className="flex items-center justify-center space-x-2 sm:space-x-3 text-yellow-400">
+                <div className="w-5 h-5 sm:w-6 sm:h-6 animate-spin rounded-full border-2 border-yellow-400 border-t-transparent"></div>
+                <span className="text-sm sm:text-base font-medium">Connecting...</span>
+              </div>
+              <p className="text-muted-foreground text-xs sm:text-sm mt-2 sm:mt-3 px-2 break-words">
+                Starting Claude CLI in {selectedProject.displayName || selectedProject.name}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Scroll to Bottom Button */}
+        {showScrollToBottom && isConnected && (
+          <button
+            onClick={scrollToBottom}
+            className="absolute bottom-4 left-4 z-10 bg-muted hover:bg-accent text-white rounded-full p-3 shadow-lg transition-all duration-200 hover:scale-105 active:scale-95 border border-border"
+            title="Scroll to bottom"
+            aria-label="Scroll to bottom"
+          >
+            <svg 
+              className="w-5 h-5" 
+              fill="none" 
+              stroke="currentColor" 
+              viewBox="0 0 24 24"
+            >
+              <path 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+                strokeWidth={2} 
+                d="M19 14l-7 7m0 0l-7-7m7 7V3" 
+              />
+            </svg>
+          </button>
+        )}
+      </div>
+    </div>
     </div>
   );
 }
