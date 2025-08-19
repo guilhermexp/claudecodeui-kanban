@@ -9,7 +9,7 @@ This file provides complete guidance to Claude Code (claude.ai/code) when workin
 npm install          # Install all dependencies (Node.js + Rust)
 npm run dev         # Start development mode with port protection
 ```
-**Ports used:** Frontend(9000), Backend(8080), Vibe Kanban(8081)
+**Ports used:** Frontend(5892), Backend(7347), Vibe Kanban(8357)
 
 ### For Production (Public Access via Ngrok)
 ```bash
@@ -34,21 +34,21 @@ npm run cleanup-force      # Force cleanup of orphan processes
 ### Complete System Architecture
 This is a **web-based UI for Claude Code CLI** with three integrated services:
 
-1. **Frontend (React/Vite)** - Port 9000 (dev only)
+1. **Frontend (React/Vite)** - Port 5892 (dev only)
    - React 18 with modern hooks and context
    - Tailwind CSS for styling with dark mode
    - CodeMirror 6 for syntax highlighting
    - XTerm.js for terminal emulation
    - Responsive design with PWA support
 
-2. **Backend (Node.js/Express)** - Port 8080 (dev + prod)
+2. **Backend (Node.js/Express)** - Port 7347 (dev + prod)
    - WebSocket server for real-time terminal/chat
    - SQLite database for projects and usage analytics  
    - JWT-based authentication system
    - Claude Code CLI integration and proxy
    - RESTful API for all frontend operations
 
-3. **Vibe Kanban (Rust/Actix)** - Port 8081 (dev + prod)
+3. **Vibe Kanban (Rust/Actix)** - Port 8357 (dev + prod)
    - Advanced task management system
    - Git workflow integration
    - Shared SQLite database with main backend
@@ -75,7 +75,7 @@ The application now includes **intelligent port protection** that prevents confl
 ### Critical Feature: Orphan Process Management
 Automatic cleanup system for Vibe Kanban backend processes that prevents server overload:
 
-- **Process Monitoring:** Continuously monitors Vibe Kanban processes (port 8081)
+- **Process Monitoring:** Continuously monitors Vibe Kanban processes (port 8357)
 - **Orphan Detection:** Identifies stuck processes from server crashes
 - **Automatic Cleanup:** Terminates orphaned processes to prevent queue buildup
 - **Health Checks:** Validates process responsiveness before cleanup
@@ -143,9 +143,9 @@ npm install            # Install all dependencies
 npm run dev           # Start all services with protection (RECOMMENDED)
 
 # Individual services (if needed for debugging)
-npm run server        # Backend only (port 8080)
-npm run client        # Frontend only (port 9000)
-npm run vibe-backend  # Vibe Kanban only (port 8081)
+npm run server        # Backend only (port 7347)
+npm run client        # Frontend only (port 5892)
+npm run vibe-backend  # Vibe Kanban only (port 8357)
 ```
 
 ### Network Development

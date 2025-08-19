@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ScrollArea } from './ui/scroll-area';
 import { Button } from './ui/button';
-import { Folder, FolderOpen, File, FileText, FileCode, List, TableProperties, Eye } from 'lucide-react';
+import { Folder, FolderOpen, File, FileText, FileCode } from 'lucide-react';
 import { cn } from '../lib/utils';
 import CodeEditor from './CodeEditor';
 import ImageViewer from './ImageViewer';
@@ -14,7 +14,7 @@ function FileTree({ selectedProject }) {
   const [expandedDirs, setExpandedDirs] = useState(new Set());
   const [selectedFile, setSelectedFile] = useState(null);
   const [selectedImage, setSelectedImage] = useState(null);
-  const [viewMode, setViewMode] = useState('detailed'); // 'simple', 'detailed', 'compact'
+  // View mode removed - using simple list view only
   const [showFilePanel, setShowFilePanel] = useState(false);
   const fetchTimeoutRef = useRef(null);
 
@@ -35,13 +35,7 @@ function FileTree({ selectedProject }) {
     };
   }, [selectedProject]);
 
-  // Load view mode preference from localStorage
-  useEffect(() => {
-    const savedViewMode = localStorage.getItem('file-tree-view-mode');
-    if (savedViewMode && ['simple', 'detailed', 'compact'].includes(savedViewMode)) {
-      setViewMode(savedViewMode);
-    }
-  }, []);
+  // View mode preference removed - using simple list only
 
   const fetchFiles = async () => {
     if (loading) return; // Prevent multiple simultaneous fetches
@@ -116,11 +110,7 @@ function FileTree({ selectedProject }) {
     });
   }, []);
 
-  // Change view mode and save preference
-  const changeViewMode = useCallback((mode) => {
-    setViewMode(mode);
-    localStorage.setItem('file-tree-view-mode', mode);
-  }, []);
+  // View mode change removed - using simple list only
 
 
   const renderFileTree = (items, level = 0) => {
@@ -210,154 +200,79 @@ function FileTree({ selectedProject }) {
 
   const getFileIcon = (filename) => {
     const ext = filename.split('.').pop()?.toLowerCase();
+    const name = filename.toLowerCase();
     
-    const codeExtensions = ['js', 'jsx', 'ts', 'tsx', 'py', 'java', 'cpp', 'c', 'php', 'rb', 'go', 'rs'];
-    const docExtensions = ['md', 'txt', 'doc', 'pdf'];
-    const imageExtensions = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'ico', 'bmp'];
+    // Special files by name
+    if (name === 'dockerfile') return <span className="w-4 h-4 flex-shrink-0">🐳</span>;
+    if (name === '.dockerignore') return <span className="w-4 h-4 flex-shrink-0">🐳</span>;
+    if (name === '.gitignore') return <span className="w-4 h-4 flex-shrink-0">🔸</span>;
+    if (name === '.prettierrc' || name === '.prettierignore') return <span className="w-4 h-4 flex-shrink-0">🎨</span>;
+    if (name === 'package.json' || name === 'package-lock.json') return <span className="w-4 h-4 flex-shrink-0">📦</span>;
+    if (name === 'tsconfig.json' || name === 'tsconfig.buildinfo') return <span className="w-4 h-4 flex-shrink-0">🔷</span>;
+    if (name === '.env' || name.startsWith('.env.')) return <span className="w-4 h-4 flex-shrink-0">🔐</span>;
+    if (name === 'readme.md' || name === 'readme.txt') return <span className="w-4 h-4 flex-shrink-0">📘</span>;
     
-    if (codeExtensions.includes(ext)) {
-      return <FileCode className="w-4 h-4 text-green-500 flex-shrink-0" />;
-    } else if (docExtensions.includes(ext)) {
-      return <FileText className="w-4 h-4 text-blue-500 flex-shrink-0" />;
-    } else if (imageExtensions.includes(ext)) {
-      return <File className="w-4 h-4 text-purple-500 flex-shrink-0" />;
-    } else {
-      return <File className="w-4 h-4 text-muted-foreground flex-shrink-0" />;
+    // Files by extension
+    switch(ext) {
+      // TypeScript
+      case 'ts':
+      case 'tsx':
+        return <span className="w-4 h-4 text-blue-500 flex-shrink-0 font-bold">TS</span>;
+      
+      // JavaScript  
+      case 'js':
+      case 'jsx':
+      case 'mjs':
+        return <span className="w-4 h-4 text-yellow-500 flex-shrink-0 font-bold">JS</span>;
+      
+      // Config files
+      case 'json':
+        return <span className="w-4 h-4 flex-shrink-0">{name.includes('config') ? '⚙️' : '{ }'}</span>;
+      case 'yaml':
+      case 'yml':
+        return <span className="w-4 h-4 flex-shrink-0">📋</span>;
+      
+      // Documentation
+      case 'md':
+        return <span className="w-4 h-4 flex-shrink-0">📝</span>;
+      
+      // SQL
+      case 'sql':
+        return <span className="w-4 h-4 flex-shrink-0">🗃️</span>;
+      
+      // Shell scripts
+      case 'sh':
+      case 'bash':
+        return <span className="w-4 h-4 flex-shrink-0">🖥️</span>;
+      
+      // Images
+      case 'png':
+      case 'jpg':
+      case 'jpeg':
+      case 'gif':
+      case 'svg':
+      case 'webp':
+      case 'ico':
+        return <span className="w-4 h-4 flex-shrink-0">🖼️</span>;
+      
+      // Other code files
+      case 'py':
+        return <span className="w-4 h-4 text-blue-400 flex-shrink-0">🐍</span>;
+      case 'go':
+        return <span className="w-4 h-4 text-cyan-500 flex-shrink-0">Go</span>;
+      case 'rs':
+        return <span className="w-4 h-4 text-orange-600 flex-shrink-0">🦀</span>;
+      case 'java':
+        return <span className="w-4 h-4 text-red-600 flex-shrink-0">☕</span>;
+      
+      // Default
+      default:
+        return <File className="w-4 h-4 text-muted-foreground flex-shrink-0" />;
     }
   };
 
   // Render detailed view with table-like layout
-  const renderDetailedView = (items, level = 0) => {
-    return items.map((item) => (
-      <div key={item.path} className="select-none">
-        <div
-          className={cn(
-            "grid grid-cols-12 gap-2 p-2 hover:bg-accent cursor-pointer items-center",
-            "touch-manipulation active:bg-accent/80 min-h-[44px] md:min-h-0",
-          )}
-          style={{ paddingLeft: `${level * 16 + 12}px` }}
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (item.type === 'directory') {
-              toggleDirectory(item.path);
-            } else if (isImageFile(item.name)) {
-              setSelectedImage({
-                name: item.name,
-                path: item.path,
-                projectPath: selectedProject.path,
-                projectName: selectedProject.name
-              });
-              setShowFilePanel(true);
-            } else {
-              setSelectedFile({
-                name: item.name,
-                path: item.path,
-                projectPath: selectedProject.path,
-                projectName: selectedProject.name
-              });
-              setShowFilePanel(true);
-            }
-          }}
-        >
-          <div className="col-span-5 flex items-center gap-2 min-w-0">
-            {item.type === 'directory' ? (
-              expandedDirs.has(item.path) ? (
-                <FolderOpen className="w-4 h-4 text-blue-500 flex-shrink-0" />
-              ) : (
-                <Folder className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-              )
-            ) : (
-              getFileIcon(item.name)
-            )}
-            <span className="text-sm truncate text-foreground">
-              {item.name}
-            </span>
-          </div>
-          <div className="col-span-2 text-sm text-muted-foreground">
-            {item.type === 'file' ? formatFileSize(item.size) : '-'}
-          </div>
-          <div className="col-span-3 text-sm text-muted-foreground">
-            {formatRelativeTime(item.modified)}
-          </div>
-          <div className="col-span-2 text-sm text-muted-foreground font-mono">
-            {item.permissionsRwx || '-'}
-          </div>
-        </div>
-        
-        {item.type === 'directory' && 
-         expandedDirs.has(item.path) && 
-         item.children && 
-         renderDetailedView(item.children, level + 1)}
-      </div>
-    ));
-  };
-
-  // Render compact view with inline details
-  const renderCompactView = (items, level = 0) => {
-    return items.map((item) => (
-      <div key={item.path} className="select-none">
-        <div
-          className={cn(
-            "flex items-center justify-between p-2 hover:bg-accent cursor-pointer",
-            "touch-manipulation active:bg-accent/80 min-h-[44px] md:min-h-0",
-          )}
-          style={{ paddingLeft: `${level * 16 + 12}px` }}
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (item.type === 'directory') {
-              toggleDirectory(item.path);
-            } else if (isImageFile(item.name)) {
-              setSelectedImage({
-                name: item.name,
-                path: item.path,
-                projectPath: selectedProject.path,
-                projectName: selectedProject.name
-              });
-              setShowFilePanel(true);
-            } else {
-              setSelectedFile({
-                name: item.name,
-                path: item.path,
-                projectPath: selectedProject.path,
-                projectName: selectedProject.name
-              });
-              setShowFilePanel(true);
-            }
-          }}
-        >
-          <div className="flex items-center gap-2 min-w-0">
-            {item.type === 'directory' ? (
-              expandedDirs.has(item.path) ? (
-                <FolderOpen className="w-4 h-4 text-blue-500 flex-shrink-0" />
-              ) : (
-                <Folder className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-              )
-            ) : (
-              getFileIcon(item.name)
-            )}
-            <span className="text-sm truncate text-foreground">
-              {item.name}
-            </span>
-          </div>
-          <div className="flex items-center gap-3 text-xs text-muted-foreground">
-            {item.type === 'file' && (
-              <>
-                <span>{formatFileSize(item.size)}</span>
-                <span className="font-mono">{item.permissionsRwx}</span>
-              </>
-            )}
-          </div>
-        </div>
-        
-        {item.type === 'directory' && 
-         expandedDirs.has(item.path) && 
-         item.children && 
-         renderCompactView(item.children, level + 1)}
-      </div>
-    ));
-  };
+  // Removed renderDetailedView and renderCompactView - using only simple list view
 
   if (loading) {
     return (
@@ -378,39 +293,10 @@ function FileTree({ selectedProject }) {
       {/* View Mode Toggle */}
       <div className="py-3 px-3 md:px-4 border-b border-border flex items-center justify-between">
         <h3 className="text-sm font-medium text-foreground">Files</h3>
-        <div className="flex gap-1">
-          <Button
-            variant={viewMode === 'simple' ? 'default' : 'ghost'}
-            size="sm"
-            className="h-8 w-8 p-0"
-            onClick={() => changeViewMode('simple')}
-            title="Simple view"
-          >
-            <List className="w-4 h-4" />
-          </Button>
-          <Button
-            variant={viewMode === 'compact' ? 'default' : 'ghost'}
-            size="sm"
-            className="h-8 w-8 p-0"
-            onClick={() => changeViewMode('compact')}
-            title="Compact view"
-          >
-            <Eye className="w-4 h-4" />
-          </Button>
-          <Button
-            variant={viewMode === 'detailed' ? 'default' : 'ghost'}
-            size="sm"
-            className="h-8 w-8 p-0"
-            onClick={() => changeViewMode('detailed')}
-            title="Detailed view"
-          >
-            <TableProperties className="w-4 h-4" />
-          </Button>
-        </div>
       </div>
 
-      {/* Column Headers for Detailed View */}
-      {viewMode === 'detailed' && files.length > 0 && (
+      {/* Column Headers removed - using simple view */}
+      {false && (
         <div className="px-3 md:px-4 pt-2 pb-1 border-b border-border">
           <div className="grid grid-cols-12 gap-2 px-1 md:px-2 text-xs font-medium text-muted-foreground">
             <div className="col-span-5">Name</div>
@@ -433,10 +319,8 @@ function FileTree({ selectedProject }) {
             </p>
           </div>
         ) : (
-          <div className={viewMode === 'detailed' ? '' : 'space-y-1'}>
-            {viewMode === 'simple' && renderFileTree(files)}
-            {viewMode === 'compact' && renderCompactView(files)}
-            {viewMode === 'detailed' && renderDetailedView(files)}
+          <div className="space-y-1">
+            {renderFileTree(files)}
           </div>
         )}
       </ScrollArea>
