@@ -129,13 +129,13 @@ function VibeTaskPanel({ isVisible, onClose }) {
   const getStatusColor = (status) => {
     const normalized = (status || '').toLowerCase();
     const statusColors = {
-      todo: 'bg-gray-400',
-      inprogress: 'bg-blue-500',
-      inreview: 'bg-amber-500',
-      done: 'bg-green-500',
-      cancelled: 'bg-red-500'
+      todo: 'bg-gradient-to-r from-gray-400 to-gray-500',
+      inprogress: 'bg-gradient-to-r from-blue-500 to-cyan-500',
+      inreview: 'bg-gradient-to-r from-amber-500 to-orange-500',
+      done: 'bg-gradient-to-r from-green-500 to-emerald-500',
+      cancelled: 'bg-gradient-to-r from-red-500 to-pink-500'
     };
-    return statusColors[normalized] || 'bg-gray-400';
+    return statusColors[normalized] || 'bg-gradient-to-r from-gray-400 to-gray-500';
   };
 
   if (!isVisible) {
@@ -145,10 +145,10 @@ function VibeTaskPanel({ isVisible, onClose }) {
   return (
     <div className="h-full flex flex-col bg-background relative max-w-full min-w-0">
       {/* Header */}
-      <div className="flex-shrink-0 border-b border-border h-12 md:h-14 px-3 md:px-4 flex items-center">
+      <div className="flex-shrink-0 border-b border-border h-12 md:h-14 px-3 md:px-4 flex items-center bg-gradient-to-r from-purple-500/10 to-pink-500/10">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-lg font-semibold text-foreground">Vibe Kanban</h3>
+            <h3 className="text-lg font-semibold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">Vibe Kanban</h3>
             <p className="text-xs text-muted-foreground mt-1">Create tasks quickly</p>
           </div>
           <button
@@ -221,7 +221,7 @@ function VibeTaskPanel({ isVisible, onClose }) {
 
             {/* Selected Project Info */}
             {selectedProject && (
-              <div className="p-2 bg-muted/30 rounded-md">
+              <div className="p-2 bg-gradient-to-r from-purple-500/5 to-pink-500/5 rounded-md border border-purple-500/10">
                 <h4 className="text-xs font-medium text-foreground">{selectedProject.name}</h4>
                 {selectedProject.description && (
                   <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{selectedProject.description}</p>
@@ -264,10 +264,10 @@ function VibeTaskPanel({ isVisible, onClose }) {
                       <button
                         key={task.id}
                         onClick={() => handleTaskClick(task)}
-                        className="w-full text-left p-2 bg-muted/20 hover:bg-muted/40 rounded-md transition-colors"
+                        className="w-full text-left p-2 bg-muted/20 hover:bg-gradient-to-r hover:from-purple-500/10 hover:to-pink-500/10 rounded-md transition-all duration-200 border border-transparent hover:border-purple-500/20"
                       >
                         <div className="flex items-start gap-2">
-                          <div className={`w-2 h-2 rounded-full mt-1 ${getStatusColor(task.status)}`} />
+                          <div className={`w-3 h-3 rounded-full mt-1 ${getStatusColor(task.status)} shadow-sm`} />
                           <div className="flex-1 min-w-0">
                             <h6 className="text-xs font-medium text-foreground truncate">{task.title}</h6>
                             {task.description && (
@@ -295,7 +295,7 @@ function VibeTaskPanel({ isVisible, onClose }) {
               <div className="space-y-2">
                 <button
                   onClick={() => setIsTaskDialogOpen(true)}
-                  className="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-all duration-200 font-medium text-sm"
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-md hover:from-purple-600 hover:to-pink-600 transition-all duration-200 font-medium text-sm shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
