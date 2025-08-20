@@ -125,17 +125,30 @@ function VibeTaskPanel({ isVisible, onClose }) {
     fetchTasks();
   }, [fetchTasks]);
 
-  // Get task status color
+  // Get task status color with brighter, more visible colors
   const getStatusColor = (status) => {
     const normalized = (status || '').toLowerCase();
     const statusColors = {
-      todo: 'bg-gray-400',
+      todo: 'bg-gray-500',
       inprogress: 'bg-blue-500',
-      inreview: 'bg-amber-500',
-      done: 'bg-green-500',
+      inreview: 'bg-orange-500',
+      done: 'bg-emerald-500',
       cancelled: 'bg-red-500'
     };
-    return statusColors[normalized] || 'bg-gray-400';
+    return statusColors[normalized] || 'bg-gray-500';
+  };
+
+  // Get status label with colors
+  const getStatusLabel = (status) => {
+    const normalized = (status || '').toLowerCase();
+    const statusLabels = {
+      todo: { text: 'To Do', className: 'text-gray-400' },
+      inprogress: { text: 'In Progress', className: 'text-blue-400' },
+      inreview: { text: 'In Review', className: 'text-orange-400' },
+      done: { text: 'Done', className: 'text-emerald-400' },
+      cancelled: { text: 'Cancelled', className: 'text-red-400' }
+    };
+    return statusLabels[normalized] || { text: status, className: 'text-gray-400' };
   };
 
   if (!isVisible) {
@@ -145,11 +158,11 @@ function VibeTaskPanel({ isVisible, onClose }) {
   return (
     <div className="h-full flex flex-col bg-background relative max-w-full min-w-0">
       {/* Header */}
-      <div className="flex-shrink-0 border-b border-border h-12 md:h-14 px-3 md:px-4 flex items-center">
+      <div className="flex-shrink-0 border-b border-border h-12 md:h-14 px-3 md:px-4 flex items-center bg-gradient-to-r from-purple-900/10 to-blue-900/10">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-lg font-semibold text-foreground">Vibe Kanban</h3>
-            <p className="text-xs text-muted-foreground mt-1">Create tasks quickly</p>
+            <h3 className="text-lg font-semibold bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">Vibe Kanban</h3>
+            <p className="text-xs text-muted-foreground/70 mt-1 italic">Create tasks quickly</p>
           </div>
           <button
             onClick={onClose}
@@ -202,7 +215,7 @@ function VibeTaskPanel({ isVisible, onClose }) {
           <>
             {/* Project Selection */}
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-foreground">Project</label>
+              <label className="text-xs font-semibold text-blue-400 uppercase tracking-wider">Project</label>
               <select
                 value={selectedProject?.id || ''}
                 onChange={(e) => {
@@ -269,14 +282,16 @@ function VibeTaskPanel({ isVisible, onClose }) {
                         <div className="flex items-start gap-2">
                           <div className={`w-2 h-2 rounded-full mt-1 ${getStatusColor(task.status)}`} />
                           <div className="flex-1 min-w-0">
-                            <h6 className="text-xs font-medium text-foreground truncate">{task.title}</h6>
+                            <h6 className="text-xs font-semibold text-foreground truncate">{task.title}</h6>
                             {task.description && (
-                              <p className="text-xs text-muted-foreground truncate">{task.description}</p>
+                              <p className="text-xs text-muted-foreground/80 truncate italic">{task.description}</p>
                             )}
                             <div className="flex items-center gap-2 mt-1">
-                              <span className="text-xs text-muted-foreground capitalize">{task.status}</span>
+                              <span className={`text-xs font-medium ${getStatusLabel(task.status).className}`}>
+                                {getStatusLabel(task.status).text}
+                              </span>
                               {task.created_at && (
-                                <span className="text-xs text-muted-foreground">
+                                <span className="text-xs text-muted-foreground/60">
                                   {new Date(task.created_at).toLocaleDateString()}
                                 </span>
                               )}
@@ -295,7 +310,7 @@ function VibeTaskPanel({ isVisible, onClose }) {
               <div className="space-y-2">
                 <button
                   onClick={() => setIsTaskDialogOpen(true)}
-                  className="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-all duration-200 font-medium text-sm"
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-md hover:from-purple-700 hover:to-blue-700 transition-all duration-200 font-medium text-sm shadow-lg"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -312,7 +327,7 @@ function VibeTaskPanel({ isVisible, onClose }) {
             {/* Quick Actions */}
             {selectedProject && (
               <div className="pt-3 border-t border-border">
-                <h5 className="text-xs font-medium text-foreground mb-2">Quick Actions</h5>
+                <h5 className="text-xs font-semibold text-foreground/90 mb-2 uppercase tracking-wider">Quick Actions</h5>
                 <div className="space-y-1">
                   <button 
                     onClick={() => window.open(`/vibe-kanban/projects/${selectedProject.id}/tasks`, '_blank')}
@@ -322,6 +337,16 @@ function VibeTaskPanel({ isVisible, onClose }) {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                     </svg>
                     Open in Vibe Kanban
+                  </button>
+                  
+                  <button 
+                    onClick={() => window.open(`/vibe-kanban/projects/${selectedProject.id}/tasks`, '_blank')}
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent rounded-md transition-colors"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                    </svg>
+                    Kanban
                   </button>
                   
                   <button 

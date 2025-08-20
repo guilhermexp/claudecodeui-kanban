@@ -28,17 +28,17 @@ const statusLabels: Record<TaskStatus, string> = {
 const getTaskStatusDotColor = (status: TaskStatus): string => {
   switch (status) {
     case 'todo':
-      return 'bg-gray-400';
+      return 'bg-gray-500';
     case 'inprogress':
       return 'bg-blue-500';
     case 'inreview':
-      return 'bg-yellow-500';
+      return 'bg-orange-500';
     case 'done':
-      return 'bg-green-500';
+      return 'bg-emerald-500';
     case 'cancelled':
       return 'bg-red-500';
     default:
-      return 'bg-gray-400';
+      return 'bg-gray-500';
   }
 };
 
@@ -53,10 +53,10 @@ function TaskDetailsHeader({
   return (
     <div>
       {/* Title and Task Actions */}
-      <div className="p-3 sm:p-4 pb-2">
+      <div className="p-3 sm:p-4 pb-2 bg-gradient-to-r from-purple-900/5 to-blue-900/5">
         <div className="flex items-start justify-between">
           <div className="flex-1 min-w-0">
-            <h2 className="text-base sm:text-lg font-bold mb-1 line-clamp-2">
+            <h2 className="text-base sm:text-lg font-bold mb-1 line-clamp-2 bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">
               {task.title}
             </h2>
             <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground">

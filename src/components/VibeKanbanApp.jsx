@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Route, Routes } from 'react-router-dom';
 import { Navbar } from '../components/vibe-kanban/layout/navbar';
-import { Projects } from '../pages/vibe-kanban/projects.tsx';
 import { ProjectTasks } from '../pages/vibe-kanban/project-tasks.tsx';
 import { Settings } from '../pages/vibe-kanban/Settings.tsx';
 import { McpServers } from '../pages/vibe-kanban/McpServers.tsx';
-import { VibeChat } from '../pages/vibe-kanban/vibe-chat.tsx';
+// Projects page removed - using direct kanban board access
 import { DisclaimerDialog } from '../components/vibe-kanban/DisclaimerDialog';
 import { OnboardingDialog } from '../components/vibe-kanban/OnboardingDialog';
 import { PrivacyOptInDialog } from '../components/vibe-kanban/PrivacyOptInDialog';
@@ -147,10 +146,7 @@ function AppContent() {
         {showNavbar && <Navbar />}
         <div className="flex-1 overflow-y-auto pb-safe sm:pb-0">
           <Routes>
-            <Route path="/" element={<VibeChat />} />
-            <Route path="/chat" element={<VibeChat />} />
-            <Route path="/projects" element={<Projects />} />
-            <Route path="/projects/:projectId" element={<Projects />} />
+            {/* Direct kanban board access only - projects page removed */}
             <Route
               path="/projects/:projectId/tasks"
               element={<ProjectTasks />}
@@ -161,6 +157,8 @@ function AppContent() {
             />
             <Route path="/settings" element={<Settings />} />
             <Route path="/mcp-servers" element={<McpServers />} />
+            {/* Default route - redirect to settings since projects page is removed */}
+            <Route path="/" element={<Settings />} />
           </Routes>
         </div>
       </div>

@@ -533,119 +533,16 @@ function Sidebar({
               
             </div>
           </div>
-          <div className="flex items-center gap-1 sm:gap-1.5 lg:gap-2">
-            <div className="relative filter-dropdown-container">
-              <Button
-                variant="ghost"
-                size="icon"
-                className={cn(
-                  "h-7 w-7 sm:h-8 sm:w-8 lg:h-9 lg:w-9 hover:bg-accent hover:text-accent-foreground transition-all",
-                  projectFilter !== 'all' && "text-primary"
-                )}
-                onClick={() => setShowFilterDropdown(!showFilterDropdown)}
-                title="Filter projects"
-              >
-                <Filter className="w-3.5 h-3.5 sm:w-4 sm:h-4 lg:w-4.5 lg:h-4.5" />
-                {projectFilter !== 'all' && (
-                  <div className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 sm:w-2 sm:h-2 bg-primary rounded-full" />
-                )}
-              </Button>
-              {showFilterDropdown && (
-                <div className="absolute top-full left-0 mt-1 w-48 bg-popover border border-border rounded-md shadow-lg z-50">
-                  <div className="py-1">
-                    <button
-                      className={cn(
-                        "w-full px-3 py-2 text-sm text-left hover:bg-accent hover:text-accent-foreground flex items-center gap-2",
-                        projectFilter === 'all' && "bg-accent text-accent-foreground"
-                      )}
-                      onClick={() => {
-                        setProjectFilter('all');
-                        setShowFilterDropdown(false);
-                      }}
-                    >
-                      <Layers className="w-4 h-4" />
-                      All Projects
-                    </button>
-                    <button
-                      className={cn(
-                        "w-full px-3 py-2 text-sm text-left hover:bg-accent hover:text-accent-foreground flex items-center gap-2",
-                        projectFilter === 'claude' && "bg-accent text-accent-foreground"
-                      )}
-                      onClick={() => {
-                        setProjectFilter('claude');
-                        setShowFilterDropdown(false);
-                      }}
-                    >
-                      <Terminal className="w-4 h-4" />
-                      Claude Code Projects
-                    </button>
-                    <button
-                      className={cn(
-                        "w-full px-3 py-2 text-sm text-left hover:bg-accent hover:text-accent-foreground flex items-center gap-2",
-                        projectFilter === 'vibe' && "bg-accent text-accent-foreground"
-                      )}
-                      onClick={() => {
-                        setProjectFilter('vibe');
-                        setShowFilterDropdown(false);
-                      }}
-                    >
-                      <Trello className="w-4 h-4" />
-                      Vibe Kanban Projects
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 sm:h-8 sm:w-8 lg:h-9 lg:w-9 hover:bg-accent hover:text-accent-foreground transition-all"
-              onClick={async () => {
-                setIsRefreshing(true);
-                try {
-                  await onRefresh();
-                } finally {
-                  setIsRefreshing(false);
-                }
-              }}
-              disabled={isRefreshing}
-              title="Refresh projects and sessions (Ctrl+R)"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 sm:w-4 sm:h-4 lg:w-4.5 lg:h-4.5 ${isRefreshing ? 'animate-spin' : ''}`} />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 sm:h-8 sm:w-8 lg:h-9 lg:w-9 hover:bg-accent hover:text-accent-foreground transition-all"
-              onClick={() => setShowNewProject(true)}
-              title="Create new project (Ctrl+N)"
-            >
-              <FolderPlus className="w-3.5 h-3.5 sm:w-4 sm:h-4 lg:w-4.5 lg:h-4.5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className={cn(
-                "h-7 w-7 sm:h-8 sm:w-8 lg:h-9 lg:w-9 hover:bg-accent hover:text-accent-foreground transition-all",
-                isEditMode ? "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400" : ""
-              )}
-              onClick={() => setIsEditMode(!isEditMode)}
-              title={isEditMode ? "Exit edit mode" : "Enter edit mode (delete projects)"}
-            >
-              <Edit3 className="w-3.5 h-3.5 sm:w-4 sm:h-4 lg:w-4.5 lg:h-4.5" />
-            </Button>
-            {onSidebarClose && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 sm:h-8 sm:w-8 lg:h-9 lg:w-9 hover:bg-accent hover:text-accent-foreground transition-all"
-                onClick={onSidebarClose}
-                title="Close sidebar"
-              >
-                <X className="w-3.5 h-3.5 sm:w-4 sm:h-4 lg:w-4.5 lg:h-4.5" />
-              </Button>
-            )}
-          </div>
+          {/* Close button - essential for closing sidebar */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={onSidebarClose}
+            title="Close sidebar"
+          >
+            <X className="w-4 h-4" />
+          </Button>
         </div>
         
         {/* Mobile Header */}
@@ -874,6 +771,125 @@ function Sidebar({
               >
                 <X className="w-3 h-3 text-muted-foreground" />
               </button>
+            )}
+          </div>
+          
+          {/* Toolbar buttons moved here from header */}
+          <div className="flex items-center gap-1 mt-2 justify-center">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 hover:bg-accent hover:text-accent-foreground transition-all"
+              onClick={async () => {
+                setIsRefreshing(true);
+                try {
+                  await onRefresh();
+                } finally {
+                  setIsRefreshing(false);
+                }
+              }}
+              disabled={isRefreshing}
+              title="Refresh projects"
+            >
+              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            </Button>
+            
+            <div className="filter-dropdown-container relative">
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn(
+                  "h-8 w-8 hover:bg-accent hover:text-accent-foreground transition-all",
+                  projectFilter !== 'all' && "text-primary"
+                )}
+                onClick={() => setShowFilterDropdown(!showFilterDropdown)}
+                title="Filter projects"
+              >
+                <Filter className="w-4 h-4" />
+                {projectFilter !== 'all' && (
+                  <div className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-primary rounded-full" />
+                )}
+              </Button>
+              {showFilterDropdown && (
+                <div className="absolute top-full left-0 mt-1 w-48 bg-popover border border-border rounded-md shadow-lg z-50">
+                  <div className="py-1">
+                    <button
+                      className={cn(
+                        "w-full px-3 py-2 text-sm text-left hover:bg-accent hover:text-accent-foreground flex items-center gap-2",
+                        projectFilter === 'all' && "bg-accent text-accent-foreground"
+                      )}
+                      onClick={() => {
+                        setProjectFilter('all');
+                        setShowFilterDropdown(false);
+                      }}
+                    >
+                      <Layers className="w-4 h-4" />
+                      All Projects
+                    </button>
+                    <button
+                      className={cn(
+                        "w-full px-3 py-2 text-sm text-left hover:bg-accent hover:text-accent-foreground flex items-center gap-2",
+                        projectFilter === 'claude' && "bg-accent text-accent-foreground"
+                      )}
+                      onClick={() => {
+                        setProjectFilter('claude');
+                        setShowFilterDropdown(false);
+                      }}
+                    >
+                      <Terminal className="w-4 h-4" />
+                      Claude Code Projects
+                    </button>
+                    <button
+                      className={cn(
+                        "w-full px-3 py-2 text-sm text-left hover:bg-accent hover:text-accent-foreground flex items-center gap-2",
+                        projectFilter === 'vibe' && "bg-accent text-accent-foreground"
+                      )}
+                      onClick={() => {
+                        setProjectFilter('vibe');
+                        setShowFilterDropdown(false);
+                      }}
+                    >
+                      <Kanban className="w-4 h-4" />
+                      Vibe Kanban Projects
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 hover:bg-accent hover:text-accent-foreground transition-all"
+              onClick={() => setShowNewProject(true)}
+              title="New project"
+            >
+              <FolderPlus className="w-4 h-4" />
+            </Button>
+            
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn(
+                "h-8 w-8 hover:bg-accent hover:text-accent-foreground transition-all",
+                isEditMode ? "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400" : ""
+              )}
+              onClick={() => setIsEditMode(!isEditMode)}
+              title={isEditMode ? "Exit edit mode" : "Edit projects"}
+            >
+              <Edit3 className="w-4 h-4" />
+            </Button>
+            
+            {onSidebarClose && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 hover:bg-accent hover:text-accent-foreground transition-all md:hidden"
+                onClick={onSidebarClose}
+                title="Close sidebar"
+              >
+                <X className="w-4 h-4" />
+              </Button>
             )}
           </div>
         </div>
@@ -1376,15 +1392,15 @@ function Sidebar({
       <div className="border-t border-border flex-shrink-0">
         {/* Desktop Footer */}
         <div className="hidden md:block p-3 space-y-2">
-          {/* VibeKanban Button */}
+          {/* VibeKanban Button - goes directly to projects */}
           <Button
             variant="outline"
             size="sm"
             className="w-full justify-start gap-2 h-8"
-            onClick={() => navigate('/vibe-kanban')}
+            onClick={() => navigate('/vibe-kanban/settings')}
           >
             <Trello className="w-4 h-4" />
-            <span>Vibe Kanban</span>
+            <span>Vibe Kanban Projects</span>
           </Button>
           
           {/* Settings and Theme Row */}
@@ -1419,14 +1435,14 @@ function Sidebar({
         
         {/* Mobile Footer */}
         <div className="md:hidden p-3 pb-safe-area-inset-bottom space-y-2">
-          {/* VibeKanban Button */}
+          {/* VibeKanban Button - goes directly to projects */}
           <Button
             variant="outline"
             className="w-full h-10 justify-center gap-2"
-            onClick={() => navigate('/vibe-kanban')}
+            onClick={() => navigate('/vibe-kanban/settings')}
           >
             <Trello className="w-4 h-4" />
-            <span>Vibe Kanban</span>
+            <span>Vibe Kanban Projects</span>
           </Button>
           
           {/* Settings and Theme Row */}

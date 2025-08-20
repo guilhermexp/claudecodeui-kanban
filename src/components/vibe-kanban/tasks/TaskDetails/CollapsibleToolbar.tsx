@@ -7,9 +7,9 @@ function CollapsibleToolbar() {
   const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(true);
 
   return (
-    <div className="border-b">
+    <div className="border-b bg-gradient-to-r from-indigo-900/5 to-purple-900/5">
       <div className="px-3 sm:px-4 pb-2 flex items-center justify-between">
-        <h3 className="text-sm font-medium text-muted-foreground">
+        <h3 className="text-sm font-semibold text-indigo-400 uppercase tracking-wider">
           Task Details
         </h3>
         <Button
