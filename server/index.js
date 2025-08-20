@@ -1593,6 +1593,184 @@ if (!global.uploadedImages) {
   global.uploadedImages = new Map();
 }
 
+// Preview Proxy - Isolates preview content to prevent WebSocket interference
+app.get('/api/preview-proxy', async (req, res) => {
+  const targetUrl = req.query.url;
+  
+  if (!targetUrl) {
+    return res.status(400).send('URL parameter is required');
+  }
+  
+  try {
+    // Fetch the target URL with timeout
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    
+    const response = await fetch(targetUrl, {
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'Claude-Code-UI-Preview-Proxy'
+      }
+    });
+    
+    clearTimeout(timeout);
+    
+    // Check if response is HTML
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('text/html')) {
+      // For non-HTML content, just proxy it directly
+      const buffer = await response.arrayBuffer();
+      res.setHeader('Content-Type', contentType || 'application/octet-stream');
+      res.send(Buffer.from(buffer));
+      return;
+    }
+    
+    let html = await response.text();
+    
+    // Inject a script to disable WebSocket when in preview mode
+    const disableWebSocketScript = `
+      <script>
+        // Disable WebSocket in preview mode to prevent interference
+        (function() {
+          if (window.parent !== window) {
+            console.log('Preview Mode: Disabling WebSocket connections');
+            const OriginalWebSocket = window.WebSocket;
+            window.WebSocket = class WebSocketDisabled {
+              constructor(url) {
+                console.log('WebSocket blocked in preview mode:', url);
+                this.readyState = 0;
+                this.url = url;
+              }
+              send() {}
+              close() {}
+              addEventListener() {}
+              removeEventListener() {}
+            };
+            window.WebSocket.CLOSED = 3;
+            window.WebSocket.CLOSING = 2;
+            window.WebSocket.OPEN = 1;
+            window.WebSocket.CONNECTING = 0;
+          }
+        })();
+      </script>
+    `;
+    
+    // Inject the script right after <head> or at the beginning of <body>
+    if (html.includes('<head>')) {
+      html = html.replace('<head>', `<head>${disableWebSocketScript}`);
+    } else if (html.includes('<body>')) {
+      html = html.replace('<body>', `<body>${disableWebSocketScript}`);
+    } else {
+      html = disableWebSocketScript + html;
+    }
+    
+    // Also rewrite any absolute URLs to go through the proxy
+    const baseUrl = new URL(targetUrl);
+    const baseOrigin = baseUrl.origin;
+    
+    // Rewrite src and href attributes to use proxy for same-origin resources
+    html = html.replace(
+      /(?:src|href)="(\/[^"]*?)"/g,
+      (match, path) => {
+        const fullUrl = baseOrigin + path;
+        return match.replace(path, `/api/preview-proxy?url=${encodeURIComponent(fullUrl)}`);
+      }
+    );
+    
+    // Set appropriate headers
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    res.send(html);
+  } catch (error) {
+    console.error('Preview proxy error:', error);
+    
+    // Better error messages
+    let errorMessage = 'Failed to load preview';
+    let errorDetails = '';
+    
+    if (error.code === 'ECONNREFUSED') {
+      errorMessage = 'Connection refused';
+      errorDetails = `The server at ${targetUrl} is not running or not accessible.`;
+    } else if (error.name === 'AbortError') {
+      errorMessage = 'Connection timeout';
+      errorDetails = 'The server took too long to respond.';
+    } else if (error.code === 'ENOTFOUND') {
+      errorMessage = 'Server not found';
+      errorDetails = `Could not find the server at ${targetUrl}.`;
+    }
+    
+    // Send a styled error page
+    const errorHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Preview Error</title>
+        <style>
+          body {
+            font-family: system-ui, -apple-system, sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          }
+          .error-container {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+            max-width: 500px;
+            text-align: center;
+          }
+          h1 {
+            color: #e53e3e;
+            margin: 0 0 1rem 0;
+            font-size: 1.5rem;
+          }
+          p {
+            color: #4a5568;
+            margin: 0.5rem 0;
+          }
+          .url {
+            background: #f7fafc;
+            padding: 0.5rem;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.9rem;
+            word-break: break-all;
+            margin: 1rem 0;
+          }
+          button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 1rem;
+          }
+          button:hover {
+            background: #5a67d8;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="error-container">
+          <h1>⚠️ ${errorMessage}</h1>
+          <p>${errorDetails}</p>
+          <div class="url">${targetUrl}</div>
+          <p>Make sure the server is running and try refreshing.</p>
+          <button onclick="window.location.reload()">Retry</button>
+        </div>
+      </body>
+      </html>
+    `;
+    
+    res.status(502).send(errorHtml);
+  }
+});
+
 // Proxy VibeKanban API requests to Rust backend
 app.use('/api/vibe-kanban', express.json(), async (req, res) => {
   try {
