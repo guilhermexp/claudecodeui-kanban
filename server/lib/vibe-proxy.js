@@ -21,7 +21,7 @@ class VibeKanbanProxy {
     this.timeout = options.timeout || 30000; // 30 seconds default
     this.retries = options.retries || 3;
     this.retryDelay = options.retryDelay || 1000; // 1 second initial delay
-    this.healthCheckInterval = options.healthCheckInterval || 30000; // 30 seconds
+    this.healthCheckInterval = options.healthCheckInterval || 120000; // 2 minutes (increased from 30s)
     
     // Circuit breaker settings
     this.circuitBreakerThreshold = options.circuitBreakerThreshold || 5;
@@ -208,22 +208,38 @@ class VibeKanbanProxy {
   }
   
   startHealthChecks() {
+    // Track last known state to reduce log spam
+    let lastHealthyState = null;
+    
     // Initial health check
     this.healthCheck().then(result => {
-      logger.info('Health check:', result.healthy ? 'Healthy' : 'Unhealthy', result);
+      lastHealthyState = result.healthy;
+      if (!result.healthy) {
+        logger.info('Vibe Kanban service not available at startup');
+      }
     });
     
-    // Periodic health checks
+    // Periodic health checks with smart logging
     this.healthCheckTimer = setInterval(async () => {
       const result = await this.healthCheck();
       
-      if (!result.healthy && !this.circuitOpen) {
-        logger.warn('Health check failed:', result.error);
-      } else if (result.healthy && this.circuitOpen) {
-        // Service recovered, close circuit
+      // Only log state changes, not every failed check
+      if (result.healthy !== lastHealthyState) {
+        if (!result.healthy && !this.circuitOpen) {
+          logger.warn('Vibe Kanban service became unavailable');
+        } else if (result.healthy && !lastHealthyState) {
+          // Service recovered
+          this.circuitOpen = false;
+          this.failureCount = 0;
+          logger.info('Vibe Kanban service recovered');
+        }
+        lastHealthyState = result.healthy;
+      }
+      
+      // Silently handle circuit breaker logic
+      if (result.healthy && this.circuitOpen) {
         this.circuitOpen = false;
         this.failureCount = 0;
-        logger.info('Service recovered, closing circuit breaker');
       }
     }, this.healthCheckInterval);
   }

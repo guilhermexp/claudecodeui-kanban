@@ -21,11 +21,12 @@ class VibeKanbanCleanupService {
     
     // Configurações
     this.config = {
-      checkInterval: 30000, // 30 segundos
+      checkInterval: 120000, // 2 minutos (aumentado de 30s para reduzir overhead)
       processTimeout: 300000, // 5 minutos para considerar órfão
       maxOrphanCount: 10, // Máximo de processos órfãos antes de limpeza forçada
       vibeKanbanPort: 8081,
-      logLevel: 'info'
+      logLevel: 'info',
+      skipHealthCheckIfNotRunning: true // Nova opção para evitar checks desnecessários
     };
     
     // Padrões de processos do Vibe Kanban para identificar
