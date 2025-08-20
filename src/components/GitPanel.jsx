@@ -763,15 +763,15 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
   return (
     <div className="h-full flex flex-col bg-card rounded-xl border border-border">
       {/* Header */}
-      <div className={`flex items-center justify-between border-b border-border ${isMobile ? 'px-3 py-2' : 'px-4 py-3'}`}>
+      <div className={`flex items-center justify-between border-b border-border bg-gradient-to-r from-orange-900/10 to-red-900/10 ${isMobile ? 'px-3 py-2' : 'px-4 py-3'}`}>
         <div className="relative" ref={dropdownRef}>
           <button
             onClick={() => setShowBranchDropdown(!showBranchDropdown)}
             className={`flex items-center hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors ${isMobile ? 'space-x-1 px-2 py-1' : 'space-x-2 px-3 py-1.5'}`}
           >
-            <GitBranch className={`text-gray-600 dark:text-gray-400 ${isMobile ? 'w-3 h-3' : 'w-4 h-4'}`} />
+            <GitBranch className={`text-orange-500 ${isMobile ? 'w-3 h-3' : 'w-4 h-4'}`} />
             <div className="flex items-center gap-1">
-              <span className={`font-medium ${isMobile ? 'text-xs' : 'text-sm'}`}>{currentBranch}</span>
+              <span className={`font-semibold bg-gradient-to-r from-orange-400 to-red-400 bg-clip-text text-transparent ${isMobile ? 'text-xs' : 'text-sm'}`}>{currentBranch}</span>
               {/* Remote status indicators */}
               {remoteStatus?.hasRemote && (
                 <div className="flex items-center gap-1 text-xs">
