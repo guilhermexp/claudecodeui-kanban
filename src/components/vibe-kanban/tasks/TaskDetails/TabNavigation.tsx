@@ -26,7 +26,7 @@ function TabNavigation({ activeTab, setActiveTab }: Props) {
   const { attemptData } = useContext(TaskAttemptDataContext);
   const { isPlanningMode, planCount } = useTaskPlan();
   return (
-    <div className="border-b bg-gradient-to-r from-purple-900/10 to-indigo-900/10">
+    <div className="border-b bg-muted/30">
       <div className="flex px-2 sm:px-4 overflow-x-auto scrollbar-thin">
         <button
           onClick={() => {
@@ -34,7 +34,7 @@ function TabNavigation({ activeTab, setActiveTab }: Props) {
           }}
           className={`flex items-center px-2 sm:px-4 py-2 text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
             activeTab === 'logs'
-              ? 'border-purple-400 text-purple-400 bg-purple-900/10'
+              ? 'border-primary text-primary bg-background'
               : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50'
           }`}
         >
@@ -48,7 +48,7 @@ function TabNavigation({ activeTab, setActiveTab }: Props) {
             }}
             className={`flex items-center px-2 sm:px-4 py-2 text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
               activeTab === 'plan'
-                ? 'border-purple-400 text-purple-400 bg-purple-900/10'
+                ? 'border-primary text-primary bg-background'
                 : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50'
             }`}
           >
@@ -65,7 +65,7 @@ function TabNavigation({ activeTab, setActiveTab }: Props) {
           }}
           className={`flex items-center px-2 sm:px-4 py-2 text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
             activeTab === 'diffs'
-              ? 'border-purple-400 text-purple-400 bg-purple-900/10'
+              ? 'border-primary text-primary bg-background'
               : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50'
           }`}
         >
@@ -83,7 +83,7 @@ function TabNavigation({ activeTab, setActiveTab }: Props) {
           }}
           className={`flex items-center px-2 sm:px-4 py-2 text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
             activeTab === 'related'
-              ? 'border-purple-400 text-purple-400 bg-purple-900/10'
+              ? 'border-primary text-primary bg-background'
               : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50'
           }`}
         >
@@ -101,7 +101,7 @@ function TabNavigation({ activeTab, setActiveTab }: Props) {
           }}
           className={`flex items-center px-2 sm:px-4 py-2 text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
             activeTab === 'processes'
-              ? 'border-purple-400 text-purple-400 bg-purple-900/10'
+              ? 'border-primary text-primary bg-background'
               : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50'
           }`}
         >
