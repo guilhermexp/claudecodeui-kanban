@@ -358,7 +358,7 @@ function MainContent({
               resizeTrigger={shellResizeTrigger}
               onSidebarClose={() => {
                 if (sidebarOpen && onSidebarOpen) {
-                  onSidebarOpen(); // This toggles the sidebar
+                  onSidebarOpen(); // This toggles the sidebar (closes it when open)
                 }
                 setActiveSidePanel(null); // Close any active side panel
               }}

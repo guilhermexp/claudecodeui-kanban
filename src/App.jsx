@@ -690,7 +690,7 @@ function AppContent() {
           messages={messages}
           isMobile={isMobile}
           onMenuClick={() => setSidebarOpen(true)}
-          onSidebarOpen={() => setSidebarOpen(true)}
+          onSidebarOpen={() => setSidebarOpen(!sidebarOpen)}
           sidebarOpen={sidebarOpen}
           isLoading={isLoadingProjects}
           onInputFocusChange={setIsInputFocused}
