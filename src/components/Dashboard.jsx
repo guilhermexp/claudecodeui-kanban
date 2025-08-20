@@ -231,8 +231,8 @@ const Dashboard = memo(({ onBack }) => {
             <ArrowLeft size={20} />
           </button>
           <div>
-            <h1 className="dashboard-title">Usage Dashboard</h1>
-            <p className="dashboard-subtitle">Track your Claude Code usage and costs</p>
+            <h1 className="dashboard-title bg-gradient-to-r from-green-400 to-cyan-400 bg-clip-text text-transparent">Usage Dashboard</h1>
+            <p className="dashboard-subtitle text-muted-foreground/70 italic">Track your Claude Code usage and costs</p>
           </div>
         </div>
         

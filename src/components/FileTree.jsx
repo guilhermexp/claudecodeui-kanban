@@ -119,10 +119,10 @@ function FileTree({ selectedProject }) {
         <Button
           variant="ghost"
           className={cn(
-            "w-full justify-start p-2 md:p-2 h-auto font-normal text-left hover:bg-accent",
-            "touch-manipulation active:bg-accent/80 min-h-[44px] md:min-h-0",
+            "w-full justify-start py-1 px-2 h-auto font-normal text-left hover:bg-accent",
+            "touch-manipulation active:bg-accent/80 min-h-[28px] md:min-h-0",
           )}
-          style={{ paddingLeft: `${level * 16 + 12}px` }}
+          style={{ paddingLeft: `${level * 10 + 8}px` }}
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -162,19 +162,19 @@ function FileTree({ selectedProject }) {
               <span className="w-4 h-4 text-orange-500 flex-shrink-0">•</span>
             ) : item.type === 'directory' ? (
               expandedDirs.has(item.path) ? (
-                <FolderOpen className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                <FolderOpen className="w-3 h-3 text-blue-500 flex-shrink-0" />
               ) : (
-                <Folder className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                <Folder className="w-3 h-3 text-muted-foreground flex-shrink-0" />
               )
             ) : (
               getFileIcon(item.name)
             )}
             <span className={cn(
-              "text-sm truncate",
+              "text-xs truncate max-w-[150px]",
               item.type === 'error' ? "text-red-500 font-medium" :
               item.type === 'error-message' ? "text-orange-400 text-xs" :
               "text-foreground"
-            )}>
+            )} title={item.name}>
               {item.name}
             </span>
           </div>
@@ -202,48 +202,48 @@ function FileTree({ selectedProject }) {
     const ext = filename.split('.').pop()?.toLowerCase();
     const name = filename.toLowerCase();
     
-    // Special files by name
-    if (name === 'dockerfile') return <span className="w-4 h-4 flex-shrink-0">🐳</span>;
-    if (name === '.dockerignore') return <span className="w-4 h-4 flex-shrink-0">🐳</span>;
-    if (name === '.gitignore') return <span className="w-4 h-4 flex-shrink-0">🔸</span>;
-    if (name === '.prettierrc' || name === '.prettierignore') return <span className="w-4 h-4 flex-shrink-0">🎨</span>;
-    if (name === 'package.json' || name === 'package-lock.json') return <span className="w-4 h-4 flex-shrink-0">📦</span>;
-    if (name === 'tsconfig.json' || name === 'tsconfig.buildinfo') return <span className="w-4 h-4 flex-shrink-0">🔷</span>;
-    if (name === '.env' || name.startsWith('.env.')) return <span className="w-4 h-4 flex-shrink-0">🔐</span>;
-    if (name === 'readme.md' || name === 'readme.txt') return <span className="w-4 h-4 flex-shrink-0">📘</span>;
+    // Special files by name - smaller text size
+    if (name === 'dockerfile') return <span className="text-xs flex-shrink-0">🐳</span>;
+    if (name === '.dockerignore') return <span className="text-xs flex-shrink-0">🐳</span>;
+    if (name === '.gitignore') return <span className="text-xs flex-shrink-0">🔸</span>;
+    if (name === '.prettierrc' || name === '.prettierignore') return <span className="text-xs flex-shrink-0">🎨</span>;
+    if (name === 'package.json' || name === 'package-lock.json') return <span className="text-xs flex-shrink-0">📦</span>;
+    if (name === 'tsconfig.json' || name === 'tsconfig.buildinfo') return <span className="text-xs flex-shrink-0">🔷</span>;
+    if (name === '.env' || name.startsWith('.env.')) return <span className="text-xs flex-shrink-0">🔐</span>;
+    if (name === 'readme.md' || name === 'readme.txt') return <span className="text-xs flex-shrink-0">📘</span>;
     
-    // Files by extension
+    // Files by extension - smaller icons
     switch(ext) {
       // TypeScript
       case 'ts':
       case 'tsx':
-        return <span className="w-4 h-4 text-blue-500 flex-shrink-0 font-bold">TS</span>;
+        return <span className="text-[10px] text-blue-500 flex-shrink-0 font-bold">TS</span>;
       
       // JavaScript  
       case 'js':
       case 'jsx':
       case 'mjs':
-        return <span className="w-4 h-4 text-yellow-500 flex-shrink-0 font-bold">JS</span>;
+        return <span className="text-[10px] text-yellow-500 flex-shrink-0 font-bold">JS</span>;
       
       // Config files
       case 'json':
-        return <span className="w-4 h-4 flex-shrink-0">{name.includes('config') ? '⚙️' : '{ }'}</span>;
+        return <span className="text-xs flex-shrink-0">{name.includes('config') ? '⚙️' : '{ }'}</span>;
       case 'yaml':
       case 'yml':
-        return <span className="w-4 h-4 flex-shrink-0">📋</span>;
+        return <span className="text-xs flex-shrink-0">📋</span>;
       
       // Documentation
       case 'md':
-        return <span className="w-4 h-4 flex-shrink-0">📝</span>;
+        return <span className="text-xs flex-shrink-0">📝</span>;
       
       // SQL
       case 'sql':
-        return <span className="w-4 h-4 flex-shrink-0">🗃️</span>;
+        return <span className="text-xs flex-shrink-0">🗃️</span>;
       
       // Shell scripts
       case 'sh':
       case 'bash':
-        return <span className="w-4 h-4 flex-shrink-0">🖥️</span>;
+        return <span className="text-xs flex-shrink-0">🖥️</span>;
       
       // Images
       case 'png':
@@ -253,21 +253,21 @@ function FileTree({ selectedProject }) {
       case 'svg':
       case 'webp':
       case 'ico':
-        return <span className="w-4 h-4 flex-shrink-0">🖼️</span>;
+        return <span className="text-xs flex-shrink-0">🖼️</span>;
       
       // Other code files
       case 'py':
-        return <span className="w-4 h-4 text-blue-400 flex-shrink-0">🐍</span>;
+        return <span className="text-xs flex-shrink-0">🐍</span>;
       case 'go':
-        return <span className="w-4 h-4 text-cyan-500 flex-shrink-0">Go</span>;
+        return <span className="text-[10px] text-cyan-500 flex-shrink-0">Go</span>;
       case 'rs':
-        return <span className="w-4 h-4 text-orange-600 flex-shrink-0">🦀</span>;
+        return <span className="text-xs flex-shrink-0">🦀</span>;
       case 'java':
-        return <span className="w-4 h-4 text-red-600 flex-shrink-0">☕</span>;
+        return <span className="text-xs flex-shrink-0">☕</span>;
       
       // Default
       default:
-        return <File className="w-4 h-4 text-muted-foreground flex-shrink-0" />;
+        return <File className="w-3 h-3 text-muted-foreground flex-shrink-0" />;
     }
   };
 
@@ -288,11 +288,12 @@ function FileTree({ selectedProject }) {
     <div className="h-full flex bg-card rounded-xl border border-border overflow-hidden">
       {/* Files List */}
       <div className={`flex flex-col transition-all duration-300 ease-in-out ${
-        showFilePanel ? 'hidden md:flex md:w-[40%] lg:w-[35%]' : 'flex-1'
+        showFilePanel ? 'hidden md:flex md:w-[25%] lg:w-[20%] xl:w-[18%]' : 'flex-1'
       }`}>
       {/* View Mode Toggle */}
-      <div className="py-3 px-3 md:px-4 border-b border-border flex items-center justify-between">
-        <h3 className="text-sm font-medium text-foreground">Files</h3>
+      <div className="py-3 px-3 md:px-4 border-b border-border flex items-center justify-between bg-gradient-to-r from-blue-900/10 to-purple-900/10">
+        <h3 className="text-sm font-semibold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">Files</h3>
+        {/* Toolbar buttons moved to Sidebar */}
       </div>
 
       {/* Column Headers removed - using simple view */}
