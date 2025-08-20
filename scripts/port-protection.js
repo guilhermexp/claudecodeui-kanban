@@ -157,7 +157,10 @@ async function killUnauthorizedProcess(port, allowedProcess = null) {
   );
   
   if (isAllowed) {
-    log('PORT-GUARD', `✅ Authorized process on port ${port}: ${processInfo.command} (CWD: ${processInfo.cwd})`, colors.green);
+    // Only log authorization checks occasionally to reduce log spam
+    if (Math.random() < 0.1) { // Log only 10% of checks
+      log('PORT-GUARD', `✅ Authorized process on port ${port}: ${processInfo.command} (CWD: ${processInfo.cwd})`, colors.green);
+    }
     return false;
   }
   
@@ -209,7 +212,7 @@ class PortProtector {
     log('PORT-GUARD', '🛡️ Starting Claude Code UI Port Protection Service', colors.cyan);
     log('PORT-GUARD', `Protected ports: ${Object.values(this.protectedPorts).join(', ')}`, colors.cyan);
     
-    // Monitor every 5 seconds
+    // Monitor every 30 seconds (reduced from 5s to avoid excessive checking)
     this.monitorInterval = setInterval(async () => {
       for (const [name, port] of Object.entries(this.protectedPorts)) {
         const inUse = await isPortInUse(port);
@@ -218,7 +221,7 @@ class PortProtector {
           await killUnauthorizedProcess(port, this.allowedProcesses[name]);
         }
       }
-    }, 5000);
+    }, 30000);
     
     // Also monitor on startup
     this.performInitialScan();
