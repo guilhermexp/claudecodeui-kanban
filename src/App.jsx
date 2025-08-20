@@ -723,7 +723,11 @@ function AppContent() {
             onTranscript={(text) => {
               // Send the transcribed text to the terminal via the global handler
               if (window.sendToActiveTerminal && typeof window.sendToActiveTerminal === 'function') {
-                window.sendToActiveTerminal(text);
+                // Add a small delay to ensure the terminal is ready to receive input
+                // This helps prevent the issue where text creates new input lines on mobile
+                setTimeout(() => {
+                  window.sendToActiveTerminal(text);
+                }, 100);
               }
             }}
           />

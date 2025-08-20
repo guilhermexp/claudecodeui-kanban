@@ -4,6 +4,7 @@ import { FitAddon } from 'xterm-addon-fit';
 import { ClipboardAddon } from '@xterm/addon-clipboard';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { WebLinksAddon } from '@xterm/addon-web-links';
+import { SearchAddon } from '@xterm/addon-search';
 import { useDropzone } from 'react-dropzone';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import PreviewPanel from './PreviewPanel';
@@ -21,14 +22,10 @@ const xtermStyles = `
     outline: none !important;
   }
   
-  /* Make terminal responsive with performance optimizations */
+  /* Make terminal responsive */
   .xterm {
     width: 100% !important;
     height: 100% !important;
-    /* Performance optimizations */
-    will-change: auto !important;
-    transform: translateZ(0) !important;
-    backface-visibility: hidden !important;
   }
   
   .xterm .xterm-viewport {
@@ -95,6 +92,17 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   const [isBypassingPermissions, setIsBypassingPermissions] = useState(false);
   const [isManualDisconnect, setIsManualDisconnect] = useState(false);
   
+  // Command history state
+  const commandHistory = useRef([]);
+  const commandHistoryIndex = useRef(-1);
+  const currentCommand = useRef('');
+  
+  // Search state
+  const searchAddon = useRef(null);
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchInputRef = useRef(null);
+  
   // Preview panel states
   const [showPreview, setShowPreview] = useState(false);
   const [previewUrl, setPreviewUrl] = useState('');
@@ -109,6 +117,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   // Reconnection state
   const reconnectTimeout = useRef(null);
   const reconnectAttempts = useRef(0);
+  const lastProjectPath = useRef(null); // Store the last project path to maintain during reconnection
   
   // Session activity tracking for protection system
   const [hasActiveSession, setHasActiveSession] = useState(false);
@@ -297,6 +306,10 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     // Mark as manual disconnect to prevent auto-reconnection
     setIsManualDisconnect(true);
     
+    // Clear stored session info on manual disconnect
+    setLastSessionId(null);
+    lastProjectPath.current = null;
+    
     if (closeWebSocket && ws.current) {
       ws.current.close(1000, 'User requested disconnect');
       ws.current = null;
@@ -420,18 +433,36 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
         // Don't frame control characters like backspace and escape
         const isControlChar = data.length === 1 && (data.charCodeAt(0) < 32 || data.charCodeAt(0) === 127);
         
-        if (!isControlChar) {
-          // Visual echo: frame the message the user is sending to the assistant
-          printFramedMessage(data);
-        }
-        
-        if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-          // Mark session as active when user sends input
-          markSessionActive();
-          ws.current.send(JSON.stringify({
-            type: 'input',
-            data: data
-          }));
+        // On mobile, ensure terminal has focus before sending input
+        // This prevents the issue where text creates new input lines
+        if (isMobile && terminal.current && !isControlChar) {
+          terminal.current.focus();
+          // Small delay to ensure focus is properly set
+          setTimeout(() => {
+            if (!isControlChar) {
+              // Visual echo: frame the message the user is sending to the assistant
+              printFramedMessage(data);
+            }
+            
+            if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+              ws.current.send(JSON.stringify({
+                type: 'input',
+                data: data
+              }));
+            }
+          }, 50);
+        } else {
+          if (!isControlChar) {
+            // Visual echo: frame the message the user is sending to the assistant
+            printFramedMessage(data);
+          }
+          
+          if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+            ws.current.send(JSON.stringify({
+              type: 'input',
+              data: data
+            }));
+          }
         }
       };
     }
@@ -682,6 +713,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     fitAddon.current = new FitAddon();
     const clipboardAddon = new ClipboardAddon();
     const webglAddon = new WebglAddon();
+    searchAddon.current = new SearchAddon();
     
     // Configure WebLinksAddon with custom handler for localhost URLs
     const webLinksAddon = new WebLinksAddon((event, uri) => {
@@ -703,6 +735,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     terminal.current.loadAddon(fitAddon.current);
     terminal.current.loadAddon(clipboardAddon);
     terminal.current.loadAddon(webLinksAddon);
+    terminal.current.loadAddon(searchAddon.current);
     
     try {
       terminal.current.loadAddon(webglAddon);
@@ -718,19 +751,109 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       }
     });
     
-    // Listen for terminal data to detect URLs
-    terminal.current.onData(() => {
-      // Debounce URL detection
-      setTimeout(() => {
-        detectUrlsInTerminal();
-      }, 500);
-    });
+    // Remove terminal data listener that was causing unnecessary processing
+    // URL detection is already handled when needed
 
-    // Add keyboard shortcuts for copy/paste
+    // Add keyboard shortcuts for copy/paste and command history
     terminal.current.attachCustomKeyEventHandler((event) => {
       // Allow Tab and Shift+Tab to bubble up for navigation
       if (event.key === 'Tab') {
         return true; // Let the browser handle tab navigation
+      }
+      
+      // Command history navigation with arrow keys
+      if (event.key === 'ArrowUp' && commandHistory.current.length > 0) {
+        event.preventDefault();
+        
+        // Save current command if at the end of history
+        if (commandHistoryIndex.current === -1) {
+          // Get current line content from terminal
+          const buffer = terminal.current.buffer.active;
+          const cursorY = buffer.cursorY;
+          const line = buffer.getLine(cursorY);
+          if (line) {
+            currentCommand.current = line.translateToString().trim();
+          }
+        }
+        
+        // Move up in history
+        if (commandHistoryIndex.current < commandHistory.current.length - 1) {
+          commandHistoryIndex.current++;
+          const historicCommand = commandHistory.current[commandHistory.current.length - 1 - commandHistoryIndex.current];
+          
+          // Clear current line and write historic command
+          if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+            // Send Ctrl+U to clear current line, then send the historic command
+            ws.current.send(JSON.stringify({
+              type: 'input',
+              data: '\x15' // Ctrl+U to clear line
+            }));
+            setTimeout(() => {
+              ws.current.send(JSON.stringify({
+                type: 'input',
+                data: historicCommand
+              }));
+            }, 10);
+          }
+        }
+        return false;
+      }
+      
+      if (event.key === 'ArrowDown' && commandHistory.current.length > 0) {
+        event.preventDefault();
+        
+        // Move down in history
+        if (commandHistoryIndex.current > -1) {
+          commandHistoryIndex.current--;
+          
+          let commandToShow = '';
+          if (commandHistoryIndex.current === -1) {
+            // Back to current command
+            commandToShow = currentCommand.current;
+          } else {
+            // Show historic command
+            commandToShow = commandHistory.current[commandHistory.current.length - 1 - commandHistoryIndex.current];
+          }
+          
+          // Clear current line and write command
+          if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+            // Send Ctrl+U to clear current line, then send the command
+            ws.current.send(JSON.stringify({
+              type: 'input',
+              data: '\x15' // Ctrl+U to clear line
+            }));
+            setTimeout(() => {
+              ws.current.send(JSON.stringify({
+                type: 'input',
+                data: commandToShow
+              }));
+            }, 10);
+          }
+        }
+        return false;
+      }
+      
+      // Ctrl+F or Cmd+F for search
+      if ((event.ctrlKey || event.metaKey) && event.key === 'f') {
+        event.preventDefault();
+        setShowSearch(true);
+        // Focus search input after a small delay to ensure it's rendered
+        setTimeout(() => {
+          if (searchInputRef.current) {
+            searchInputRef.current.focus();
+          }
+        }, 100);
+        return false;
+      }
+      
+      // ESC to close search
+      if (event.key === 'Escape' && showSearch) {
+        setShowSearch(false);
+        setSearchQuery('');
+        if (searchAddon.current) {
+          searchAddon.current.clearDecorations();
+        }
+        return false;
       }
       
       // Ctrl+C or Cmd+C for copy (when text is selected)
@@ -858,13 +981,43 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     
     setIsInitialized(true);
 
-    // Handle terminal input with optimized session tracking
+    // Handle terminal input and track commands for history
+    let currentLineBuffer = '';
     terminal.current.onData((data) => {
       if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-        // Mark session as active only if not already active (avoid excessive calls)
-        if (!hasActiveSession) {
-          markSessionActive();
+        // Track input for command history
+        if (data === '\r' || data === '\n') {
+          // Enter pressed - save command to history
+          if (currentLineBuffer.trim().length > 0) {
+            // Add to command history (avoid duplicates of the last command)
+            const trimmedCommand = currentLineBuffer.trim();
+            if (commandHistory.current.length === 0 || 
+                commandHistory.current[commandHistory.current.length - 1] !== trimmedCommand) {
+              commandHistory.current.push(trimmedCommand);
+              // Keep history size reasonable (max 100 commands)
+              if (commandHistory.current.length > 100) {
+                commandHistory.current.shift();
+              }
+            }
+            // Reset history navigation index
+            commandHistoryIndex.current = -1;
+            currentCommand.current = '';
+          }
+          currentLineBuffer = '';
+        } else if (data === '\x7f') {
+          // Backspace
+          if (currentLineBuffer.length > 0) {
+            currentLineBuffer = currentLineBuffer.slice(0, -1);
+          }
+        } else if (data === '\x15') {
+          // Ctrl+U (clear line)
+          currentLineBuffer = '';
+        } else if (data.charCodeAt(0) >= 32) {
+          // Regular character
+          currentLineBuffer += data;
         }
+        
+        // Send input to terminal
         ws.current.send(JSON.stringify({
           type: 'input',
           data: data
@@ -908,7 +1061,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
                 }));
               }
             }
-          }, 150); // Slightly increased debounce time
+          }, 50); // Reduced debounce time for better responsiveness
         }
       }
     });
@@ -1029,7 +1182,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
                   rows: terminal.current.rows
                 }));
               }
-            }, 100);
+            }, 50);
           } catch (error) {
             console.error('Error during terminal resize:', error);
           }
@@ -1221,6 +1374,11 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
         setIsConnected(true);
         setIsConnecting(false);
         
+        // Show reconnection success message if this was a reconnection
+        if (lastSessionId && terminal.current) {
+          terminal.current.write('\x1b[32m✓ Reconnected successfully. Session context maintained.\x1b[0m\r\n');
+        }
+        
         // Reset reconnection attempts on successful connection
         reconnectAttempts.current = 0;
         
@@ -1245,15 +1403,28 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
             setTimeout(() => {
               // Only send init if not already initialized for this connection
               if (!hasInitialized.current) {
+                // Use stored session ID if this is a reconnection, otherwise use current session
+                const sessionIdToUse = lastSessionId || selectedSession?.id;
+                const projectPathToUse = lastProjectPath.current || selectedProject.fullPath || selectedProject.path;
+                
                 const initPayload = {
                   type: 'init',
-                  projectPath: selectedProject.fullPath || selectedProject.path,
-                  sessionId: selectedSession?.id,
-                  hasSession: !!selectedSession,
+                  projectPath: projectPathToUse,
+                  sessionId: sessionIdToUse,
+                  hasSession: !!sessionIdToUse,
                   cols: terminal.current.cols,
                   rows: terminal.current.rows,
-                  bypassPermissions: isBypassingPermissions
+                  bypassPermissions: isBypassingPermissions,
+                  isReconnection: !!lastSessionId // Flag to indicate this is a reconnection
                 };
+                
+                // Store session info for future reconnections
+                if (sessionIdToUse) {
+                  setLastSessionId(sessionIdToUse);
+                }
+                if (projectPathToUse) {
+                  lastProjectPath.current = projectPathToUse;
+                }
                 
                 ws.current.send(JSON.stringify(initPayload));
                 hasInitialized.current = true;
@@ -1348,7 +1519,8 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
         if (!isManualDisconnect && wasUnexpected && reconnectAttempts.current < maxReconnectAttempts) {
           // Show reconnection message in terminal
           if (terminal.current) {
-            terminal.current.write('\r\n\x1b[33mConnection lost. Attempting to reconnect...\x1b[0m\r\n');
+            const sessionInfo = lastSessionId ? ' (maintaining session context)' : '';
+            terminal.current.write(`\r\n\x1b[33mConnection lost. Attempting to reconnect${sessionInfo}...\x1b[0m\r\n`);
           }
           
           // Attempt to reconnect after a delay
@@ -1583,6 +1755,91 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
           </div>
         )}
 
+        {/* Search Bar */}
+        {showSearch && (
+          <div className="absolute top-4 right-4 z-20 bg-card border border-border rounded-lg shadow-lg p-2 flex items-center space-x-2">
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                if (searchAddon.current) {
+                  searchAddon.current.findNext(e.target.value, {
+                    incremental: true,
+                    decorations: {
+                      matchBackground: '#FFD700',
+                      activeMatchBackground: '#FFA500'
+                    }
+                  });
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  if (searchAddon.current && searchQuery) {
+                    if (e.shiftKey) {
+                      searchAddon.current.findPrevious(searchQuery);
+                    } else {
+                      searchAddon.current.findNext(searchQuery);
+                    }
+                  }
+                } else if (e.key === 'Escape') {
+                  setShowSearch(false);
+                  setSearchQuery('');
+                  if (searchAddon.current) {
+                    searchAddon.current.clearDecorations();
+                  }
+                }
+              }}
+              placeholder="Search terminal..."
+              className="px-3 py-1 bg-background text-foreground text-sm rounded border border-border focus:outline-none focus:ring-2 focus:ring-primary w-48"
+              autoFocus
+            />
+            <button
+              onClick={() => {
+                if (searchAddon.current && searchQuery) {
+                  searchAddon.current.findPrevious(searchQuery);
+                }
+              }}
+              className="p-1.5 hover:bg-accent rounded transition-colors"
+              title="Previous match (Shift+Enter)"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <button
+              onClick={() => {
+                if (searchAddon.current && searchQuery) {
+                  searchAddon.current.findNext(searchQuery);
+                }
+              }}
+              className="p-1.5 hover:bg-accent rounded transition-colors"
+              title="Next match (Enter)"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+            <button
+              onClick={() => {
+                setShowSearch(false);
+                setSearchQuery('');
+                if (searchAddon.current) {
+                  searchAddon.current.clearDecorations();
+                }
+              }}
+              className="p-1.5 hover:bg-accent rounded transition-colors"
+              title="Close (Esc)"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        )}
+
         {/* Scroll to Bottom Button */}
         {showScrollToBottom && isConnected && (
           <button
@@ -1805,6 +2062,91 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
                 Starting Claude CLI in {selectedProject.displayName || selectedProject.name}
               </p>
             </div>
+          </div>
+        )}
+
+        {/* Search Bar */}
+        {showSearch && (
+          <div className="absolute top-4 right-4 z-20 bg-card border border-border rounded-lg shadow-lg p-2 flex items-center space-x-2">
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                if (searchAddon.current) {
+                  searchAddon.current.findNext(e.target.value, {
+                    incremental: true,
+                    decorations: {
+                      matchBackground: '#FFD700',
+                      activeMatchBackground: '#FFA500'
+                    }
+                  });
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  if (searchAddon.current && searchQuery) {
+                    if (e.shiftKey) {
+                      searchAddon.current.findPrevious(searchQuery);
+                    } else {
+                      searchAddon.current.findNext(searchQuery);
+                    }
+                  }
+                } else if (e.key === 'Escape') {
+                  setShowSearch(false);
+                  setSearchQuery('');
+                  if (searchAddon.current) {
+                    searchAddon.current.clearDecorations();
+                  }
+                }
+              }}
+              placeholder="Search terminal..."
+              className="px-3 py-1 bg-background text-foreground text-sm rounded border border-border focus:outline-none focus:ring-2 focus:ring-primary w-48"
+              autoFocus
+            />
+            <button
+              onClick={() => {
+                if (searchAddon.current && searchQuery) {
+                  searchAddon.current.findPrevious(searchQuery);
+                }
+              }}
+              className="p-1.5 hover:bg-accent rounded transition-colors"
+              title="Previous match (Shift+Enter)"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <button
+              onClick={() => {
+                if (searchAddon.current && searchQuery) {
+                  searchAddon.current.findNext(searchQuery);
+                }
+              }}
+              className="p-1.5 hover:bg-accent rounded transition-colors"
+              title="Next match (Enter)"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+            <button
+              onClick={() => {
+                setShowSearch(false);
+                setSearchQuery('');
+                if (searchAddon.current) {
+                  searchAddon.current.clearDecorations();
+                }
+              }}
+              className="p-1.5 hover:bg-accent rounded transition-colors"
+              title="Close (Esc)"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           </div>
         )}
 
