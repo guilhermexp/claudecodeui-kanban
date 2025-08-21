@@ -111,6 +111,10 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   // Image drag & drop states
   const [isDraggedImageOver, setIsDraggedImageOver] = useState(false);
   
+  // Terminal theme state
+  const [terminalTheme, setTerminalTheme] = useState('dark');
+  const [showThemeDropdown, setShowThemeDropdown] = useState(false);
+  
   // Heartbeat interval reference
   const heartbeatInterval = useRef(null);
   
@@ -276,8 +280,8 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     
     viewport.addEventListener('scroll', checkPosition);
     
-    // Also check periodically in case content changes
-    scrollCheckRef.current = setInterval(checkPosition, 1000);
+    // Also check periodically in case content changes - increased interval for better performance
+    scrollCheckRef.current = setInterval(checkPosition, 2000);
     
     return () => {
       viewport.removeEventListener('scroll', checkPosition);
@@ -353,6 +357,73 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       }));
     }
   };
+  
+  // Change terminal theme
+  const changeTerminalTheme = (theme) => {
+    setTerminalTheme(theme);
+    setShowThemeDropdown(false);
+    
+    // Update terminal theme if it exists
+    if (terminal.current) {
+      const themes = {
+        dark: {
+          background: '#0d0d0d',
+          foreground: '#f2f2f2',
+          cursor: '#ffffff',
+          cursorAccent: '#0d0d0d',
+          selection: '#333333',
+          selectionForeground: '#ffffff',
+        },
+        light: {
+          background: '#ffffff',
+          foreground: '#333333',
+          cursor: '#333333',
+          cursorAccent: '#ffffff',
+          selection: '#b4d5fe',
+          selectionForeground: '#000000',
+        },
+        gray: {
+          background: '#2d2d2d',
+          foreground: '#cccccc',
+          cursor: '#ffffff',
+          cursorAccent: '#2d2d2d',
+          selection: '#515151',
+          selectionForeground: '#ffffff',
+        }
+      };
+      
+      // Update terminal theme
+      terminal.current.options.theme = {
+        ...terminal.current.options.theme,
+        ...themes[theme]
+      };
+    }
+    
+    // Save preference to localStorage
+    localStorage.setItem('terminal-theme', theme);
+  };
+  
+  // Load saved theme on mount
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('terminal-theme');
+    if (savedTheme && ['dark', 'light', 'gray'].includes(savedTheme)) {
+      setTerminalTheme(savedTheme);
+    }
+  }, []);
+  
+  // Close theme dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showThemeDropdown && !event.target.closest('.theme-dropdown-container')) {
+        setShowThemeDropdown(false);
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showThemeDropdown]);
 
   // Setup dropzone to handle image drops
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -685,6 +756,34 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     }
 
 
+    // Terminal theme configurations
+    const themes = {
+      dark: {
+        background: '#0d0d0d',
+        foreground: '#f2f2f2',
+        cursor: '#ffffff',
+        cursorAccent: '#0d0d0d',
+        selection: '#333333',
+        selectionForeground: '#ffffff',
+      },
+      light: {
+        background: '#ffffff',
+        foreground: '#333333',
+        cursor: '#333333',
+        cursorAccent: '#ffffff',
+        selection: '#b4d5fe',
+        selectionForeground: '#000000',
+      },
+      gray: {
+        background: '#2d2d2d',
+        foreground: '#cccccc',
+        cursor: '#ffffff',
+        cursorAccent: '#2d2d2d',
+        selection: '#515151',
+        selectionForeground: '#ffffff',
+      }
+    };
+    
     // Initialize new terminal with responsive settings and performance optimizations
     terminal.current = new Terminal({
       cursorBlink: true,
@@ -693,7 +792,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       allowProposedApi: true, // Required for clipboard addon
       allowTransparency: false,
       convertEol: true,
-      scrollback: isMobile ? 1000 : 5000, // Reduced for better performance
+      scrollback: isMobile ? 500 : 2000, // Further reduced for better input performance
       tabStopWidth: 4,
       fastScrollModifier: 'alt', // Optimize scrolling
       scrollSensitivity: 1,
@@ -704,13 +803,8 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       macOptionClickForcesSelection: false,
       // Enhanced theme with full 16-color ANSI support + true colors
       theme: {
-        // Basic colors
-        background: '#0d0d0d',  // Dark gray background matching bg-card
-        foreground: '#f2f2f2',  // White text matching foreground color
-        cursor: '#ffffff',
-        cursorAccent: '#0d0d0d',
-        selection: '#333333',   // Neutral gray selection
-        selectionForeground: '#ffffff',
+        // Basic colors - use selected theme
+        ...themes[terminalTheme],
         
         // Standard ANSI colors (0-7)
         black: '#000000',
@@ -748,7 +842,13 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     const webglAddon = new WebglAddon();
     searchAddon.current = new SearchAddon();
     
+    // Load addons first (order matters)
+    terminal.current.loadAddon(fitAddon.current);
+    terminal.current.loadAddon(clipboardAddon);
+    terminal.current.loadAddon(searchAddon.current);
+    
     // Configure WebLinksAddon with custom handler for localhost URLs
+    // Note: WebLinksAddon must be loaded after the terminal is opened
     const webLinksAddon = new WebLinksAddon((event, uri) => {
       // Check if it's a localhost URL
       if (isLocalhostUrl(uri)) {
@@ -765,17 +865,17 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       }
     });
     
-    terminal.current.loadAddon(fitAddon.current);
-    terminal.current.loadAddon(clipboardAddon);
-    terminal.current.loadAddon(webLinksAddon);
-    terminal.current.loadAddon(searchAddon.current);
-    
-    try {
-      terminal.current.loadAddon(webglAddon);
-    } catch (error) {
-    }
+    // WebGL addon disabled for better performance on input
+    // Uncomment if needed for specific use cases
+    // try {
+    //   terminal.current.loadAddon(webglAddon);
+    // } catch (error) {
+    // }
     
     terminal.current.open(terminalRef.current);
+    
+    // Load WebLinksAddon after terminal is opened
+    terminal.current.loadAddon(webLinksAddon);
 
     // Fit terminal immediately after opening
     requestAnimationFrame(() => {
@@ -1094,7 +1194,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
                 }));
               }
             }
-          }, 50); // Reduced debounce time for better responsiveness
+          }, 100); // Increased debounce for better performance
         }
       }
     });
@@ -1484,21 +1584,11 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
           if (data.type === 'output') {
             // Mark session as active when receiving output from Claude
             markSessionActive();
-            // Check for URLs in the output and make them clickable
-            const urlRegex = /(https?:\/\/[^\s\x1b\x07]+)/g;
-            let output = data.data;
-            
-            // Find URLs in the text (excluding ANSI escape sequences)
-            const urls = [];
-            let match;
-            while ((match = urlRegex.exec(output.replace(/\x1b\[[0-9;]*m/g, ''))) !== null) {
-              urls.push(match[1]);
-            }
-            
-            // If URLs found, log them for potential opening
+            // Removed URL regex processing here for better performance
+            // URLs are already handled by WebLinksAddon
             
             // Write output directly to terminal (preserving ANSI colors)
-            terminal.current.write(output);
+            terminal.current.write(data.data);
           } else if (data.type === 'image-uploaded') {
             // Handle successful image upload
             const { path, fileName } = data;
@@ -1834,6 +1924,60 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
                   )}
                 </div>
                 <div className="flex items-center space-x-1 sm:space-x-2">
+                  
+                  {/* Terminal Theme Selector */}
+                  <div className="relative theme-dropdown-container">
+                    <button
+                      onClick={() => setShowThemeDropdown(!showThemeDropdown)}
+                      className="p-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent rounded transition-colors"
+                      title="Change terminal theme"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                          d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" 
+                        />
+                      </svg>
+                    </button>
+                    
+                    {/* Theme Dropdown */}
+                    {showThemeDropdown && (
+                      <div className="absolute top-full right-0 mt-1 w-32 bg-popover border border-border rounded-md shadow-lg z-50">
+                        <button
+                          onClick={() => changeTerminalTheme('dark')}
+                          className={`w-full px-3 py-1.5 text-xs text-left hover:bg-accent transition-colors ${
+                            terminalTheme === 'dark' ? 'bg-accent' : ''
+                          }`}
+                        >
+                          <span className="flex items-center gap-2">
+                            <span className="w-3 h-3 rounded-full bg-gray-900 border border-gray-600"></span>
+                            Dark
+                          </span>
+                        </button>
+                        <button
+                          onClick={() => changeTerminalTheme('light')}
+                          className={`w-full px-3 py-1.5 text-xs text-left hover:bg-accent transition-colors ${
+                            terminalTheme === 'light' ? 'bg-accent' : ''
+                          }`}
+                        >
+                          <span className="flex items-center gap-2">
+                            <span className="w-3 h-3 rounded-full bg-white border border-gray-300"></span>
+                            Light
+                          </span>
+                        </button>
+                        <button
+                          onClick={() => changeTerminalTheme('gray')}
+                          className={`w-full px-3 py-1.5 text-xs text-left hover:bg-accent transition-colors ${
+                            terminalTheme === 'gray' ? 'bg-accent' : ''
+                          }`}
+                        >
+                          <span className="flex items-center gap-2">
+                            <span className="w-3 h-3 rounded-full bg-[#2d2d2d] border border-gray-500"></span>
+                            Gray
+                          </span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
                   
                   {/* Bypass Permissions Toggle */}
                   <button
