@@ -113,7 +113,6 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   
   // Terminal theme state
   const [terminalTheme, setTerminalTheme] = useState('dark');
-  const [showThemeDropdown, setShowThemeDropdown] = useState(false);
   
   // Heartbeat interval reference
   const heartbeatInterval = useRef(null);
@@ -385,9 +384,14 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   };
   
   // Change terminal theme
-  const changeTerminalTheme = (theme) => {
-    setTerminalTheme(theme);
-    setShowThemeDropdown(false);
+  const cycleTerminalTheme = () => {
+    // Cycle through themes: dark -> light -> gray -> dark
+    const themeOrder = ['dark', 'light', 'gray'];
+    const currentIndex = themeOrder.indexOf(terminalTheme);
+    const nextIndex = (currentIndex + 1) % themeOrder.length;
+    const nextTheme = themeOrder[nextIndex];
+    
+    setTerminalTheme(nextTheme);
     
     // Update terminal theme if it exists
     if (terminal.current) {
@@ -421,12 +425,12 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       // Update terminal theme
       terminal.current.options.theme = {
         ...terminal.current.options.theme,
-        ...themes[theme]
+        ...themes[nextTheme]
       };
     }
     
     // Save preference to localStorage
-    localStorage.setItem('terminal-theme', theme);
+    localStorage.setItem('terminal-theme', nextTheme);
   };
   
   // Load saved theme on mount
@@ -437,19 +441,6 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     }
   }, []);
   
-  // Close theme dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (showThemeDropdown && !event.target.closest('.theme-dropdown-container')) {
-        setShowThemeDropdown(false);
-      }
-    };
-    
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showThemeDropdown]);
 
   // Setup dropzone to handle image drops
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -1951,59 +1942,23 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
                 </div>
                 <div className="flex items-center space-x-1 sm:space-x-2">
                   
-                  {/* Terminal Theme Selector */}
-                  <div className="relative theme-dropdown-container">
-                    <button
-                      onClick={() => setShowThemeDropdown(!showThemeDropdown)}
-                      className="p-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent rounded transition-colors"
-                      title="Change terminal theme"
-                    >
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                          d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" 
-                        />
-                      </svg>
-                    </button>
-                    
-                    {/* Theme Dropdown */}
-                    {showThemeDropdown && (
-                      <div className="absolute top-full right-0 mt-1 w-32 bg-popover border border-border rounded-md shadow-lg z-50">
-                        <button
-                          onClick={() => changeTerminalTheme('dark')}
-                          className={`w-full px-3 py-1.5 text-xs text-left hover:bg-accent transition-colors ${
-                            terminalTheme === 'dark' ? 'bg-accent' : ''
-                          }`}
-                        >
-                          <span className="flex items-center gap-2">
-                            <span className="w-3 h-3 rounded-full bg-gray-900 border border-gray-600"></span>
-                            Dark
-                          </span>
-                        </button>
-                        <button
-                          onClick={() => changeTerminalTheme('light')}
-                          className={`w-full px-3 py-1.5 text-xs text-left hover:bg-accent transition-colors ${
-                            terminalTheme === 'light' ? 'bg-accent' : ''
-                          }`}
-                        >
-                          <span className="flex items-center gap-2">
-                            <span className="w-3 h-3 rounded-full bg-white border border-gray-300"></span>
-                            Light
-                          </span>
-                        </button>
-                        <button
-                          onClick={() => changeTerminalTheme('gray')}
-                          className={`w-full px-3 py-1.5 text-xs text-left hover:bg-accent transition-colors ${
-                            terminalTheme === 'gray' ? 'bg-accent' : ''
-                          }`}
-                        >
-                          <span className="flex items-center gap-2">
-                            <span className="w-3 h-3 rounded-full bg-[#2d2d2d] border border-gray-500"></span>
-                            Gray
-                          </span>
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                  {/* Terminal Theme Toggle */}
+                  <button
+                    onClick={cycleTerminalTheme}
+                    className="p-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent rounded transition-colors"
+                    title={`Terminal theme: ${terminalTheme} (click to change)`}
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                        d={terminalTheme === 'light' 
+                          ? "M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"
+                          : terminalTheme === 'dark'
+                          ? "M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21c2.185 0 4.188-.779 5.75-2.078l.203-.206A9.003 9.003 0 0020 12a8.965 8.965 0 00-.646-3.354z"
+                          : "M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+                        }
+                      />
+                    </svg>
+                  </button>
                   
                   {/* Bypass Permissions Toggle */}
                   <button
