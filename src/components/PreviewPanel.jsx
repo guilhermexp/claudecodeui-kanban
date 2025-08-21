@@ -24,73 +24,181 @@ function PreviewPanel({ url, onClose, onRefresh, onOpenExternal, isMobile }) {
     }
   }, [url, isPaused]);
 
-  // Isolate iframe errors from affecting the parent application
+  // Handle console messages from iframe via postMessage
   useEffect(() => {
-    const handleGlobalError = (event) => {
-      // Check if error originated from iframe
-      if (event.filename && event.filename.includes('localhost')) {
-        // Prevent the error from affecting parent app
-        event.preventDefault();
-        event.stopPropagation();
+    const handleMessage = (event) => {
+      // Validate origin is localhost
+      try {
+        const origin = new URL(event.origin);
+        const validHosts = ['localhost', '127.0.0.1', '0.0.0.0', '[::1]'];
+        if (!validHosts.includes(origin.hostname)) {
+          return;
+        }
+      } catch {
+        return;
+      }
+
+      // Handle console messages from iframe
+      if (event.data && event.data.type === 'console-message') {
+        const { level, message, timestamp, url, filename, line, column, stack } = event.data;
         
-        // Capture the error in our logs
         const logEntry = {
-          type: 'error',
-          message: event.message || 'Unknown error',
-          filename: event.filename,
-          line: event.lineno,
-          column: event.colno,
-          timestamp: new Date().toLocaleTimeString(),
-          stack: event.error?.stack
+          type: level,
+          message: message || 'Unknown message',
+          timestamp: new Date(timestamp).toLocaleTimeString(),
+          url: url,
+          filename: filename,
+          line: line,
+          column: column,
+          stack: stack
         };
         
         setLogs(prev => [...prev.slice(-99), logEntry]); // Keep last 100 logs
-        console.warn('Preview iframe error isolated:', event.message);
-        return false;
+      }
+      
+      // Handle console capture ready notification
+      if (event.data && event.data.type === 'console-capture-ready') {
+        console.log('Console capture initialized for preview');
       }
     };
 
-    // Also capture console messages from iframe
-    const originalConsoleError = console.error;
-    const originalConsoleWarn = console.warn;
-    
-    console.error = function(...args) {
-      // Check if it's from the preview context
-      const stack = new Error().stack;
-      if (stack && (stack.includes('localhost:3000') || stack.includes('localhost:5173'))) {
-        const logEntry = {
-          type: 'console-error',
-          message: args.join(' '),
-          timestamp: new Date().toLocaleTimeString()
-        };
-        setLogs(prev => [...prev.slice(-99), logEntry]);
-      }
-      originalConsoleError.apply(console, args);
-    };
-    
-    console.warn = function(...args) {
-      // Check if it's from the preview context
-      const stack = new Error().stack;
-      if (stack && (stack.includes('localhost:3000') || stack.includes('localhost:5173'))) {
-        const logEntry = {
-          type: 'console-warn',
-          message: args.join(' '),
-          timestamp: new Date().toLocaleTimeString()
-        };
-        setLogs(prev => [...prev.slice(-99), logEntry]);
-      }
-      originalConsoleWarn.apply(console, args);
-    };
-
-    // Add global error handler to isolate iframe errors
-    window.addEventListener('error', handleGlobalError, true);
+    window.addEventListener('message', handleMessage);
 
     return () => {
-      window.removeEventListener('error', handleGlobalError, true);
-      console.error = originalConsoleError;
-      console.warn = originalConsoleWarn;
+      window.removeEventListener('message', handleMessage);
     };
   }, []);
+
+  // Inject console capture script when iframe loads
+  useEffect(() => {
+    const injectConsoleCapture = () => {
+      if (iframeRef.current && !isPaused) {
+        try {
+          // Try to inject the script into the iframe
+          const iframe = iframeRef.current;
+          
+          // Wait a bit for the iframe to be ready
+          setTimeout(() => {
+            try {
+              // Try to access iframe content window
+              const iframeWindow = iframe.contentWindow;
+              if (iframeWindow) {
+                // Create and inject script
+                const script = iframeWindow.document.createElement('script');
+                script.src = '/preview-console-injector.js';
+                script.async = true;
+                
+                // Also inject inline as fallback
+                const inlineScript = iframeWindow.document.createElement('script');
+                inlineScript.textContent = `
+                  (function() {
+                    const originalConsole = {
+                      log: console.log,
+                      error: console.error,
+                      warn: console.warn,
+                      info: console.info,
+                      debug: console.debug
+                    };
+                    
+                    function safeStringify(obj) {
+                      try {
+                        const seen = new WeakSet();
+                        return JSON.stringify(obj, function(key, value) {
+                          if (typeof value === 'object' && value !== null) {
+                            if (seen.has(value)) return '[Circular]';
+                            seen.add(value);
+                          }
+                          if (value instanceof Error) {
+                            return { message: value.message, stack: value.stack, name: value.name };
+                          }
+                          return value;
+                        });
+                      } catch (e) {
+                        return String(obj);
+                      }
+                    }
+                    
+                    ['log', 'error', 'warn', 'info', 'debug'].forEach(method => {
+                      console[method] = function(...args) {
+                        originalConsole[method].apply(console, args);
+                        try {
+                          const message = args.map(arg => {
+                            if (typeof arg === 'object') return safeStringify(arg);
+                            return String(arg);
+                          }).join(' ');
+                          
+                          window.parent.postMessage({
+                            type: 'console-message',
+                            level: method,
+                            message: message,
+                            timestamp: new Date().toISOString(),
+                            url: window.location.href
+                          }, '*');
+                        } catch (e) {}
+                      };
+                    });
+                    
+                    window.addEventListener('error', function(event) {
+                      try {
+                        window.parent.postMessage({
+                          type: 'console-message',
+                          level: 'error',
+                          message: event.message || 'Unknown error',
+                          timestamp: new Date().toISOString(),
+                          url: window.location.href,
+                          filename: event.filename,
+                          line: event.lineno,
+                          column: event.colno,
+                          stack: event.error?.stack
+                        }, '*');
+                      } catch (e) {}
+                    });
+                    
+                    window.addEventListener('unhandledrejection', function(event) {
+                      try {
+                        window.parent.postMessage({
+                          type: 'console-message',
+                          level: 'error',
+                          message: 'Unhandled Promise Rejection: ' + (event.reason?.message || event.reason || 'Unknown'),
+                          timestamp: new Date().toISOString(),
+                          url: window.location.href,
+                          stack: event.reason?.stack
+                        }, '*');
+                      } catch (e) {}
+                    });
+                    
+                    window.parent.postMessage({
+                      type: 'console-capture-ready',
+                      timestamp: new Date().toISOString()
+                    }, '*');
+                  })();
+                `;
+                
+                const head = iframeWindow.document.head || iframeWindow.document.getElementsByTagName('head')[0];
+                if (head) {
+                  head.appendChild(script);
+                  head.appendChild(inlineScript);
+                }
+              }
+            } catch (e) {
+              // Cross-origin restriction, can't inject script
+              console.log('Cannot inject console capture script due to cross-origin restrictions');
+            }
+          }, 500);
+        } catch (e) {
+          console.warn('Failed to inject console capture:', e);
+        }
+      }
+    };
+
+    if (iframeRef.current && !isPaused) {
+      const iframe = iframeRef.current;
+      iframe.addEventListener('load', injectConsoleCapture);
+      return () => {
+        iframe.removeEventListener('load', injectConsoleCapture);
+      };
+    }
+  }, [isPaused]);
 
   const handleRefresh = () => {
     if (iframeRef.current && !isPaused) {
@@ -297,20 +405,36 @@ function PreviewPanel({ url, onClose, onRefresh, onOpenExternal, isMobile }) {
                         <div
                           key={index}
                           className={`p-2 rounded text-xs font-mono ${
-                            log.type === 'error' || log.type === 'console-error'
+                            log.type === 'error'
                               ? 'bg-red-500/10 border border-red-500/20 text-red-400'
-                              : 'bg-yellow-500/10 border border-yellow-500/20 text-yellow-400'
+                              : log.type === 'warn'
+                              ? 'bg-yellow-500/10 border border-yellow-500/20 text-yellow-400'
+                              : log.type === 'info'
+                              ? 'bg-blue-500/10 border border-blue-500/20 text-blue-400'
+                              : log.type === 'debug'
+                              ? 'bg-gray-500/10 border border-gray-500/20 text-gray-400'
+                              : 'bg-accent/50 border border-border text-foreground'
                           }`}
                         >
                           <div className="flex items-start justify-between gap-2">
                             <span className="text-muted-foreground">[{log.timestamp}]</span>
-                            <span className="uppercase text-xs">{log.type.replace('console-', '')}</span>
+                            <span className="uppercase text-xs font-semibold">
+                              {log.type === 'log' ? 'LOG' : log.type.toUpperCase()}
+                            </span>
                           </div>
-                          <div className="mt-1 break-all">{log.message}</div>
+                          <div className="mt-1 break-all whitespace-pre-wrap">{log.message}</div>
                           {log.filename && (
-                            <div className="mt-1 text-muted-foreground">
+                            <div className="mt-1 text-muted-foreground text-xs opacity-75">
                               {log.filename}:{log.line}:{log.column}
                             </div>
+                          )}
+                          {log.stack && (
+                            <details className="mt-1">
+                              <summary className="cursor-pointer text-muted-foreground text-xs hover:text-foreground">
+                                Stack trace
+                              </summary>
+                              <pre className="mt-1 text-xs opacity-75 overflow-x-auto">{log.stack}</pre>
+                            </details>
                           )}
                         </div>
                       ))

@@ -54,16 +54,16 @@ sleep 2
 echo "📦 Gerando build do frontend (vite build)..."
 npm run build
 
-# Inicia servidor Node (serve dist em 8080)
+# Inicia servidor Node (serve dist em 7347)
 export NODE_ENV=production
 nohup npm run server > prod-server.log 2>&1 &
 SERVER_PID=$!
 echo "🟢 Server (Node) iniciado na porta ${SERVER_PORT} (PID: ${SERVER_PID})"
 
-# Inicia Vibe Kanban (Rust) em 8081 se existir
+# Inicia Vibe Kanban (Rust) em 6734 se existir
 if [ -d "vibe-kanban/backend" ]; then
   echo "🦀 Iniciando Vibe Kanban (Rust) na porta ${VIBE_PORT}..."
-  (cd vibe-kanban/backend && PORT=${VIBE_PORT} VIBE_NO_BROWSER=true nohup cargo run --release > "${ROOT_DIR}/prod-vibe.log" 2>&1 & echo $! > "${ROOT_DIR}/.vibe.pid")
+  (cd vibe-kanban/backend && BACKEND_PORT=${VIBE_PORT} VIBE_NO_BROWSER=true nohup cargo run --release > "${ROOT_DIR}/prod-vibe.log" 2>&1 & echo $! > "${ROOT_DIR}/.vibe.pid")
   if [ -f .vibe.pid ]; then
     VIBE_PID=$(cat .vibe.pid || true)
     rm -f .vibe.pid || true
@@ -85,7 +85,19 @@ for i in {1..30}; do
   sleep 1
 done
 
-# Inicia túnel ngrok para o servidor Node (8080) com verificação e retry
+# Aguarda Vibe Kanban ficar pronto (até 30s)
+if [ -d "vibe-kanban/backend" ]; then
+  echo "⏳ Aguardando Vibe Kanban ficar pronto..."
+  for i in {1..30}; do
+    if curl -sf "http://localhost:${VIBE_PORT}/api/health" >/dev/null; then
+      echo "✅ Vibe Kanban OK"
+      break
+    fi
+    sleep 1
+  done
+fi
+
+# Inicia túnel ngrok para o servidor Node (7347) com verificação e retry
 echo "🔒 Iniciando túnel ngrok -> http://localhost:${SERVER_PORT}"
 nohup "${NGROK_BIN}" http --domain="${DOMAIN}" ${SERVER_PORT} > "${ROOT_DIR}/prod-ngrok.log" 2>&1 &
 NGROK_PID=$!
@@ -103,8 +115,8 @@ done
 
 echo ""
 echo "✅ Ambiente de PRODUÇÃO rodando em background!"
-echo "🌐 Server will be available at: http://$LOCAL_IP:7347"
-echo "🌐 Server will be available at: http://localhost:7347"
+echo "🌐 Acesse localmente em: http://localhost:7347"
+echo "🌍 Acesse globalmente em: https://${DOMAIN}/"
 echo ""
 echo "📜 Logs:"
 echo "  - Servidor: tail -f prod-server.log"
