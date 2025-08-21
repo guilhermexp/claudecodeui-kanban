@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { ClipboardAddon } from '@xterm/addon-clipboard';
-import { WebglAddon } from '@xterm/addon-webgl';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { SearchAddon } from '@xterm/addon-search';
 import { useDropzone } from 'react-dropzone';
@@ -856,7 +855,6 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
 
     fitAddon.current = new FitAddon();
     const clipboardAddon = new ClipboardAddon();
-    const webglAddon = new WebglAddon();
     searchAddon.current = new SearchAddon();
     
     // Load addons first (order matters)
@@ -1720,7 +1718,11 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   // Create the terminal content once to be reused in both layouts
   const terminalContent = (
     <>
-      <div ref={terminalRef} className="h-full w-full focus:outline-none" style={{ outline: 'none' }} />
+      <div 
+        ref={terminalRef} 
+        className="h-full w-full focus:outline-none" 
+        style={{ outline: 'none' }} 
+      />
       
       {/* Drag overlay for images */}
       {(isDragActive || isDraggedImageOver) && (
@@ -1914,7 +1916,9 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     <PanelGroup direction="horizontal" className="h-full w-full flex gap-3">
       {/* Terminal Panel - Always present */}
       <Panel defaultSize={showPreview && !isMobile ? 50 : 100} minSize={30} className="h-full">
-        <div className="h-full min-h-0 flex flex-col bg-card rounded-xl border border-border" {...dropzoneProps}>
+        <div 
+          className="h-full min-h-0 flex flex-col bg-card rounded-xl border border-border" 
+          {...dropzoneProps}>
           <input {...inputProps} />
             {/* Status Bar (aligned with Files header) */}
             <div className="flex-shrink-0 border-b border-border px-3 py-3">
