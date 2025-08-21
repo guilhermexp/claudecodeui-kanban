@@ -576,6 +576,35 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     setLastSessionId(currentSessionId);
   }, [selectedSession?.id, isInitialized]);
 
+  // Cleanup WebSocket when component unmounts
+  useEffect(() => {
+    return () => {
+      // Clean up WebSocket connection on unmount
+      if (ws.current) {
+        ws.current.close(1000, 'Component unmounting');
+        ws.current = null;
+      }
+      
+      // Clear heartbeat interval
+      if (heartbeatInterval.current) {
+        clearInterval(heartbeatInterval.current);
+        heartbeatInterval.current = null;
+      }
+      
+      // Clear scroll check interval
+      if (scrollCheckRef.current) {
+        clearInterval(scrollCheckRef.current);
+        scrollCheckRef.current = null;
+      }
+      
+      // Clear any reconnection timeout
+      if (reconnectTimeout.current) {
+        clearTimeout(reconnectTimeout.current);
+        reconnectTimeout.current = null;
+      }
+    };
+  }, []); // Empty dependency array - only runs on mount/unmount
+
   // Initialize terminal when component mounts
   useEffect(() => {
     if (!terminalRef.current || !selectedProject || isRestarting) {

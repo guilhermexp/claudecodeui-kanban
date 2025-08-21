@@ -37,7 +37,7 @@ import { getProjects, getSessions, getSessionMessages, renameProject, deleteSess
 import { spawnClaude, abortClaudeSession } from './claude-cli.js';
 import gitRoutes from './routes/git.js';
 import authRoutes from './routes/auth.js';
-import mcpRoutes from './routes/mcp.js';
+// import mcpRoutes from './routes/mcp.js'; // MCP removed - managed directly by Claude CLI
 import usageRoutes from './routes/usage.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
@@ -292,8 +292,8 @@ app.post('/api/system/kill', async (req, res) => {
 // Git API Routes (protected)
 app.use('/api/git', authenticateToken, gitRoutes);
 
-// MCP API Routes (protected)
-app.use('/api/mcp', authenticateToken, mcpRoutes);
+// MCP API Routes (protected) - Removed: MCPs are managed directly by Claude CLI
+// app.use('/api/mcp', authenticateToken, mcpRoutes);
 
 // Usage API Routes (protected)
 app.use('/api/usage', usageRoutes);
@@ -2118,3 +2118,5 @@ process.on('unhandledRejection', (reason, promise) => {
   console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
   // Don't shutdown on unhandled rejections, just log them
 });
+
+// MCP cleanup removed - can interfere with normal Claude MCP usage
