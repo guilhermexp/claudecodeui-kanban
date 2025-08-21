@@ -337,6 +337,62 @@ app.get('/api/config', authenticateToken, (req, res) => {
   });
 });
 
+// Settings API endpoints
+app.get('/api/settings', authenticateToken, async (req, res) => {
+  try {
+    // For now, we'll use a simple in-memory storage or file-based storage
+    // In production, this should be stored in a database
+    const settingsFile = path.join(__dirname, 'database', 'user-settings.json');
+    
+    if (fs.existsSync(settingsFile)) {
+      const settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+      const userSettings = settings[req.user?.username] || {};
+      res.json(userSettings);
+    } else {
+      // Return default settings
+      res.json({
+        allowedTools: [],
+        disallowedTools: [],
+        skipPermissions: false,
+        projectSortOrder: 'name'
+      });
+    }
+  } catch (error) {
+    console.error('Error loading settings:', error);
+    res.status(500).json({ error: 'Failed to load settings' });
+  }
+});
+
+app.post('/api/settings', authenticateToken, async (req, res) => {
+  try {
+    const settingsFile = path.join(__dirname, 'database', 'user-settings.json');
+    let allSettings = {};
+    
+    // Load existing settings
+    if (fs.existsSync(settingsFile)) {
+      allSettings = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+    }
+    
+    // Update user's settings
+    const username = req.user?.username || 'default';
+    allSettings[username] = {
+      allowedTools: req.body.allowedTools || [],
+      disallowedTools: req.body.disallowedTools || [],
+      skipPermissions: req.body.skipPermissions || false,
+      projectSortOrder: req.body.projectSortOrder || 'name',
+      updatedAt: new Date().toISOString()
+    };
+    
+    // Save to file
+    fs.writeFileSync(settingsFile, JSON.stringify(allSettings, null, 2));
+    
+    res.json({ success: true, settings: allSettings[username] });
+  } catch (error) {
+    console.error('Error saving settings:', error);
+    res.status(500).json({ error: 'Failed to save settings' });
+  }
+});
+
 app.get('/api/projects', authenticateToken, async (req, res) => {
   try {
     const projects = await getProjects();

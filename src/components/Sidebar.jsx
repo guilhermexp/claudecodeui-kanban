@@ -258,14 +258,24 @@ function Sidebar({
     if (!aStarred && bStarred) return 1;
     
     // For projects with same starred status, sort by selected order
-    if (projectSortOrder === 'date') {
-      // Sort by most recent activity (descending)
-      return getProjectLastActivity(b) - getProjectLastActivity(a);
-    } else {
-      // Sort by display name (user-defined) or fallback to name (ascending)
-      const nameA = a.displayName || a.name;
-      const nameB = b.displayName || b.name;
-      return nameA.localeCompare(nameB);
+    switch (projectSortOrder) {
+      case 'recent':
+        // Sort by most recent activity (descending)
+        return getProjectLastActivity(b) - getProjectLastActivity(a);
+      case 'oldest':
+        // Sort by oldest activity (ascending)
+        return getProjectLastActivity(a) - getProjectLastActivity(b);
+      case 'name-desc':
+        // Sort by name (descending)
+        const nameDescA = a.displayName || a.name;
+        const nameDescB = b.displayName || b.name;
+        return nameDescB.localeCompare(nameDescA);
+      case 'name':
+      default:
+        // Sort by name (ascending)
+        const nameA = a.displayName || a.name;
+        const nameB = b.displayName || b.name;
+        return nameA.localeCompare(nameB);
     }
   });
 

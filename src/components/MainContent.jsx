@@ -208,11 +208,6 @@ function MainContent({
                   </div>
                 }
               </div>
-              
-              {/* System Monitor - Shows active terminals and ports */}
-              <div className="relative">
-                <SystemMonitor />
-              </div>
             </div>
           </div>
           
@@ -231,7 +226,12 @@ function MainContent({
           {/* Modern Tab Navigation - Right Side */}
           {/* Modern Tab Navigation - Right Side */}
           <div className="flex-shrink-0 hidden sm:block order-3">
-            <div className="relative flex bg-muted rounded-lg p-1 gap-1">
+            <div className="relative flex items-center bg-muted rounded-lg p-1 gap-1">
+              {/* System Monitor - Shows active terminals and ports */}
+              <SystemMonitor />
+              
+              <div className="w-px bg-border mx-1"></div>
+              
               <button
                 onClick={() => {
                   // Toggle Files panel

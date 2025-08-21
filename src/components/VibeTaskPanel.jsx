@@ -145,10 +145,10 @@ function VibeTaskPanel({ isVisible, onClose }) {
   return (
     <div className="h-full flex flex-col bg-background relative max-w-full min-w-0">
       {/* Header */}
-      <div className="flex-shrink-0 border-b border-border h-12 md:h-14 px-3 md:px-4 flex items-center bg-gradient-to-r from-purple-500/10 to-pink-500/10">
+      <div className="flex-shrink-0 border-b border-border h-12 md:h-14 px-3 md:px-4 flex items-center bg-gradient-to-r from-blue-500/10 to-cyan-500/10">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-lg font-semibold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">Vibe Kanban</h3>
+            <h3 className="text-lg font-semibold bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent">Vibe Kanban</h3>
             <p className="text-xs text-muted-foreground mt-1">Create tasks quickly</p>
           </div>
           <button
@@ -221,7 +221,7 @@ function VibeTaskPanel({ isVisible, onClose }) {
 
             {/* Selected Project Info */}
             {selectedProject && (
-              <div className="p-2 bg-gradient-to-r from-purple-500/5 to-pink-500/5 rounded-md border border-purple-500/10">
+              <div className="p-2 bg-gradient-to-r from-blue-500/5 to-cyan-500/5 rounded-md border border-blue-500/10">
                 <h4 className="text-xs font-medium text-foreground">{selectedProject.name}</h4>
                 {selectedProject.description && (
                   <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{selectedProject.description}</p>
@@ -264,7 +264,7 @@ function VibeTaskPanel({ isVisible, onClose }) {
                       <button
                         key={task.id}
                         onClick={() => handleTaskClick(task)}
-                        className="w-full text-left p-2 bg-muted/20 hover:bg-gradient-to-r hover:from-purple-500/10 hover:to-pink-500/10 rounded-md transition-all duration-200 border border-transparent hover:border-purple-500/20"
+                        className="w-full text-left p-2 bg-muted/20 hover:bg-gradient-to-r hover:from-blue-500/10 hover:to-cyan-500/10 rounded-md transition-all duration-200 border border-transparent hover:border-blue-500/20"
                       >
                         <div className="flex items-start gap-2">
                           <div className={`w-3 h-3 rounded-full mt-1 ${getStatusColor(task.status)} shadow-sm`} />
@@ -295,7 +295,7 @@ function VibeTaskPanel({ isVisible, onClose }) {
               <div className="space-y-2">
                 <button
                   onClick={() => setIsTaskDialogOpen(true)}
-                  className="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-md hover:from-purple-600 hover:to-pink-600 transition-all duration-200 font-medium text-sm shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-md hover:from-blue-600 hover:to-cyan-600 transition-all duration-200 font-medium text-sm shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />

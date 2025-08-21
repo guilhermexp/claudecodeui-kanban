@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Settings API</title>
+</head>
+<body>
+    <h1>Test Settings API</h1>
+    <button onclick="testGet()">Test GET /api/settings</button>
+    <button onclick="testPost()">Test POST /api/settings</button>
+    <div id="result"></div>
+
+    <script>
+        const token = localStorage.getItem('auth-token');
+        
+        async function testGet() {
+            try {
+                const response = await fetch('http://localhost:5892/api/settings', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                const data = await response.json();
+                document.getElementById('result').innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+                console.log('GET /api/settings:', data);
+            } catch (error) {
+                document.getElementById('result').innerHTML = 'Error: ' + error;
+                console.error('Error:', error);
+            }
+        }
+        
+        async function testPost() {
+            try {
+                const response = await fetch('http://localhost:5892/api/settings', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        allowedTools: ['Read', 'Write'],
+                        disallowedTools: [],
+                        skipPermissions: false,
+                        projectSortOrder: 'recent'
+                    })
+                });
+                const data = await response.json();
+                document.getElementById('result').innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+                console.log('POST /api/settings:', data);
+            } catch (error) {
+                document.getElementById('result').innerHTML = 'Error: ' + error;
+                console.error('Error:', error);
+            }
+        }
+    </script>
+</body>
+</html>
