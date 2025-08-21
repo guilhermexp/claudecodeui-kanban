@@ -820,6 +820,70 @@ app.put('/api/projects/:projectName/file', authenticateToken, async (req, res) =
   }
 });
 
+// Create file or folder endpoint
+app.post('/api/files/create', authenticateToken, async (req, res) => {
+  try {
+    const { projectName, path: filePath, type } = req.body;
+    
+    if (!projectName || !filePath) {
+      return res.status(400).json({ error: 'Project name and path are required' });
+    }
+    
+    if (!['file', 'folder'].includes(type)) {
+      return res.status(400).json({ error: 'Type must be "file" or "folder"' });
+    }
+    
+    // Get the actual project directory
+    let projectDir;
+    try {
+      projectDir = await extractProjectDirectory(projectName);
+    } catch (error) {
+      console.error('Error extracting project directory:', error);
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    
+    // Construct the full path
+    const fullPath = path.join(projectDir, filePath);
+    
+    // Check if already exists
+    try {
+      await fsPromises.access(fullPath);
+      return res.status(400).json({ error: `${type === 'file' ? 'File' : 'Folder'} already exists` });
+    } catch (e) {
+      // Good, it doesn't exist
+    }
+    
+    if (type === 'folder') {
+      // Create folder
+      await fsPromises.mkdir(fullPath, { recursive: true });
+      console.log('📁 Created folder:', fullPath);
+    } else {
+      // Create file
+      // First ensure parent directory exists
+      const parentDir = path.dirname(fullPath);
+      await fsPromises.mkdir(parentDir, { recursive: true });
+      
+      // Create empty file
+      await fsPromises.writeFile(fullPath, '', 'utf8');
+      console.log('📄 Created file:', fullPath);
+    }
+    
+    res.json({ 
+      success: true, 
+      message: `${type === 'file' ? 'File' : 'Folder'} created successfully`,
+      path: fullPath
+    });
+    
+  } catch (error) {
+    console.error('Error creating file/folder:', error);
+    if (error.code === 'EACCES') {
+      res.status(403).json({ error: 'Permission denied' });
+    } else {
+      res.status(500).json({ error: error.message });
+    }
+  }
+});
+
 app.get('/api/projects/:projectName/files', authenticateToken, async (req, res) => {
   try {
     

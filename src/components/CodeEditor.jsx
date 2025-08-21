@@ -13,7 +13,6 @@ import { X, Save, Download, Maximize2, Minimize2, Eye, EyeOff, Copy } from 'luci
 import { api } from '../utils/api';
 import { formatFileSize } from '../utils/formatters';
 import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 
 function CodeEditor({ file, onClose, projectPath, inline = false }) {
   const [content, setContent] = useState('');
@@ -26,6 +25,18 @@ function CodeEditor({ file, onClose, projectPath, inline = false }) {
   const [wordWrap, setWordWrap] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
   const [showMarkdownPreview, setShowMarkdownPreview] = useState(false);
+  const [remarkGfm, setRemarkGfm] = useState(null);
+  
+  // Load remark-gfm dynamically for markdown files
+  useEffect(() => {
+    if (file.name.toLowerCase().endsWith('.md')) {
+      import('remark-gfm').then(module => {
+        setRemarkGfm(() => module.default);
+      }).catch(err => {
+        console.log('Could not load remark-gfm, using basic markdown');
+      });
+    }
+  }, [file.name]);
 
   // Create diff highlighting
   const diffEffect = StateEffect.define();
@@ -410,7 +421,7 @@ function CodeEditor({ file, onClose, projectPath, inline = false }) {
               prose-table:border-collapse prose-th:border prose-th:border-gray-300 dark:prose-th:border-gray-600
               prose-td:border prose-td:border-gray-300 dark:prose-td:border-gray-600"
             >
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              <ReactMarkdown remarkPlugins={remarkGfm ? [remarkGfm] : []}>
                 {content}
               </ReactMarkdown>
             </div>
