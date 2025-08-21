@@ -179,6 +179,32 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       return false;
     }
   };
+  
+  // Preview navigation functions (exposed to global for MainContent)
+  useEffect(() => {
+    window.previewGoBack = () => {
+      // Implement go back functionality
+      console.log('Go back not implemented yet');
+    };
+    
+    window.previewGoForward = () => {
+      // Implement go forward functionality
+      console.log('Go forward not implemented yet');
+    };
+    
+    window.previewRefresh = () => {
+      // Trigger refresh on PreviewPanel if it exists
+      if (window.refreshPreview) {
+        window.refreshPreview();
+      }
+    };
+    
+    return () => {
+      delete window.previewGoBack;
+      delete window.previewGoForward;
+      delete window.previewRefresh;
+    };
+  }, []);
 
   const handlePreviewUrl = (url) => {
     // Prevent preview from opening on mobile devices

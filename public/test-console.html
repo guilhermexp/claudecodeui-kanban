@@ -3,170 +3,92 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Console Test Page</title>
+    <title>Console Capture Test</title>
     <style>
         body {
-            font-family: system-ui, -apple-system, sans-serif;
-            padding: 40px;
-            max-width: 800px;
-            margin: 0 auto;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-        }
-        .container {
-            background: white;
-            border-radius: 16px;
-            padding: 32px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-        }
-        h1 {
-            color: #333;
-            margin-bottom: 24px;
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f0f0f0;
         }
         button {
-            background: #667eea;
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 8px;
+            margin: 10px;
+            padding: 10px 20px;
             font-size: 16px;
             cursor: pointer;
-            margin: 8px;
-            transition: all 0.3s;
+            border: none;
+            border-radius: 5px;
+            background: #007bff;
+            color: white;
         }
         button:hover {
-            background: #5a67d8;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+            background: #0056b3;
         }
-        .button-group {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 12px;
-            margin-top: 24px;
-        }
-        .error-btn { background: #f56565; }
-        .error-btn:hover { background: #e53e3e; }
-        .warn-btn { background: #ed8936; }
-        .warn-btn:hover { background: #dd6b20; }
-        .info-btn { background: #4299e1; }
-        .info-btn:hover { background: #3182ce; }
-        .debug-btn { background: #718096; }
-        .debug-btn:hover { background: #4a5568; }
+        .error-btn { background: #dc3545; }
+        .error-btn:hover { background: #c82333; }
+        .warn-btn { background: #ffc107; color: black; }
+        .warn-btn:hover { background: #e0a800; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>🧪 Console Test Page</h1>
-        <p>Click the buttons below to generate different types of console messages. Check the Console Logs dropdown in the preview panel to see them!</p>
-        
-        <div class="button-group">
-            <button onclick="testLog()">📝 Console Log</button>
-            <button onclick="testError()" class="error-btn">❌ Console Error</button>
-            <button onclick="testWarn()" class="warn-btn">⚠️ Console Warn</button>
-            <button onclick="testInfo()" class="info-btn">ℹ️ Console Info</button>
-            <button onclick="testDebug()" class="debug-btn">🐛 Console Debug</button>
-            <button onclick="testObject()">📦 Log Object</button>
-            <button onclick="testArray()">📚 Log Array</button>
-            <button onclick="testMultiple()">🎯 Multiple Args</button>
-            <button onclick="triggerError()" class="error-btn">💥 Trigger Error</button>
-            <button onclick="triggerPromiseRejection()" class="error-btn">🔥 Promise Rejection</button>
-        </div>
-
-        <div style="margin-top: 32px; padding: 16px; background: #f7fafc; border-radius: 8px;">
-            <h3>Auto-generated messages:</h3>
-            <p id="status">Generating automatic console messages every 5 seconds...</p>
-        </div>
-    </div>
+    <h1>Console Capture Test Page</h1>
+    <p>Click the buttons below to test different console outputs:</p>
+    
+    <button onclick="testConsoleLog()">Test console.log()</button>
+    <button onclick="testConsoleInfo()">Test console.info()</button>
+    <button class="warn-btn" onclick="testConsoleWarn()">Test console.warn()</button>
+    <button class="error-btn" onclick="testConsoleError()">Test console.error()</button>
+    <button class="error-btn" onclick="testRuntimeError()">Test Runtime Error</button>
+    <button class="error-btn" onclick="testPromiseRejection()">Test Promise Rejection</button>
+    <button onclick="testMultipleArgs()">Test Multiple Arguments</button>
+    <button onclick="testObject()">Test Object Logging</button>
 
     <script>
-        // Automatic console messages on load
-        console.log('🎉 Test page loaded successfully!');
-        console.info('ℹ️ This is an informational message');
-        console.warn('⚠️ This is a warning message');
-        console.error('❌ This is an error message (but not a real error)');
-        
         // Test functions
-        function testLog() {
-            console.log('This is a regular console.log message at', new Date().toLocaleTimeString());
+        function testConsoleLog() {
+            console.log("This is a test console.log message at", new Date().toLocaleTimeString());
         }
         
-        function testError() {
-            console.error('This is a console.error message!', 'With multiple', 'arguments');
+        function testConsoleInfo() {
+            console.info("This is an info message with timestamp:", Date.now());
         }
         
-        function testWarn() {
-            console.warn('Warning! Something might be wrong at', new Date().toLocaleTimeString());
+        function testConsoleWarn() {
+            console.warn("Warning: This is a test warning message!");
         }
         
-        function testInfo() {
-            console.info('Information: System status is operational');
+        function testConsoleError() {
+            console.error("Error: This is a test error message!");
         }
         
-        function testDebug() {
-            console.debug('Debug information:', { timestamp: Date.now(), action: 'button_click' });
+        function testRuntimeError() {
+            // This will cause a runtime error
+            nonExistentFunction();
+        }
+        
+        function testPromiseRejection() {
+            Promise.reject(new Error("This is a test promise rejection"));
+        }
+        
+        function testMultipleArgs() {
+            console.log("Multiple", "arguments", "test:", 123, true, { key: "value" });
         }
         
         function testObject() {
-            const obj = {
-                name: 'Test Object',
+            const testObj = {
+                name: "Test Object",
                 value: 42,
                 nested: {
-                    deep: {
-                        property: 'Hello from deep nested property!'
-                    }
+                    deep: "value",
+                    array: [1, 2, 3]
                 },
-                array: [1, 2, 3, 4, 5],
                 timestamp: new Date()
             };
-            console.log('Complex object:', obj);
+            console.log("Object test:", testObj);
         }
         
-        function testArray() {
-            const arr = ['Apple', 'Banana', 'Cherry', 'Date', 'Elderberry'];
-            console.log('Array of fruits:', arr);
-        }
-        
-        function testMultiple() {
-            console.log('Multiple', 'arguments', 'in', 'one', 'call', '=', 1 + 2 + 3 + 4 + 5);
-        }
-        
-        function triggerError() {
-            try {
-                // This will throw an error
-                nonExistentFunction();
-            } catch (e) {
-                console.error('Caught error:', e.message);
-                throw e; // Re-throw to trigger window.onerror
-            }
-        }
-        
-        function triggerPromiseRejection() {
-            Promise.reject(new Error('This is an unhandled promise rejection!'));
-        }
-        
-        // Periodic automatic messages
-        let counter = 0;
-        setInterval(() => {
-            counter++;
-            const messages = [
-                () => console.log(`📊 Periodic update #${counter} at ${new Date().toLocaleTimeString()}`),
-                () => console.info(`ℹ️ System check #${counter}: All systems operational`),
-                () => console.warn(`⚠️ Memory usage check #${counter}: 73% used`),
-                () => console.debug(`🐛 Debug tick #${counter}`)
-            ];
-            
-            const randomMessage = messages[Math.floor(Math.random() * messages.length)];
-            randomMessage();
-            
-            document.getElementById('status').textContent = 
-                `Generated ${counter} automatic messages. Last update: ${new Date().toLocaleTimeString()}`;
-        }, 5000);
-        
-        // Test error on page load (after a delay)
-        setTimeout(() => {
-            console.warn('⏰ Delayed warning: 3 seconds have passed since page load');
-        }, 3000);
+        // Auto test on load
+        console.log("🎯 Console Capture Test Page Loaded at", new Date().toISOString());
+        console.info("Ready for testing!");
     </script>
 </body>
 </html>

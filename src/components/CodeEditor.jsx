@@ -12,6 +12,8 @@ import { StateField, StateEffect, RangeSetBuilder } from '@codemirror/state';
 import { X, Save, Download, Maximize2, Minimize2, Eye, EyeOff, Copy } from 'lucide-react';
 import { api } from '../utils/api';
 import { formatFileSize } from '../utils/formatters';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 function CodeEditor({ file, onClose, projectPath, inline = false }) {
   const [content, setContent] = useState('');
@@ -23,6 +25,7 @@ function CodeEditor({ file, onClose, projectPath, inline = false }) {
   const [showDiff, setShowDiff] = useState(!!file.diffInfo);
   const [wordWrap, setWordWrap] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
+  const [showMarkdownPreview, setShowMarkdownPreview] = useState(false);
 
   // Create diff highlighting
   const diffEffect = StateEffect.define();
@@ -344,6 +347,21 @@ function CodeEditor({ file, onClose, projectPath, inline = false }) {
               <Download className="w-4 h-4" />
             </button>
             
+            {/* Markdown Preview button - only for .md files */}
+            {file.name.toLowerCase().endsWith('.md') && (
+              <button
+                onClick={() => setShowMarkdownPreview(!showMarkdownPreview)}
+                className={`p-1.5 rounded transition-colors ${
+                  showMarkdownPreview 
+                    ? 'bg-accent text-foreground' 
+                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                }`}
+                title={showMarkdownPreview ? "Show raw markdown" : "Preview markdown"}
+              >
+                {showMarkdownPreview ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            )}
+            
             {/* Save button */}
             <button
               onClick={handleSave}
@@ -377,29 +395,48 @@ function CodeEditor({ file, onClose, projectPath, inline = false }) {
           </div>
         </div>
         
-        {/* Editor content */}
+        {/* Editor content or Markdown Preview */}
         <div className="flex-1 min-h-0 overflow-hidden">
-          <CodeMirror
-            value={content}
-            onChange={(value) => setContent(value)}
-            theme={isDarkMode ? oneDark : undefined}
-            extensions={extensions}
-            className="h-full overflow-auto"
-            basicSetup={{
-              lineNumbers: true,
-              foldGutter: true,
-              dropCursor: false,
-              allowMultipleSelections: false,
-              indentOnInput: true,
-              bracketMatching: true,
-              closeBrackets: true,
-              autocompletion: true,
-              rectangularSelection: false,
-              crosshairCursor: false,
-              highlightSelectionMatches: true,
-              searchKeymap: true
-            }}
-          />
+          {showMarkdownPreview && file.name.toLowerCase().endsWith('.md') ? (
+            <div className="h-full overflow-auto p-6 prose prose-sm max-w-none dark:prose-invert
+              prose-headings:font-semibold prose-h1:text-3xl prose-h2:text-2xl prose-h3:text-xl
+              prose-p:text-base prose-p:leading-relaxed
+              prose-a:text-blue-600 dark:prose-a:text-blue-400 prose-a:underline
+              prose-code:bg-gray-100 dark:prose-code:bg-gray-800 prose-code:px-1 prose-code:py-0.5 prose-code:rounded
+              prose-pre:bg-gray-100 dark:prose-pre:bg-gray-900 prose-pre:p-4
+              prose-blockquote:border-l-4 prose-blockquote:border-gray-300 dark:prose-blockquote:border-gray-600
+              prose-ul:list-disc prose-ol:list-decimal
+              prose-img:rounded-lg prose-img:shadow-md
+              prose-table:border-collapse prose-th:border prose-th:border-gray-300 dark:prose-th:border-gray-600
+              prose-td:border prose-td:border-gray-300 dark:prose-td:border-gray-600"
+            >
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {content}
+              </ReactMarkdown>
+            </div>
+          ) : (
+            <CodeMirror
+              value={content}
+              onChange={(value) => setContent(value)}
+              theme={isDarkMode ? oneDark : undefined}
+              extensions={extensions}
+              className="h-full overflow-auto"
+              basicSetup={{
+                lineNumbers: true,
+                foldGutter: true,
+                dropCursor: false,
+                allowMultipleSelections: false,
+                indentOnInput: true,
+                bracketMatching: true,
+                closeBrackets: true,
+                autocompletion: true,
+                rectangularSelection: false,
+                crosshairCursor: false,
+                highlightSelectionMatches: true,
+                searchKeymap: true
+              }}
+            />
+          )}
         </div>
       </div>
     );

@@ -43,6 +43,17 @@ function ToolsSettings({ isOpen, onClose }) {
 
   const loadSettings = async () => {
     try {
+      // First try to load from localStorage
+      const savedSettings = localStorage.getItem('claude-tools-settings');
+      if (savedSettings) {
+        const localData = JSON.parse(savedSettings);
+        setAllowedTools(localData.allowedTools || []);
+        setDisallowedTools(localData.disallowedTools || []);
+        setSkipPermissions(localData.skipPermissions || false);
+        setProjectSortOrder(localData.projectSortOrder || 'name');
+      }
+      
+      // Then try to load from backend (which may be more up-to-date)
       const token = localStorage.getItem('auth-token');
       const response = await fetch('/api/settings', {
         headers: {
@@ -56,6 +67,14 @@ function ToolsSettings({ isOpen, onClose }) {
         setDisallowedTools(data.disallowedTools || []);
         setSkipPermissions(data.skipPermissions || false);
         setProjectSortOrder(data.projectSortOrder || 'name');
+        
+        // Update localStorage with backend data
+        localStorage.setItem('claude-tools-settings', JSON.stringify({
+          allowedTools: data.allowedTools || [],
+          disallowedTools: data.disallowedTools || [],
+          skipPermissions: data.skipPermissions || false,
+          projectSortOrder: data.projectSortOrder || 'name'
+        }));
       }
     } catch (error) {
       console.error('Error loading settings:', error);
@@ -65,6 +84,17 @@ function ToolsSettings({ isOpen, onClose }) {
   const saveSettings = async () => {
     setIsSaving(true);
     try {
+      // Save to localStorage immediately for components to read
+      const settingsData = {
+        allowedTools,
+        disallowedTools,
+        skipPermissions,
+        projectSortOrder
+      };
+      
+      localStorage.setItem('claude-tools-settings', JSON.stringify(settingsData));
+      
+      // Also save to backend
       const token = localStorage.getItem('auth-token');
       const response = await fetch('/api/settings', {
         method: 'POST',
@@ -72,12 +102,7 @@ function ToolsSettings({ isOpen, onClose }) {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          allowedTools,
-          disallowedTools,
-          skipPermissions,
-          projectSortOrder
-        })
+        body: JSON.stringify(settingsData)
       });
       
       if (response.ok) {

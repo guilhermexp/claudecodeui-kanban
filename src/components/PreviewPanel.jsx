@@ -272,6 +272,14 @@ function PreviewPanel({ url, onClose, onRefresh, onOpenExternal, isMobile }) {
       iframeRef.current.src = currentUrl;
     }
   };
+  
+  // Expose refresh function to global scope for MainContent
+  useEffect(() => {
+    window.refreshPreview = handleRefresh;
+    return () => {
+      delete window.refreshPreview;
+    };
+  }, [currentUrl, isPaused]);
 
   const handleTogglePause = () => {
     setIsPaused(!isPaused);
