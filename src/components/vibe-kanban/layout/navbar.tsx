@@ -5,7 +5,6 @@ import {
   FolderOpen,
   Settings,
   ArrowLeft,
-  MessageSquare,
   Sun,
   Moon,
 } from 'lucide-react';
@@ -34,11 +33,33 @@ export function Navbar() {
 
   // Função para lidar com o botão voltar
   const handleBack = () => {
-    // Se estiver na página de chat do Vibe Kanban, volta para o Claude Code UI
-    if (location.pathname === '/vibe-kanban' || location.pathname === '/vibe-kanban/chat' || location.pathname === '/vibe-kanban/') {
+    // Lógica melhorada de navegação
+    const path = location.pathname;
+    
+    // Se estiver na página inicial do Vibe Kanban (projects), volta para o Claude Code UI
+    if (path === '/vibe-kanban' || path === '/vibe-kanban/' || path === '/vibe-kanban/projects') {
       navigate('/');
-    } else {
-      // Caso contrário, usa o histórico do navegador para voltar
+    } 
+    // Se estiver em uma página de tasks/kanban, volta para projects
+    else if (path.includes('/vibe-kanban/projects/') && path.includes('/tasks')) {
+      // Extrai o projectId e volta para a página do projeto
+      const projectIdMatch = path.match(/\/projects\/([^\/]+)/);
+      if (projectIdMatch) {
+        navigate(`/vibe-kanban/projects/${projectIdMatch[1]}`);
+      } else {
+        navigate('/vibe-kanban/projects');
+      }
+    }
+    // Se estiver na página de detalhes de um projeto, volta para a lista de projetos
+    else if (path.match(/^\/vibe-kanban\/projects\/[^\/]+$/)) {
+      navigate('/vibe-kanban/projects');
+    }
+    // Para outras páginas (settings, mcp-servers), volta para projects
+    else if (path === '/vibe-kanban/settings' || path === '/vibe-kanban/mcp-servers') {
+      navigate('/vibe-kanban/projects');
+    }
+    // Caso padrão: usa o histórico do navegador
+    else {
       navigate(-1);
     }
   };
@@ -58,18 +79,6 @@ export function Navbar() {
                 <span className="ml-2">Voltar</span>
               </Button>
               <div className="hidden sm:flex items-center space-x-1">
-                <Button
-                  asChild
-                  variant={
-                    location.pathname === '/vibe-kanban' || location.pathname === '/vibe-kanban/chat' ? 'default' : 'ghost'
-                  }
-                  size="sm"
-                >
-                  <Link to="/vibe-kanban/chat">
-                    <MessageSquare className="h-4 w-4" />
-                    <span className="ml-2">Chat</span>
-                  </Link>
-                </Button>
                 <Button
                   asChild
                   variant={
@@ -137,21 +146,20 @@ export function Navbar() {
               className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent w-full text-left"
             >
               <ArrowLeft className="h-4 w-4" />
-              {location.pathname === '/vibe-kanban' || location.pathname === '/vibe-kanban/chat' || location.pathname === '/vibe-kanban/'
-                ? 'Voltar ao Claude Code UI' 
-                : 'Voltar'}
+              {(() => {
+                const path = location.pathname;
+                if (path === '/vibe-kanban' || path === '/vibe-kanban/' || path === '/vibe-kanban/projects') {
+                  return 'Claude Code UI';
+                } else if (path.includes('/vibe-kanban/projects/') && path.includes('/tasks')) {
+                  return 'Projeto';
+                } else if (path.match(/^\/vibe-kanban\/projects\/[^\/]+$/)) {
+                  return 'Projetos';
+                } else if (path === '/vibe-kanban/settings' || path === '/vibe-kanban/mcp-servers') {
+                  return 'Projetos';
+                }
+                return 'Voltar';
+              })()}
             </button>
-            <Link
-              to="/vibe-kanban/chat"
-              className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                location.pathname === '/vibe-kanban' || location.pathname === '/vibe-kanban/chat'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-              }`}
-            >
-              <MessageSquare className="h-4 w-4" />
-              Chat
-            </Link>
             <Link
               to="/vibe-kanban/projects"
               className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
