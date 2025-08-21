@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { ScrollArea } from './ui/scroll-area';
 import { Button } from './ui/button';
 import { Folder, FolderOpen, File, FileText, FileCode } from 'lucide-react';
@@ -17,16 +17,35 @@ function FileTree({ selectedProject }) {
   // View mode removed - using simple list view only
   const [showFilePanel, setShowFilePanel] = useState(false);
   const fetchTimeoutRef = useRef(null);
+  const lastFetchTime = useRef(0);
+  const lastProjectPath = useRef(null);
+  const MIN_FETCH_INTERVAL = 1000; // Minimum 1 second between fetches
 
   useEffect(() => {
     if (selectedProject) {
-      // Debounce fetchFiles to avoid multiple calls
+      // Skip if same project
+      if (lastProjectPath.current === selectedProject.path) {
+        return;
+      }
+      lastProjectPath.current = selectedProject.path;
+      
+      const now = Date.now();
+      const timeSinceLastFetch = now - lastFetchTime.current;
+      
+      // If last fetch was too recent, delay more
+      const delay = timeSinceLastFetch < MIN_FETCH_INTERVAL 
+        ? MIN_FETCH_INTERVAL - timeSinceLastFetch 
+        : 500; // Increased from 100ms to 500ms
+      
+      // Clear any pending fetch
       if (fetchTimeoutRef.current) {
         clearTimeout(fetchTimeoutRef.current);
       }
+      
       fetchTimeoutRef.current = setTimeout(() => {
+        lastFetchTime.current = Date.now();
         fetchFiles();
-      }, 100);
+      }, delay);
     }
     return () => {
       if (fetchTimeoutRef.current) {
@@ -113,7 +132,7 @@ function FileTree({ selectedProject }) {
   // View mode change removed - using simple list only
 
 
-  const renderFileTree = (items, level = 0) => {
+  const renderFileTree = useCallback((items, level = 0) => {
     return items.map((item) => (
       <div key={item.path} className="select-none">
         <Button
@@ -190,7 +209,7 @@ function FileTree({ selectedProject }) {
         )}
       </div>
     ));
-  };
+  }, [expandedDirs, selectedProject, setSelectedFile, setSelectedImage, setShowFilePanel, toggleDirectory]);
 
   const isImageFile = (filename) => {
     const ext = filename.split('.').pop()?.toLowerCase();
@@ -320,7 +339,7 @@ function FileTree({ selectedProject }) {
             </p>
           </div>
         ) : (
-          <div className="space-y-1">
+          <div className="space-y-1" style={{ backfaceVisibility: 'hidden', transform: 'translateZ(0)' }}>
             {renderFileTree(files)}
           </div>
         )}
@@ -428,4 +447,9 @@ function FileTree({ selectedProject }) {
   );
 }
 
-export default FileTree;
+// Memoize component to prevent unnecessary re-renders
+export default React.memo(FileTree, (prevProps, nextProps) => {
+  // Only re-render if selectedProject actually changed
+  return prevProps.selectedProject?.path === nextProps.selectedProject?.path &&
+         prevProps.selectedProject?.name === nextProps.selectedProject?.name;
+});
