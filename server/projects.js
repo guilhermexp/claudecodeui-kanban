@@ -5,11 +5,18 @@ import readline from 'readline';
 
 // Cache for extracted project directories
 const projectDirectoryCache = new Map();
+
+// Cache for projects list with timestamp
+let projectsCache = null;
+let projectsCacheTime = 0;
+const PROJECTS_CACHE_TTL = 30000; // 30 seconds cache
 let cacheTimestamp = Date.now();
 
 // Clear cache when needed (called when project files change)
 function clearProjectDirectoryCache() {
   projectDirectoryCache.clear();
+  projectsCache = null;
+  projectsCacheTime = 0;
   cacheTimestamp = Date.now();
 }
 
@@ -178,6 +185,12 @@ async function extractProjectDirectory(projectName) {
 }
 
 async function getProjects() {
+  // Return cached projects if still valid
+  const now = Date.now();
+  if (projectsCache && (now - projectsCacheTime) < PROJECTS_CACHE_TTL) {
+    return projectsCache;
+  }
+  
   const claudeDir = path.join(process.env.HOME, '.claude', 'projects');
   const config = await loadProjectConfig();
   const projects = [];
@@ -187,7 +200,26 @@ async function getProjects() {
     // First, get existing projects from the file system
     const entries = await fs.readdir(claudeDir, { withFileTypes: true });
     
-    for (const entry of entries) {
+    // Filter and limit projects to avoid processing too many
+    const validEntries = entries.filter(entry => {
+      if (!entry.isDirectory()) return false;
+      
+      // Skip temporary Vibe Kanban directories and other temp paths
+      const name = entry.name;
+      if (name.includes('vibe-kanban') || 
+          name.includes('private-var-folders') ||
+          name.includes('tmp-') ||
+          name.length < 5) {
+        return false;
+      }
+      
+      return true;
+    });
+    
+    // Limit to first 30 projects for performance
+    const entriesToProcess = validEntries.slice(0, 30);
+    
+    for (const entry of entriesToProcess) {
       if (entry.isDirectory()) {
         existingProjects.add(entry.name);
         const projectPath = path.join(claudeDir, entry.name);
@@ -209,16 +241,14 @@ async function getProjects() {
           sessions: []
         };
         
-        // Try to get sessions for this project (just first 5 for performance)
-        try {
-          const sessionResult = await getSessions(entry.name, 5, 0);
-          project.sessions = sessionResult.sessions || [];
-          project.sessionMeta = {
-            hasMore: sessionResult.hasMore,
-            total: sessionResult.total
-          };
-        } catch (e) {
-        }
+        // Skip getting sessions on initial load for performance
+        // Sessions will be loaded on-demand when user clicks on a project
+        project.sessions = [];
+        project.sessionMeta = {
+          hasMore: true,
+          total: 0,
+          notLoaded: true
+        };
         
         projects.push(project);
       }
@@ -255,6 +285,10 @@ async function getProjects() {
       projects.push(project);
     }
   }
+  
+  // Cache the results
+  projectsCache = projects;
+  projectsCacheTime = Date.now();
   
   return projects;
 }
