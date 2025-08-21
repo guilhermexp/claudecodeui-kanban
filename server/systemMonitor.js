@@ -54,8 +54,9 @@ class SystemMonitor {
 
   async getActiveTerminals() {
     try {
-      // Count bash/zsh/node processes started by Claude Code UI
-      const { stdout } = await execAsync(`ps aux | grep -E "(bash|zsh|sh|node.*claude|npm|yarn|cargo|python|ruby)" | grep -v grep | grep -v "SystemMonitor" | head -20`);
+      // Get only terminal processes directly related to Claude Code UI
+      // Exclude MCP servers and Claude CLI subprocesses
+      const { stdout } = await execAsync(`ps aux | grep -E "(node server/index|vite|vibe-kanban|cargo run)" | grep -v grep | grep -v "mcp" | grep -v "context7" | grep -v "supabase" | grep -v "playwright" | grep -v "sequential" | head -10`);
       
       const lines = stdout.trim().split('\n').filter(line => line.length > 0);
       const processes = [];
@@ -68,14 +69,14 @@ class SystemMonitor {
           const mem = parts[3];
           const command = parts.slice(10).join(' ');
           
-          // Filter for relevant processes
-          if (command.includes('claude') || 
-              command.includes('npm') || 
-              command.includes('node server') ||
-              command.includes('vite') ||
-              command.includes('cargo') ||
-              command.includes('vibe-kanban') ||
-              command.includes('localhost')) {
+          // Only include Claude Code UI related processes
+          if ((command.includes('node server/index') ||
+               command.includes('vite') ||
+               command.includes('vibe-kanban') ||
+               command.includes('cargo run')) &&
+              !command.includes('mcp-') &&
+              !command.includes('context7') &&
+              !command.includes('supabase')) {
             processes.push({
               pid,
               cpu,

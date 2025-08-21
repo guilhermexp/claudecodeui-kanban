@@ -5,15 +5,19 @@ import { createRequire } from 'module';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { existsSync } from 'fs';
-import { PortProtector, PROTECTED_PORTS } from './port-protection.js';
+// Port protection removed - was causing issues with browser processes
 
 const require = createRequire(import.meta.url);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const rootDir = join(__dirname, '..');
 
-// Use protected ports from port-protection module
-const PORTS = PROTECTED_PORTS;
+// Define ports directly
+const PORTS = {
+  CLIENT: 5892,
+  SERVER: 7347,
+  VIBE_BACKEND: 6734
+};
 
 // Colors for output
 const colors = {
@@ -133,8 +137,8 @@ async function main() {
   log('INIT', 'Starting Claude Code UI Development Environment', colors.cyan);
   
   // Initialize Port Protection Service (but don't start monitoring yet)
-  const portProtector = new PortProtector(PORTS);
-  log('INIT', '🛡️ Initializing Port Protection Service', colors.cyan);
+  // const portProtector = new PortProtector(PORTS);
+  // log('INIT', '🛡️ Initializing Port Protection Service', colors.cyan);
   
   // Cleanup existing processes first
   await killPortProcesses([PORTS.CLIENT, PORTS.SERVER, PORTS.VIBE_BACKEND]);
@@ -153,17 +157,17 @@ async function main() {
     {
       color: colors.green,
       env: { PORT: PORTS.SERVER },
-      registerCallback: (pid) => portProtector.registerAllowedProcess('SERVER', pid)
+      registerCallback: (pid) => {} // portProtector.registerAllowedProcess('SERVER', pid)
     }
   );
   services.push(serverService);
   
   // Register server process as authorized
-  setTimeout(() => {
-    if (serverService.process && serverService.process.pid) {
-      portProtector.registerAllowedProcess('SERVER', serverService.process.pid);
-    }
-  }, 1000);
+  // setTimeout(() => {
+  //   if (serverService.process && serverService.process.pid) {
+  //     portProtector.registerAllowedProcess('SERVER', serverService.process.pid);
+  //   }
+  // }, 1000);
 
   // Start Client (Vite Frontend)
   const clientService = spawnService(
@@ -173,17 +177,17 @@ async function main() {
     {
       color: colors.blue,
       env: { VITE_PORT: PORTS.CLIENT },
-      registerCallback: (pid) => portProtector.registerAllowedProcess('CLIENT', pid)
+      registerCallback: (pid) => {} // portProtector.registerAllowedProcess('CLIENT', pid)
     }
   );
   services.push(clientService);
   
   // Register client process as authorized
-  setTimeout(() => {
-    if (clientService.process && clientService.process.pid) {
-      portProtector.registerAllowedProcess('CLIENT', clientService.process.pid);
-    }
-  }, 1000);
+  // setTimeout(() => {
+  //   if (clientService.process && clientService.process.pid) {
+  //     portProtector.registerAllowedProcess('CLIENT', clientService.process.pid);
+  //   }
+  // }, 1000);
 
   // Start Vibe-Kanban Backend (if exists)
   if (checkVibeKanban()) {
@@ -198,17 +202,17 @@ async function main() {
           PORT: PORTS.VIBE_BACKEND,
           VIBE_NO_BROWSER: 'true'  // Prevent auto browser opening
         },
-        registerCallback: (pid) => portProtector.registerAllowedProcess('VIBE_BACKEND', pid)
+        registerCallback: (pid) => {} // portProtector.registerAllowedProcess('VIBE_BACKEND', pid)
       }
     );
     services.push(vibeService);
     
     // Register vibe process as authorized
-    setTimeout(() => {
-      if (vibeService.process && vibeService.process.pid) {
-        portProtector.registerAllowedProcess('VIBE_BACKEND', vibeService.process.pid);
-      }
-    }, 2000); // Rust takes longer to start
+    // setTimeout(() => {
+    //   if (vibeService.process && vibeService.process.pid) {
+    //     portProtector.registerAllowedProcess('VIBE_BACKEND', vibeService.process.pid);
+    //   }
+    // }, 2000); // Rust takes longer to start
   }
 
   // Graceful shutdown
@@ -216,7 +220,7 @@ async function main() {
     log('SHUTDOWN', 'Shutting down all services...', colors.yellow);
     
     // Stop port protection first
-    portProtector.stop();
+    // portProtector.stop();
     
     services.forEach(service => {
       if (service.process && !service.process.killed) {
@@ -230,7 +234,7 @@ async function main() {
     log('SHUTDOWN', 'Received SIGTERM, shutting down...', colors.yellow);
     
     // Stop port protection first
-    portProtector.stop();
+    // portProtector.stop();
     
     services.forEach(service => {
       if (service.process && !service.process.killed) {
@@ -241,10 +245,10 @@ async function main() {
   });
 
   // Start port protection after all services are launched and registered
-  setTimeout(async () => {
-    log('INIT', '🛡️ Starting Port Protection monitoring...', colors.cyan);
-    await portProtector.start();
-  }, 4000); // Wait longer to ensure all processes are registered
+  // setTimeout(async () => {
+  //   log('INIT', '🛡️ Starting Port Protection monitoring...', colors.cyan);
+  //   await portProtector.start();
+  // }, 4000); // Wait longer to ensure all processes are registered
   
   // Keep the process alive
   log('READY', `Development servers starting on ports: Client(${PORTS.CLIENT}), Server(${PORTS.SERVER}), Vibe-Backend(${PORTS.VIBE_BACKEND})`, colors.cyan);
