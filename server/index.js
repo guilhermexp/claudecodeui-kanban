@@ -1470,7 +1470,7 @@ import VibeKanbanProxy from './lib/vibe-proxy.js';
 
 // Initialize Vibe Kanban proxy with configuration
 const vibeProxy = new VibeKanbanProxy({
-  baseUrl: 'http://localhost:8081',
+  baseUrl: 'http://localhost:6734',
   timeout: 30000, // 30 seconds
   retries: 3,
   retryDelay: 1000, // 1 second
