@@ -1081,9 +1081,9 @@ function handleShellConnection(ws, request) {
                     const filePath = decodeURIComponent(encodedPath);
                     
                     // Get the actual project directory
-                    const projectDir = extractProjectDirectory(projectName);
+                    const projectDir = await extractProjectDirectory(projectName);
                     if (!projectDir) {
-                      console.error('Project not found:', projectName);
+                      // Don't log for old/non-existent projects - just skip silently
                       continue;
                     }
                     

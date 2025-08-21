@@ -5,7 +5,6 @@ import { Projects } from '../pages/vibe-kanban/projects.tsx';
 import { ProjectTasks } from '../pages/vibe-kanban/project-tasks.tsx';
 import { Settings } from '../pages/vibe-kanban/Settings.tsx';
 import { McpServers } from '../pages/vibe-kanban/McpServers.tsx';
-import { VibeChat } from '../pages/vibe-kanban/vibe-chat.tsx';
 import { DisclaimerDialog } from '../components/vibe-kanban/DisclaimerDialog';
 import { OnboardingDialog } from '../components/vibe-kanban/OnboardingDialog';
 import { PrivacyOptInDialog } from '../components/vibe-kanban/PrivacyOptInDialog';
@@ -147,8 +146,7 @@ function AppContent() {
         {showNavbar && <Navbar />}
         <div className="flex-1 overflow-y-auto pb-safe sm:pb-0">
           <Routes>
-            <Route path="/" element={<VibeChat />} />
-            <Route path="/chat" element={<VibeChat />} />
+            <Route path="/" element={<Projects />} />
             <Route path="/projects" element={<Projects />} />
             <Route path="/projects/:projectId" element={<Projects />} />
             <Route

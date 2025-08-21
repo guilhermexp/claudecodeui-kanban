@@ -84,8 +84,8 @@ async function extractProjectDirectory(projectName) {
     try {
       await fs.access(projectDir);
     } catch (accessError) {
-      // Project directory doesn't exist, return fallback path
-      console.log(`[INFO] Project directory doesn't exist: ${projectDir}`);
+      // Project directory doesn't exist, return fallback path silently
+      // Don't log as this happens frequently with old project references
       return projectName.replace(/-/g, '/');
     }
     
