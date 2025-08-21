@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { ScrollArea } from './ui/scroll-area';
 import { Button } from './ui/button';
-import { Folder, FolderOpen, File, FileText, FileCode } from 'lucide-react';
+import { Folder, FolderOpen, File, FileText, FileCode, FilePlus, FolderPlus } from 'lucide-react';
 import { cn } from '../lib/utils';
 import CodeEditor from './CodeEditor';
 import ImageViewer from './ImageViewer';
@@ -16,6 +16,12 @@ function FileTree({ selectedProject }) {
   const [selectedImage, setSelectedImage] = useState(null);
   // View mode removed - using simple list view only
   const [showFilePanel, setShowFilePanel] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createType, setCreateType] = useState('file'); // 'file' or 'folder'
+  const [createName, setCreateName] = useState('');
+  const [createPath, setCreatePath] = useState(''); // Path where to create
+  const [createError, setCreateError] = useState('');
+  const [contextMenu, setContextMenu] = useState(null); // For right-click menu
   const fetchTimeoutRef = useRef(null);
   const lastFetchTime = useRef(0);
   const lastProjectPath = useRef(null);
@@ -53,6 +59,13 @@ function FileTree({ selectedProject }) {
       }
     };
   }, [selectedProject]);
+  
+  // Close context menu when clicking outside
+  useEffect(() => {
+    const handleClick = () => setContextMenu(null);
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, []);
 
   // View mode preference removed - using simple list only
 
@@ -173,6 +186,17 @@ function FileTree({ selectedProject }) {
               setShowFilePanel(true);
             }
           }}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (item.type === 'directory') {
+              setContextMenu({
+                x: e.clientX,
+                y: e.clientY,
+                item: item
+              });
+            }
+          }}
         >
           <div className="flex items-center gap-2 min-w-0 w-full">
             {item.type === 'error' ? (
@@ -290,6 +314,54 @@ function FileTree({ selectedProject }) {
     }
   };
 
+  // Handle create file/folder
+  const handleCreate = async () => {
+    if (!createName.trim()) {
+      setCreateError('Name cannot be empty');
+      return;
+    }
+    
+    // Validate name
+    const invalidChars = /[<>:"|?*\\]/g;
+    if (invalidChars.test(createName)) {
+      setCreateError('Invalid characters in name');
+      return;
+    }
+    
+    setCreateError('');
+    
+    try {
+      const fullPath = createPath ? `${createPath}/${createName}` : createName;
+      const response = await fetch('/api/files/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('auth-token')}`
+        },
+        body: JSON.stringify({
+          projectName: selectedProject.name,
+          path: fullPath,
+          type: createType
+        })
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        setCreateError(error.error || 'Failed to create');
+        return;
+      }
+      
+      // Success - refresh files and close modal
+      setShowCreateModal(false);
+      setCreateName('');
+      setCreatePath('');
+      fetchFiles();
+    } catch (error) {
+      console.error('Error creating:', error);
+      setCreateError('Failed to create');
+    }
+  };
+
   // Render detailed view with table-like layout
   // Removed renderDetailedView and renderCompactView - using only simple list view
 
@@ -304,6 +376,7 @@ function FileTree({ selectedProject }) {
   }
 
   return (
+    <>
     <div className="h-full flex bg-card rounded-xl border border-border overflow-hidden">
       {/* Files List */}
       <div className={`flex flex-col transition-all duration-300 ease-in-out ${
@@ -312,7 +385,34 @@ function FileTree({ selectedProject }) {
       {/* View Mode Toggle */}
       <div className="py-3 px-3 md:px-4 border-b border-border flex items-center justify-between bg-gradient-to-r from-blue-900/10 to-purple-900/10">
         <h3 className="text-sm font-semibold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">Files</h3>
-        {/* Toolbar buttons moved to Sidebar */}
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => {
+              setCreateType('file');
+              setShowCreateModal(true);
+              setCreatePath('');
+              setCreateName('');
+              setCreateError('');
+            }}
+            className="p-1 hover:bg-accent rounded-md transition-colors"
+            title="New File"
+          >
+            <FilePlus className="w-4 h-4 text-muted-foreground" />
+          </button>
+          <button
+            onClick={() => {
+              setCreateType('folder');
+              setShowCreateModal(true);
+              setCreatePath('');
+              setCreateName('');
+              setCreateError('');
+            }}
+            className="p-1 hover:bg-accent rounded-md transition-colors"
+            title="New Folder"
+          >
+            <FolderPlus className="w-4 h-4 text-muted-foreground" />
+          </button>
+        </div>
       </div>
 
       {/* Column Headers removed - using simple view */}
@@ -444,6 +544,112 @@ function FileTree({ selectedProject }) {
           )}
       </div>
     </div>
+    
+    {/* Context Menu */}
+    {contextMenu && (
+      <div
+        style={{
+          position: 'fixed',
+          top: contextMenu.y,
+          left: contextMenu.x,
+          zIndex: 100
+        }}
+        className="bg-background border border-border rounded-md shadow-lg py-1 min-w-[150px]"
+      >
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setCreateType('file');
+            setCreatePath(contextMenu.item.path);
+            setShowCreateModal(true);
+            setCreateName('');
+            setCreateError('');
+            setContextMenu(null);
+          }}
+          className="w-full px-3 py-1.5 text-left text-sm hover:bg-accent flex items-center gap-2"
+        >
+          <FilePlus className="w-4 h-4" />
+          New File
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setCreateType('folder');
+            setCreatePath(contextMenu.item.path);
+            setShowCreateModal(true);
+            setCreateName('');
+            setCreateError('');
+            setContextMenu(null);
+          }}
+          className="w-full px-3 py-1.5 text-left text-sm hover:bg-accent flex items-center gap-2"
+        >
+          <FolderPlus className="w-4 h-4" />
+          New Folder
+        </button>
+      </div>
+    )}
+    
+    {/* Create File/Folder Modal */}
+    {showCreateModal && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+        <div className="bg-background border border-border rounded-lg p-6 w-96 max-w-[90vw]">
+          <h3 className="text-lg font-semibold mb-4">
+            Create New {createType === 'file' ? 'File' : 'Folder'}
+          </h3>
+          
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm text-muted-foreground">Name</label>
+              <input
+                type="text"
+                value={createName}
+                onChange={(e) => setCreateName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleCreate();
+                  if (e.key === 'Escape') setShowCreateModal(false);
+                }}
+                className="w-full mt-1 px-3 py-2 bg-muted border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+                placeholder={createType === 'file' ? 'filename.js' : 'folder-name'}
+                autoFocus
+              />
+            </div>
+            
+            {createPath && (
+              <div className="text-sm text-muted-foreground">
+                Creating in: <span className="font-mono">{createPath}</span>
+              </div>
+            )}
+            
+            {createError && (
+              <div className="text-sm text-red-500">
+                {createError}
+              </div>
+            )}
+            
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => {
+                  setShowCreateModal(false);
+                  setCreateName('');
+                  setCreatePath('');
+                  setCreateError('');
+                }}
+                className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreate}
+                className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+              >
+                Create
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
 
