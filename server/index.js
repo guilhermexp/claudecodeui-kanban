@@ -237,6 +237,10 @@ app.use('/api/auth', authRoutes);
 app.use('/api', validateApiKey);
 
 
+// Import System Monitor
+import SystemMonitor from './systemMonitor.js';
+const systemMonitor = new SystemMonitor();
+
 // Health check endpoint (public)
 app.get('/api/health', (req, res) => {
   const healthStatus = {
@@ -250,6 +254,39 @@ app.get('/api/health', (req, res) => {
   };
   
   res.json(healthStatus);
+});
+
+// System monitoring endpoint (public for local access)
+app.get('/api/system/monitor', async (req, res) => {
+  try {
+    const systemInfo = await systemMonitor.getSystemInfo();
+    res.json(systemInfo);
+  } catch (error) {
+    console.error('System monitor error:', error);
+    res.status(500).json({ error: 'Failed to get system information' });
+  }
+});
+
+// Kill process endpoint (requires careful permission handling)
+app.post('/api/system/kill', async (req, res) => {
+  try {
+    const { pid } = req.body;
+    
+    if (!pid) {
+      return res.status(400).json({ error: 'PID is required' });
+    }
+    
+    const result = await systemMonitor.killProcess(pid);
+    
+    if (result.success) {
+      res.json(result);
+    } else {
+      res.status(500).json(result);
+    }
+  } catch (error) {
+    console.error('Kill process error:', error);
+    res.status(500).json({ error: 'Failed to kill process' });
+  }
 });
 
 // Git API Routes (protected)

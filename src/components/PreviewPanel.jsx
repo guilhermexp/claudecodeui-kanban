@@ -77,16 +77,22 @@ function PreviewPanel({ url, onClose, onRefresh, onOpenExternal, isMobile }) {
           // Try to inject the script into the iframe
           const iframe = iframeRef.current;
           
-          // Wait a bit for the iframe to be ready
-          setTimeout(() => {
+          // Function to perform the actual injection
+          const performInjection = () => {
             try {
               // Try to access iframe content window
               const iframeWindow = iframe.contentWindow;
-              if (iframeWindow) {
+              const iframeDocument = iframe.contentDocument || (iframeWindow && iframeWindow.document);
+              
+              if (iframeWindow && iframeDocument) {
+                // Check if already injected
+                if (iframeWindow.__consoleInjected) return;
+                iframeWindow.__consoleInjected = true;
+
                 // Create and inject script
-                const script = iframeWindow.document.createElement('script');
+                const script = iframeDocument.createElement('script');
                 script.src = '/preview-console-injector.js';
-                script.async = true;
+                script.async = false;
                 
                 // Also inject inline as fallback
                 const inlineScript = iframeWindow.document.createElement('script');
@@ -167,38 +173,96 @@ function PreviewPanel({ url, onClose, onRefresh, onOpenExternal, isMobile }) {
                       } catch (e) {}
                     });
                     
+                    // Test that the injection worked
+                    console.log('[Console Capture] Initialized at ' + new Date().toISOString());
+                    
+                    // Notify parent that we're ready
                     window.parent.postMessage({
                       type: 'console-capture-ready',
                       timestamp: new Date().toISOString()
                     }, '*');
+                    
+                    // Also capture React errors
+                    if (window.React && window.React.createElement) {
+                      const originalCreateElement = window.React.createElement;
+                      window.React.createElement = function(...args) {
+                        try {
+                          return originalCreateElement.apply(this, args);
+                        } catch (error) {
+                          console.error('React Error:', error);
+                          throw error;
+                        }
+                      };
+                    }
                   })();
                 `;
                 
-                const head = iframeWindow.document.head || iframeWindow.document.getElementsByTagName('head')[0];
+                // Try to inject in both head and body
+                const head = iframeDocument.head || iframeDocument.getElementsByTagName('head')[0];
+                const body = iframeDocument.body || iframeDocument.getElementsByTagName('body')[0];
+                
+                // Inject inline script first (more reliable)
+                if (head) {
+                  head.appendChild(inlineScript);
+                } else if (body) {
+                  body.appendChild(inlineScript);
+                }
+                
+                // Then inject external script
                 if (head) {
                   head.appendChild(script);
-                  head.appendChild(inlineScript);
                 }
+                
+                console.log('Console capture injected successfully');
               }
             } catch (e) {
               // Cross-origin restriction, can't inject script
-              console.log('Cannot inject console capture script due to cross-origin restrictions');
+              console.log('Cannot inject console capture script:', e.message);
             }
-          }, 500);
+          };
+
+          // Try to inject immediately
+          performInjection();
+          
+          // Also try after a short delay
+          setTimeout(performInjection, 100);
+          
+          // And after a longer delay for slow-loading content
+          setTimeout(performInjection, 500);
+          
         } catch (e) {
-          console.warn('Failed to inject console capture:', e);
+          console.warn('Failed to setup console capture:', e);
         }
       }
     };
 
     if (iframeRef.current && !isPaused) {
       const iframe = iframeRef.current;
+      
+      // Try to inject immediately if iframe already has content
+      injectConsoleCapture();
+      
+      // Also inject on load event
       iframe.addEventListener('load', injectConsoleCapture);
+      
+      // And monitor for dynamic content changes
+      const observer = new MutationObserver(() => {
+        injectConsoleCapture();
+      });
+      
+      if (iframe.contentDocument) {
+        observer.observe(iframe.contentDocument, {
+          childList: true,
+          subtree: true
+        });
+      }
+      
       return () => {
         iframe.removeEventListener('load', injectConsoleCapture);
+        observer.disconnect();
       };
     }
-  }, [isPaused]);
+  }, [isPaused, currentUrl]);
 
   const handleRefresh = () => {
     if (iframeRef.current && !isPaused) {

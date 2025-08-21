@@ -19,6 +19,7 @@ import GitPanel from './GitPanel';
 import VibeTaskPanel from './VibeTaskPanel';
 import Dashboard from './Dashboard';
 import ErrorBoundary from './ErrorBoundary';
+import SystemMonitor from './SystemMonitor';
 
 function MainContent({ 
   selectedProject, 
@@ -191,20 +192,27 @@ function MainContent({
                 </svg>
               </button>
             )}
-            <div className="min-w-0 max-w-[200px] md:max-w-[250px]">
-              {
-                <div className="flex items-center gap-2">
-                  <h2 className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white">
-                    Shell {activeSidePanel && `+ ${activeSidePanel === 'files' ? 'Files' : 
-                                                    activeSidePanel === 'git' ? 'Source Control' :
-                                                    activeSidePanel === 'tasks' ? 'Tasks' :
-                                                    activeSidePanel === 'dashboard' ? 'Dashboard' : ''}`}
-                  </h2>
-                  <span className="inline-block px-2 py-0.5 text-xs rounded-full bg-gradient-to-r from-blue-500/20 to-purple-500/20 dark:from-blue-400/30 dark:to-purple-400/30 text-blue-700 dark:text-blue-300 font-medium">
-                    {selectedProject.displayName}
-                  </span>
-                </div>
-              }
+            <div className="flex items-center gap-3 flex-1">
+              <div className="min-w-0 max-w-[200px] md:max-w-[250px]">
+                {
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white">
+                      Shell {activeSidePanel && `+ ${activeSidePanel === 'files' ? 'Files' : 
+                                                      activeSidePanel === 'git' ? 'Source Control' :
+                                                      activeSidePanel === 'tasks' ? 'Tasks' :
+                                                      activeSidePanel === 'dashboard' ? 'Dashboard' : ''}`}
+                    </h2>
+                    <span className="inline-block px-2 py-0.5 text-xs rounded-full bg-gradient-to-r from-blue-500/20 to-purple-500/20 dark:from-blue-400/30 dark:to-purple-400/30 text-blue-700 dark:text-blue-300 font-medium">
+                      {selectedProject.displayName}
+                    </span>
+                  </div>
+                }
+              </div>
+              
+              {/* System Monitor - Shows active terminals and ports */}
+              <div className="relative">
+                <SystemMonitor />
+              </div>
             </div>
           </div>
           
