@@ -349,9 +349,11 @@ function MainContent({
       {/* Main content wrapper with side panels */}
       <div className="flex-1 min-h-0 flex relative">
         {/* Shell Area - Always visible, shrinks when panels open */}
-        <div className={`flex-1 min-h-0 flex flex-col transition-all duration-300 px-2 md:px-4 ${
-          activeSidePanel ? 'mr-96 sm:mr-[440px] md:mr-[520px] lg:mr-[600px]' : ''
-        }`}>
+        <div 
+          className={`flex-1 min-h-0 flex flex-col transition-all duration-300 px-2 md:px-4 ${
+            activeSidePanel ? 'mr-96 sm:mr-[440px] md:mr-[520px] lg:mr-[600px]' : ''
+          }`}
+        >
           <div className="h-full overflow-hidden mt-2">
             <Shell 
               selectedProject={selectedProject} 
