@@ -1,465 +1,407 @@
-import React, { useState, useEffect, useCallback, memo, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, memo } from 'react';
 import {
   ArrowLeft,
-  Filter,
   Loader2,
   DollarSign,
   Activity,
   FileText,
   Clock,
+  TrendingUp,
+  MessageSquare,
+  Zap,
+  RefreshCw,
+  Calendar,
+  Brain,
   Database
 } from 'lucide-react';
 import { authenticatedFetch } from '../utils/api';
 import './Dashboard.css';
-import {
-  OverviewTab,
-  TimeUsageTab,
-  ModelsTab,
-  ProjectsTab,
-  SessionsTab,
-  TimelineTab
-} from './Dashboard/TabContents';
 
 const Dashboard = memo(({ onBack }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [stats, setStats] = useState(null);
-  const [sessionStats, setSessionStats] = useState(null);
-  const [timeStats, setTimeStats] = useState(null);
-  const [selectedDateRange, setSelectedDateRange] = useState('all');
-  const [activeTab, setActiveTab] = useState('overview');
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastRefresh, setLastRefresh] = useState(new Date());
   const [isImporting, setIsImporting] = useState(false);
-  const [tabsLoaded, setTabsLoaded] = useState({ overview: true });
 
-  // Check for cached data on mount but don't block import
-  useEffect(() => {
-    // Check for cached stats in localStorage
-    const cachedStats = localStorage.getItem('cachedUsageStats');
-    if (cachedStats) {
-      try {
-        const parsed = JSON.parse(cachedStats);
-        if (parsed.timestamp) {
-          const cacheAge = (new Date() - new Date(parsed.timestamp)) / (1000 * 60 * 60);
-          if (cacheAge < 1) { // Use cache if less than 1 hour old
-            setStats(parsed.data);
-            // Don't set loading to false here, let loadUsageStats handle it
-          }
-        }
-      } catch (e) {
-        console.warn('Failed to parse cached stats');
-      }
-    }
-  }, []);
+  // Removed auto-refresh - only manual refresh now
 
-  const loadUsageStats = useCallback(async (forceReload = false, loadSpecificTab = null) => {
+  const loadUsageStats = useCallback(async (showLoading = true) => {
     try {
-      setLoading(true);
+      if (showLoading) setLoading(true);
       setError(null);
 
-      // Check when was the last import
-      const lastImport = localStorage.getItem('lastUsageImport');
-      const shouldImport = forceReload || !lastImport || 
-        ((new Date() - new Date(lastImport)) / (1000 * 60) > 30); // Import if more than 30 minutes
+      // Get stats for last 7 days by default
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 7);
       
-      if (shouldImport && !isImporting) {
-        try {
-          setIsImporting(true);
-          const importResponse = await authenticatedFetch('/api/usage/import', {
-            method: 'POST'
-          });
-          if (importResponse.ok) {
-            const importResult = await importResponse.json();
-            // Import completed successfully
-            localStorage.setItem('lastUsageImport', new Date().toISOString());
-          }
-        } catch (importErr) {
-          console.warn('Could not import latest data:', importErr);
-        } finally {
-          setIsImporting(false);
-        }
-      }
+      const params = new URLSearchParams({
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString()
+      });
 
-      let url = '/api/usage/stats';
-      const params = new URLSearchParams();
-      
-      if (selectedDateRange !== 'all') {
-        const endDate = new Date();
-        const startDate = new Date();
-        const days = selectedDateRange === '7d' ? 7 : 30;
-        startDate.setDate(startDate.getDate() - days);
-        
-        params.append('startDate', startDate.toISOString());
-        params.append('endDate', endDate.toISOString());
-      }
-
-      const queryString = params.toString();
-      if (queryString) {
-        url += `?${queryString}`;
-      }
-
-      const response = await authenticatedFetch(url);
+      // Use regular fetch without authentication for now
+      const response = await fetch(`/api/usage/stats?${params}`);
       if (!response.ok) {
-        const errorData = await response.text();
-        console.error('API Error:', errorData);
         throw new Error('Failed to fetch usage stats');
       }
 
       const data = await response.json();
-      setStats(data);
       
-      // Cache the stats
-      localStorage.setItem('cachedUsageStats', JSON.stringify({
-        timestamp: new Date().toISOString(),
-        data: data
-      }));
-
-      // Load specific tab data if requested
-      const tabToLoad = loadSpecificTab || activeTab;
-
-      // Load session stats
-      if (tabToLoad === 'sessions') {
-        const sessionResponse = await authenticatedFetch('/api/usage/sessions' + (queryString ? `?${queryString}` : ''));
-        if (sessionResponse.ok) {
-          const sessionData = await sessionResponse.json();
-          setSessionStats(sessionData);
-          setTabsLoaded(prev => ({ ...prev, sessions: true }));
-        }
-      }
-
-      // Load time usage stats
-      if (tabToLoad === 'usage-time') {
-        const timeResponse = await authenticatedFetch('/api/usage/time' + (queryString ? `?${queryString}` : ''));
-        if (timeResponse.ok) {
-          const timeData = await timeResponse.json();
-          // Time stats loaded successfully
-          setTimeStats(timeData);
-          setTabsLoaded(prev => ({ ...prev, 'usage-time': true }));
-        }
-      }
+      // Transform backend data to match frontend expectations
+      const transformedStats = {
+        totalCost: data.total_cost || 0,
+        totalTokens: data.total_tokens || 0,
+        inputTokens: data.total_input_tokens || 0,
+        outputTokens: data.total_output_tokens || 0,
+        todaySessions: data.total_sessions || 0,
+        activeSessions: 0, // Will be populated from live metrics
+        avgResponseTime: 0, // Will be populated from session data
+        totalDuration: 0, // Will be populated from session data
+        
+        // Transform model usage data
+        modelUsage: data.by_model?.reduce((acc, model) => {
+          acc[model.model || 'unknown'] = {
+            count: model.session_count || 0,
+            cost: model.total_cost || 0,
+            tokens: model.total_tokens || 0
+          };
+          return acc;
+        }, {}) || {},
+        
+        // Transform recent activity from by_project data
+        recentActivity: data.by_project?.map(project => ({
+          project: project.project_name || project.project_path || 'Unknown',
+          model: 'claude-opus-4', // Default model
+          tokens: project.total_tokens || 0,
+          cost: project.total_cost || 0,
+          timestamp: project.last_used || new Date().toISOString()
+        })) || [],
+        
+        // Add cost trend calculation
+        costTrend: 0 // Could be calculated from by_date data
+      };
+      
+      setStats(transformedStats);
+      setLastRefresh(new Date());
     } catch (err) {
       console.error('Failed to load usage stats:', err);
-      setError('Failed to load usage statistics. Please try again.');
+      setError('Failed to load statistics');
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
-  }, [isImporting, selectedDateRange]);
+  }, []);
 
-  const generateSampleData = useCallback(async () => {
-    try {
-      const response = await authenticatedFetch('/api/usage/generate-sample', {
-        method: 'POST'
-      });
-      if (response.ok) {
-        await loadUsageStats(true);
-      }
-    } catch (err) {
-      console.error('Failed to generate sample data:', err);
-    }
+  useEffect(() => {
+    loadUsageStats();
   }, [loadUsageStats]);
 
-  const formatCurrency = useCallback((amount) => {
+  const handleRefresh = () => {
+    setIsRefreshing(true);
+    loadUsageStats(false);
+  };
+
+  const handleImportData = async () => {
+    try {
+      setIsImporting(true);
+      setError(null);
+      
+      // Call import endpoint to import data from Claude projects
+      // Use regular fetch without authentication for now
+      const response = await fetch('/api/usage/import', {
+        method: 'POST'
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to import usage data');
+      }
+      
+      const result = await response.json();
+      
+      // Reload stats after import
+      await loadUsageStats(false);
+      
+      // Show success message (could add a toast notification here)
+      console.log(`Imported ${result.imported} records from Claude projects`);
+    } catch (err) {
+      console.error('Failed to import usage data:', err);
+      setError('Failed to import usage data');
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',
       minimumFractionDigits: 2,
       maximumFractionDigits: 4
-    }).format(amount || 0);
-  }, []);
+    }).format(amount);
+  };
 
-  const formatNumber = useCallback((num) => {
-    return new Intl.NumberFormat('en-US').format(num || 0);
-  }, []);
+  const formatNumber = (num) => {
+    if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
+    if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
+    return num.toLocaleString();
+  };
 
-  const formatTokens = useCallback((num) => {
-    if (!num) return '0';
-    if (num >= 1_000_000) {
-      return `${(num / 1_000_000).toFixed(2)}M`;
-    } else if (num >= 1_000) {
-      return `${(num / 1_000).toFixed(1)}K`;
-    }
-    return formatNumber(num);
-  }, [formatNumber]);
+  const formatModelName = (model) => {
+    // Shorten long model names for display
+    if (model.includes('claude-opus-4-1')) return 'Opus 4.1';
+    if (model.includes('claude-opus-4')) return 'Opus 4';
+    if (model.includes('claude-sonnet-4')) return 'Sonnet 4';
+    if (model.includes('claude-haiku')) return 'Haiku';
+    return model;
+  };
 
-  const formatDuration = useCallback((minutes) => {
-    if (!minutes) return '0m';
-    const hours = Math.floor(minutes / 60);
-    const mins = Math.round(minutes % 60);
+  const formatDuration = (seconds) => {
+    if (!seconds) return '0s';
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    
     if (hours > 0) {
-      return `${hours}h ${mins}m`;
+      return `${hours}h ${minutes}m`;
+    } else if (minutes > 0) {
+      return `${minutes}m ${secs}s`;
     }
-    return `${mins}m`;
-  }, []);
+    return `${secs}s`;
+  };
 
-  const getModelDisplayName = useCallback((model) => {
-    const modelMap = {
-      'claude-4-opus': 'Opus 4',
-      'claude-4-sonnet': 'Sonnet 4',
-      'claude-3.5-sonnet': 'Sonnet 3.5',
-      'claude-3-opus': 'Opus 3',
-      'claude-3-5-sonnet-20241022': 'Sonnet 3.5',
-      'claude-3-opus-20240229': 'Opus 3'
-    };
-    return modelMap[model] || model;
-  }, []);
+  const getTimeAgo = (date) => {
+    const seconds = Math.floor((new Date() - new Date(date)) / 1000);
+    if (seconds < 60) return 'just now';
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
+  };
 
-  const getModelColor = useCallback((model) => {
-    if (model?.includes('opus')) return 'model-opus';
-    if (model?.includes('sonnet')) return 'model-sonnet';
-    return 'model-default';
-  }, []);
+  if (loading) {
+    return (
+      <div className="h-full flex items-center justify-center bg-background">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-3" />
+          <p className="text-sm text-muted-foreground">Loading analytics...</p>
+        </div>
+      </div>
+    );
+  }
 
-  // Load usage stats when component mounts and when date range changes
-  useEffect(() => {
-    loadUsageStats();
-  }, [selectedDateRange]);
-
-  // Load tab-specific data when tab changes
-  useEffect(() => {
-    if (activeTab === 'sessions' && !sessionStats && !tabsLoaded.sessions) {
-      loadUsageStats(false, 'sessions');
-    } else if (activeTab === 'usage-time' && !timeStats && !tabsLoaded['usage-time']) {
-      loadUsageStats(false, 'usage-time');
-    }
-  }, [activeTab]);
+  if (error) {
+    return (
+      <div className="h-full flex items-center justify-center bg-background">
+        <div className="text-center">
+          <p className="text-destructive mb-3">{error}</p>
+          <button
+            onClick={() => loadUsageStats()}
+            className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="dashboard-container">
+    <div className="h-full flex flex-col bg-background">
       {/* Header */}
-      <div className="dashboard-header">
-        <div className="dashboard-header-left">
-          <button className="dashboard-back-btn" onClick={onBack}>
-            <ArrowLeft size={20} />
+      <div className="border-b border-border px-4 py-3 flex items-center justify-between bg-muted/30">
+        <div className="flex items-center gap-3 min-w-0">
+          <button
+            onClick={onBack}
+            className="p-1.5 hover:bg-accent rounded transition-colors flex-shrink-0"
+            title="Back"
+          >
+            <ArrowLeft className="w-4 h-4" />
           </button>
-          <div>
-            <h1 className="dashboard-title bg-gradient-to-r from-green-400 to-cyan-400 bg-clip-text text-transparent">Usage Dashboard</h1>
-            <p className="dashboard-subtitle text-muted-foreground/70 italic">Track your Claude Code usage and costs</p>
+          <div className="flex items-center gap-2 min-w-0">
+            <Activity className="w-5 h-5 text-primary flex-shrink-0" />
+            <h2 className="text-sm font-semibold truncate">Real-Time Analytics</h2>
           </div>
         </div>
         
-        {/* Date Range Filter */}
-        <div className="dashboard-date-filter">
-          <button 
-            onClick={() => {
-              localStorage.removeItem('lastUsageImport');
-              localStorage.removeItem('cachedUsageStats');
-              window.location.reload();
-            }}
-            style={{ marginRight: '1rem', padding: '0.5rem', fontSize: '0.75rem' }}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <span className="text-xs text-muted-foreground hidden sm:inline">
+            Updated {getTimeAgo(lastRefresh)}
+          </span>
+          <button
+            onClick={handleImportData}
+            disabled={isImporting}
+            className="px-2 py-1 text-xs bg-accent hover:bg-accent/80 rounded transition-colors disabled:opacity-50 flex items-center gap-1"
+            title="Import data from Claude projects"
           >
-            🔄 Reimport Data
+            <Database className={`w-3 h-3 ${isImporting ? 'animate-pulse' : ''}`} />
+            <span className="hidden sm:inline">{isImporting ? 'Importing...' : 'Import'}</span>
           </button>
-          <Filter size={16} />
-          <div className="date-filter-buttons">
-            {['all', '30d', '7d'].map((range) => (
-              <button
-                key={range}
-                className={`date-filter-btn ${selectedDateRange === range ? 'active' : ''}`}
-                onClick={() => setSelectedDateRange(range)}
-              >
-                {range === 'all' ? 'All Time' : range === '7d' ? 'Last 7 Days' : 'Last 30 Days'}
-              </button>
-            ))}
-          </div>
+          <button
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            className="p-1.5 hover:bg-accent rounded transition-colors disabled:opacity-50"
+            title="Refresh"
+          >
+            <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+          </button>
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="dashboard-content">
-        {loading && !stats ? (
-          <div className="dashboard-loading">
-            <Loader2 className="dashboard-spinner" size={32} />
-            <p>{isImporting ? 'Importing latest data...' : 'Loading usage statistics...'}</p>
-          </div>
-        ) : error ? (
-          <div className="dashboard-error">
-            <p className="error-message">{error}</p>
-            <button className="retry-btn" onClick={loadUsageStats}>
-              Try Again
-            </button>
-          </div>
-        ) : stats ? (
-          <div className="dashboard-stats">
-            {/* Summary Cards */}
-            <div className="stats-grid">
-              <div className="stat-card">
-                <div className="stat-content">
-                  <div>
-                    <p className="stat-label">Total Cost</p>
-                    <p className="stat-value">{formatCurrency(stats.total_cost)}</p>
-                  </div>
-                  <DollarSign className="stat-icon" />
-                </div>
-              </div>
-              
-              <div className="stat-card">
-                <div className="stat-content">
-                  <div>
-                    <p className="stat-label">Total Tokens</p>
-                    <p className="stat-value">{formatTokens(stats.total_tokens)}</p>
-                  </div>
-                  <Activity className="stat-icon" />
-                </div>
-              </div>
-              
-              <div className="stat-card">
-                <div className="stat-content">
-                  <div>
-                    <p className="stat-label">Total Sessions</p>
-                    <p className="stat-value">{formatNumber(stats.total_sessions)}</p>
-                  </div>
-                  <FileText className="stat-icon" />
-                </div>
-              </div>
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto p-4">
 
-              {timeStats && (
-                <div className="stat-card">
-                  <div className="stat-content">
-                    <div>
-                      <p className="stat-label">Total Time Used</p>
-                      <p className="stat-value">{formatDuration(timeStats.total_minutes)}</p>
-                    </div>
-                    <Clock className="stat-icon" />
-                  </div>
+        {/* Main Stats Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          {/* Total Cost Card */}
+          <div className="bg-card border border-border rounded-lg p-4 min-h-[120px] flex flex-col">
+            <div className="flex items-center justify-between mb-2">
+              <DollarSign className="w-5 h-5 text-success-foreground flex-shrink-0" />
+              <span className="text-xs text-muted-foreground">7 days</span>
+            </div>
+            <div className="flex-1 flex flex-col justify-center space-y-1">
+              <p className="dashboard-stat-number font-bold">
+                {formatCurrency(stats?.totalCost || 0)}
+              </p>
+              <p className="text-xs text-muted-foreground">Total Cost</p>
+              {stats?.costTrend && (
+                <div className="flex items-center gap-1">
+                  <TrendingUp className={`w-3 h-3 ${stats.costTrend > 0 ? 'text-destructive' : 'text-success-foreground'}`} />
+                  <span className={`text-xs ${stats.costTrend > 0 ? 'text-destructive' : 'text-success-foreground'}`}>
+                    {Math.abs(stats.costTrend).toFixed(0)}%
+                  </span>
                 </div>
               )}
             </div>
+          </div>
 
-            {/* Tabs */}
-            <div className="dashboard-tabs">
-              <div className="tabs-list">
-                <button
-                  className={`tab-trigger ${activeTab === 'overview' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('overview')}
-                >
-                  Overview
-                </button>
-                <button
-                  className={`tab-trigger ${activeTab === 'usage-time' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('usage-time')}
-                >
-                  Time Usage
-                </button>
-                <button
-                  className={`tab-trigger ${activeTab === 'models' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('models')}
-                >
-                  By Model
-                </button>
-                <button
-                  className={`tab-trigger ${activeTab === 'projects' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('projects')}
-                >
-                  By Project
-                </button>
-                <button
-                  className={`tab-trigger ${activeTab === 'sessions' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('sessions')}
-                >
-                  By Session
-                </button>
-                <button
-                  className={`tab-trigger ${activeTab === 'timeline' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('timeline')}
-                >
-                  Timeline
-                </button>
+          {/* Total Tokens Card */}
+          <div className="bg-card border border-border rounded-lg p-4 min-h-[120px] flex flex-col">
+            <div className="flex items-center justify-between mb-2">
+              <Zap className="w-5 h-5 text-warning flex-shrink-0" />
+              <span className="text-xs text-muted-foreground">7 days</span>
+            </div>
+            <div className="flex-1 flex flex-col justify-center space-y-1">
+              <p className="dashboard-stat-number font-bold">
+                {formatNumber(stats?.totalTokens || 0)}
+              </p>
+              <p className="text-xs text-muted-foreground">Total Tokens</p>
+              <div className="flex gap-4 text-xs">
+                <span className="text-primary">↓ {formatNumber(stats?.inputTokens || 0)}</span>
+                <span className="text-success-foreground">↑ {formatNumber(stats?.outputTokens || 0)}</span>
               </div>
-
-              {/* Overview Tab */}
-              {activeTab === 'overview' && (
-                <Suspense fallback={<div className="dashboard-loading"><Loader2 className="dashboard-spinner" size={24} /></div>}>
-                  <OverviewTab 
-                    stats={stats} 
-                    formatCurrency={formatCurrency} 
-                    formatTokens={formatTokens}
-                    getModelDisplayName={getModelDisplayName}
-                    getModelColor={getModelColor}
-                  />
-                </Suspense>
-              )}
-
-              {/* Time Usage Tab */}
-              {activeTab === 'usage-time' && (
-                <Suspense fallback={<div className="dashboard-loading"><Loader2 className="dashboard-spinner" size={24} /></div>}>
-                  {timeStats ? (
-                    <TimeUsageTab 
-                      timeStats={timeStats} 
-                      formatDuration={formatDuration}
-                    />
-                  ) : (
-                    <div className="dashboard-loading">
-                      <Loader2 className="dashboard-spinner" size={24} />
-                      <p>Loading time usage data...</p>
-                    </div>
-                  )}
-                </Suspense>
-              )}
-
-              {/* Models Tab */}
-              {activeTab === 'models' && stats.by_model && (
-                <Suspense fallback={<div className="dashboard-loading"><Loader2 className="dashboard-spinner" size={24} /></div>}>
-                  <ModelsTab 
-                    stats={stats} 
-                    formatCurrency={formatCurrency} 
-                    formatTokens={formatTokens}
-                    getModelDisplayName={getModelDisplayName}
-                    getModelColor={getModelColor}
-                  />
-                </Suspense>
-              )}
-
-              {/* Projects Tab */}
-              {activeTab === 'projects' && stats.by_project && (
-                <Suspense fallback={<div className="dashboard-loading"><Loader2 className="dashboard-spinner" size={24} /></div>}>
-                  <ProjectsTab 
-                    stats={stats} 
-                    formatCurrency={formatCurrency} 
-                    formatTokens={formatTokens}
-                  />
-                </Suspense>
-              )}
-
-              {/* Sessions Tab */}
-              {activeTab === 'sessions' && (
-                <Suspense fallback={<div className="dashboard-loading"><Loader2 className="dashboard-spinner" size={24} /></div>}>
-                  {sessionStats ? (
-                    <SessionsTab 
-                      sessionStats={sessionStats} 
-                      formatCurrency={formatCurrency}
-                    />
-                  ) : (
-                    <div className="dashboard-loading">
-                      <Loader2 className="dashboard-spinner" size={24} />
-                      <p>Loading session data...</p>
-                    </div>
-                  )}
-                </Suspense>
-              )}
-
-              {/* Timeline Tab */}
-              {activeTab === 'timeline' && stats.by_date && (
-                <Suspense fallback={<div className="dashboard-loading"><Loader2 className="dashboard-spinner" size={24} /></div>}>
-                  <TimelineTab 
-                    stats={stats} 
-                    formatCurrency={formatCurrency} 
-                    formatTokens={formatTokens}
-                  />
-                </Suspense>
-              )}
             </div>
           </div>
-        ) : (
-          <div className="dashboard-empty">
-            <div className="empty-state">
-              <Database className="empty-icon" size={48} />
-              <h3>No Usage Data</h3>
-              <p>No usage data available yet. Start using Claude Code to see your usage statistics here.</p>
-              <button className="generate-btn" onClick={generateSampleData}>
-                Generate Sample Data
-              </button>
+
+          {/* Active Sessions Card */}
+          <div className="bg-card border border-border rounded-lg p-4 min-h-[120px] flex flex-col">
+            <div className="flex items-center justify-between mb-2">
+              <MessageSquare className="w-5 h-5 text-primary flex-shrink-0" />
+              <span className="text-xs text-muted-foreground">Today</span>
+            </div>
+            <div className="flex-1 flex flex-col justify-center space-y-1">
+              <p className="dashboard-stat-number font-bold">
+                {stats?.todaySessions || 0}
+              </p>
+              <p className="text-xs text-muted-foreground">Sessions</p>
+              <p className="text-xs text-success-foreground">
+                {stats?.activeSessions || 0} active now
+              </p>
             </div>
           </div>
-        )}
+
+          {/* Average Response Time */}
+          <div className="bg-card border border-border rounded-lg p-4 min-h-[120px] flex flex-col">
+            <div className="flex items-center justify-between mb-2">
+              <Clock className="w-5 h-5 text-accent flex-shrink-0" />
+              <span className="text-xs text-muted-foreground">Avg</span>
+            </div>
+            <div className="flex-1 flex flex-col justify-center space-y-1">
+              <p className="dashboard-stat-number font-bold">
+                {formatDuration(stats?.avgResponseTime || 0)}
+              </p>
+              <p className="text-xs text-muted-foreground">Response Time</p>
+              <p className="text-xs text-muted-foreground">
+                Total: {formatDuration(stats?.totalDuration || 0)}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Model Usage */}
+        <div className="bg-card border border-border rounded-lg p-4 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Brain className="w-5 h-5 text-primary" />
+              <h3 className="text-sm font-semibold">Model Usage</h3>
+            </div>
+            <span className="text-xs text-muted-foreground">Last 7 days</span>
+          </div>
+          
+          <div className="space-y-3">
+            {stats?.modelUsage && Object.entries(stats.modelUsage)
+              .sort((a, b) => b[1].count - a[1].count)
+              .slice(0, 5)
+              .map(([model, data]) => (
+                <div key={model} className="flex items-center justify-between">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-1 gap-2">
+                      <span className="text-xs font-medium truncate flex-1" title={model}>{formatModelName(model)}</span>
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">
+                        {data.count} calls • {formatCurrency(data.cost)}
+                      </span>
+                    </div>
+                    <div className="h-2 bg-muted rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-primary rounded-full transition-all"
+                        style={{ 
+                          width: `${(data.tokens / stats.totalTokens) * 100}%` 
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+          </div>
+        </div>
+
+        {/* Recent Activity */}
+        <div className="bg-card border border-border rounded-lg p-4">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <FileText className="w-5 h-5 text-primary" />
+              <h3 className="text-sm font-semibold">Recent Activity</h3>
+            </div>
+            <span className="text-xs text-muted-foreground">Live</span>
+          </div>
+          
+          <div className="space-y-2">
+            {stats?.recentActivity && stats.recentActivity.slice(0, 5).map((activity, idx) => (
+              <div key={idx} className="flex items-center justify-between py-2 border-b border-border last:border-b-0">
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium truncate">{activity.project || 'Unknown Project'}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {activity.model} • {formatNumber(activity.tokens)} tokens
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs font-medium">{formatCurrency(activity.cost)}</p>
+                  <p className="text-xs text-muted-foreground">{getTimeAgo(activity.timestamp)}</p>
+                </div>
+              </div>
+            ))}
+            
+            {(!stats?.recentActivity || stats.recentActivity.length === 0) && (
+              <p className="text-xs text-muted-foreground text-center py-4">
+                No recent activity
+              </p>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

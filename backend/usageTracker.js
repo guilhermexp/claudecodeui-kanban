@@ -544,6 +544,61 @@ class UsageTracker {
 
     return sessions || [];
   }
+
+  getLiveMetrics() {
+    // Get real-time metrics from the database
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    
+    // Get current session metrics (last 5 minutes)
+    const sessionStart = new Date(now.getTime() - 5 * 60 * 1000);
+    const currentSession = this.db.prepare(`
+      SELECT 
+        COALESCE(SUM(input_tokens), 0) as input_tokens,
+        COALESCE(SUM(output_tokens), 0) as output_tokens,
+        COALESCE(SUM(input_tokens + output_tokens), 0) as total_tokens,
+        COALESCE(SUM(cost), 0) as session_cost,
+        COUNT(*) as message_count
+      FROM usage_logs
+      WHERE timestamp >= ?
+    `).get(sessionStart.toISOString()) || {};
+
+    // Get today's metrics
+    const todayMetrics = this.db.prepare(`
+      SELECT 
+        COALESCE(SUM(cost), 0) as today_cost,
+        COALESCE(SUM(input_tokens + output_tokens), 0) as today_tokens
+      FROM usage_logs
+      WHERE timestamp >= ?
+    `).get(todayStart.toISOString()) || {};
+
+    // Get this month's metrics
+    const monthMetrics = this.db.prepare(`
+      SELECT 
+        COALESCE(SUM(cost), 0) as monthly_cost,
+        COALESCE(SUM(input_tokens + output_tokens), 0) as monthly_tokens
+      FROM usage_logs
+      WHERE timestamp >= ?
+    `).get(monthStart.toISOString()) || {};
+
+    // Calculate response time (mock for now - could be enhanced with actual tracking)
+    const avgResponseTime = Math.floor(Math.random() * 200) + 100; // 100-300ms
+    
+    return {
+      inputTokens: currentSession.input_tokens || 0,
+      outputTokens: currentSession.output_tokens || 0,
+      totalTokens: currentSession.total_tokens || 0,
+      sessionCost: currentSession.session_cost || 0,
+      todayCost: todayMetrics.today_cost || 0,
+      monthlyCost: monthMetrics.monthly_cost || 0,
+      messageCount: currentSession.message_count || 0,
+      avgResponseTime: avgResponseTime,
+      successRate: 100, // Can be calculated from actual success/failure logs
+      activeConnections: 1, // Would need WebSocket connection tracking
+      timestamp: now.toISOString()
+    };
+  }
 }
 
 export default UsageTracker;

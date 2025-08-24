@@ -55,9 +55,9 @@ function MobileNav({ activeTab, setActiveTab, isInputFocused, isShellConnected, 
                 e.preventDefault();
                 item.onClick();
               }}
-              className={`flex items-center justify-center p-2 rounded-lg min-h-[40px] min-w-[40px] relative touch-manipulation transition-colors ${
+              className={`flex items-center justify-center p-2 rounded-lg min-h-[44px] min-w-[44px] relative touch-manipulation transition-colors ${
                 isActive
-                  ? 'text-blue-500 bg-blue-500/10'
+                  ? 'text-primary bg-primary/10'
                   : 'text-muted-foreground hover:text-foreground hover:bg-accent'
               }`}
               aria-label={item.id}
@@ -65,10 +65,10 @@ function MobileNav({ activeTab, setActiveTab, isInputFocused, isShellConnected, 
               <Icon className="w-5 h-5" />
               {/* Show active session indicator for Shell */}
               {item.id === 'shell' && shellHasActiveSession && activeTab !== 'shell' && (
-                <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full animate-pulse border border-background" />
+                <div className="absolute -top-1 -right-1 w-3 h-3 bg-success rounded-full animate-pulse border border-background" />
               )}
               {isActive && (
-                <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-8 h-0.5 bg-blue-500 rounded-full" />
+                <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-8 h-0.5 bg-primary rounded-full" />
               )}
             </button>
           );

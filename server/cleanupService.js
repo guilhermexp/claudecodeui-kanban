@@ -9,6 +9,7 @@ import { spawn, exec } from 'child_process';
 import { promisify } from 'util';
 import fs from 'fs/promises';
 import path from 'path';
+import Logger from './lib/logger.js';
 
 const execAsync = promisify(exec);
 
@@ -18,6 +19,7 @@ class VibeKanbanCleanupService {
     this.cleanupInterval = null;
     this.orphanProcesses = new Set();
     this.lastCleanup = null;
+    this.logger = new Logger('VibeKanbanCleanup');
     
     // Configurações
     this.config = {
@@ -43,11 +45,19 @@ class VibeKanbanCleanupService {
    */
   start() {
     if (this.isRunning) {
-      console.log('[CLEANUP-SERVICE] Service already running');
+      this.logger.warn('Service already running', {
+        event: 'service_already_running',
+        isRunning: this.isRunning,
+        lastCleanup: this.lastCleanup
+      });
       return;
     }
 
-    console.log('[CLEANUP-SERVICE] Starting Vibe Kanban cleanup service');
+    this.logger.info('Starting Vibe Kanban cleanup service', {
+      event: 'service_start',
+      config: this.config,
+      processPatterns: this.vibeProcessPatterns.length
+    });
     this.isRunning = true;
     
     // Limpeza inicial
@@ -63,9 +73,18 @@ class VibeKanbanCleanupService {
    * Para o serviço de limpeza
    */
   stop() {
-    if (!this.isRunning) return;
+    if (!this.isRunning) {
+      this.logger.debug('Service already stopped', {
+        event: 'service_already_stopped'
+      });
+      return;
+    }
     
-    console.log('[CLEANUP-SERVICE] Stopping cleanup service');
+    this.logger.info('Stopping cleanup service', {
+      event: 'service_stop',
+      lastCleanup: this.lastCleanup,
+      orphanProcessCount: this.orphanProcesses.size
+    });
     this.isRunning = false;
     
     if (this.cleanupInterval) {
@@ -78,8 +97,13 @@ class VibeKanbanCleanupService {
    * Realiza a limpeza de processos órfãos
    */
   async performCleanup() {
+    const startTime = Date.now();
+    
     try {
-      console.log('[CLEANUP-SERVICE] Performing cleanup check...');
+      this.logger.info('Starting cleanup check', {
+        event: 'cleanup_start',
+        timestamp: new Date().toISOString()
+      });
       
       // 1. Verificar se porta Vibe Kanban está em uso
       const isPortInUse = await this.checkPortUsage(this.config.vibeKanbanPort);
@@ -102,9 +126,27 @@ class VibeKanbanCleanupService {
       await this.checkDatabaseHealth();
       
       this.lastCleanup = new Date();
+      const duration = Date.now() - startTime;
+      
+      this.logger.info('Cleanup completed successfully', {
+        event: 'cleanup_complete',
+        duration: `${duration}ms`,
+        statistics: {
+          portInUse: isPortInUse,
+          totalProcesses: vibeProcesses.length,
+          orphanProcesses: orphanProcesses.length,
+          cleanedProcesses: orphanProcesses.length
+        }
+      });
       
     } catch (error) {
-      console.error('[CLEANUP-SERVICE] Cleanup failed:', error);
+      const duration = Date.now() - startTime;
+      this.logger.error('Cleanup failed', {
+        event: 'cleanup_error',
+        duration: `${duration}ms`,
+        error: error.message,
+        stack: error.stack
+      });
     }
   }
 
@@ -154,9 +196,19 @@ class VibeKanbanCleanupService {
         }
       }
       
+      this.logger.debug('Found Vibe Kanban processes', {
+        event: 'processes_found',
+        count: processes.length,
+        processes: processes.map(p => ({ pid: p.pid, command: p.command.substring(0, 50) + '...' }))
+      });
+      
       return processes;
     } catch (error) {
-      console.error('[CLEANUP-SERVICE] Failed to find Vibe Kanban processes:', error);
+      this.logger.error('Failed to find Vibe Kanban processes', {
+        event: 'process_discovery_error',
+        error: error.message,
+        stack: error.stack
+      });
       return [];
     }
   }
@@ -191,7 +243,12 @@ class VibeKanbanCleanupService {
     
     // Se temos muitos processos, considerar limpeza mais agressiva
     if (processes.length > this.config.maxOrphanCount) {
-      console.warn(`[CLEANUP-SERVICE] Too many Vibe processes (${processes.length}), marking older ones as orphans`);
+      this.logger.warn('Too many Vibe processes detected', {
+        event: 'excessive_processes',
+        processCount: processes.length,
+        maxAllowed: this.config.maxOrphanCount,
+        action: 'marking_older_as_orphans'
+      });
       
       // Ordenar por tempo e marcar os mais antigos
       const sorted = processes.sort((a, b) => a.startTime - b.startTime);
@@ -199,6 +256,16 @@ class VibeKanbanCleanupService {
       
       orphans.push(...excess);
     }
+    
+    this.logger.debug('Orphan process identification completed', {
+      event: 'orphan_identification_complete',
+      totalProcesses: processes.length,
+      orphanProcesses: orphans.length,
+      criteria: {
+        processTimeout: this.config.processTimeout,
+        portInUse: isPortInUse
+      }
+    });
     
     return orphans;
   }
@@ -233,13 +300,26 @@ class VibeKanbanCleanupService {
    * Limpa processos órfãos identificados
    */
   async cleanOrphanProcesses(orphans) {
-    if (orphans.length === 0) return;
+    if (orphans.length === 0) {
+      this.logger.debug('No orphan processes to clean', {
+        event: 'no_orphans_found'
+      });
+      return;
+    }
     
-    console.log(`[CLEANUP-SERVICE] Cleaning ${orphans.length} orphan processes`);
+    this.logger.info('Starting orphan process cleanup', {
+      event: 'orphan_cleanup_start',
+      orphanCount: orphans.length,
+      processes: orphans.map(p => ({ pid: p.pid, command: p.command.substring(0, 50) + '...' }))
+    });
     
     for (const orphan of orphans) {
       try {
-        console.log(`[CLEANUP-SERVICE] Terminating orphan process PID:${orphan.pid} - ${orphan.command}`);
+        this.logger.info('Terminating orphan process', {
+          event: 'process_termination_start',
+          pid: orphan.pid,
+          command: orphan.command.substring(0, 100) + '...'
+        });
         
         // Tentar terminação graceful primeiro (SIGTERM)
         await execAsync(`kill ${orphan.pid}`);
@@ -252,14 +332,27 @@ class VibeKanbanCleanupService {
         
         if (stillRunning) {
           // Forçar terminação (SIGKILL)
-          console.log(`[CLEANUP-SERVICE] Force killing process PID:${orphan.pid}`);
+          this.logger.warn('Force killing unresponsive process', {
+            event: 'process_force_kill',
+            pid: orphan.pid,
+            reason: 'graceful_termination_failed'
+          });
           await execAsync(`kill -9 ${orphan.pid}`);
         }
         
-        console.log(`[CLEANUP-SERVICE] Successfully cleaned orphan process PID:${orphan.pid}`);
+        this.logger.info('Successfully cleaned orphan process', {
+          event: 'process_cleaned',
+          pid: orphan.pid,
+          method: stillRunning ? 'force_kill' : 'graceful'
+        });
         
       } catch (error) {
-        console.warn(`[CLEANUP-SERVICE] Failed to clean process PID:${orphan.pid}:`, error.message);
+        this.logger.error('Failed to clean orphan process', {
+          event: 'process_cleanup_error',
+          pid: orphan.pid,
+          error: error.message,
+          command: orphan.command.substring(0, 100) + '...'
+        });
       }
     }
   }
@@ -292,7 +385,11 @@ class VibeKanbanCleanupService {
               
               if (fileAge > 24 * 60 * 60 * 1000) { // 1 dia
                 await fs.rm(filePath, { recursive: true, force: true });
-                console.log(`[CLEANUP-SERVICE] Cleaned temp file: ${filePath}`);
+                this.logger.debug('Cleaned temporary file', {
+                  event: 'temp_file_cleaned',
+                  filePath,
+                  fileAge: `${Math.round(fileAge / 1000 / 60 / 60)}h`
+                });
               }
             }
           }
@@ -317,13 +414,27 @@ class VibeKanbanCleanupService {
       const sizeMB = stats.size / (1024 * 1024);
       
       if (sizeMB > 100) { // 100MB threshold
-        console.warn(`[CLEANUP-SERVICE] Database size is ${sizeMB.toFixed(2)}MB - consider maintenance`);
+        this.logger.warn('Database size exceeds threshold', {
+          event: 'database_size_warning',
+          sizeMB: sizeMB.toFixed(2),
+          threshold: '100MB',
+          recommendation: 'consider_maintenance'
+        });
+      } else {
+        this.logger.debug('Database health check passed', {
+          event: 'database_health_ok',
+          sizeMB: sizeMB.toFixed(2)
+        });
       }
       
       // TODO: Adicionar verificações de integridade quando tiver acesso ao banco
       
     } catch (error) {
-      console.warn('[CLEANUP-SERVICE] Database health check failed:', error.message);
+      this.logger.warn('Database health check failed', {
+        event: 'database_health_check_error',
+        error: error.message,
+        dbPath: path.join(process.cwd(), 'vibe-kanban', 'backend', 'database.sqlite')
+      });
     }
   }
 
@@ -352,9 +463,16 @@ class VibeKanbanCleanupService {
    * Limpeza manual forçada
    */
   async forceCleanup() {
-    console.log('[CLEANUP-SERVICE] Performing forced cleanup...');
+    this.logger.info('Performing forced cleanup', {
+      event: 'force_cleanup_start',
+      isRunning: this.isRunning,
+      lastCleanup: this.lastCleanup
+    });
     await this.performCleanup();
-    console.log('[CLEANUP-SERVICE] Forced cleanup completed');
+    this.logger.info('Forced cleanup completed', {
+      event: 'force_cleanup_complete',
+      timestamp: new Date().toISOString()
+    });
   }
 }
 

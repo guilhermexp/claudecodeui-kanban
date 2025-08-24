@@ -598,8 +598,8 @@ body {
 @layer components {
   /* Mobile touch optimization and safe areas */
   @media (max-width: 768px) {
+    /* Default behavior allows normal scrolling */
     * {
-      touch-action: manipulation;
       /* keep tap highlight off safely */
       -webkit-tap-highlight-color: transparent;
     }
@@ -616,6 +616,7 @@ body {
       opacity: 1 !important;
     }
     
+    /* Only apply touch-action: manipulation to interactive elements */
     button, 
     [role="button"],
     .clickable,
@@ -625,6 +626,14 @@ body {
       user-select: none;
       -webkit-user-select: none;
       touch-action: manipulation;
+    }
+    
+    /* Ensure scrollable containers allow normal scrolling */
+    .overflow-y-scroll,
+    .overflow-x-scroll,
+    .overflow-scroll,
+    [data-radix-scroll-area-viewport] {
+      touch-action: auto;
     }
     
     /* Better mobile touch targets */
@@ -660,14 +669,24 @@ body {
       -webkit-touch-callout: default !important;
     }
     
-    /* Fix mobile scrolling */
-    .overflow-y-auto {
+    /* Fix mobile scrolling - allow natural vertical scrolling */
+    .overflow-y-auto,
+    .scrollable-content,
+    .file-manager-content {
       touch-action: pan-y;
       -webkit-overflow-scrolling: touch;
     }
     
     .chat-message {
-      touch-action: pan-y;
+      touch-action: auto;
+    }
+    
+    /* Ensure mobile modals and panels can scroll normally */
+    .modal-content,
+    .panel-content,
+    .sidebar-content {
+      touch-action: auto;
+      -webkit-overflow-scrolling: touch;
     }
     
     /* Fix hover states on mobile */
@@ -751,6 +770,26 @@ body {
     padding-bottom: max(env(safe-area-inset-bottom), 12px);
   }
   
+  .ios-top-safe {
+    padding-top: max(env(safe-area-inset-top), 0px);
+  }
+  
+  .ios-sides-safe {
+    padding-left: max(env(safe-area-inset-left), 0px);
+    padding-right: max(env(safe-area-inset-right), 0px);
+  }
+  
+  /* Better mobile modal containers */
+  .mobile-modal {
+    height: 100dvh; /* Dynamic viewport height */
+    height: -webkit-fill-available;
+  }
+  
+  .mobile-content {
+    padding-bottom: max(env(safe-area-inset-bottom), 8px);
+    max-height: calc(100dvh - 120px); /* Account for nav bar */
+  }
+  
   
   @media screen and (max-width: 768px) {
     .chat-input-mobile {
@@ -762,9 +801,15 @@ body {
       overflow-x: hidden !important;
     }
     
-    /* Ensure all content stays within viewport */
-    * {
-      max-width: 100vw !important;
+    /* Ensure all content stays within viewport - more selective */
+    .container, .max-w-full, .w-full {
+      max-width: 100vw;
+    }
+    
+    /* Prevent specific elements from overflowing */
+    pre, code, table {
+      max-width: 100%;
+      overflow-x: auto;
     }
     
     /* Fix terminal overflow */

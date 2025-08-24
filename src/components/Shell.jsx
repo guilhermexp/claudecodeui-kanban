@@ -17,6 +17,19 @@ const xtermStyles = `
   .xterm:focus .xterm-screen {
     outline: none !important;
   }
+  /* Control cursor blink rate and remove any transitions */
+  .xterm .xterm-cursor-layer {
+    transition: none !important;
+    animation: none !important;
+  }
+  .xterm-cursor-block {
+    transition: none !important;
+  }
+  /* Remove any animations from terminal content */
+  .xterm * {
+    transition: none !important;
+    animation: none !important;
+  }
   .xterm-screen:focus {
     outline: none !important;
   }
@@ -43,11 +56,19 @@ const xtermStyles = `
     }
     
     .xterm .xterm-viewport {
-      -webkit-overflow-scrolling: touch;
+      -webkit-overflow-scrolling: touch !important;
+      overflow-y: auto !important;
+      touch-action: pan-y !important;
     }
     
     .xterm .xterm-screen {
       min-width: 100% !important;
+      touch-action: pan-y !important;
+    }
+    
+    /* Enable smooth scrolling on mobile */
+    .xterm .xterm-viewport .xterm-scroll-area {
+      touch-action: pan-y !important;
     }
     
     /* Optimized mobile input - remove layout interference */
@@ -57,6 +78,18 @@ const xtermStyles = `
         opacity: 0 !important;
         pointer-events: none !important;
       }
+    }
+  }
+  
+  /* Mobile scroll optimization */
+  @media (max-width: 768px) {
+    .xterm {
+      overscroll-behavior: contain;
+    }
+    
+    .xterm .xterm-viewport {
+      scroll-behavior: smooth;
+      overscroll-behavior-y: contain;
     }
   }
   
@@ -803,6 +836,8 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     // Initialize new terminal with responsive settings and performance optimizations
     terminal.current = new Terminal({
       cursorBlink: true,
+      cursorStyle: 'block', // Use block cursor for better visibility
+      cursorWidth: 1,
       fontSize: isMobile ? 14 : 14,  // Increased mobile font size for better readability
       fontFamily: 'Menlo, Monaco, "Courier New", monospace',
       allowProposedApi: true, // Required for clipboard addon
@@ -811,12 +846,18 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       scrollback: isMobile ? 500 : 2000, // Further reduced for better input performance
       tabStopWidth: 4,
       fastScrollModifier: 'alt', // Optimize scrolling
-      scrollSensitivity: 1,
+      scrollSensitivity: isMobile ? 3 : 1, // Increased scroll sensitivity on mobile
       ...(isMobile && { cols: 80, rows: 20 }), // Reduced rows for mobile to account for navigation bar
       // Enable full color support
       windowsMode: false,
       macOptionIsMeta: true,
       macOptionClickForcesSelection: false,
+      // Mobile-specific optimizations
+      ...(isMobile && {
+        smoothScrollDuration: 0, // Disable smooth scroll animation on mobile for better performance
+        rightClickSelectsWord: false, // Prevent right-click selection issues on mobile
+        altClickMovesCursor: false, // Disable alt-click cursor movement on mobile
+      }),
       // Enhanced theme with full 16-color ANSI support + true colors
       theme: {
         // Basic colors - use selected theme
@@ -904,13 +945,20 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
 
     // Add keyboard shortcuts for copy/paste and command history
     terminal.current.attachCustomKeyEventHandler((event) => {
-      // Allow Tab and Shift+Tab to bubble up for navigation
+      // Allow Tab to work normally in terminal for autocompletion
       if (event.key === 'Tab') {
-        return true; // Let the browser handle tab navigation
+        return false; // Let terminal handle tab for autocompletion
       }
       
-      // Command history navigation with arrow keys
-      if (event.key === 'ArrowUp' && commandHistory.current.length > 0) {
+      // Don't intercept arrow keys without modifiers - let terminal handle them completely
+      if ((event.key === 'ArrowUp' || event.key === 'ArrowDown' || 
+          event.key === 'ArrowLeft' || event.key === 'ArrowRight') &&
+          !event.ctrlKey && !event.altKey && !event.metaKey) {
+        return false; // Let terminal handle arrow keys for autocompletion navigation
+      }
+      
+      // Command history navigation with Ctrl+Arrow keys (alternate method)
+      if (event.ctrlKey && event.key === 'ArrowUp' && commandHistory.current.length > 0) {
         event.preventDefault();
         
         // Save current command if at the end of history
@@ -947,7 +995,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
         return false;
       }
       
-      if (event.key === 'ArrowDown' && commandHistory.current.length > 0) {
+      if (event.ctrlKey && event.key === 'ArrowDown' && commandHistory.current.length > 0) {
         event.preventDefault();
         
         // Move down in history
@@ -1216,6 +1264,31 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
 
     if (terminalRef.current) {
       resizeObserver.observe(terminalRef.current);
+    }
+    
+    // Mobile-specific touch scroll improvements
+    if (isMobile && terminal.current && terminal.current.element) {
+      const viewport = terminal.current.element.querySelector('.xterm-viewport');
+      if (viewport) {
+        // Enable better touch scrolling on mobile
+        viewport.style.touchAction = 'pan-y';
+        viewport.style.overflowY = 'auto';
+        viewport.style.webkitOverflowScrolling = 'touch';
+        viewport.style.scrollBehavior = 'smooth';
+        
+        // Prevent default touch behaviors that interfere with scrolling
+        viewport.addEventListener('touchstart', (e) => {
+          // Allow scrolling but prevent text selection during scroll
+          if (e.touches.length === 1) {
+            e.stopPropagation();
+          }
+        }, { passive: true });
+        
+        viewport.addEventListener('touchmove', (e) => {
+          // Allow scrolling
+          e.stopPropagation();
+        }, { passive: true });
+      }
     }
 
     return () => {
@@ -1726,12 +1799,12 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       
       {/* Drag overlay for images */}
       {(isDragActive || isDraggedImageOver) && (
-        <div className="absolute inset-0 bg-blue-500/20 border-2 border-dashed border-blue-500 rounded-lg flex items-center justify-center z-50 pointer-events-none">
+        <div className="absolute inset-0 bg-primary/20 border-2 border-dashed border-primary rounded-lg flex items-center justify-center z-50 pointer-events-none">
           <div className="bg-white dark:bg-card rounded-lg p-4 shadow-lg pointer-events-none">
-            <svg className="w-8 h-8 text-blue-500 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-8 h-8 text-primary mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
             </svg>
-            <p className="text-sm font-medium text-blue-600 dark:text-blue-400 mb-1">Solte as imagens aqui</p>
+            <p className="text-sm font-medium text-primary dark:text-primary mb-1">Solte as imagens aqui</p>
             <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
               Imagens serão enviadas para o chat do Claude
             </p>
@@ -1755,7 +1828,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
           <div className="text-center max-w-sm w-full">
             <button
               onClick={connectToShell}
-              className="px-4 sm:px-6 py-2 sm:py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center space-x-2 text-sm sm:text-base font-medium w-full"
+              className="px-4 sm:px-6 py-2 sm:py-3 bg-success text-success-foreground rounded-lg hover:bg-success/90 transition-colors flex items-center justify-center space-x-2 text-sm sm:text-base font-medium w-full"
               title="Connect to shell"
             >
               <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1774,7 +1847,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
               Arraste imagens ou pressione ⌘V para adicionar ao chat
             </p>
             {isBypassingPermissions && (
-              <p className="text-yellow-400 text-xs mt-2 px-2 flex items-center justify-center space-x-1 flex-wrap">
+              <p className="text-warning text-xs mt-2 px-2 flex items-center justify-center space-x-1 flex-wrap">
                 <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
                 </svg>
@@ -1789,8 +1862,8 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       {isConnecting && (
         <div className="absolute inset-0 flex items-center justify-center bg-card bg-opacity-90 p-3 sm:p-4">
           <div className="text-center max-w-sm w-full">
-            <div className="flex items-center justify-center space-x-2 sm:space-x-3 text-yellow-400">
-              <div className="w-5 h-5 sm:w-6 sm:h-6 animate-spin rounded-full border-2 border-yellow-400 border-t-transparent"></div>
+            <div className="flex items-center justify-center space-x-2 sm:space-x-3 text-warning">
+              <div className="w-5 h-5 sm:w-6 sm:h-6 animate-spin rounded-full border-2 border-warning border-t-transparent"></div>
               <span className="text-sm sm:text-base font-medium">Connecting...</span>
             </div>
             <p className="text-muted-foreground text-xs sm:text-sm mt-2 sm:mt-3 px-2 break-words">
@@ -1924,9 +1997,9 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
             <div className="flex-shrink-0 border-b border-border px-3 py-3">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center space-x-2 flex-1 min-w-0">
-                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
+                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isConnected ? 'bg-success' : 'bg-destructive'}`} />
                   {selectedSession && (
-                    <span className="text-xs text-blue-300 truncate">
+                    <span className="text-xs text-primary-foreground truncate">
                       ({selectedSession.summary.slice(0, isMobile ? 20 : 30)}...)
                     </span>
                   )}
@@ -1934,7 +2007,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
                     <span className="text-xs text-muted-foreground hidden xs:inline">(New Session)</span>
                   )}
                   {!isInitialized && (
-                    <span className="text-xs text-yellow-400">
+                    <span className="text-xs text-warning">
                       {isMobile ? 'Init...' : '(Initializing...)'}
                     </span>
                   )}
