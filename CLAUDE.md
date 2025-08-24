@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-This file provides complete guidance to Claude Code (claude.ai/code) when working with code in this repository. **IMPORTANT: Read this entire file to understand the project context and avoid common issues.**
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository. **IMPORTANT: Read this entire file to understand the project context and avoid common issues.**
 
 ## 🚀 **Quick Start Guide**
 
@@ -9,7 +9,7 @@ This file provides complete guidance to Claude Code (claude.ai/code) when workin
 npm install          # Install all dependencies (Node.js + Rust)
 npm run dev         # Start development mode with port protection
 ```
-**Ports used:** Frontend(5892), Backend(7347), Vibe Kanban(8357)
+**Ports used:** Frontend(5892), Backend(7347), Vibe Kanban(6734)
 
 ### For Production (Public Access via Ngrok)
 ```bash
@@ -48,7 +48,7 @@ This is a **web-based UI for Claude Code CLI** with three integrated services:
    - Claude Code CLI integration and proxy
    - RESTful API for all frontend operations
 
-3. **Vibe Kanban (Rust/Actix)** - Port 8357 (dev + prod)
+3. **Vibe Kanban (Rust/Actix)** - Port 6734 (dev + prod)
    - Advanced task management system
    - Git workflow integration
    - Shared SQLite database with main backend
@@ -75,7 +75,7 @@ The application now includes **intelligent port protection** that prevents confl
 ### Critical Feature: Orphan Process Management
 Automatic cleanup system for Vibe Kanban backend processes that prevents server overload:
 
-- **Process Monitoring:** Continuously monitors Vibe Kanban processes (port 8357)
+- **Process Monitoring:** Continuously monitors Vibe Kanban processes (port 6734)
 - **Orphan Detection:** Identifies stuck processes from server crashes
 - **Automatic Cleanup:** Terminates orphaned processes to prevent queue buildup
 - **Health Checks:** Validates process responsiveness before cleanup
@@ -132,8 +132,9 @@ npm run dev            # OR
 
 ### Configuration Files
 - `package.json` - Dependencies and npm scripts
-- `vite.config.js` - Frontend build configuration
-- `tailwind.config.js` - Styling configuration
+- `vite.config.js` - Frontend build configuration with Ngrok support and proxy rules
+- `tailwind.config.js` - Styling configuration with custom theme variables
+- `src/index.css` - Global CSS with custom properties for theming and mobile optimization
 
 ## 🔧 **Development Commands**
 
@@ -145,7 +146,7 @@ npm run dev           # Start all services with protection (RECOMMENDED)
 # Individual services (if needed for debugging)
 npm run server        # Backend only (port 7347)
 npm run client        # Frontend only (port 5892)
-npm run vibe-backend  # Vibe Kanban only (port 8357)
+npm run vibe-backend  # Vibe Kanban only (port 6734)
 ```
 
 ### Network Development
@@ -223,15 +224,30 @@ npm run dev  # Restart full stack
 
 ## 🎨 **Frontend Architecture Details**
 
+### CSS Architecture & Theming System
+- **CSS Custom Properties:** Comprehensive theming system in `src/index.css` with semantic color variables
+- **Theme Variables:** Complete support for `--primary`, `--success`, `--destructive`, `--warning`, `--accent` colors
+- **Mobile Classes:** Specialized classes for mobile optimization:
+  - `.mobile-modal` - Full-height mobile modals with dynamic viewport support
+  - `.mobile-content` - Mobile content containers with safe area support  
+  - `.ios-sides-safe` / `.ios-bottom-safe` - iOS safe area handling
+  - `.scrollable-content` - Touch-optimized scrolling containers
+- **Responsive Strategy:** Mobile-first design with desktop side panels that convert to full-screen modals on mobile
+- **Color Consistency:** Use semantic color classes (`text-primary`, `bg-success`) instead of hardcoded colors (`text-blue-500`)
+
 ### State Management
 - **React Context:** AuthContext for authentication, ThemeContext for dark/light mode
 - **Local State:** Component-level state with useState and useEffect
 - **Session Persistence:** Local storage for user preferences and session data
 
-### Responsive Design
+### Responsive Design & Mobile Optimization
 - **Mobile First:** Tailwind CSS with responsive breakpoints
-- **PWA Support:** Service worker and manifest for offline capability
-- **Touch Optimization:** Mobile-specific interactions and gestures
+- **PWA Support:** Service worker and manifest for offline capability  
+- **Touch Optimization:** Mobile-specific interactions with 44px minimum touch targets
+- **iOS Safe Areas:** Complete support with `env(safe-area-inset-*)` for notched devices
+- **Mobile Navigation:** Bottom nav with `MobileNav.jsx` component for mobile UI
+- **CSS Custom Properties:** Consistent theming system with CSS variables for light/dark modes
+- **Mobile Modal System:** Custom `.mobile-modal` and `.mobile-content` classes for full-screen mobile experiences
 
 ### Performance Optimizations
 - **Code Splitting:** Route-based code splitting with React.lazy
@@ -337,6 +353,13 @@ node scripts/test-port-attack.js
 - **XSS Prevention:** Sanitize dynamic content
 - **CSRF Protection:** Use CSRF tokens for state-changing operations
 
+### Mobile & CSS Development Guidelines
+- **ALWAYS use semantic color classes:** Use `text-primary`, `bg-success`, `text-destructive` instead of `text-blue-500`, `bg-green-500`, `text-red-500`
+- **Mobile modal structure:** Use `mobile-modal` and `mobile-content` classes for full-screen mobile experiences
+- **Touch targets:** Ensure minimum 44px touch targets with `min-h-[44px] min-w-[44px]` classes
+- **Safe areas:** Apply `ios-sides-safe` and `ios-bottom-safe` classes to mobile layouts
+- **Component patterns:** Desktop uses side panels, mobile uses full-screen modals with same content
+
 ## 🚀 **Deployment Options**
 
 ### Local Development
@@ -384,8 +407,10 @@ npm run server  # Production server only (no tunnel)
 4. **Read error messages carefully** - port conflicts are now automatically resolved
 5. **Use the documentation** - refer to PORT-MANAGEMENT.md for conflicts
 6. **Test on mobile** - responsive design is critical
-7. **Verify Vibe Kanban** - Rust backend must be compiled
+7. **Verify Vibe Kanban** - Rust backend must be compiled (`cd vibe-kanban && cargo build --release`)
 8. **Monitor WebSocket connections** - critical for terminal functionality
+9. **Use semantic CSS classes** - Never use hardcoded colors like `text-blue-500`, always use theme variables
+10. **Mobile-first development** - Test mobile layout and touch interactions
 
 This application is actively used for development work, so **stability and reliability are paramount**. When in doubt, ask the user before making significant changes.[byterover-mcp]
 

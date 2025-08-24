@@ -254,10 +254,10 @@ export function TaskFormDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[95vw] sm:max-w-[650px] w-full mx-2 sm:mx-auto max-h-[90vh] overflow-y-auto border-purple-500/20 bg-gradient-to-br from-background via-purple-500/5 to-pink-500/5">
+      <DialogContent className="max-w-[95vw] sm:max-w-[650px] w-full mx-2 sm:mx-auto max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent font-bold">
-            {isEditMode ? 'Edit Task' : '✨ Create New Task'}
+          <DialogTitle className="text-foreground font-semibold">
+            {isEditMode ? 'Edit Task' : 'Create New Task'}
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-3 sm:space-y-4">
@@ -279,23 +279,23 @@ export function TaskFormDialog({
           )}
 
           <div>
-            <Label htmlFor="task-title" className="text-sm font-medium flex items-center gap-2">
-              <span className="text-purple-500">📝</span> Title
+            <Label htmlFor="task-title" className="text-sm font-medium">
+              Title
             </Label>
             <Input
               id="task-title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="What needs to be done?"
-              className="mt-1.5 border-purple-500/20 focus:border-purple-500/40 bg-purple-500/5"
+              className="mt-1.5"
               disabled={isSubmitting || isSubmittingAndStart}
               autoFocus
             />
           </div>
 
           <div>
-            <Label htmlFor="task-description" className="text-sm font-medium flex items-center gap-2">
-              <span className="text-pink-500">📄</span> Description
+            <Label htmlFor="task-description" className="text-sm font-medium">
+              Description
             </Label>
             <FileSearchTextarea
               value={description}
@@ -303,7 +303,7 @@ export function TaskFormDialog({
               rows={3}
               maxRows={6}
               placeholder="Add more details (optional). Type @ to search files."
-              className="mt-1.5 resize-none border-pink-500/20 focus:border-pink-500/40 bg-pink-500/5"
+              className="mt-1.5 resize-none"
               disabled={isSubmitting || isSubmittingAndStart}
               projectId={projectId}
             />
@@ -394,9 +394,9 @@ export function TaskFormDialog({
               <Button
                 onClick={handleSubmit}
                 disabled={isSubmitting || !title.trim()}
-                className="w-full sm:w-auto bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white shadow-lg hover:shadow-xl"
+                className="w-full sm:w-auto"
               >
-                {isSubmitting ? 'Updating...' : '💾 Update Task'}
+                {isSubmitting ? 'Updating...' : 'Update Task'}
               </Button>
             ) : (
               <>
@@ -409,7 +409,7 @@ export function TaskFormDialog({
                     !title.trim() ||
                     isPlanningModeWithoutPlan
                   }
-                  className={`w-full sm:w-auto bg-gradient-to-r from-purple-500/20 to-pink-500/20 hover:from-purple-500/30 hover:to-pink-500/30 border border-purple-500/30 ${
+                  className={`w-full sm:w-auto ${
                     isPlanningModeWithoutPlan
                       ? 'opacity-60 cursor-not-allowed'
                       : ''
@@ -423,7 +423,7 @@ export function TaskFormDialog({
                   {isPlanningModeWithoutPlan && (
                     <AlertTriangle className="h-4 w-4 mr-2" />
                   )}
-                  {isSubmitting ? 'Creating...' : '✅ Create Task'}
+                  {isSubmitting ? 'Creating...' : 'Create Task'}
                 </Button>
                 {onCreateAndStartTask && (
                   <Button
@@ -434,7 +434,7 @@ export function TaskFormDialog({
                       !title.trim() ||
                       isPlanningModeWithoutPlan
                     }
-                    className={`w-full sm:w-auto font-medium bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all ${isPlanningModeWithoutPlan ? 'opacity-60 cursor-not-allowed' : ''}`}
+                    className={`w-full sm:w-auto font-medium ${isPlanningModeWithoutPlan ? 'opacity-60 cursor-not-allowed' : ''}`}
                     title={
                       isPlanningModeWithoutPlan
                         ? 'Plan required before creating and starting task'
@@ -446,7 +446,7 @@ export function TaskFormDialog({
                     )}
                     {isSubmittingAndStart
                       ? 'Creating & Starting...'
-                      : '🚀 Create & Start'}
+                      : 'Create & Start'}
                   </Button>
                 )}
               </>

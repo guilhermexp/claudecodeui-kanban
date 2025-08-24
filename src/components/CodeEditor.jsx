@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
 import { python } from '@codemirror/lang-python';
@@ -14,7 +14,14 @@ import { api } from '../utils/api';
 import { formatFileSize } from '../utils/formatters';
 import ReactMarkdown from 'react-markdown';
 
-function CodeEditor({ file, onClose, projectPath, inline = false }) {
+const CodeEditor = forwardRef(({ 
+  file, 
+  onClose, 
+  projectPath, 
+  inline = false,
+  showMarkdownPreview: externalShowMarkdownPreview,
+  onToggleMarkdownPreview
+}, ref) => {
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -24,7 +31,10 @@ function CodeEditor({ file, onClose, projectPath, inline = false }) {
   const [showDiff, setShowDiff] = useState(!!file.diffInfo);
   const [wordWrap, setWordWrap] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
-  const [showMarkdownPreview, setShowMarkdownPreview] = useState(false);
+  // Use external state if provided (inline mode), otherwise use internal state
+  const [internalShowMarkdownPreview, setInternalShowMarkdownPreview] = useState(false);
+  const showMarkdownPreview = inline ? externalShowMarkdownPreview : internalShowMarkdownPreview;
+  const setShowMarkdownPreview = inline ? onToggleMarkdownPreview : setInternalShowMarkdownPreview;
   const [remarkGfm, setRemarkGfm] = useState(null);
   
   // Load remark-gfm dynamically for markdown files
@@ -178,6 +188,13 @@ function CodeEditor({ file, onClose, projectPath, inline = false }) {
   // Update diff decorations when content or diff info changes
   const editorRef = useRef(null);
   
+  // Expose methods to parent component when inline
+  useImperativeHandle(ref, () => ({
+    save: handleSave,
+    getContent: () => content,
+    setContent: (newContent) => setContent(newContent)
+  }), [content]);
+  
   useEffect(() => {
     if (editorRef.current && content && file.diffInfo && showDiff) {
       const decorations = createDiffDecorations(content, file.diffInfo);
@@ -325,82 +342,13 @@ function CodeEditor({ file, onClose, projectPath, inline = false }) {
     ...(wordWrap ? [EditorView.lineWrapping] : [])
   ];
 
-  // For inline mode, remove the modal wrapper
+  // For inline mode, remove the modal wrapper and toolbar (toolbar is now in FileManagerSimple)
   if (inline) {
     return (
       <div className="h-full flex flex-col bg-background">
-        {/* Toolbar with action buttons */}
-        <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-muted/10">
-          <div className="flex items-center gap-2">
-            {/* Copy button */}
-            <button
-              onClick={handleCopy}
-              className={`p-1.5 rounded hover:bg-accent transition-colors ${
-                copySuccess ? 'text-green-600' : 'text-muted-foreground hover:text-foreground'
-              }`}
-              title="Copy to clipboard"
-            >
-              {copySuccess ? (
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-              ) : (
-                <Copy className="w-4 h-4" />
-              )}
-            </button>
-            
-            {/* Download button */}
-            <button
-              onClick={handleDownload}
-              className="p-1.5 text-muted-foreground hover:text-foreground rounded hover:bg-accent transition-colors"
-              title="Download file"
-            >
-              <Download className="w-4 h-4" />
-            </button>
-            
-            {/* Markdown Preview button - only for .md files */}
-            {file.name.toLowerCase().endsWith('.md') && (
-              <button
-                onClick={() => setShowMarkdownPreview(!showMarkdownPreview)}
-                className={`p-1.5 rounded transition-colors ${
-                  showMarkdownPreview 
-                    ? 'bg-accent text-foreground' 
-                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-                }`}
-                title={showMarkdownPreview ? "Show raw markdown" : "Preview markdown"}
-              >
-                {showMarkdownPreview ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            )}
-            
-            {/* Save button */}
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className={`px-2 py-1 text-xs font-medium rounded transition-colors disabled:opacity-50 ${
-                saveSuccess 
-                  ? 'bg-green-600 hover:bg-green-700 text-white' 
-                  : 'bg-primary hover:bg-primary/90 text-primary-foreground'
-              }`}
-            >
-              {saveSuccess ? (
-                <span className="flex items-center gap-1">
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  Saved
-                </span>
-              ) : (
-                <span className="flex items-center gap-1">
-                  <Save className="w-3.5 h-3.5" />
-                  {saving ? 'Saving...' : 'Save'}
-                </span>
-              )}
-            </button>
-          </div>
-          
-          {/* File info */}
-          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+        {/* File info bar - moved to bottom for cleaner look */}
+        <div className="flex items-center justify-end px-3 py-1 border-b border-border bg-muted/5 text-xs text-muted-foreground">
+          <div className="flex items-center gap-3">
             <span>Lines: {content.split('\n').length}</span>
             <span>{formatFileSize(content.length)}</span>
           </div>
@@ -628,6 +576,8 @@ function CodeEditor({ file, onClose, projectPath, inline = false }) {
       </div>
     </div>
   );
-}
+});
+
+CodeEditor.displayName = 'CodeEditor';
 
 export default CodeEditor;

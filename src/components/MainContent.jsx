@@ -12,14 +12,13 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import FileTree from './FileTree';
+import FileManagerSimple from './FileManagerSimple';
 import CodeEditor from './CodeEditor';
 import Shell from './Shell';
 import GitPanel from './GitPanel';
 import VibeTaskPanel from './VibeTaskPanel';
 import Dashboard from './Dashboard';
 import ErrorBoundary from './ErrorBoundary';
-import SystemMonitor from './SystemMonitor';
 
 function MainContent({ 
   selectedProject, 
@@ -33,6 +32,7 @@ function MainContent({
   onMenuClick,
   onSidebarOpen,          // Function to open sidebar (for desktop)
   sidebarOpen,            // Sidebar open state (for desktop)
+  onActiveSidePanelChange, // Callback to report active side panel state
   isLoading,
   onInputFocusChange,
   // Session Protection Props: Functions passed down from App.jsx to manage active session state
@@ -57,6 +57,13 @@ function MainContent({
   // Panel states - only one can be open at a time
   const [activeSidePanel, setActiveSidePanel] = useState(null); // 'files' | 'git' | 'tasks' | 'dashboard' | null
   // Shell terminals state removed - single terminal mode only
+
+  // Notify parent component about active side panel changes
+  useEffect(() => {
+    if (onActiveSidePanelChange) {
+      onActiveSidePanelChange(activeSidePanel);
+    }
+  }, [activeSidePanel, onActiveSidePanelChange]);
   
   // Expose tab switching globally for Shell image drops
   useEffect(() => {
@@ -202,7 +209,7 @@ function MainContent({
                                                       activeSidePanel === 'tasks' ? 'Tasks' :
                                                       activeSidePanel === 'dashboard' ? 'Dashboard' : ''}`}
                     </h2>
-                    <span className="inline-block px-2 py-0.5 text-xs rounded-full bg-gradient-to-r from-blue-500/20 to-purple-500/20 dark:from-blue-400/30 dark:to-purple-400/30 text-blue-700 dark:text-blue-300 font-medium">
+                    <span className="inline-block px-2 py-0.5 text-xs rounded-full bg-gradient-to-r from-primary/20 to-accent/20 dark:from-primary/30 dark:to-accent/30 text-primary dark:text-primary-foreground font-medium">
                       {selectedProject.displayName}
                     </span>
                   </div>
@@ -215,9 +222,9 @@ function MainContent({
           {/* Context Window Display - shows on all screen sizes */}
           {contextWindowPercentage !== null && (
             <div className={`order-2 ml-2 px-2 py-1 rounded text-xs sm:text-sm ${
-              contextWindowPercentage >= 90 ? 'bg-red-500/20 text-red-400' :
-              contextWindowPercentage >= 70 ? 'bg-yellow-500/20 text-yellow-400' :
-              'bg-green-500/20 text-green-400'
+              contextWindowPercentage >= 90 ? 'bg-destructive/20 text-destructive' :
+              contextWindowPercentage >= 70 ? 'bg-warning/20 text-warning-foreground' :
+              'bg-success/20 text-success-foreground'
             }`}>
               Context: {contextWindowPercentage}%
             </div>
@@ -227,10 +234,6 @@ function MainContent({
           {/* Modern Tab Navigation - Right Side */}
           <div className="flex-shrink-0 hidden sm:block order-3">
             <div className="relative flex items-center bg-muted rounded-lg p-1 gap-1">
-              {/* System Monitor - Shows active terminals and ports */}
-              <SystemMonitor />
-              
-              <div className="w-px bg-border mx-1"></div>
               
               <button
                 onClick={() => {
@@ -384,19 +387,32 @@ function MainContent({
               }`}
             >
               <div className="h-full flex flex-col">
-                <div className="flex-shrink-0 border-b border-border h-12 md:h-14 px-3 md:px-4 flex items-center justify-between">
-                  <h3 className="text-lg font-semibold text-foreground">Files</h3>
-                  <button
-                    onClick={() => setActiveSidePanel(null)}
-                    className="h-8 w-8 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent rounded-md transition-colors"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
+                <div className="flex-shrink-0 border-b border-border px-3 md:px-4 flex flex-col">
+                  <div className="h-12 md:h-14 flex items-center justify-between">
+                    <h3 className="text-lg font-semibold text-foreground">Files</h3>
+                    <button
+                      onClick={() => setActiveSidePanel(null)}
+                      className="h-8 w-8 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent rounded-md transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                  {/* Current path indicator */}
+                  <div className="pb-3">
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground/70 bg-muted/30 px-2 py-1 rounded-md font-mono">
+                      <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-5l-2-2H5a2 2 0 00-2 2z" />
+                      </svg>
+                      <span className="truncate" title={selectedProject.path}>
+                        {selectedProject.path}
+                      </span>
+                    </div>
+                  </div>
                 </div>
                 <div className="flex-1 overflow-hidden">
-                  <FileTree selectedProject={selectedProject} />
+                  <FileManagerSimple selectedProject={selectedProject} />
                 </div>
               </div>
             </div>
@@ -464,23 +480,31 @@ function MainContent({
         {isMobile && (
           <>
             {activeTab === 'files' && (
-              <div className="absolute inset-0 bg-background z-10">
-                <FileTree selectedProject={selectedProject} />
+              <div className="absolute inset-0 bg-background z-10 mobile-modal ios-sides-safe">
+                <div className="h-full mobile-content overflow-y-auto scrollable-content">
+                  <FileManagerSimple selectedProject={selectedProject} />
+                </div>
               </div>
             )}
             {activeTab === 'git' && (
-              <div className="absolute inset-0 bg-background z-10">
-                <GitPanel selectedProject={selectedProject} isMobile={true} isVisible={true} />
+              <div className="absolute inset-0 bg-background z-10 mobile-modal ios-sides-safe">
+                <div className="h-full mobile-content overflow-y-auto scrollable-content">
+                  <GitPanel selectedProject={selectedProject} isMobile={true} isVisible={true} />
+                </div>
               </div>
             )}
             {activeTab === 'tasks' && (
-              <div className="absolute inset-0 bg-background z-10">
-                <VibeTaskPanel isVisible={true} onClose={() => setActiveTab('shell')} isMobile={true} />
+              <div className="absolute inset-0 bg-background z-10 mobile-modal ios-sides-safe">
+                <div className="h-full mobile-content overflow-y-auto scrollable-content">
+                  <VibeTaskPanel isVisible={true} onClose={() => setActiveTab('shell')} isMobile={true} />
+                </div>
               </div>
             )}
             {activeTab === 'dashboard' && (
-              <div className="absolute inset-0 bg-background z-10">
-                <Dashboard onBack={() => setActiveTab('shell')} />
+              <div className="absolute inset-0 bg-background z-10 mobile-modal ios-sides-safe">
+                <div className="h-full mobile-content overflow-y-auto scrollable-content">
+                  <Dashboard onBack={() => setActiveTab('shell')} />
+                </div>
               </div>
             )}
           </>

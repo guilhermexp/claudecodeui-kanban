@@ -84,6 +84,8 @@ function AppContent() {
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [isShellConnected, setIsShellConnected] = useState(false);
   const [showToolsSettings, setShowToolsSettings] = useState(false);
+  // Track active side panels to determine sidebar behavior (integrated vs overlay)
+  const [activeSidePanel, setActiveSidePanel] = useState(null);
   // Shell session protection - tracks when Claude is actively working
   const [shellHasActiveSession, setShellHasActiveSession] = useState(false);
   // Session Protection System: Track sessions with active conversations to prevent
@@ -105,6 +107,9 @@ function AppContent() {
   const authReady = !authLoading && !!user;
   
   const { ws, sendMessage, messages, reconnect } = useWebSocket(authReady);
+
+  // Determine if sidebar should use overlay mode (when side panels are active)
+  const shouldUseSidebarOverlay = !isMobile && activeSidePanel !== null;
 
   // Monitor authentication changes and reconnect WebSocket
   useEffect(() => {
@@ -600,8 +605,8 @@ function AppContent() {
         cursor: isResizing ? 'col-resize' : 'default'
       }}
     >
-      {/* Desktop Sidebar - keeps open for Tools Settings */}
-      {!isMobile && (sidebarOpen || showToolsSettings) && (
+      {/* Desktop Sidebar - Integrated Mode (no side panels active) */}
+      {!isMobile && (sidebarOpen || showToolsSettings) && !shouldUseSidebarOverlay && (
         <div 
           className="flex-shrink-0 border-r border-border bg-card relative"
           style={{ width: `${sidebarWidth}px` }}
@@ -632,6 +637,37 @@ function AppContent() {
             }}
           >
             <div className="absolute inset-y-0 -left-1 -right-1 group-hover:bg-primary/10" />
+          </div>
+        </div>
+      )}
+
+      {/* Desktop Sidebar - Overlay Mode (when side panels are active) */}
+      {!isMobile && (sidebarOpen || showToolsSettings) && shouldUseSidebarOverlay && (
+        <div className="fixed inset-0 z-[60] flex">
+          <div 
+            className="absolute inset-0 bg-black/20 backdrop-blur-sm"
+            onClick={() => setSidebarOpen(false)}
+          />
+          <div 
+            className="relative bg-card border-r border-border h-full shadow-xl"
+            style={{ width: `${sidebarWidth}px` }}
+          >
+            <div className="h-full overflow-y-auto">
+              <Sidebar
+                projects={projects}
+                selectedProject={selectedProject}
+                selectedSession={selectedSession}
+                onProjectSelect={handleProjectSelect}
+                onSessionSelect={handleSessionSelect}
+                onNewSession={handleNewSession}
+                onSessionDelete={handleSessionDelete}
+                onProjectDelete={handleProjectDelete}
+                isLoading={isLoadingProjects}
+                onRefresh={handleSidebarRefresh}
+                onShowSettings={() => setShowToolsSettings(true)}
+                onSidebarClose={() => setSidebarOpen(false)}
+              />
+            </div>
           </div>
         </div>
       )}
@@ -692,6 +728,7 @@ function AppContent() {
           onMenuClick={() => setSidebarOpen(true)}
           onSidebarOpen={() => setSidebarOpen(!sidebarOpen)}
           sidebarOpen={sidebarOpen}
+          onActiveSidePanelChange={setActiveSidePanel}
           isLoading={isLoadingProjects}
           onInputFocusChange={setIsInputFocused}
           onSessionActive={markSessionAsActive}

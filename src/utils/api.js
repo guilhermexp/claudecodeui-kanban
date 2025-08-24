@@ -15,7 +15,10 @@ export const authenticatedFetch = (url, options = {}) => {
     defaultHeaders['Authorization'] = `Bearer ${token}`;
   }
   
-  return fetch(url, {
+  // Ensure URL is properly formatted
+  const fullUrl = url.startsWith('http') ? url : url;
+  
+  return fetch(fullUrl, {
     ...options,
     headers: {
       ...defaultHeaders,

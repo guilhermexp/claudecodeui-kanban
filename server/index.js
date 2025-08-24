@@ -6,6 +6,15 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// Configure multer for file uploads
+const upload = multer({
+  dest: path.join(os.tmpdir(), 'claude-code-uploads'),
+  limits: {
+    fileSize: 100 * 1024 * 1024, // 100MB max file size
+    files: 100 // Max 100 files at once
+  }
+});
+
 try {
   const envPath = path.join(__dirname, '../.env');
   const envFile = fs.readFileSync(envPath, 'utf8');
@@ -39,9 +48,20 @@ import gitRoutes from './routes/git.js';
 import authRoutes from './routes/auth.js';
 // import mcpRoutes from './routes/mcp.js'; // MCP removed - managed directly by Claude CLI
 import usageRoutes from './routes/usage.js';
+import filesRoutes from './routes/files.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 import cleanupService from './cleanupService.js';
+import { 
+  apiRateLimit, 
+  monitoringRateLimit,
+  strictRateLimit, 
+  claudeRateLimit, 
+  fileRateLimit, 
+  speedLimiter, 
+  resourceMonitor, 
+  processLimiter 
+} from './middleware/rateLimiting.js';
 
 // File system watcher for projects folder
 let projectsWatcher = null;
@@ -227,67 +247,97 @@ const wss = new WebSocketServer({
   }
 });
 
+// Security and rate limiting middleware
+app.use(resourceMonitor);
+app.use(speedLimiter);
 app.use(cors());
 app.use(express.json());
 
 // Authentication routes (public - before API key validation)
 app.use('/api/auth', authRoutes);
 
+// Apply general rate limiting to all API routes
+app.use('/api', apiRateLimit);
+
 // Optional API key validation (if configured) - for other /api routes
 app.use('/api', validateApiKey);
 
 
-// Import System Monitor
-import SystemMonitor from './systemMonitor.js';
-const systemMonitor = new SystemMonitor();
 
-// Health check endpoint (public)
-app.get('/api/health', (req, res) => {
-  const healthStatus = {
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    services: {
-      server: 'running',
-      database: 'connected',
-      vibeKanban: 'available'
-    }
-  };
+// Enhanced health check endpoint (public)
+app.get('/api/health', async (req, res) => {
+  const startTime = Date.now();
   
-  res.json(healthStatus);
-});
-
-// System monitoring endpoint (public for local access)
-app.get('/api/system/monitor', async (req, res) => {
   try {
-    const systemInfo = await systemMonitor.getSystemInfo();
-    res.json(systemInfo);
+    const healthStatus = {
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      version: process.env.npm_package_version || '1.0.0',
+      environment: process.env.NODE_ENV || 'development',
+      services: {}
+    };
+
+    // Check database connectivity
+    try {
+      const db = await initializeDatabase();
+      await db.prepare('SELECT 1').get();
+      healthStatus.services.database = 'connected';
+    } catch (error) {
+      healthStatus.services.database = 'error';
+      healthStatus.status = 'degraded';
+    }
+
+    // Check Vibe Kanban backend
+    try {
+      const vibeResponse = await fetch('http://localhost:6734/api/health', {
+        timeout: 2000
+      });
+      healthStatus.services.vibeKanban = vibeResponse.ok ? 'available' : 'error';
+    } catch (error) {
+      healthStatus.services.vibeKanban = 'unavailable';
+      if (healthStatus.status === 'healthy') {
+        healthStatus.status = 'degraded';
+      }
+    }
+
+    // Add system metrics
+    const memUsage = process.memoryUsage();
+    healthStatus.metrics = {
+      memory: {
+        rss: Math.round(memUsage.rss / 1024 / 1024) + 'MB',
+        heapUsed: Math.round(memUsage.heapUsed / 1024 / 1024) + 'MB',
+        heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024) + 'MB'
+      },
+      connections: {
+        websocket: connectedClients.size,
+        active: [...connectedClients.values()].filter(client => 
+          Date.now() - client.lastActivity < 300000 // 5 minutes
+        ).length
+      },
+      responseTime: `${Date.now() - startTime}ms`
+    };
+
+    // Determine overall status
+    const allServicesHealthy = Object.values(healthStatus.services)
+      .every(status => status === 'connected' || status === 'available');
+    
+    if (!allServicesHealthy && healthStatus.status === 'healthy') {
+      healthStatus.status = 'degraded';
+    }
+
+    res.status(healthStatus.status === 'healthy' ? 200 : 503).json(healthStatus);
+    
   } catch (error) {
-    console.error('System monitor error:', error);
-    res.status(500).json({ error: 'Failed to get system information' });
+    res.status(503).json({
+      status: 'unhealthy',
+      timestamp: new Date().toISOString(),
+      error: error.message,
+      responseTime: `${Date.now() - startTime}ms`
+    });
   }
 });
 
-// Kill process endpoint (requires careful permission handling)
-app.post('/api/system/kill', async (req, res) => {
-  try {
-    const { pid } = req.body;
-    
-    if (!pid) {
-      return res.status(400).json({ error: 'PID is required' });
-    }
-    
-    const result = await systemMonitor.killProcess(pid);
-    
-    if (result.success) {
-      res.json(result);
-    } else {
-      res.status(500).json(result);
-    }
-  } catch (error) {
-    console.error('Kill process error:', error);
-    res.status(500).json({ error: 'Failed to kill process' });
-  }
-});
 
 // Git API Routes (protected)
 app.use('/api/git', authenticateToken, gitRoutes);
@@ -297,6 +347,7 @@ app.use('/api/git', authenticateToken, gitRoutes);
 
 // Usage API Routes (protected)
 app.use('/api/usage', usageRoutes);
+app.use('/api/files', filesRoutes);
 
 // Vibe Kanban Cleanup API Routes
 app.get('/api/cleanup/status', authenticateToken, (req, res) => {
@@ -635,6 +686,32 @@ app.get('/api/projects/:projectName/sessions/:sessionId/messages', authenticateT
     notifyUserProjectAccess(req.user.userId, projectName);
     const messages = await getSessionMessages(projectName, sessionId);
     res.json({ messages });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get current session information
+app.get('/api/sessions/current', authenticateToken, async (req, res) => {
+  try {
+    // Get the most recent active session from WebSocket connections
+    const activeConnections = Array.from(clients.values());
+    const currentSession = activeConnections.find(client => 
+      client.userId === req.user.userId && client.projectName
+    );
+    
+    if (currentSession) {
+      const sessionInfo = {
+        sessionId: currentSession.sessionId,
+        projectName: currentSession.projectName,
+        startTime: currentSession.startTime || new Date().toISOString(),
+        messageCount: currentSession.messageCount || 0,
+        model: currentSession.model || 'claude-3-5-sonnet-20241022'
+      };
+      res.json(sessionInfo);
+    } else {
+      res.json(null);
+    }
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -1624,6 +1701,7 @@ app.post('/api/projects/:projectName/upload-images', authenticateToken, async (r
 
 // Import the robust Vibe proxy
 import VibeKanbanProxy from './lib/vibe-proxy.js';
+import multer from 'multer';
 
 // Initialize Vibe Kanban proxy with configuration
 const vibeProxy = new VibeKanbanProxy({
@@ -2036,8 +2114,15 @@ app.get('/api/files', (req, res) => {
 
 // Catch all unhandled API routes that don't exist  
 app.use('/api/*', (req, res) => {
-  console.warn(`API 404: ${req.method} ${req.path}`);
-  res.status(404).json({ error: 'API endpoint not found', path: req.path });
+  // Only log actual 404s, not polling attempts
+  const isPollingRoute = req.originalUrl.includes('/api/usage/live') || 
+                        req.originalUrl.includes('/api/sessions/current');
+  
+  if (!isPollingRoute) {
+    console.warn(`API 404: ${req.method} ${req.originalUrl}`);
+  }
+  
+  res.status(404).json({ error: 'API endpoint not found', path: req.originalUrl });
 });
 
 // Serve React app for all other routes

@@ -129,13 +129,13 @@ function VibeTaskPanel({ isVisible, onClose }) {
   const getStatusColor = (status) => {
     const normalized = (status || '').toLowerCase();
     const statusColors = {
-      todo: 'bg-gradient-to-r from-gray-400 to-gray-500',
-      inprogress: 'bg-gradient-to-r from-blue-500 to-cyan-500',
-      inreview: 'bg-gradient-to-r from-amber-500 to-orange-500',
-      done: 'bg-gradient-to-r from-green-500 to-emerald-500',
-      cancelled: 'bg-gradient-to-r from-red-500 to-pink-500'
+      todo: 'bg-muted',
+      inprogress: 'bg-info',
+      inreview: 'bg-warning',
+      done: 'bg-success',
+      cancelled: 'bg-destructive'
     };
-    return statusColors[normalized] || 'bg-gradient-to-r from-gray-400 to-gray-500';
+    return statusColors[normalized] || 'bg-muted';
   };
 
   if (!isVisible) {
@@ -144,27 +144,23 @@ function VibeTaskPanel({ isVisible, onClose }) {
 
   return (
     <div className="h-full flex flex-col bg-background relative max-w-full min-w-0">
-      {/* Header */}
-      <div className="flex-shrink-0 border-b border-border h-12 md:h-14 px-3 md:px-4 flex items-center bg-gradient-to-r from-blue-500/10 to-cyan-500/10">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-lg font-semibold bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent">Vibe Kanban</h3>
-            <p className="text-xs text-muted-foreground mt-1">Create tasks quickly</p>
-          </div>
-          <button
-            onClick={onClose}
-            className="h-8 w-8 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent rounded-md transition-colors"
-            title="Close panel"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
+      {/* Header - matching Files and Source Control modals */}
+      <div className="flex-shrink-0 px-4 py-3 flex items-center justify-between border-b border-border">
+        <h3 className="text-foreground font-medium">Tasks</h3>
+        <button
+          onClick={onClose}
+          className="text-muted-foreground hover:text-foreground transition-colors"
+          title="Close"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto p-3 md:p-3 space-y-3 min-w-0">
+      {/* Content - matching other modals background */}
+      <div className="flex-1 overflow-y-auto bg-card">
+        <div className="p-4 space-y-3">
         {loading && (
           <div className="flex items-center justify-center py-6">
             <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
@@ -173,11 +169,11 @@ function VibeTaskPanel({ isVisible, onClose }) {
         )}
 
         {error && (
-          <div className="p-2 bg-destructive/10 border border-destructive/20 rounded-md">
-            <p className="text-xs text-destructive">{error}</p>
+          <div className="p-2 bg-[#f85149]/10 border border-[#f85149]/20 rounded-md">
+            <p className="text-xs text-[#f85149]">{error}</p>
             <button 
               onClick={fetchProjects}
-              className="mt-1.5 px-2 py-1 bg-destructive/20 hover:bg-destructive/30 text-destructive text-xs rounded transition-colors"
+              className="mt-1.5 px-2 py-1 bg-[#f85149]/20 hover:bg-[#f85149]/30 text-[#f85149] text-xs rounded transition-colors"
             >
               Retry
             </button>
@@ -186,13 +182,13 @@ function VibeTaskPanel({ isVisible, onClose }) {
 
         {!loading && !error && projects.length === 0 && (
           <div className="text-center py-6">
-            <div className="w-10 h-10 mx-auto mb-3 bg-muted rounded-full flex items-center justify-center">
-              <svg className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="w-10 h-10 mx-auto mb-3 bg-[#161b22] rounded-full flex items-center justify-center">
+              <svg className="w-5 h-5 text-[#7d8590]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
               </svg>
             </div>
-            <h4 className="text-sm font-medium text-foreground mb-2">No Projects</h4>
-            <p className="text-xs text-muted-foreground">
+            <h4 className="text-sm font-medium text-[#e6edf3] mb-2">No Projects</h4>
+            <p className="text-xs text-[#7d8590]">
               Create projects in Vibe Kanban first.
             </p>
           </div>
@@ -209,7 +205,7 @@ function VibeTaskPanel({ isVisible, onClose }) {
                   const project = projects.find(p => p.id === e.target.value);
                   setSelectedProject(project);
                 }}
-                className="w-full px-2.5 py-1.5 bg-background border border-input rounded-md text-xs focus:outline-none focus:ring-1 focus:ring-ring focus:border-transparent"
+                className="w-full px-2.5 py-1.5 bg-input border border-border rounded-md text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring focus:border-transparent"
               >
                 {projects.map((project) => (
                   <option key={project.id} value={project.id}>
@@ -221,7 +217,7 @@ function VibeTaskPanel({ isVisible, onClose }) {
 
             {/* Selected Project Info */}
             {selectedProject && (
-              <div className="p-2 bg-gradient-to-r from-blue-500/5 to-cyan-500/5 rounded-md border border-blue-500/10">
+              <div className="p-2 bg-secondary rounded-md border border-border">
                 <h4 className="text-xs font-medium text-foreground">{selectedProject.name}</h4>
                 {selectedProject.description && (
                   <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{selectedProject.description}</p>
@@ -264,7 +260,7 @@ function VibeTaskPanel({ isVisible, onClose }) {
                       <button
                         key={task.id}
                         onClick={() => handleTaskClick(task)}
-                        className="w-full text-left p-2 bg-muted/20 hover:bg-gradient-to-r hover:from-blue-500/10 hover:to-cyan-500/10 rounded-md transition-all duration-200 border border-transparent hover:border-blue-500/20"
+                        className="w-full text-left p-2 bg-muted/50 hover:bg-muted rounded-md transition-all duration-200 border border-border hover:border-accent"
                       >
                         <div className="flex items-start gap-2">
                           <div className={`w-3 h-3 rounded-full mt-1 ${getStatusColor(task.status)} shadow-sm`} />
@@ -295,7 +291,7 @@ function VibeTaskPanel({ isVisible, onClose }) {
               <div className="space-y-2">
                 <button
                   onClick={() => setIsTaskDialogOpen(true)}
-                  className="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-md hover:from-blue-600 hover:to-cyan-600 transition-all duration-200 font-medium text-sm shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-all duration-200 font-medium text-sm"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -338,6 +334,7 @@ function VibeTaskPanel({ isVisible, onClose }) {
             )}
           </>
         )}
+        </div>
       </div>
 
       {/* Task Creation Dialog */}

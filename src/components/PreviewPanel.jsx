@@ -8,6 +8,8 @@ function PreviewPanel({ url, onClose, onRefresh, onOpenExternal, isMobile }) {
   const [logs, setLogs] = useState([]);
   const [showLogs, setShowLogs] = useState(false);
   const [pausedUrl, setPausedUrl] = useState(null); // Store URL when paused
+  const [microphoneStatus, setMicrophoneStatus] = useState('idle'); // idle, granted, denied, requesting
+  const [showPermissionInfo, setShowPermissionInfo] = useState(false);
   const iframeRef = useRef(null);
   const logsRef = useRef(null);
 
@@ -23,6 +25,48 @@ function PreviewPanel({ url, onClose, onRefresh, onOpenExternal, isMobile }) {
       setPausedUrl(url);
     }
   }, [url, isPaused]);
+
+  // Check microphone permission status
+  const checkMicrophonePermission = async () => {
+    try {
+      const result = await navigator.permissions.query({ name: 'microphone' });
+      setMicrophoneStatus(result.state);
+      
+      // Listen for permission changes
+      result.addEventListener('change', () => {
+        setMicrophoneStatus(result.state);
+      });
+    } catch (e) {
+      // Permissions API might not be available or microphone not supported
+      console.log('Could not check microphone permission:', e);
+    }
+  };
+
+  // Request microphone permission
+  const requestMicrophonePermission = async () => {
+    try {
+      setMicrophoneStatus('requesting');
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      
+      // Stop the stream immediately - we just needed to request permission
+      stream.getTracks().forEach(track => track.stop());
+      
+      setMicrophoneStatus('granted');
+      setShowPermissionInfo(false);
+      
+      // Reload the iframe to apply the new permissions
+      if (iframeRef.current) {
+        iframeRef.current.src = currentUrl;
+      }
+    } catch (e) {
+      console.error('Microphone permission denied:', e);
+      setMicrophoneStatus('denied');
+    }
+  };
+
+  useEffect(() => {
+    checkMicrophonePermission();
+  }, []);
 
   // Handle console messages from iframe via postMessage
   useEffect(() => {
@@ -124,7 +168,8 @@ function PreviewPanel({ url, onClose, onRefresh, onOpenExternal, isMobile }) {
                       }
                     }
                     
-                    ['log', 'error', 'warn', 'info', 'debug'].forEach(method => {
+                    // Only capture errors and warnings, not regular logs
+                    ['error', 'warn'].forEach(method => {
                       console[method] = function(...args) {
                         originalConsole[method].apply(console, args);
                         try {
@@ -132,6 +177,9 @@ function PreviewPanel({ url, onClose, onRefresh, onOpenExternal, isMobile }) {
                             if (typeof arg === 'object') return safeStringify(arg);
                             return String(arg);
                           }).join(' ');
+                          
+                          // Skip empty or meaningless messages
+                          if (!message || message.trim() === '') return;
                           
                           window.parent.postMessage({
                             type: 'console-message',
@@ -173,10 +221,8 @@ function PreviewPanel({ url, onClose, onRefresh, onOpenExternal, isMobile }) {
                       } catch (e) {}
                     });
                     
-                    // Test that the injection worked
-                    console.log('[Console Capture] Initialized at ' + new Date().toISOString());
-                    
-                    // Notify parent that we're ready
+                    // Don't log initialization - it's just noise
+                    // Silently notify parent that we're ready
                     window.parent.postMessage({
                       type: 'console-capture-ready',
                       timestamp: new Date().toISOString()
@@ -194,6 +240,89 @@ function PreviewPanel({ url, onClose, onRefresh, onOpenExternal, isMobile }) {
                         }
                       };
                     }
+                    
+                    // Capture Vite error overlay
+                    const captureViteErrors = () => {
+                      // Look for Vite's error overlay element
+                      const viteErrorOverlay = document.querySelector('vite-error-overlay');
+                      if (viteErrorOverlay) {
+                        // Try to access shadow DOM (Vite uses shadow DOM for error overlay)
+                        const shadowRoot = viteErrorOverlay.shadowRoot;
+                        if (shadowRoot) {
+                          // Find error message elements
+                          const errorMessage = shadowRoot.querySelector('.message-body');
+                          const errorFile = shadowRoot.querySelector('.file');
+                          const errorFrame = shadowRoot.querySelector('.frame');
+                          const errorStack = shadowRoot.querySelector('.stack');
+                          
+                          if (errorMessage) {
+                            const message = errorMessage.textContent || 'Vite compilation error';
+                            const file = errorFile ? errorFile.textContent : '';
+                            const frame = errorFrame ? errorFrame.textContent : '';
+                            const stack = errorStack ? errorStack.textContent : '';
+                            
+                            // Send the error to parent
+                            window.parent.postMessage({
+                              type: 'console-message',
+                              level: 'error',
+                              message: '[Vite Error] ' + message,
+                              timestamp: new Date().toISOString(),
+                              url: window.location.href,
+                              filename: file,
+                              stack: frame + '\\n' + stack,
+                              source: 'vite-overlay'
+                            }, '*');
+                          }
+                        }
+                      }
+                      
+                      // Also check for standard error overlay (older Vite versions or other bundlers)
+                      const errorOverlay = document.querySelector('#vite-error-overlay, .vite-error-overlay, [data-vite-error]');
+                      if (errorOverlay && !errorOverlay.dataset.captured) {
+                        errorOverlay.dataset.captured = 'true';
+                        const errorText = errorOverlay.textContent || errorOverlay.innerText;
+                        if (errorText) {
+                          window.parent.postMessage({
+                            type: 'console-message',
+                            level: 'error',
+                            message: '[Build Error] ' + errorText.slice(0, 500),
+                            timestamp: new Date().toISOString(),
+                            url: window.location.href,
+                            source: 'error-overlay'
+                          }, '*');
+                        }
+                      }
+                    };
+                    
+                    // Set up MutationObserver to detect when Vite error overlay appears
+                    const observer = new MutationObserver((mutations) => {
+                      for (const mutation of mutations) {
+                        if (mutation.type === 'childList') {
+                          for (const node of mutation.addedNodes) {
+                            if (node.nodeName && (
+                              node.nodeName.toLowerCase() === 'vite-error-overlay' ||
+                              (node.id && node.id.includes('vite')) ||
+                              (node.className && typeof node.className === 'string' && node.className.includes('error'))
+                            )) {
+                              // Wait a bit for the error content to render
+                              setTimeout(captureViteErrors, 100);
+                            }
+                          }
+                        }
+                      }
+                    });
+                    
+                    // Start observing document body for error overlays
+                    observer.observe(document.body, {
+                      childList: true,
+                      subtree: true
+                    });
+                    
+                    // Also check periodically for error overlays
+                    setInterval(captureViteErrors, 2000);
+                    
+                    // Initial check
+                    setTimeout(captureViteErrors, 500);
                   })();
                 `;
                 
@@ -411,6 +540,42 @@ function PreviewPanel({ url, onClose, onRefresh, onOpenExternal, isMobile }) {
 
           {/* Action Buttons */}
           <div className="flex items-center gap-1">
+            {/* Microphone Permission Button */}
+            <button
+              onClick={() => {
+                if (microphoneStatus === 'prompt' || microphoneStatus === 'denied') {
+                  setShowPermissionInfo(true);
+                } else if (microphoneStatus === 'idle') {
+                  requestMicrophonePermission();
+                }
+              }}
+              className={`p-1.5 rounded-md transition-colors relative ${
+                microphoneStatus === 'granted' 
+                  ? 'text-green-500 hover:bg-green-500/10' 
+                  : microphoneStatus === 'denied'
+                  ? 'text-red-500 hover:bg-red-500/10'
+                  : microphoneStatus === 'requesting'
+                  ? 'text-yellow-500 hover:bg-yellow-500/10'
+                  : 'hover:bg-accent'
+              }`}
+              title={
+                microphoneStatus === 'granted' 
+                  ? "Microphone permission granted" 
+                  : microphoneStatus === 'denied'
+                  ? "Microphone permission denied - click to request"
+                  : microphoneStatus === 'requesting'
+                  ? "Requesting microphone permission..."
+                  : "Request microphone permission"
+              }
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+              </svg>
+              {microphoneStatus === 'denied' && (
+                <span className="absolute -top-1 -right-1 bg-red-500 rounded-full w-2 h-2"></span>
+              )}
+            </button>
+
             <button
               onClick={handleTogglePause}
               className={`p-1.5 rounded-md transition-colors ${isPaused ? 'bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-600 dark:text-yellow-400' : 'hover:bg-accent'}`}
@@ -438,28 +603,38 @@ function PreviewPanel({ url, onClose, onRefresh, onOpenExternal, isMobile }) {
               </svg>
             </button>
             
-            {/* Logs Button with Dropdown */}
+            {/* Error Console Button with Dropdown - Only show if there are errors */}
             <div className="relative" ref={logsRef}>
               <button
                 onClick={() => setShowLogs(!showLogs)}
-                className={`p-1.5 hover:bg-accent rounded-md transition-colors relative ${logs.length > 0 ? 'text-red-500' : ''}`}
-                title={`Console logs (${logs.length})`}
+                className={`p-1.5 hover:bg-accent rounded-md transition-colors relative ${
+                  logs.filter(l => l.type === 'error').length > 0 
+                    ? 'text-red-500 animate-pulse' 
+                    : logs.length > 0 
+                    ? 'text-yellow-500' 
+                    : 'text-muted-foreground opacity-50'
+                }`}
+                title={`Console errors (${logs.filter(l => l.type === 'error').length}) / warnings (${logs.filter(l => l.type === 'warn').length})`}
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 {logs.length > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
+                  <span className={`absolute -top-1 -right-1 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center ${
+                    logs.filter(l => l.type === 'error').length > 0 ? 'bg-red-500' : 'bg-yellow-500'
+                  }`}>
                     {logs.length > 99 ? '99+' : logs.length}
                   </span>
                 )}
               </button>
               
-              {/* Logs Dropdown */}
+              {/* Error Console Dropdown */}
               {showLogs && (
                 <div className="absolute right-0 mt-2 w-96 max-h-96 bg-card border border-border rounded-lg shadow-lg overflow-hidden z-50">
                   <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-muted/50">
-                    <span className="text-sm font-medium">Console Logs ({logs.length})</span>
+                    <span className="text-sm font-medium">
+                      Console Errors & Warnings ({logs.filter(l => l.type === 'error').length} errors, {logs.filter(l => l.type === 'warn').length} warnings)
+                    </span>
                     <button
                       onClick={clearLogs}
                       className="text-xs px-2 py-1 hover:bg-accent rounded transition-colors"
@@ -470,7 +645,7 @@ function PreviewPanel({ url, onClose, onRefresh, onOpenExternal, isMobile }) {
                   <div className="overflow-y-auto max-h-80 p-2 space-y-1">
                     {logs.length === 0 ? (
                       <div className="text-center py-4 text-muted-foreground text-sm">
-                        No logs captured yet
+                        No errors or warnings detected
                       </div>
                     ) : (
                       logs.map((log, index) => (
@@ -481,23 +656,21 @@ function PreviewPanel({ url, onClose, onRefresh, onOpenExternal, isMobile }) {
                               ? 'bg-red-500/10 border border-red-500/20 text-red-400'
                               : log.type === 'warn'
                               ? 'bg-yellow-500/10 border border-yellow-500/20 text-yellow-400'
-                              : log.type === 'info'
-                              ? 'bg-blue-500/10 border border-blue-500/20 text-blue-400'
-                              : log.type === 'debug'
-                              ? 'bg-gray-500/10 border border-gray-500/20 text-gray-400'
                               : 'bg-accent/50 border border-border text-foreground'
                           }`}
                         >
-                          <div className="flex items-start justify-between gap-2">
-                            <span className="text-muted-foreground">[{log.timestamp}]</span>
-                            <span className="uppercase text-xs font-semibold">
-                              {log.type === 'log' ? 'LOG' : log.type.toUpperCase()}
+                          <div className="flex items-start justify-between gap-2 mb-1">
+                            <span className={`uppercase text-xs font-bold ${
+                              log.type === 'error' ? 'text-red-500' : 'text-yellow-500'
+                            }`}>
+                              {log.type === 'error' ? '⚠️ ERROR' : '⚠️ WARNING'}
                             </span>
+                            <span className="text-muted-foreground text-xs">{log.timestamp}</span>
                           </div>
-                          <div className="mt-1 break-all whitespace-pre-wrap">{log.message}</div>
+                          <div className="break-all whitespace-pre-wrap font-medium">{log.message}</div>
                           {log.filename && (
-                            <div className="mt-1 text-muted-foreground text-xs opacity-75">
-                              {log.filename}:{log.line}:{log.column}
+                            <div className="mt-1 text-muted-foreground text-xs">
+                              📁 {log.filename}:{log.line}:{log.column}
                             </div>
                           )}
                           {log.stack && (
@@ -505,7 +678,7 @@ function PreviewPanel({ url, onClose, onRefresh, onOpenExternal, isMobile }) {
                               <summary className="cursor-pointer text-muted-foreground text-xs hover:text-foreground">
                                 Stack trace
                               </summary>
-                              <pre className="mt-1 text-xs opacity-75 overflow-x-auto">{log.stack}</pre>
+                              <pre className="mt-1 text-xs opacity-75 overflow-x-auto bg-black/20 p-1 rounded">{log.stack}</pre>
                             </details>
                           )}
                         </div>
@@ -540,6 +713,65 @@ function PreviewPanel({ url, onClose, onRefresh, onOpenExternal, isMobile }) {
 
       {/* Preview Content */}
       <div className="flex-1 relative bg-white">
+        {/* Microphone Permission Info Modal */}
+        {showPermissionInfo && (
+          <div className="absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm z-20">
+            <div className="bg-card border border-border rounded-lg p-6 max-w-md mx-4 shadow-lg">
+              <div className="flex items-start justify-between mb-4">
+                <h3 className="text-lg font-semibold text-foreground">Microphone Permission Required</h3>
+                <button
+                  onClick={() => setShowPermissionInfo(false)}
+                  className="p-1 hover:bg-accent rounded-md transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Your application needs microphone access to work properly. The preview panel requires permission to share microphone access with the embedded application.
+                </p>
+                
+                {microphoneStatus === 'denied' && (
+                  <div className="bg-red-500/10 border border-red-500/20 rounded-md p-3">
+                    <p className="text-sm text-red-600 dark:text-red-400">
+                      Microphone permission was previously denied. You may need to:
+                    </p>
+                    <ol className="mt-2 ml-4 text-sm text-red-600 dark:text-red-400 list-decimal">
+                      <li>Click the lock icon in your browser's address bar</li>
+                      <li>Find the microphone permission setting</li>
+                      <li>Change it from "Blocked" to "Allow"</li>
+                      <li>Refresh the page</li>
+                    </ol>
+                  </div>
+                )}
+                
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={requestMicrophonePermission}
+                    className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+                    disabled={microphoneStatus === 'requesting'}
+                  >
+                    {microphoneStatus === 'requesting' ? 'Requesting...' : 'Grant Permission'}
+                  </button>
+                  <button
+                    onClick={() => setShowPermissionInfo(false)}
+                    className="px-4 py-2 bg-muted text-foreground rounded-md hover:bg-accent transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+                
+                <p className="text-xs text-muted-foreground">
+                  Note: The permission is only for this session and will be used solely by your application in the preview.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {isPaused && (
           <div className="absolute inset-0 flex items-center justify-center bg-background z-10">
             <div className="text-center">
@@ -603,6 +835,8 @@ function PreviewPanel({ url, onClose, onRefresh, onOpenExternal, isMobile }) {
           title="Preview"
           loading="lazy"
           data-preview-frame="true"
+          allow="microphone *; camera *; geolocation *; accelerometer *; gyroscope *; magnetometer *; midi *; encrypted-media *"
+          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads"
         />
       </div>
     </div>

@@ -1,126 +1,271 @@
 /**
- * Request validation middleware
+ * Input Validation Schemas
+ * Comprehensive validation using Joi for all API endpoints
  */
 
-const { ValidationError } = require('../lib/errors');
-const logger = require('../lib/logger').child('validation');
+import Joi from 'joi';
+import Logger from '../lib/logger.js';
+
+const logger = new Logger('ValidationMiddleware');
+
+// Base schemas for common data types
+const schemas = {
+  // Authentication schemas
+  auth: {
+    login: Joi.object({
+      username: Joi.string().alphanum().min(3).max(30).required(),
+      password: Joi.string().min(6).max(128).required()
+    }),
+    register: Joi.object({
+      username: Joi.string().alphanum().min(3).max(30).required(),
+      password: Joi.string().min(6).max(128).required(),
+      email: Joi.string().email().optional()
+    })
+  },
+
+  // Project schemas
+  project: {
+    create: Joi.object({
+      name: Joi.string().min(1).max(100).required(),
+      path: Joi.string().min(1).max(500).required(),
+      description: Joi.string().max(1000).optional()
+    }),
+    update: Joi.object({
+      name: Joi.string().min(1).max(100).optional(),
+      description: Joi.string().max(1000).optional(),
+      settings: Joi.object().optional()
+    })
+  },
+
+  // Claude CLI schemas
+  claude: {
+    execute: Joi.object({
+      command: Joi.string().min(1).max(10000).required(),
+      projectId: Joi.string().uuid().optional(),
+      options: Joi.object({
+        timeout: Joi.number().integer().min(1000).max(300000).optional(),
+        model: Joi.string().valid(
+          'claude-3-5-sonnet-20241022',
+          'claude-3-sonnet-20240229',
+          'claude-3-haiku-20240307'
+        ).optional()
+      }).optional()
+    }),
+    chat: Joi.object({
+      message: Joi.string().min(1).max(50000).required(),
+      sessionId: Joi.string().uuid().optional(),
+      context: Joi.object().optional()
+    })
+  },
+
+  // Git operation schemas
+  git: {
+    commit: Joi.object({
+      message: Joi.string().min(1).max(1000).required(),
+      files: Joi.array().items(Joi.string()).optional()
+    }),
+    branch: Joi.object({
+      name: Joi.string().min(1).max(100).required(),
+      fromBranch: Joi.string().max(100).optional()
+    }),
+    merge: Joi.object({
+      sourceBranch: Joi.string().min(1).max(100).required(),
+      targetBranch: Joi.string().min(1).max(100).required()
+    })
+  },
+
+  // File operation schemas
+  file: {
+    create: Joi.object({
+      path: Joi.string().min(1).max(1000).required(),
+      content: Joi.string().max(1000000).optional(), // 1MB limit
+      type: Joi.string().valid('file', 'directory').default('file')
+    }),
+    update: Joi.object({
+      content: Joi.string().max(1000000).required()
+    }),
+    move: Joi.object({
+      newPath: Joi.string().min(1).max(1000).required()
+    })
+  },
+
+  // Task management schemas
+  task: {
+    create: Joi.object({
+      title: Joi.string().min(1).max(200).required(),
+      description: Joi.string().max(2000).optional(),
+      priority: Joi.string().valid('low', 'medium', 'high', 'urgent').default('medium'),
+      status: Joi.string().valid('todo', 'in_progress', 'done', 'blocked').default('todo'),
+      projectId: Joi.string().uuid().optional(),
+      assignee: Joi.string().max(100).optional(),
+      dueDate: Joi.date().optional()
+    }),
+    update: Joi.object({
+      title: Joi.string().min(1).max(200).optional(),
+      description: Joi.string().max(2000).optional(),
+      priority: Joi.string().valid('low', 'medium', 'high', 'urgent').optional(),
+      status: Joi.string().valid('todo', 'in_progress', 'done', 'blocked').optional(),
+      assignee: Joi.string().max(100).optional(),
+      dueDate: Joi.date().optional()
+    })
+  },
+
+  // Analytics schemas
+  analytics: {
+    usage: Joi.object({
+      startDate: Joi.date().required(),
+      endDate: Joi.date().min(Joi.ref('startDate')).required(),
+      projectId: Joi.string().uuid().optional(),
+      groupBy: Joi.string().valid('day', 'week', 'month').default('day')
+    })
+  },
+
+  // Common query parameters
+  query: {
+    pagination: Joi.object({
+      page: Joi.number().integer().min(1).default(1),
+      limit: Joi.number().integer().min(1).max(100).default(20),
+      sortBy: Joi.string().max(50).optional(),
+      sortOrder: Joi.string().valid('asc', 'desc').default('asc')
+    }),
+    search: Joi.object({
+      q: Joi.string().min(1).max(200).optional(),
+      filter: Joi.object().optional()
+    })
+  }
+};
 
 /**
- * Validate request body against schema
+ * Create validation middleware for specific schema
+ * @param {Object} schema - Joi schema to validate against
+ * @param {string} source - Source of data ('body', 'query', 'params')
+ * @returns {Function} Express middleware function
  */
-function validateBody(schema) {
+export function validateSchema(schema, source = 'body') {
   return (req, res, next) => {
-    const errors = [];
-    
-    for (const [field, rules] of Object.entries(schema)) {
-      const value = req.body[field];
-      
-      // Check required fields
-      if (rules.required && (value === undefined || value === null || value === '')) {
-        errors.push(`${field} is required`);
-        continue;
-      }
-      
-      // Skip validation if field is optional and not provided
-      if (!rules.required && (value === undefined || value === null)) {
-        continue;
-      }
-      
-      // Type validation
-      if (rules.type) {
-        const actualType = Array.isArray(value) ? 'array' : typeof value;
-        if (actualType !== rules.type) {
-          errors.push(`${field} must be of type ${rules.type}`);
-          continue;
-        }
-      }
-      
-      // String validations
-      if (rules.type === 'string') {
-        if (rules.minLength && value.length < rules.minLength) {
-          errors.push(`${field} must be at least ${rules.minLength} characters`);
-        }
-        if (rules.maxLength && value.length > rules.maxLength) {
-          errors.push(`${field} must not exceed ${rules.maxLength} characters`);
-        }
-        if (rules.pattern && !rules.pattern.test(value)) {
-          errors.push(`${field} has invalid format`);
-        }
-      }
-      
-      // Number validations
-      if (rules.type === 'number') {
-        if (rules.min !== undefined && value < rules.min) {
-          errors.push(`${field} must be at least ${rules.min}`);
-        }
-        if (rules.max !== undefined && value > rules.max) {
-          errors.push(`${field} must not exceed ${rules.max}`);
-        }
-      }
-      
-      // Array validations
-      if (rules.type === 'array') {
-        if (rules.minItems && value.length < rules.minItems) {
-          errors.push(`${field} must contain at least ${rules.minItems} items`);
-        }
-        if (rules.maxItems && value.length > rules.maxItems) {
-          errors.push(`${field} must not exceed ${rules.maxItems} items`);
-        }
-      }
-      
-      // Custom validation
-      if (rules.validate) {
-        const customError = rules.validate(value, req.body);
-        if (customError) {
-          errors.push(customError);
-        }
-      }
+    const data = req[source];
+    const { error, value } = schema.validate(data, {
+      abortEarly: false,
+      stripUnknown: true,
+      convert: true
+    });
+
+    if (error) {
+      const validationErrors = error.details.map(detail => ({
+        field: detail.path.join('.'),
+        message: detail.message,
+        value: detail.context.value
+      }));
+
+      logger.warn('Validation failed', {
+        source,
+        errors: validationErrors,
+        originalData: data,
+        endpoint: req.originalUrl,
+        method: req.method,
+        ip: req.ip
+      });
+
+      return res.status(400).json({
+        error: 'Validation failed',
+        details: validationErrors,
+        timestamp: new Date().toISOString()
+      });
     }
-    
-    if (errors.length > 0) {
-      logger.warn('Validation failed', { errors, body: req.body });
-      throw new ValidationError('Validation failed', errors);
-    }
-    
+
+    // Replace original data with validated and sanitized data
+    req[source] = value;
+
+    logger.debug('Validation passed', {
+      source,
+      endpoint: req.originalUrl,
+      method: req.method,
+      validatedFields: Object.keys(value)
+    });
+
     next();
   };
 }
 
 /**
- * Validate query parameters
+ * Validate request body against schema
+ * @param {Object} schema - Joi schema
+ * @returns {Function} Express middleware
  */
-function validateQuery(schema) {
+export const validateBody = (schema) => validateSchema(schema, 'body');
+
+/**
+ * Validate query parameters against schema
+ * @param {Object} schema - Joi schema
+ * @returns {Function} Express middleware
+ */
+export const validateQuery = (schema) => validateSchema(schema, 'query');
+
+/**
+ * Validate route parameters against schema
+ * @param {Object} schema - Joi schema
+ * @returns {Function} Express middleware
+ */
+export const validateParams = (schema) => validateSchema(schema, 'params');
+
+/**
+ * Combined validation for multiple sources
+ * @param {Object} options - Validation options
+ * @param {Object} options.body - Body schema
+ * @param {Object} options.query - Query schema
+ * @param {Object} options.params - Params schema
+ * @returns {Function} Express middleware
+ */
+export function validateRequest({ body, query, params }) {
   return (req, res, next) => {
+    const validations = [];
+    
+    if (body) validations.push({ schema: body, source: 'body' });
+    if (query) validations.push({ schema: query, source: 'query' });
+    if (params) validations.push({ schema: params, source: 'params' });
+
     const errors = [];
-    
-    for (const [param, rules] of Object.entries(schema)) {
-      const value = req.query[param];
-      
-      // Convert to appropriate type
-      let parsedValue = value;
-      if (value !== undefined && rules.type === 'number') {
-        parsedValue = Number(value);
-        if (isNaN(parsedValue)) {
-          errors.push(`${param} must be a valid number`);
-          continue;
-        }
-        req.query[param] = parsedValue;
-      } else if (value !== undefined && rules.type === 'boolean') {
-        parsedValue = value === 'true' || value === '1';
-        req.query[param] = parsedValue;
-      }
-      
-      // Apply same validation logic as body
-      if (rules.required && !value) {
-        errors.push(`${param} is required`);
+
+    for (const { schema, source } of validations) {
+      const { error, value } = schema.validate(req[source], {
+        abortEarly: false,
+        stripUnknown: true,
+        convert: true
+      });
+
+      if (error) {
+        const validationErrors = error.details.map(detail => ({
+          field: `${source}.${detail.path.join('.')}`,
+          message: detail.message,
+          value: detail.context.value
+        }));
+        errors.push(...validationErrors);
+      } else {
+        req[source] = value;
       }
     }
-    
+
     if (errors.length > 0) {
-      logger.warn('Query validation failed', { errors, query: req.query });
-      throw new ValidationError('Query validation failed', errors);
+      logger.warn('Multi-source validation failed', {
+        errors,
+        endpoint: req.originalUrl,
+        method: req.method,
+        ip: req.ip
+      });
+
+      return res.status(400).json({
+        error: 'Validation failed',
+        details: errors,
+        timestamp: new Date().toISOString()
+      });
     }
-    
+
+    logger.debug('Multi-source validation passed', {
+      endpoint: req.originalUrl,
+      method: req.method,
+      sources: validations.map(v => v.source)
+    });
+
     next();
   };
 }
@@ -128,7 +273,7 @@ function validateQuery(schema) {
 /**
  * Sanitize input to prevent XSS and injection attacks
  */
-function sanitizeInput() {
+export function sanitizeInput() {
   return (req, res, next) => {
     // Sanitize body
     if (req.body && typeof req.body === 'object') {
@@ -171,8 +316,15 @@ function sanitizeObject(obj) {
   return sanitized;
 }
 
-module.exports = {
+// Export schemas for use in routes
+export { schemas };
+
+export default {
+  validateSchema,
   validateBody,
   validateQuery,
-  sanitizeInput
+  validateParams,
+  validateRequest,
+  sanitizeInput,
+  schemas
 };
