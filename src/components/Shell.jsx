@@ -838,7 +838,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       cursorBlink: true,
       cursorStyle: 'block', // Use block cursor for better visibility
       cursorWidth: 1,
-      fontSize: isMobile ? 14 : 14,  // Increased mobile font size for better readability
+      fontSize: isMobile ? 15 : 16,  // Increased font size for better readability
       fontFamily: 'Menlo, Monaco, "Courier New", monospace',
       allowProposedApi: true, // Required for clipboard addon
       allowTransparency: false,
