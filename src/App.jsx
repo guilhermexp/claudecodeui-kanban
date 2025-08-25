@@ -599,12 +599,13 @@ function AppContent() {
 
   return (
     <div 
-      className="fixed inset-x-0 top-0 bottom-0 flex bg-background" 
+      className="fixed inset-x-0 top-0 bottom-0 flex bg-background p-2" 
       style={{ 
         height: '100%',
         cursor: isResizing ? 'col-resize' : 'default'
       }}
     >
+      <div className="flex w-full h-full rounded-xl overflow-hidden bg-card border border-border">
       {/* Desktop Sidebar - Integrated Mode (no side panels active) */}
       {!isMobile && (sidebarOpen || showToolsSettings) && !shouldUseSidebarOverlay && (
         <div 
@@ -780,6 +781,7 @@ function AppContent() {
 
       {/* Session Keep Alive Component */}
       <SessionKeepAlive />
+      </div>
     </div>
   );
 }
