@@ -568,9 +568,9 @@ function Sidebar({
   }, [searchFilter]);
 
   return (
-    <div className="h-full flex flex-col bg-card/95 backdrop-blur-sm border-r border-border md:select-none rounded-r-xl">
+    <div className="h-full flex flex-col bg-card/95 backdrop-blur-sm border-r border-border md:select-none">
       {/* Header */}
-      <div className="h-12 md:h-14 px-3 md:px-4 border-b border-border flex items-center rounded-tr-xl">
+      <div className="h-12 md:h-14 px-3 md:px-4 border-b border-border flex items-center">
         {/* Desktop Header */}
           <div className="hidden md:flex items-center justify-between w-full">
           <div className="flex items-center gap-3">
@@ -925,7 +925,7 @@ function Sidebar({
       )}
       
       {/* Projects List */}
-      <ScrollArea className="flex-1 px-3 py-2 overflow-y-auto overscroll-contain scrollbar-thin rounded-br-xl">
+      <ScrollArea className="flex-1 px-3 py-2 overflow-y-auto overscroll-contain scrollbar-thin">
         <div className="space-y-1 pb-safe-area-inset-bottom">
           {isLoading ? (
             <div className="text-center py-12 md:py-8 px-4">
