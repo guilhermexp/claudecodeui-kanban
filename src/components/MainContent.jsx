@@ -169,9 +169,9 @@ function MainContent({
   }
 
   return (
-    <div className="h-full min-h-0 flex flex-col relative">
+    <div className="h-full min-h-0 flex flex-col relative rounded-l-xl overflow-hidden">
       {/* Header with tabs */}
-      <div className="bg-card/95 backdrop-blur-sm border-b border-border h-12 md:h-14 px-3 md:px-4 flex items-center flex-shrink-0 relative z-50">
+      <div className="bg-card/95 backdrop-blur-sm border-b border-border h-12 md:h-14 px-3 md:px-4 flex items-center flex-shrink-0 relative z-50 rounded-tl-xl">
         <div className="flex items-center justify-between gap-4 md:gap-6 w-full">
           <div className="flex items-center space-x-2 sm:space-x-3 flex-1 order-1">
             {isMobile && (

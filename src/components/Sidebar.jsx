@@ -5,7 +5,7 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
 
-import { FolderOpen, Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, Edit3, Check, X, Trash2, Settings, FolderPlus, RefreshCw, Sparkles, Moon, Sun, Trello, Search, Star, Edit2, Loader2, BarChart3, FolderSearch, Filter, Layers, Terminal, Kanban } from 'lucide-react';
+import { FolderOpen, Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, ChevronUp, Edit3, Check, X, Trash2, Settings, FolderPlus, RefreshCw, Sparkles, Moon, Sun, Trello, Search, Star, Edit2, Loader2, BarChart3, FolderSearch, Filter, Layers, Terminal, Kanban } from 'lucide-react';
 import { ProjectIcon, isVibeKanbanProject as isVibeKanban } from '../utils/projectIcons.jsx';
 import { cn } from '../lib/utils';
 import ClaudeLogo from './ClaudeLogo';
@@ -57,6 +57,15 @@ function Sidebar({
   const [isEditMode, setIsEditMode] = useState(false);
   const [projectFilter, setProjectFilter] = useState('claude'); // 'all', 'claude', 'vibe'
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
+  // Lazy loading control with localStorage persistence
+  const [showAllProjects, setShowAllProjects] = useState(() => {
+    try {
+      const cached = localStorage.getItem('sidebar_showAllProjects');
+      return cached ? JSON.parse(cached) : false;
+    } catch {
+      return false;
+    }
+  });
   const { isDarkMode, toggleDarkMode } = useTheme();
 
   // Starred projects state - persisted in localStorage
@@ -506,7 +515,7 @@ function Sidebar({
   };
 
   // Filter projects based on search input and project type
-  const filteredProjects = sortedProjects.filter(project => {
+  let filteredProjects = sortedProjects.filter(project => {
     // First apply type filter
     if (projectFilter === 'vibe') {
       // Show only Vibe Kanban projects (those with Trello icon)
@@ -528,10 +537,40 @@ function Sidebar({
     return displayName.includes(searchLower) || projectName.includes(searchLower);
   });
 
+  // Store the total available projects after filtering (before lazy loading)
+  const totalFilteredProjects = filteredProjects.length;
+
+  // Lazy loading: show only recent projects unless search is active or showAllProjects is true
+  if (!searchFilter.trim() && !showAllProjects) {
+    // Show starred projects + recent projects (max 8 total)
+    const starredProjects = filteredProjects.filter(project => isProjectStarred(project.name));
+    const recentProjects = filteredProjects
+      .filter(project => !isProjectStarred(project.name))
+      .slice(0, Math.max(1, 8 - starredProjects.length)); // At least 1, max 8 total
+    
+    filteredProjects = [...starredProjects, ...recentProjects];
+  }
+  
+  // Persist showAllProjects state in localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('sidebar_showAllProjects', JSON.stringify(showAllProjects));
+    } catch (error) {
+      console.warn('Failed to save showAllProjects state:', error);
+    }
+  }, [showAllProjects]);
+
+  // Reset showAllProjects when search is active (search shows all matching results)
+  useEffect(() => {
+    if (searchFilter.trim()) {
+      setShowAllProjects(false);
+    }
+  }, [searchFilter]);
+
   return (
-    <div className="h-full flex flex-col bg-card/95 backdrop-blur-sm border-r border-border md:select-none">
+    <div className="h-full flex flex-col bg-card/95 backdrop-blur-sm border-r border-border md:select-none rounded-r-xl">
       {/* Header */}
-      <div className="h-12 md:h-14 px-3 md:px-4 border-b border-border flex items-center">
+      <div className="h-12 md:h-14 px-3 md:px-4 border-b border-border flex items-center rounded-tr-xl">
         {/* Desktop Header */}
           <div className="hidden md:flex items-center justify-between w-full">
           <div className="flex items-center gap-3">
@@ -565,7 +604,15 @@ function Sidebar({
               </div>
               <div>
                 <h1 className="text-base font-semibold text-foreground">CodeUI</h1>
-                <p className="text-xs text-muted-foreground">Projects</p>
+                <p className="text-xs text-muted-foreground">
+                  {searchFilter.trim() ? (
+                    `${filteredProjects.length} of ${totalFilteredProjects} projects`
+                  ) : showAllProjects ? (
+                    `${filteredProjects.length} projects`
+                  ) : (
+                    `${filteredProjects.length} of ${totalFilteredProjects} projects`
+                  )}
+                </p>
               </div>
             </div>
             {onSidebarClose && (
@@ -878,7 +925,7 @@ function Sidebar({
       )}
       
       {/* Projects List */}
-      <ScrollArea className="flex-1 px-3 py-2 overflow-y-auto overscroll-contain scrollbar-thin">
+      <ScrollArea className="flex-1 px-3 py-2 overflow-y-auto overscroll-contain scrollbar-thin rounded-br-xl">
         <div className="space-y-1 pb-safe-area-inset-bottom">
           {isLoading ? (
             <div className="text-center py-12 md:py-8 px-4">
@@ -1322,6 +1369,33 @@ function Sidebar({
                 </div>
               );
             })
+          )}
+          
+          {/* Show More/Less Projects Button */}
+          {!searchFilter.trim() && totalFilteredProjects > 8 && (
+            <div className="px-3 py-2">
+              {!showAllProjects ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full justify-center gap-2 h-8 text-sm border-dashed hover:bg-accent/50"
+                  onClick={() => setShowAllProjects(true)}
+                >
+                  <ChevronDown className="w-3 h-3" />
+                  Show {totalFilteredProjects - filteredProjects.length} more projects
+                </Button>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-center gap-2 h-8 text-sm hover:bg-accent/30"
+                  onClick={() => setShowAllProjects(false)}
+                >
+                  <ChevronUp className="w-3 h-3" />
+                  Show less
+                </Button>
+              )}
+            </div>
           )}
         </div>
       </ScrollArea>

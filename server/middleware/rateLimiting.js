@@ -220,11 +220,11 @@ export const processLimiter = (() => {
 
 // Specific rate limiter for project analysis endpoint
 export const projectAnalysisRateLimit = rateLimit({
-  windowMs: 5 * 60 * 1000, // 5 minutes
-  max: 5, // Only 5 analysis requests per 5 minutes
+  windowMs: 2 * 60 * 1000, // 2 minutes (reduced window)
+  max: 15, // Increased to 15 analysis requests per 2 minutes
   message: {
     error: 'Project analysis rate limit exceeded. This endpoint is resource-intensive.',
-    retryAfter: '5 minutes'
+    retryAfter: '2 minutes'
   },
   standardHeaders: true,
   legacyHeaders: false,
@@ -237,7 +237,7 @@ export const projectAnalysisRateLimit = rateLimit({
     });
     res.status(429).json({
       error: 'Project analysis rate limit exceeded. This endpoint is resource-intensive.',
-      retryAfter: '5 minutes'
+      retryAfter: '2 minutes'
     });
   }
 });
