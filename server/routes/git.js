@@ -4,7 +4,6 @@ import { promisify } from 'util';
 import path from 'path';
 import { promises as fs } from 'fs';
 import { extractProjectDirectory } from '../projects.js';
-import { monitoringRateLimit } from '../middleware/rateLimiting.js';
 
 const router = express.Router();
 const execAsync = promisify(exec);
@@ -53,7 +52,7 @@ async function getGitRoot(projectPath) {
 }
 
 // Get git status for a project
-router.get('/status', monitoringRateLimit, async (req, res) => {
+router.get('/status', async (req, res) => {
   const { project } = req.query;
   
   if (!project) {
@@ -219,7 +218,7 @@ router.post('/commit', async (req, res) => {
 });
 
 // Get list of branches
-router.get('/branches', monitoringRateLimit, async (req, res) => {
+router.get('/branches', async (req, res) => {
   const { project } = req.query;
   
   if (!project) {
@@ -556,7 +555,7 @@ function generateSimpleCommitMessage(files, diff) {
 }
 
 // Get remote status (ahead/behind commits with smart remote detection)
-router.get('/remote-status', monitoringRateLimit, async (req, res) => {
+router.get('/remote-status', async (req, res) => {
   const { project } = req.query;
   
   if (!project) {

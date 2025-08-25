@@ -945,89 +945,13 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
 
     // Add keyboard shortcuts for copy/paste and command history
     terminal.current.attachCustomKeyEventHandler((event) => {
-      // Allow Tab to work normally in terminal for autocompletion
-      if (event.key === 'Tab') {
-        return false; // Let terminal handle tab for autocompletion
+      // Allow Tab and arrow keys to work normally in terminal for autocompletion
+      if (event.key === 'Tab' || 
+          event.key === 'ArrowUp' || event.key === 'ArrowDown' || 
+          event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+        return false; // Let terminal handle these keys completely
       }
       
-      // Don't intercept arrow keys without modifiers - let terminal handle them completely
-      if ((event.key === 'ArrowUp' || event.key === 'ArrowDown' || 
-          event.key === 'ArrowLeft' || event.key === 'ArrowRight') &&
-          !event.ctrlKey && !event.altKey && !event.metaKey) {
-        return false; // Let terminal handle arrow keys for autocompletion navigation
-      }
-      
-      // Command history navigation with Ctrl+Arrow keys (alternate method)
-      if (event.ctrlKey && event.key === 'ArrowUp' && commandHistory.current.length > 0) {
-        event.preventDefault();
-        
-        // Save current command if at the end of history
-        if (commandHistoryIndex.current === -1) {
-          // Get current line content from terminal
-          const buffer = terminal.current.buffer.active;
-          const cursorY = buffer.cursorY;
-          const line = buffer.getLine(cursorY);
-          if (line) {
-            currentCommand.current = line.translateToString().trim();
-          }
-        }
-        
-        // Move up in history
-        if (commandHistoryIndex.current < commandHistory.current.length - 1) {
-          commandHistoryIndex.current++;
-          const historicCommand = commandHistory.current[commandHistory.current.length - 1 - commandHistoryIndex.current];
-          
-          // Clear current line and write historic command
-          if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-            // Send Ctrl+U to clear current line, then send the historic command
-            ws.current.send(JSON.stringify({
-              type: 'input',
-              data: '\x15' // Ctrl+U to clear line
-            }));
-            setTimeout(() => {
-              ws.current.send(JSON.stringify({
-                type: 'input',
-                data: historicCommand
-              }));
-            }, 10);
-          }
-        }
-        return false;
-      }
-      
-      if (event.ctrlKey && event.key === 'ArrowDown' && commandHistory.current.length > 0) {
-        event.preventDefault();
-        
-        // Move down in history
-        if (commandHistoryIndex.current > -1) {
-          commandHistoryIndex.current--;
-          
-          let commandToShow = '';
-          if (commandHistoryIndex.current === -1) {
-            // Back to current command
-            commandToShow = currentCommand.current;
-          } else {
-            // Show historic command
-            commandToShow = commandHistory.current[commandHistory.current.length - 1 - commandHistoryIndex.current];
-          }
-          
-          // Clear current line and write command
-          if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-            // Send Ctrl+U to clear current line, then send the command
-            ws.current.send(JSON.stringify({
-              type: 'input',
-              data: '\x15' // Ctrl+U to clear line
-            }));
-            setTimeout(() => {
-              ws.current.send(JSON.stringify({
-                type: 'input',
-                data: commandToShow
-              }));
-            }, 10);
-          }
-        }
-        return false;
-      }
       
       // Ctrl+F or Cmd+F for search
       if ((event.ctrlKey || event.metaKey) && event.key === 'f') {
@@ -1988,7 +1912,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   return (
     <PanelGroup direction="horizontal" className="h-full w-full flex gap-3">
       {/* Terminal Panel - Always present */}
-      <Panel defaultSize={showPreview && !isMobile ? 50 : 100} minSize={30} className="h-full">
+      <Panel defaultSize={showPreview && !isMobile ? 30 : 100} minSize={20} className="h-full">
         <div 
           className="h-full min-h-0 flex flex-col bg-card rounded-xl border border-border" 
           {...dropzoneProps}>
@@ -2120,7 +2044,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
         </PanelResizeHandle>
         
         {/* Preview Panel */}
-        <Panel defaultSize={50} minSize={20} className="h-full">
+        <Panel defaultSize={70} minSize={30} className="h-full">
           <PreviewPanel
             url={previewUrl}
             onClose={() => setShowPreview(false)}

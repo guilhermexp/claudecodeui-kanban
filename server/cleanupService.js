@@ -23,12 +23,13 @@ class VibeKanbanCleanupService {
     
     // Configurações
     this.config = {
-      checkInterval: 120000, // 2 minutos (aumentado de 30s para reduzir overhead)
-      processTimeout: 300000, // 5 minutos para considerar órfão
+      checkInterval: 600000, // 10 minutos (reduzido de 2min para diminuir overhead)
+      processTimeout: 900000, // 15 minutos para considerar órfão (mais conservador)
       maxOrphanCount: 10, // Máximo de processos órfãos antes de limpeza forçada
       vibeKanbanPort: 8081,
-      logLevel: 'info',
-      skipHealthCheckIfNotRunning: true // Nova opção para evitar checks desnecessários
+      logLevel: 'warn', // Reduzir logs para apenas warnings e erros
+      skipHealthCheckIfNotRunning: true, // Nova opção para evitar checks desnecessários
+      skipCleanupIfNoOrphans: true // Pular limpeza se não há processos órfãos
     };
     
     // Padrões de processos do Vibe Kanban para identificar
@@ -100,35 +101,59 @@ class VibeKanbanCleanupService {
     const startTime = Date.now();
     
     try {
+      // 1. Verificar se porta Vibe Kanban está em uso
+      const isPortInUse = await this.checkPortUsage(this.config.vibeKanbanPort);
+      
+      // 2. Se porta está funcionando e configuração permite pular, fazer verificação simples
+      if (isPortInUse && this.config.skipCleanupIfNoOrphans) {
+        // Quick check: apenas contar processos
+        const vibeProcesses = await this.findVibeKanbanProcesses();
+        
+        // Se há apenas 1 processo (normal) e porta está funcionando, pular limpeza completa
+        if (vibeProcesses.length <= 2) {
+          const duration = Date.now() - startTime;
+          this.logger.debug('Skipped cleanup - system healthy', {
+            event: 'cleanup_skipped',
+            duration: `${duration}ms`,
+            reason: 'system_healthy',
+            statistics: {
+              portInUse: true,
+              totalProcesses: vibeProcesses.length,
+              orphanProcesses: 0,
+              cleanedProcesses: 0
+            }
+          });
+          this.lastCleanup = new Date();
+          return;
+        }
+      }
+      
       this.logger.info('Starting cleanup check', {
         event: 'cleanup_start',
         timestamp: new Date().toISOString()
       });
       
-      // 1. Verificar se porta Vibe Kanban está em uso
-      const isPortInUse = await this.checkPortUsage(this.config.vibeKanbanPort);
-      
-      // 2. Listar processos relacionados ao Vibe Kanban
+      // 3. Listar processos relacionados ao Vibe Kanban
       const vibeProcesses = await this.findVibeKanbanProcesses();
       
-      // 3. Identificar processos órfãos
+      // 4. Identificar processos órfãos
       const orphanProcesses = await this.identifyOrphanProcesses(vibeProcesses, isPortInUse);
       
-      // 4. Limpar processos órfãos se necessário
+      // 5. Limpar processos órfãos se necessário
       if (orphanProcesses.length > 0) {
         await this.cleanOrphanProcesses(orphanProcesses);
+        
+        // 6. Apenas limpar arquivos e verificar DB se houve limpeza de processos
+        await this.cleanTemporaryFiles();
+        await this.checkDatabaseHealth();
       }
-      
-      // 5. Limpar arquivos temporários e caches
-      await this.cleanTemporaryFiles();
-      
-      // 6. Verificar integridade do banco de dados
-      await this.checkDatabaseHealth();
       
       this.lastCleanup = new Date();
       const duration = Date.now() - startTime;
       
-      this.logger.info('Cleanup completed successfully', {
+      // Só logar como INFO se houve ação, senão usar DEBUG
+      const logLevel = orphanProcesses.length > 0 ? 'info' : 'debug';
+      this.logger[logLevel]('Cleanup completed successfully', {
         event: 'cleanup_complete',
         duration: `${duration}ms`,
         statistics: {
@@ -196,11 +221,13 @@ class VibeKanbanCleanupService {
         }
       }
       
-      this.logger.debug('Found Vibe Kanban processes', {
-        event: 'processes_found',
-        count: processes.length,
-        processes: processes.map(p => ({ pid: p.pid, command: p.command.substring(0, 50) + '...' }))
-      });
+      if (this.config.logLevel === 'debug') {
+        this.logger.debug('Found Vibe Kanban processes', {
+          event: 'processes_found',
+          count: processes.length,
+          processes: processes.map(p => ({ pid: p.pid, command: p.command.substring(0, 50) + '...' }))
+        });
+      }
       
       return processes;
     } catch (error) {

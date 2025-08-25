@@ -12,13 +12,17 @@ const rateLimitLogger = logger.child('rate-limit');
 // General API rate limiting
 export const apiRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 500, // limit each IP to 500 requests per windowMs (increased for monitoring)
+  max: 1000, // general API rate limit
   message: {
     error: 'Too many requests from this IP',
     retryAfter: '15 minutes'
   },
   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  skip: (req) => {
+    // No specific paths skipped currently
+    return false;
+  },
   handler: (req, res) => {
     rateLimitLogger.warn('Rate limit exceeded', {
       event: 'rate_limit_exceeded',
@@ -34,35 +38,6 @@ export const apiRateLimit = rateLimit({
       current: req.rateLimit.current,
       limit: req.rateLimit.limit,
       remaining: req.rateLimit.remaining
-    });
-  }
-});
-
-// Monitoring endpoints rate limiting (more permissive)
-export const monitoringRateLimit = rateLimit({
-  windowMs: 1 * 60 * 1000, // 1 minute
-  max: 200, // allow 200 requests per minute for monitoring
-  message: {
-    error: 'Too many monitoring requests',
-    retryAfter: '1 minute'
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-  skip: (req) => {
-    // Skip rate limiting for specific monitoring endpoints if needed
-    return req.path === '/api/health';
-  },
-  handler: (req, res) => {
-    rateLimitLogger.warn('Monitoring rate limit exceeded', {
-      event: 'monitoring_rate_limit_exceeded',
-      ip: req.ip,
-      path: req.path,
-      method: req.method
-    });
-    
-    res.status(429).json({
-      error: 'Too many monitoring requests',
-      retryAfter: '1 minute'
     });
   }
 });
@@ -161,8 +136,8 @@ export const resourceMonitor = (req, res, next) => {
       });
     }
 
-    // Log high memory usage
-    if (memoryDiff.heapUsed > 50 * 1024 * 1024) { // 50MB
+    // Log high memory usage (increased threshold to reduce noise)
+    if (memoryDiff.heapUsed > 200 * 1024 * 1024) { // 200MB (was 50MB)
       rateLimitLogger.warn('High memory usage request', {
         event: 'high_memory_usage',
         path: req.path,
@@ -242,6 +217,30 @@ export const processLimiter = (() => {
     next();
   };
 })();
+
+// Specific rate limiter for project analysis endpoint
+export const projectAnalysisRateLimit = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  max: 5, // Only 5 analysis requests per 5 minutes
+  message: {
+    error: 'Project analysis rate limit exceeded. This endpoint is resource-intensive.',
+    retryAfter: '5 minutes'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) => {
+    rateLimitLogger.warn('Project analysis rate limit exceeded', {
+      event: 'project_analysis_rate_limit_exceeded',
+      ip: req.ip,
+      path: req.path,
+      projectPath: req.query.path
+    });
+    res.status(429).json({
+      error: 'Project analysis rate limit exceeded. This endpoint is resource-intensive.',
+      retryAfter: '5 minutes'
+    });
+  }
+});
 
 // Cleanup interval to prevent memory leaks
 setInterval(() => {

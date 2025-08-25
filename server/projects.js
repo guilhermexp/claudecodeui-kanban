@@ -7,9 +7,15 @@ import readline from 'readline';
 const projectDirectoryCache = new Map();
 let cacheTimestamp = Date.now();
 
+// Cache for projects list to reduce memory usage
+const projectsCache = { data: null, timestamp: 0 };
+const PROJECTS_CACHE_DURATION = 30 * 1000; // 30 seconds
+
 // Clear cache when needed (called when project files change)
 function clearProjectDirectoryCache() {
   projectDirectoryCache.clear();
+  projectsCache.data = null;
+  projectsCache.timestamp = 0;
   cacheTimestamp = Date.now();
 }
 
@@ -178,6 +184,11 @@ async function extractProjectDirectory(projectName) {
 }
 
 async function getProjects() {
+  // Return cached projects if still valid
+  if (projectsCache.data && (Date.now() - projectsCache.timestamp) < PROJECTS_CACHE_DURATION) {
+    return projectsCache.data;
+  }
+
   const claudeDir = path.join(process.env.HOME, '.claude', 'projects');
   const config = await loadProjectConfig();
   const projects = [];
@@ -255,6 +266,10 @@ async function getProjects() {
       projects.push(project);
     }
   }
+  
+  // Cache the results
+  projectsCache.data = projects;
+  projectsCache.timestamp = Date.now();
   
   return projects;
 }

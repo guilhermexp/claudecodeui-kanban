@@ -84,8 +84,6 @@ export const api = {
     }),
   getFiles: (projectName) =>
     authenticatedFetch(`/api/projects/${projectName}/files`),
-  getProjectLogo: (projectName) =>
-    authenticatedFetch(`/api/projects/${projectName}/logo`),
   transcribe: (formData) =>
     authenticatedFetch('/api/transcribe', {
       method: 'POST',
