@@ -22,7 +22,7 @@ Web UI para Claude Code com integração Vibe Kanban e dashboard de uso. Três s
 - `src/components/VibeTaskPanel.jsx`: painel deslizante do Vibe Kanban
 - `src/utils/api.js`: cliente HTTP autenticado
 - `src/utils/projectAnalyzer.js`: análise predominante de tecnologia (via backend)
-- `src/utils/projectIcons.jsx`: detecção e rendering de ícones (VK → Trello, logo real, tech fallback)
+- `src/utils/projectIcons.jsx`: detecção e rendering de ícones (VK → Trello, tech fallback)
 - `src/index.css` + Tailwind
 
 ## Backend (server)
@@ -48,7 +48,6 @@ Web UI para Claude Code com integração Vibe Kanban e dashboard de uso. Três s
   - PUT `/api/projects/:projectName/file` { filePath, content }
   - GET `/api/projects/:projectName/files` (árvore de arquivos limitada)
   - GET `/api/projects/:projectName/files/content?path=ABSOLUTE` (binário; imagens, etc.)
-  - GET `/api/projects/:projectName/logo` (detecção de favicon/logo com cache)
   - GET `/api/projects/analyze?path=ABSOLUTE` (análise leve da stack com cache)
 - Git
   - Prefixo `/api/git/*` (via `server/routes/git.js`)
@@ -68,18 +67,17 @@ Web UI para Claude Code com integração Vibe Kanban e dashboard de uso. Três s
 
 ## Observações de Segurança
 - Todas as rotas `/api/*` (exceto `auth/*` e alguns servidores de imagem) exigem token (Bearer). O frontend usa `authenticatedFetch`.
-- Endpoints de conteúdo binário são servidos via URL assinada pela sessão; para logos, o frontend baixa via fetch autenticado e gera `ObjectURL`.
+- Endpoints de conteúdo binário são servidos via URL assinada pela sessão.
 
 ## Watchers e Cache
 - Watcher (chokidar) em `~/.claude/projects` com debounce: dispara atualização de projetos via WebSocket.
 - Caches em memória (TTL ~1h):
-  - Logos de projetos (`/api/projects/:projectName/logo`)
   - Resultado de análise (`/api/projects/analyze`)
 - Caches são limpos quando o watcher detecta mudanças.
 
 ## Fluxo de Ícones na Sidebar
 1. Se projeto é Vibe Kanban → ícone Trello (fixo)
-2. Tentar logo real (favicon/logo) via `/api/projects/:name/logo` → fetch autenticado → `ObjectURL`
+2. Usar ícone tecnológico baseado na análise do projeto
 3. Fallback: tecnologia predominante (python, react, etc.)
 4. Fallback final: pasta (aberta/fechada)
 

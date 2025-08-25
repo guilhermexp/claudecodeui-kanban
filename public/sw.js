@@ -1,5 +1,5 @@
 // Service Worker for Claude Code UI PWA
-const CACHE_VERSION = 2; // Increment this to force cache update
+const CACHE_VERSION = 5; // Increment this to force cache update
 const CACHE_NAME = `claude-ui-v${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `claude-ui-dynamic-v${CACHE_VERSION}`;
 const urlsToCache = [

@@ -95,7 +95,14 @@ export default defineConfig(({ command, mode }) => {
     build: {
       outDir: 'dist',
       cssMinify: false, // Disable CSS minification to avoid syntax errors
-      target: 'es2020'
+      target: 'es2020',
+      rollupOptions: {
+        output: {
+          entryFileNames: `assets/[name].[hash].js`,
+          chunkFileNames: `assets/[name].[hash].js`,
+          assetFileNames: `assets/[name].[hash].[ext]`
+        }
+      }
     }
   }
 })

@@ -1,5 +1,5 @@
 // Project Icon Detection Utility
-// Automatically detects and returns appropriate icons/logos for projects
+// Automatically detects and returns appropriate icons for projects
 
 import React from 'react';
 import { 
@@ -174,30 +174,6 @@ const TECH_PATTERNS = {
   }
 };
 
-// Common project logo file names to search for
-const LOGO_FILES = [
-  'logo.svg',
-  'logo.png', 
-  'logo.jpg',
-  'logo.jpeg',
-  'icon.svg',
-  'icon.png',
-  'favicon.svg',
-  'favicon.png',
-  'favicon.ico',
-  'public/logo.svg',
-  'public/logo.png',
-  'public/favicon.svg',
-  'public/favicon.png',
-  'src/assets/logo.svg',
-  'src/assets/logo.png',
-  'assets/logo.svg',
-  'assets/logo.png',
-  'images/logo.svg',
-  'images/logo.png',
-  'static/logo.svg',
-  'static/logo.png'
-];
 
 /**
  * Detects project technology based on files and content
@@ -273,72 +249,74 @@ export const isVibeKanbanProject = (project) => {
 };
 
 /**
- * Get project logo/icon with fallback
+ * Get project icon with fallback
  */
+// Cache for project icons to prevent excessive API calls
+const iconCache = new Map();
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
 export const getProjectIcon = async (project, isExpanded = false) => {
   try {
+    // DEBUG: Log function call to verify we're using new code
+    console.log('[DEBUG] getProjectIcon called - new version without logo calls');
+    
+    const cacheKey = `${project.name}-${isExpanded}`;
+    const cached = iconCache.get(cacheKey);
+    
+    // Return cached result if still valid
+    if (cached && (Date.now() - cached.timestamp) < CACHE_DURATION) {
+      return cached.data;
+    }
+
     // 1. Special case: Vibe Kanban always uses Trello icon
     if (isVibeKanbanProject(project)) {
-      return {
+      const result = {
         type: 'lucide',
         lucideIcon: Trello,
         color: '#0079BF'
       };
+      iconCache.set(cacheKey, { data: result, timestamp: Date.now() });
+      return result;
     }
 
-    // 2. Prefer real project logo (favicon/logo) when available
-    try {
-      const res = await api.getProjectLogo(project.name);
-      if (res.ok) {
-        const data = await res.json();
-        if (data?.found && data.url) {
-          // Fetch the binary with auth header and create an object URL
-          try {
-            const imgRes = await authenticatedFetch(data.url);
-            if (imgRes.ok) {
-              const blob = await imgRes.blob();
-              const objectUrl = URL.createObjectURL(blob);
-              return { type: 'image', src: objectUrl };
-            }
-          } catch (_) {
-            // ignore
-          }
-        }
-      }
-    } catch (e) {
-      // Ignore network errors and fall back to icons
-    }
-    
-    // 3. Fallback to technology-detected icon
+    // Fallback to technology-detected icon
     const techConfig = await detectProjectTechnology(project);
     if (techConfig) {
+      let result;
       if (techConfig.isMacProject) {
-        return {
+        result = {
           type: 'mac-apple'
         };
+      } else {
+        result = {
+          type: 'emoji',
+          icon: techConfig.icon,
+          lucideIcon: techConfig.lucideIcon,
+          color: techConfig.color,
+          tech: techConfig
+        };
       }
-      return {
-        type: 'emoji',
-        icon: techConfig.icon,
-        lucideIcon: techConfig.lucideIcon,
-        color: techConfig.color,
-        tech: techConfig
-      };
+      iconCache.set(cacheKey, { data: result, timestamp: Date.now() });
+      return result;
     }
     
-    // 4. Final fallback to folder icons
-    return {
+    // Final fallback to folder icons
+    const result = {
       type: 'lucide',
       lucideIcon: isExpanded ? FolderOpen : Folder,
       color: isExpanded ? '#2563eb' : '#6b7280'
     };
+    iconCache.set(cacheKey, { data: result, timestamp: Date.now() });
+    return result;
   } catch (error) {
     console.error('Error getting project icon:', error);
-    return {
+    const result = {
       type: 'lucide',
       lucideIcon: isExpanded ? FolderOpen : Folder,
       color: isExpanded ? '#2563eb' : '#6b7280'
     };
+    iconCache.set(cacheKey, { data: result, timestamp: Date.now() });
+    return result;
   }
 };
 
@@ -387,12 +365,12 @@ export const ProjectIcon = ({ project, isExpanded = false, size = 16, className 
     );
   }
   
-  // Future: handle actual logo files
+  // Future: handle actual image files
   if (iconConfig.type === 'image') {
     return (
       <img 
         src={iconConfig.src}
-        alt={`${project.name} logo`}
+        alt={`${project.name} icon`}
         className={className}
         style={{ 
           width: size, 
@@ -403,7 +381,7 @@ export const ProjectIcon = ({ project, isExpanded = false, size = 16, className 
     );
   }
   
-  // Mac special-case: render bundled Apple logo SVG
+  // Mac special-case: render bundled Apple icon SVG
   if (iconConfig.type === 'mac-apple') {
     return (
       <img
@@ -426,5 +404,4 @@ export default {
   getProjectIcon,
   ProjectIcon,
   TECH_PATTERNS,
-  LOGO_FILES
 };

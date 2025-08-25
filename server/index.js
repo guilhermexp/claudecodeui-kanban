@@ -48,25 +48,25 @@ import gitRoutes from './routes/git.js';
 import authRoutes from './routes/auth.js';
 // import mcpRoutes from './routes/mcp.js'; // MCP removed - managed directly by Claude CLI
 import usageRoutes from './routes/usage.js';
+import systemRoutes from './routes/system.js';
 import filesRoutes from './routes/files.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 import cleanupService from './cleanupService.js';
 import { 
   apiRateLimit, 
-  monitoringRateLimit,
   strictRateLimit, 
   claudeRateLimit, 
   fileRateLimit, 
   speedLimiter, 
   resourceMonitor, 
-  processLimiter 
+  processLimiter,
+  projectAnalysisRateLimit 
 } from './middleware/rateLimiting.js';
 
 // File system watcher for projects folder
 let projectsWatcher = null;
 // Simple in-memory caches
-const projectLogoCache = new Map(); // key: projectDir, value: { data, ts }
 const projectAnalysisCache = new Map(); // key: projectDir, value: { data, ts }
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 
@@ -178,8 +178,7 @@ async function setupProjectsWatcher() {
           
           // Clear project directory cache when files change
           clearProjectDirectoryCache();
-          // Also clear our local caches to avoid stale logos/analysis
-          projectLogoCache.clear();
+          // Also clear our local caches to avoid stale analysis
           projectAnalysisCache.clear();
           
           // Get updated projects list
@@ -252,6 +251,28 @@ app.use(resourceMonitor);
 app.use(speedLimiter);
 app.use(cors());
 app.use(express.json());
+
+// DEPRECATED: Temporary logo endpoint to handle cached browser requests
+app.get('/api/projects/:projectName/logo', (req, res) => {
+  console.log(`[DEPRECATED] Logo API call from cached code: ${req.path}`);
+  res.status(410).json({
+    error: 'Logo API has been removed',
+    message: 'Please refresh your browser (Ctrl+F5 or Cmd+Shift+R) to get the updated version',
+    removed: true,
+    timestamp: new Date().toISOString()
+  });
+});
+
+// DEPRECATED: Temporary system monitor endpoint to handle cached browser requests
+app.get('/api/system/monitor', (req, res) => {
+  console.log(`[DEPRECATED] System monitor API call from cached code: ${req.path}`);
+  res.status(410).json({
+    error: 'System monitor API has been removed',
+    message: 'Please refresh your browser (Ctrl+F5 or Cmd+Shift+R) to get the updated version',
+    removed: true,
+    timestamp: new Date().toISOString()
+  });
+});
 
 // Authentication routes (public - before API key validation)
 app.use('/api/auth', authRoutes);
@@ -347,6 +368,7 @@ app.use('/api/git', authenticateToken, gitRoutes);
 
 // Usage API Routes (protected)
 app.use('/api/usage', usageRoutes);
+app.use('/api/system', systemRoutes);
 app.use('/api/files', filesRoutes);
 
 // Vibe Kanban Cleanup API Routes
@@ -453,97 +475,9 @@ app.get('/api/projects', authenticateToken, async (req, res) => {
   }
 });
 
-// Get best logo/favicon for a project
-app.get('/api/projects/:projectName/logo', authenticateToken, async (req, res) => {
-  try {
-    // Resolve actual project directory from encoded name/id
-    let projectDir;
-    try {
-      projectDir = await extractProjectDirectory(req.params.projectName);
-    } catch (error) {
-      // Fallback to simple dash replacement
-      projectDir = req.params.projectName.replace(/-/g, '/');
-    }
-
-    // Cache lookup
-    const cached = getCached(projectLogoCache, projectDir);
-    if (cached) return res.json(cached);
-
-    // Check for persistent cached icon inside project directory
-    const cacheDir = path.join(projectDir, '.claude-ui');
-    const cachedIcons = [
-      'project-icon.svg',
-      'project-icon.png',
-      'project-icon.jpg',
-      'project-icon.jpeg',
-      'project-icon.ico'
-    ];
-    for (const name of cachedIcons) {
-      const p = path.join(cacheDir, name);
-      try {
-        await fsPromises.access(p);
-        const url = `/api/projects/${encodeURIComponent(req.params.projectName)}/files/content?path=${encodeURIComponent(p)}`;
-        const result = { found: true, url, path: p, mimeType: mime.lookup(p) || 'application/octet-stream', relativePath: path.relative(projectDir, p), persisted: true };
-        setCached(projectLogoCache, projectDir, result);
-        return res.json(result);
-      } catch (_) {}
-    }
-
-    // Candidate logo paths relative to project root
-    const candidates = [
-      'logo.svg', 'logo.png', 'logo.jpg', 'logo.jpeg',
-      'icon.svg', 'icon.png', 'icon.jpg', 'icon.jpeg', 'icon.ico',
-      'favicon.svg', 'favicon.png', 'favicon.jpg', 'favicon.jpeg', 'favicon.ico',
-      'public/logo.svg', 'public/logo.png', 'public/favicon.svg', 'public/favicon.png', 'public/favicon.ico', 'public/apple-touch-icon.png',
-      'src/assets/logo.svg', 'src/assets/logo.png', 'assets/logo.svg', 'assets/logo.png',
-      'images/logo.svg', 'images/logo.png', 'static/logo.svg', 'static/logo.png'
-    ];
-
-    for (const rel of candidates) {
-      const absPath = path.join(projectDir, rel);
-      try {
-        await fsPromises.access(absPath);
-        const mimeType = mime.lookup(absPath) || 'application/octet-stream';
-
-        // Persist a copy inside project to avoid future scans
-        try {
-          await fsPromises.mkdir(cacheDir, { recursive: true });
-          const ext = path.extname(absPath) || '.png';
-          const cachedCopy = path.join(cacheDir, `project-icon${ext}`);
-          // Only copy if not exists
-          try {
-            await fsPromises.access(cachedCopy);
-          } catch (_) {
-            await fsPromises.copyFile(absPath, cachedCopy);
-          }
-          const url = `/api/projects/${encodeURIComponent(req.params.projectName)}/files/content?path=${encodeURIComponent(cachedCopy)}`;
-          const result = { found: true, url, path: cachedCopy, mimeType: mime.lookup(cachedCopy) || mimeType, relativePath: path.relative(projectDir, cachedCopy), persisted: true };
-          setCached(projectLogoCache, projectDir, result);
-          return res.json(result);
-        } catch (copyError) {
-          // Fall back to serving original if copy fails
-          const url = `/api/projects/${encodeURIComponent(req.params.projectName)}/files/content?path=${encodeURIComponent(absPath)}`;
-          const result = { found: true, url, path: absPath, mimeType, relativePath: rel, persisted: false };
-          setCached(projectLogoCache, projectDir, result);
-          return res.json(result);
-        }
-      } catch (e) {
-        // continue
-      }
-    }
-
-    const result = { found: false };
-    setCached(projectLogoCache, projectDir, result);
-    res.json(result);
-  } catch (error) {
-    console.error('Error locating project logo:', error);
-    // Return not found instead of error to prevent 404 spam
-    res.json({ found: false });
-  }
-});
 
 // Analyze project contents to infer dominant technology/language
-app.get('/api/projects/analyze', authenticateToken, async (req, res) => {
+app.get('/api/projects/analyze', projectAnalysisRateLimit, authenticateToken, async (req, res) => {
   try {
     const projectPath = req.query.path;
     if (!projectPath || !path.isAbsolute(projectPath)) {
@@ -571,22 +505,38 @@ app.get('/api/projects/analyze', authenticateToken, async (req, res) => {
       api: 0
     };
 
-    const ignoredDirs = new Set(['node_modules', 'dist', 'build', '.git', '.next', '.turbo', 'target']);
+    const ignoredDirs = new Set(['node_modules', 'dist', 'build', '.git', '.next', '.turbo', 'target', 'venv', '__pycache__', '.vscode', '.idea']);
 
+    let filesProcessed = 0;
+    const MAX_FILES = 1000; // Limit total files processed
+    const MAX_DEPTH = 2; // More restrictive depth
+    const startTime = Date.now();
+    const TIMEOUT_MS = 2000; // 2 second timeout
+    
     async function walk(dir, depth = 0) {
-      if (depth > 4) return;
+      // Early exits to prevent memory issues
+      if (depth > MAX_DEPTH) return;
+      if (filesProcessed > MAX_FILES) return;
+      if (Date.now() - startTime > TIMEOUT_MS) return;
+      
       let entries = [];
       try {
         entries = await fsPromises.readdir(dir, { withFileTypes: true });
+        // Limit entries per directory to prevent massive directories
+        entries = entries.slice(0, 100);
       } catch (e) {
         return;
       }
+      
       for (const entry of entries) {
         if (ignoredDirs.has(entry.name)) continue;
+        if (filesProcessed >= MAX_FILES) return;
+        
         const full = path.join(dir, entry.name);
         if (entry.isDirectory()) {
           await walk(full, depth + 1);
         } else {
+          filesProcessed++;
           const ext = path.extname(entry.name).toLowerCase();
           switch (ext) {
             case '.py': stats.python++; break;
@@ -604,18 +554,29 @@ app.get('/api/projects/analyze', authenticateToken, async (req, res) => {
             case '.yaml':
             case '.dockerfile': stats.docker++; break;
           }
-          // Lightweight package.json check for React/React Native/Vue
+          // Optimized package.json check - limit read size and only check key dependencies
           if (entry.name === 'package.json') {
             try {
-              const pkgRaw = await fsPromises.readFile(full, 'utf8');
-              const pkg = JSON.parse(pkgRaw);
-              const allDeps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
-              if (allDeps['react'] || allDeps['next']) stats.react += 20; // boost
-              if (allDeps['react-native']) stats.reactnative += 30; // strong signal
-              if (allDeps['vue'] || allDeps['nuxt']) stats.vue += 20;
-              if (allDeps['svelte']) stats.svelte += 20;
-              if (allDeps['express'] || allDeps['fastify'] || allDeps['koa']) stats.nodejs += 10;
-            } catch (_) {}
+              // Only read first 8KB to avoid large package.json files
+              const buffer = Buffer.alloc(8192);
+              const fd = await fsPromises.open(full, 'r');
+              const { bytesRead } = await fd.read(buffer, 0, 8192, 0);
+              await fd.close();
+              
+              const pkgRaw = buffer.slice(0, bytesRead).toString('utf8');
+              // Only parse if it looks like valid JSON start
+              if (pkgRaw.startsWith('{')) {
+                const pkg = JSON.parse(pkgRaw.split('\n').slice(0, 50).join('\n') + '}'); // Truncated parse
+                const allDeps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
+                if (allDeps['react'] || allDeps['next']) stats.react += 20;
+                if (allDeps['react-native']) stats.reactnative += 30;
+                if (allDeps['vue'] || allDeps['nuxt']) stats.vue += 20;
+                if (allDeps['svelte']) stats.svelte += 20;
+                if (allDeps['express'] || allDeps['fastify'] || allDeps['koa']) stats.nodejs += 10;
+              }
+            } catch (_) {
+              // Silently ignore package.json parsing errors
+            }
           }
         }
       }
