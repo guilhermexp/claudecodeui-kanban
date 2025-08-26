@@ -1,4 +1,3 @@
-import React from 'react';
 import { Folder, Terminal, GitBranch, CheckSquare } from 'lucide-react';
 
 function MobileNav({ activeTab, setActiveTab, isInputFocused, isShellConnected, shellHasActiveSession }) {
