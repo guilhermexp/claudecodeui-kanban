@@ -211,7 +211,7 @@ const Dashboard = memo(({ onBack }) => {
   }
 
   return (
-    <div className="h-full flex flex-col bg-background">
+    <div className="h-full flex flex-col bg-card border border-border rounded-lg overflow-hidden">
       {/* Header */}
       <div className="border-b border-border px-4 py-3 flex items-center justify-between bg-muted/30">
         <div className="flex items-center gap-3 min-w-0">
@@ -256,20 +256,20 @@ const Dashboard = memo(({ onBack }) => {
       <div className="flex-1 overflow-y-auto p-4">
 
         {/* Main Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4 mb-6">
           {/* Total Cost Card */}
-          <div className="bg-card border border-border rounded-lg p-4 min-h-[120px] flex flex-col">
+          <div className="bg-card border border-border/50 rounded-lg p-3 sm:p-4 min-h-[110px] sm:min-h-[120px] flex flex-col shadow-sm">
             <div className="flex items-center justify-between mb-2">
-              <DollarSign className="w-5 h-5 text-success-foreground flex-shrink-0" />
+              <DollarSign className="w-4 h-4 sm:w-5 sm:h-5 text-success-foreground flex-shrink-0" />
               <span className="text-xs text-muted-foreground">7 days</span>
             </div>
             <div className="flex-1 flex flex-col justify-center space-y-1">
-              <p className="dashboard-stat-number font-bold">
+              <p className="text-lg sm:text-xl font-bold text-foreground leading-tight overflow-hidden text-ellipsis">
                 {formatCurrency(stats?.totalCost || 0)}
               </p>
               <p className="text-xs text-muted-foreground">Total Cost</p>
-              {stats?.costTrend && (
-                <div className="flex items-center gap-1">
+              {stats?.costTrend !== undefined && stats?.costTrend !== 0 && (
+                <div className="flex items-center gap-1 mt-1">
                   <TrendingUp className={`w-3 h-3 ${stats.costTrend > 0 ? 'text-destructive' : 'text-success-foreground'}`} />
                   <span className={`text-xs ${stats.costTrend > 0 ? 'text-destructive' : 'text-success-foreground'}`}>
                     {Math.abs(stats.costTrend).toFixed(0)}%
@@ -280,17 +280,17 @@ const Dashboard = memo(({ onBack }) => {
           </div>
 
           {/* Total Tokens Card */}
-          <div className="bg-card border border-border rounded-lg p-4 min-h-[120px] flex flex-col">
+          <div className="bg-card border border-border/50 rounded-lg p-3 sm:p-4 min-h-[110px] sm:min-h-[120px] flex flex-col shadow-sm">
             <div className="flex items-center justify-between mb-2">
-              <Zap className="w-5 h-5 text-warning flex-shrink-0" />
+              <Zap className="w-4 h-4 sm:w-5 sm:h-5 text-warning flex-shrink-0" />
               <span className="text-xs text-muted-foreground">7 days</span>
             </div>
             <div className="flex-1 flex flex-col justify-center space-y-1">
-              <p className="dashboard-stat-number font-bold">
+              <p className="text-lg sm:text-xl font-bold text-foreground leading-tight overflow-hidden text-ellipsis">
                 {formatNumber(stats?.totalTokens || 0)}
               </p>
               <p className="text-xs text-muted-foreground">Total Tokens</p>
-              <div className="flex gap-4 text-xs">
+              <div className="flex gap-3 text-xs mt-1">
                 <span className="text-primary">↓ {formatNumber(stats?.inputTokens || 0)}</span>
                 <span className="text-success-foreground">↑ {formatNumber(stats?.outputTokens || 0)}</span>
               </div>
@@ -298,34 +298,34 @@ const Dashboard = memo(({ onBack }) => {
           </div>
 
           {/* Active Sessions Card */}
-          <div className="bg-card border border-border rounded-lg p-4 min-h-[120px] flex flex-col">
+          <div className="bg-card border border-border/50 rounded-lg p-3 sm:p-4 min-h-[110px] sm:min-h-[120px] flex flex-col shadow-sm">
             <div className="flex items-center justify-between mb-2">
-              <MessageSquare className="w-5 h-5 text-primary flex-shrink-0" />
+              <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5 text-primary flex-shrink-0" />
               <span className="text-xs text-muted-foreground">Today</span>
             </div>
             <div className="flex-1 flex flex-col justify-center space-y-1">
-              <p className="dashboard-stat-number font-bold">
+              <p className="text-lg sm:text-xl font-bold text-foreground leading-tight">
                 {stats?.todaySessions || 0}
               </p>
               <p className="text-xs text-muted-foreground">Sessions</p>
-              <p className="text-xs text-success-foreground">
+              <p className="text-xs text-success-foreground mt-1">
                 {stats?.activeSessions || 0} active now
               </p>
             </div>
           </div>
 
           {/* Average Response Time */}
-          <div className="bg-card border border-border rounded-lg p-4 min-h-[120px] flex flex-col">
+          <div className="bg-card border border-border rounded-lg p-3 sm:p-4 min-h-[110px] sm:min-h-[120px] flex flex-col">
             <div className="flex items-center justify-between mb-2">
-              <Clock className="w-5 h-5 text-accent flex-shrink-0" />
+              <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground flex-shrink-0" />
               <span className="text-xs text-muted-foreground">Avg</span>
             </div>
             <div className="flex-1 flex flex-col justify-center space-y-1">
-              <p className="dashboard-stat-number font-bold">
+              <p className="text-lg sm:text-xl font-bold text-foreground leading-tight">
                 {formatDuration(stats?.avgResponseTime || 0)}
               </p>
               <p className="text-xs text-muted-foreground">Response Time</p>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground mt-1">
                 Total: {formatDuration(stats?.totalDuration || 0)}
               </p>
             </div>
@@ -333,72 +333,82 @@ const Dashboard = memo(({ onBack }) => {
         </div>
 
         {/* Model Usage */}
-        <div className="bg-card border border-border rounded-lg p-4 mb-6">
+        <div className="bg-card border border-border rounded-lg p-3 sm:p-4 mb-6">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
-              <Brain className="w-5 h-5 text-primary" />
+              <Brain className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
               <h3 className="text-sm font-semibold">Model Usage</h3>
             </div>
             <span className="text-xs text-muted-foreground">Last 7 days</span>
           </div>
           
           <div className="space-y-3">
-            {stats?.modelUsage && Object.entries(stats.modelUsage)
-              .sort((a, b) => b[1].count - a[1].count)
-              .slice(0, 5)
-              .map(([model, data]) => (
-                <div key={model} className="flex items-center justify-between">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-1 gap-2">
-                      <span className="text-xs font-medium truncate flex-1" title={model}>{formatModelName(model)}</span>
-                      <span className="text-xs text-muted-foreground whitespace-nowrap">
-                        {data.count} calls • {formatCurrency(data.cost)}
-                      </span>
-                    </div>
-                    <div className="h-2 bg-muted rounded-full overflow-hidden">
-                      <div 
-                        className="h-full bg-primary rounded-full transition-all"
-                        style={{ 
-                          width: `${(data.tokens / stats.totalTokens) * 100}%` 
-                        }}
-                      />
+            {stats?.modelUsage && Object.entries(stats.modelUsage).length > 0 ? (
+              Object.entries(stats.modelUsage)
+                .sort((a, b) => b[1].count - a[1].count)
+                .slice(0, 5)
+                .map(([model, data]) => (
+                  <div key={model} className="flex items-center justify-between">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-2 gap-2">
+                        <span className="text-xs sm:text-sm font-medium truncate flex-1" title={model}>
+                          {formatModelName(model)}
+                        </span>
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">
+                          {data.count} calls • {formatCurrency(data.cost)}
+                        </span>
+                      </div>
+                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-primary rounded-full transition-all duration-300"
+                          style={{ 
+                            width: `${stats.totalTokens > 0 ? (data.tokens / stats.totalTokens) * 100 : 0}%` 
+                          }}
+                        />
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))
+            ) : (
+              <div className="text-center py-8">
+                <p className="text-sm text-muted-foreground">No model usage data available</p>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Recent Activity */}
-        <div className="bg-card border border-border rounded-lg p-4">
+        <div className="bg-card border border-border rounded-lg p-3 sm:p-4">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
-              <FileText className="w-5 h-5 text-primary" />
+              <FileText className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
               <h3 className="text-sm font-semibold">Recent Activity</h3>
             </div>
             <span className="text-xs text-muted-foreground">Live</span>
           </div>
           
           <div className="space-y-2">
-            {stats?.recentActivity && stats.recentActivity.slice(0, 5).map((activity, idx) => (
-              <div key={idx} className="flex items-center justify-between py-2 border-b border-border last:border-b-0">
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-medium truncate">{activity.project || 'Unknown Project'}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {activity.model} • {formatNumber(activity.tokens)} tokens
-                  </p>
+            {stats?.recentActivity && stats.recentActivity.length > 0 ? (
+              stats.recentActivity.slice(0, 5).map((activity, idx) => (
+                <div key={idx} className="flex items-center justify-between py-2 border-b border-border last:border-b-0">
+                  <div className="flex-1 min-w-0 pr-4">
+                    <p className="text-xs sm:text-sm font-medium truncate" title={activity.project}>
+                      {activity.project || 'Unknown Project'}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {activity.model} • {formatNumber(activity.tokens)} tokens
+                    </p>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className="text-xs sm:text-sm font-medium">{formatCurrency(activity.cost)}</p>
+                    <p className="text-xs text-muted-foreground">{getTimeAgo(activity.timestamp)}</p>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-xs font-medium">{formatCurrency(activity.cost)}</p>
-                  <p className="text-xs text-muted-foreground">{getTimeAgo(activity.timestamp)}</p>
-                </div>
+              ))
+            ) : (
+              <div className="text-center py-8">
+                <p className="text-sm text-muted-foreground">No recent activity</p>
               </div>
-            ))}
-            
-            {(!stats?.recentActivity || stats.recentActivity.length === 0) && (
-              <p className="text-xs text-muted-foreground text-center py-4">
-                No recent activity
-              </p>
             )}
           </div>
         </div>

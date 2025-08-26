@@ -265,38 +265,97 @@ export const detectProjectTypeFromName = (project) => {
 };
 
 /**
- * Gets project analysis with caching
+ * Gets project analysis with caching and rate limiting
  */
 const projectAnalysisCache = new Map();
+const pendingAnalysis = new Map(); // Prevent duplicate requests
+let lastAnalysisTime = 0;
+const ANALYSIS_COOLDOWN = 1000; // 1 second between API calls
 
 export const getEnhancedProjectAnalysis = async (project) => {
   const cacheKey = `${project.name}-${project.fullPath}`;
   
+  // Return cached result if available
   if (projectAnalysisCache.has(cacheKey)) {
     return projectAnalysisCache.get(cacheKey);
   }
   
+  // Check if there's a pending request for this project
+  if (pendingAnalysis.has(cacheKey)) {
+    return await pendingAnalysis.get(cacheKey);
+  }
+  
   try {
-    // Try server-side analysis first
-    let analysis = await analyzeProjectFiles(project.fullPath);
+    // Start with name-based analysis (no API call needed)
+    const nameBasedAnalysis = detectProjectTypeFromName(project);
     
-    // Fallback to name-based detection
-    if (!analysis || analysis.confidence < 0.5) {
-      const nameBasedAnalysis = detectProjectTypeFromName(project);
-      if (nameBasedAnalysis && (!analysis || nameBasedAnalysis.confidence > analysis.confidence)) {
-        analysis = nameBasedAnalysis;
-      }
+    // If name-based analysis has high confidence, use it immediately
+    if (nameBasedAnalysis && nameBasedAnalysis.confidence >= 0.8) {
+      projectAnalysisCache.set(cacheKey, nameBasedAnalysis);
+      return nameBasedAnalysis;
     }
     
-    // Cache the result
-    if (analysis) {
-      projectAnalysisCache.set(cacheKey, analysis);
+    // Only do server-side analysis if we have low confidence and respect rate limiting
+    const now = Date.now();
+    if (now - lastAnalysisTime > ANALYSIS_COOLDOWN) {
+      lastAnalysisTime = now;
+      
+      // Create a promise for this analysis to prevent duplicates
+      const analysisPromise = (async () => {
+        try {
+          let analysis = await analyzeProjectFiles(project.fullPath);
+          
+          // Fallback to name-based detection if server analysis fails
+          if (!analysis || analysis.confidence < 0.5) {
+            analysis = nameBasedAnalysis || {
+              type: 'unknown',
+              confidence: 0.3,
+              icon: '📁',
+              color: '#666666'
+            };
+          }
+          
+          // Cache the result
+          projectAnalysisCache.set(cacheKey, analysis);
+          pendingAnalysis.delete(cacheKey);
+          return analysis;
+        } catch (error) {
+          pendingAnalysis.delete(cacheKey);
+          const fallback = nameBasedAnalysis || {
+            type: 'unknown',
+            confidence: 0.3,
+            icon: '📁',
+            color: '#666666'
+          };
+          projectAnalysisCache.set(cacheKey, fallback);
+          return fallback;
+        }
+      })();
+      
+      pendingAnalysis.set(cacheKey, analysisPromise);
+      return await analysisPromise;
+    } else {
+      // Use name-based analysis due to rate limiting
+      const fallback = nameBasedAnalysis || {
+        type: 'unknown',
+        confidence: 0.3,
+        icon: '📁',
+        color: '#666666'
+      };
+      projectAnalysisCache.set(cacheKey, fallback);
+      return fallback;
     }
     
-    return analysis;
   } catch (error) {
     console.warn('Failed to get enhanced project analysis:', error);
-    return detectProjectTypeFromName(project);
+    const fallback = detectProjectTypeFromName(project) || {
+      type: 'unknown',
+      confidence: 0.3,
+      icon: '📁',
+      color: '#666666'
+    };
+    projectAnalysisCache.set(cacheKey, fallback);
+    return fallback;
   }
 };
 

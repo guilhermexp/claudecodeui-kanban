@@ -92,7 +92,7 @@ body {
     --accent-foreground: 0 0% 10%;        /* Preto para texto de destaque */
     --destructive: 0 60% 50%;             /* Vermelho mais visível */
     --destructive-foreground: 0 0% 100%;  /* Branco sobre vermelho */
-    --border: 214.3 31.8% 85%;            /* Bordas mais visíveis */
+    --border: 214.3 31.8% 91.4%;          /* Bordas mais suaves para light mode */
     --input: 214.3 31.8% 91.4%;
     --ring: 262.1 83.3% 57.8%;
     --radius: 0.5rem;
@@ -144,7 +144,7 @@ body {
     --accent-foreground: 0 0% 95%;    /* White text */
     --destructive: 210 11% 35%;       /* Dark grey for destructive actions */
     --destructive-foreground: 0 0% 100%; /* White text on destructive */
-    --border: 0 0% 20%;               /* Grey borders */
+    --border: 0 0% 15%;               /* Bordas mais escuras para dark mode */
     --input: 0 0% 10%;                /* Dark grey inputs */
     --ring: 0 0% 50%;                 /* Neutral grey focus ring */
 

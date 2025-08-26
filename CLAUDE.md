@@ -412,7 +412,73 @@ npm run server  # Production server only (no tunnel)
 9. **Use semantic CSS classes** - Never use hardcoded colors like `text-blue-500`, always use theme variables
 10. **Mobile-first development** - Test mobile layout and touch interactions
 
-This application is actively used for development work, so **stability and reliability are paramount**. When in doubt, ask the user before making significant changes.[byterover-mcp]
+This application is actively used for development work, so **stability and reliability are paramount**. When in doubt, ask the user before making significant changes.
+
+## 🔊 **Claude Code Hooks - Sound Notifications**
+
+### Overview
+The application now supports **native Claude Code CLI hooks** for sound notifications when Claude completes tasks. This uses the official Claude Code hooks system to play sounds universally across all interfaces.
+
+### Quick Commands
+```bash
+npm run hooks:enable    # Enable sound notifications with default Glass sound
+npm run hooks:disable   # Disable all sound notifications
+npm run hooks:status    # Show current configuration  
+npm run hooks:list      # List all available system sounds
+npm run hooks:test <sound> [type]  # Test a specific sound
+```
+
+### How It Works
+- **Native Integration**: Uses official Claude Code CLI hooks system (`~/.claude/config.json`)
+- **Universal**: Works with any Claude Code interface (terminal, VS Code, this UI)
+- **Stop Hook**: Plays sound when Claude finishes responding
+- **Notification Hook**: Plays sound for general notifications
+- **macOS System Sounds**: Uses built-in macOS sounds (Glass, Ping, Sosumi, etc.)
+
+### Available Sounds
+The system automatically detects available sounds:
+- **System Sounds**: Basso, Blow, Bottle, Frog, Funk, Glass, Hero, Morse, Ping, Pop, Purr, Sosumi, Submarine, Tink
+- **Custom Sounds**: Any `.wav` files in `/public/sounds/` directory
+
+### UI Configuration
+1. Open **Settings** in Vibe Kanban interface
+2. Go to **Claude Hooks** tab  
+3. Toggle sound notifications on/off
+4. Test different sounds
+5. View current configuration status
+
+### Configuration Files
+- **Claude Config**: `~/.claude/config.json` (automatically managed)
+- **Hook Script**: `scripts/setup-claude-hooks.js` 
+- **API Routes**: `/api/claude-hooks/*` endpoints
+- **CLI Tool**: `scripts/claude-hooks-cli.js`
+
+### Example Hook Configuration
+```json
+{
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "afplay \"/System/Library/Sounds/Glass.aiff\""
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Benefits
+- **Work Efficiency**: No need to constantly monitor Claude Code progress
+- **Context Switching**: Start a task, switch windows, get notified when complete
+- **Universal**: Same notification system works across all Claude Code interfaces
+- **Customizable**: Choose from various system sounds or add custom ones
+
+[byterover-mcp]
 
 # important 
 always use byterover-retrieve-knowledge tool to get the related context before any tasks 

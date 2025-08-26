@@ -463,8 +463,8 @@ function FileManagerSimple({ selectedProject }) {
         showFilePanel ? 'hidden md:flex md:w-[25%] lg:w-[20%] xl:w-[18%]' : 'flex-1'
       }`}>
         {/* Header */}
-        <div className="py-3 px-3 md:px-4 border-b border-border flex items-center justify-between bg-gradient-to-r from-primary/10 to-accent/10">
-          <h3 className="text-sm font-semibold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+        <div className="py-3 px-3 md:px-4 border-b border-border flex items-center justify-between">
+          <h3 className="text-foreground font-medium">
             Files
           </h3>
           <div className="flex items-center gap-1">
@@ -480,6 +480,7 @@ function FileManagerSimple({ selectedProject }) {
             </button>
             <button
               onClick={() => {
+                setCreateType('file');
                 setCreateType('file');
                 setShowCreateModal(true);
                 setCreatePath('');

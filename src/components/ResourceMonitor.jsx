@@ -10,54 +10,105 @@ function ResourceMonitor() {
   });
   const [isLoading, setIsLoading] = useState(false);
   const intervalRef = useRef(null);
+  const isMountedRef = useRef(true);
 
   // Fetch system information
   const fetchSystemInfo = async () => {
-    if (!isOpen) return;
+    // Double check to prevent race conditions
+    if (!isMountedRef.current || !isOpen) {
+      console.log('[ResourceMonitor] Skipping fetch - not mounted or closed');
+      return;
+    }
     
     console.log('[ResourceMonitor] Fetching system info...');
     setIsLoading(true);
     try {
-      const data = await authenticatedFetch('/api/system/info');
+      const response = await authenticatedFetch('/api/system/info');
+      
+      // Check if response is ok
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      // Parse JSON response
+      const data = await response.json();
+      
+      // Check again after async operation
+      if (!isMountedRef.current || !isOpen) {
+        console.log('[ResourceMonitor] Discarding data - component unmounted or closed');
+        return;
+      }
+      
       console.log('[ResourceMonitor] Received data:', data);
-      setSystemInfo({
+      const newSystemInfo = {
         activePorts: data?.activePorts || [],
         memoryUsage: data?.memoryUsage || 0,
         cpuUsage: data?.cpuUsage || 0,
         ...data
-      });
+      };
+      console.log('[ResourceMonitor] Setting system info:', newSystemInfo);
+      setSystemInfo(newSystemInfo);
     } catch (error) {
       console.error('[ResourceMonitor] Failed to fetch system info:', error);
-      setSystemInfo({
-        activePorts: [],
-        memoryUsage: 0,
-        cpuUsage: 0
-      });
+      if (isMountedRef.current) {
+        setSystemInfo({
+          activePorts: [],
+          memoryUsage: 0,
+          cpuUsage: 0
+        });
+      }
     } finally {
-      setIsLoading(false);
+      if (isMountedRef.current) {
+        setIsLoading(false);
+      }
     }
   };
 
-  // Start/stop monitoring when panel opens/closes
+  // Component lifecycle
   useEffect(() => {
-    if (isOpen) {
-      // Fetch immediately
-      fetchSystemInfo();
-      // Then every 2 seconds
-      intervalRef.current = setInterval(fetchSystemInfo, 2000);
-    } else {
+    isMountedRef.current = true;
+    
+    return () => {
+      isMountedRef.current = false;
+      // Clean up any existing interval on unmount
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
+    };
+  }, []);
+
+  // Start/stop monitoring when panel opens/closes
+  useEffect(() => {
+    // Always clear any existing interval first
+    if (intervalRef.current) {
+      console.log('[ResourceMonitor] Clearing existing interval');
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
     }
 
+    if (isOpen) {
+      console.log('[ResourceMonitor] Panel opened - starting monitoring...');
+      // Fetch immediately
+      fetchSystemInfo();
+      
+      // Set up interval - NO CHECK INSIDE THE INTERVAL
+      // The interval will be cleared when isOpen changes
+      intervalRef.current = setInterval(fetchSystemInfo, 10000); // Increased to 10 seconds
+      console.log('[ResourceMonitor] Interval created with ID:', intervalRef.current);
+    } else {
+      console.log('[ResourceMonitor] Panel closed - stopping monitoring');
+    }
+
+    // Cleanup function - ALWAYS runs when component unmounts or isOpen changes
     return () => {
       if (intervalRef.current) {
+        console.log('[ResourceMonitor] useEffect cleanup - clearing interval:', intervalRef.current);
         clearInterval(intervalRef.current);
+        intervalRef.current = null;
       }
     };
-  }, [isOpen]);
+  }, [isOpen]); // Only re-run when isOpen changes
 
   const handlePortAction = async (port, action) => {
     try {
@@ -89,7 +140,11 @@ function ResourceMonitor() {
     <div className="relative">
       {/* Trigger Button */}
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => {
+          const newState = !isOpen;
+          console.log('[ResourceMonitor] Button clicked, setting isOpen to:', newState);
+          setIsOpen(newState);
+        }}
         className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all duration-200 ${
           isOpen
             ? 'bg-primary text-primary-foreground'
@@ -112,7 +167,10 @@ function ResourceMonitor() {
           <div className="flex items-center justify-between p-3 border-b border-border">
             <h3 className="font-semibold text-sm">System Monitor</h3>
             <button
-              onClick={() => setIsOpen(false)}
+              onClick={() => {
+                console.log('[ResourceMonitor] Close button clicked');
+                setIsOpen(false);
+              }}
               className="w-6 h-6 flex items-center justify-center text-muted-foreground hover:text-foreground rounded-md hover:bg-accent transition-colors"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
