@@ -1,4 +1,3 @@
-import React from 'react';
 import { TaskDetailsPanel } from './TaskDetailsPanel';
 import type { TaskWithAttemptStatus } from '../../../lib/vibe-kanban/shared-types';
 

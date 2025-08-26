@@ -1,7 +1,7 @@
 // Project Icon Detection Utility
 // Automatically detects and returns appropriate icons for projects
 
-import React from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Folder, 
   FolderOpen, 
@@ -324,9 +324,9 @@ export const getProjectIcon = async (project, isExpanded = false) => {
  * React component for project icon
  */
 export const ProjectIcon = ({ project, isExpanded = false, size = 16, className = "" }) => {
-  const [iconConfig, setIconConfig] = React.useState(null);
+  const [iconConfig, setIconConfig] = useState(null);
   
-  React.useEffect(() => {
+  useEffect(() => {
     getProjectIcon(project, isExpanded).then(setIconConfig);
   }, [project, isExpanded]);
   
