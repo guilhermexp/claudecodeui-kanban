@@ -143,7 +143,7 @@ function VibeTaskPanel({ isVisible, onClose }) {
   }
 
   return (
-    <div className="h-full flex flex-col bg-background relative max-w-full min-w-0">
+    <div className="h-full flex flex-col bg-card border border-border rounded-lg overflow-hidden relative max-w-full min-w-0">
       {/* Header - matching Files and Source Control modals */}
       <div className="flex-shrink-0 px-4 py-3 flex items-center justify-between border-b border-border">
         <h3 className="text-foreground font-medium">Tasks</h3>
@@ -317,17 +317,7 @@ function VibeTaskPanel({ isVisible, onClose }) {
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
                     </svg>
-                    Kanban
-                  </button>
-                  
-                  <button 
-                    onClick={() => window.open('/vibe-kanban/projects', '_blank')}
-                    className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent rounded-md transition-colors"
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                    </svg>
-                    All Projects
+                    Open Kanban
                   </button>
                 </div>
               </div>

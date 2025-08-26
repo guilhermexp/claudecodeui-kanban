@@ -21,6 +21,7 @@ import Dashboard from './Dashboard';
 import ResourceMonitor from './ResourceMonitor';
 import ErrorBoundary from './ErrorBoundary';
 import { TextShimmer } from './ui/text-shimmer';
+import { ConfigProvider } from './vibe-kanban/config-provider';
 
 function MainContent({ 
   selectedProject, 
@@ -469,22 +470,24 @@ function MainContent({
           }`}
         >
           <div className="h-full overflow-hidden mt-2">
-            <Shell 
-              selectedProject={selectedProject} 
-              selectedSession={selectedSession}
-              isActive={true}
-              onSessionCountChange={setOpenShellSessions}
-              onConnectionChange={onShellConnectionChange}
-              onSessionStateChange={handleShellSessionStateChange}
-              isMobile={isMobile}
-              resizeTrigger={shellResizeTrigger}
-              onSidebarClose={() => {
-                if (sidebarOpen && onSidebarOpen) {
-                  onSidebarOpen(); // This toggles the sidebar (closes it when open)
-                }
+            <ConfigProvider>
+              <Shell 
+                selectedProject={selectedProject} 
+                selectedSession={selectedSession}
+                isActive={true}
+                onSessionCountChange={setOpenShellSessions}
+                onConnectionChange={onShellConnectionChange}
+                onSessionStateChange={handleShellSessionStateChange}
+                isMobile={isMobile}
+                resizeTrigger={shellResizeTrigger}
+                onSidebarClose={() => {
+                  if (sidebarOpen && onSidebarOpen) {
+                    onSidebarOpen(); // This toggles the sidebar (closes it when open)
+                  }
                 setActiveSidePanel(null); // Close any active side panel
               }}
             />
+            </ConfigProvider>
           </div>
         </div>
 

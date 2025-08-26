@@ -1,17 +1,18 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '../ui/button';
 import {
-  FolderOpen,
   Settings,
   ArrowLeft,
   Sun,
   Moon,
 } from 'lucide-react';
+import { SettingsModal } from '../SettingsModal';
 
 export function Navbar() {
   const location = useLocation();
   const navigate = useNavigate();
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
 
   // Check if dark mode is enabled
   const [isDarkMode, setIsDarkMode] = React.useState(() => {
@@ -54,8 +55,8 @@ export function Navbar() {
     else if (path.match(/^\/vibe-kanban\/projects\/[^\/]+$/)) {
       navigate('/vibe-kanban/projects');
     }
-    // Para outras páginas (settings, mcp-servers), volta para projects
-    else if (path === '/vibe-kanban/settings' || path === '/vibe-kanban/mcp-servers') {
+    // Para outras páginas (mcp-servers), volta para projects
+    else if (path === '/vibe-kanban/mcp-servers') {
       navigate('/vibe-kanban/projects');
     }
     // Caso padrão: usa o histórico do navegador
@@ -80,28 +81,12 @@ export function Navbar() {
               </Button>
               <div className="hidden sm:flex items-center space-x-1">
                 <Button
-                  asChild
-                  variant={
-                    location.pathname === '/vibe-kanban/projects' || location.pathname.startsWith('/vibe-kanban/projects/') ? 'default' : 'ghost'
-                  }
+                  variant="ghost"
                   size="sm"
+                  onClick={() => setShowSettingsModal(true)}
                 >
-                  <Link to="/vibe-kanban/projects">
-                    <FolderOpen className="h-4 w-4" />
-                    <span className="ml-2">Projects</span>
-                  </Link>
-                </Button>
-                <Button
-                  asChild
-                  variant={
-                    location.pathname === '/vibe-kanban/settings' ? 'default' : 'ghost'
-                  }
-                  size="sm"
-                >
-                  <Link to="/vibe-kanban/settings">
-                    <Settings className="h-4 w-4" />
-                    <span className="ml-2">Settings</span>
-                  </Link>
+                  <Settings className="h-4 w-4" />
+                  <span className="ml-2">Settings</span>
                 </Button>
               </div>
             </div>
@@ -154,37 +139,27 @@ export function Navbar() {
                   return 'Projeto';
                 } else if (path.match(/^\/vibe-kanban\/projects\/[^\/]+$/)) {
                   return 'Projetos';
-                } else if (path === '/vibe-kanban/settings' || path === '/vibe-kanban/mcp-servers') {
+                } else if (path === '/vibe-kanban/mcp-servers') {
                   return 'Projetos';
                 }
                 return 'Voltar';
               })()}
             </button>
-            <Link
-              to="/vibe-kanban/projects"
-              className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                location.pathname === '/vibe-kanban/projects' || location.pathname.startsWith('/vibe-kanban/projects/')
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-              }`}
-            >
-              <FolderOpen className="h-4 w-4" />
-              Projects
-            </Link>
-            <Link
-              to="/vibe-kanban/settings"
-              className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                location.pathname === '/vibe-kanban/settings'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-              }`}
+            <button
+              onClick={() => setShowSettingsModal(true)}
+              className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent w-full text-left transition-colors"
             >
               <Settings className="h-4 w-4" />
               Settings
-            </Link>
+            </button>
           </div>
         </div>
       </div>
+
+      <SettingsModal 
+        open={showSettingsModal} 
+        onClose={() => setShowSettingsModal(false)} 
+      />
     </>
   );
 }

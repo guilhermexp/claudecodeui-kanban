@@ -3,7 +3,7 @@ import { Route, Routes } from 'react-router-dom';
 import { Navbar } from '../components/vibe-kanban/layout/navbar';
 import { Projects } from '../pages/vibe-kanban/projects.tsx';
 import { ProjectTasks } from '../pages/vibe-kanban/project-tasks.tsx';
-import { Settings } from '../pages/vibe-kanban/Settings.tsx';
+import { AutoRedirectToProject } from '../components/vibe-kanban/AutoRedirectToProject';
 import { McpServers } from '../pages/vibe-kanban/McpServers.tsx';
 import { DisclaimerDialog } from '../components/vibe-kanban/DisclaimerDialog';
 import { OnboardingDialog } from '../components/vibe-kanban/OnboardingDialog';
@@ -146,7 +146,7 @@ function AppContent() {
         {showNavbar && <Navbar />}
         <div className="flex-1 overflow-y-auto pb-safe sm:pb-0">
           <Routes>
-            <Route path="/" element={<Projects />} />
+            <Route path="/" element={<AutoRedirectToProject />} />
             <Route path="/projects" element={<Projects />} />
             <Route path="/projects/:projectId" element={<Projects />} />
             <Route
@@ -157,7 +157,6 @@ function AppContent() {
               path="/projects/:projectId/tasks/:taskId"
               element={<ProjectTasks />}
             />
-            <Route path="/settings" element={<Settings />} />
             <Route path="/mcp-servers" element={<McpServers />} />
           </Routes>
         </div>

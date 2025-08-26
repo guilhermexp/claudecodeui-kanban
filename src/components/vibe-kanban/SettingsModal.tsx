@@ -23,6 +23,11 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
   const [mcpServers, setMcpServers] = useState<any[]>([]);
   const [mcpLoading, setMcpLoading] = useState(false);
   const [mcpTestResults, setMcpTestResults] = useState<Record<string, any>>({});
+  
+  // Claude Hooks states
+  const [hooksConfig, setHooksConfig] = useState<any>(null);
+  const [availableSounds, setAvailableSounds] = useState<any>({ system: [], custom: [] });
+  const [hooksLoading, setHooksLoading] = useState(false);
 
   if (!open) return null;
 
@@ -115,6 +120,107 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
     }
   };
 
+  // Claude Hooks functions
+  const fetchHooksConfig = async () => {
+    setHooksLoading(true);
+    try {
+      const token = localStorage.getItem('auth-token');
+      
+      // Fetch config and available sounds
+      const [configResponse, soundsResponse] = await Promise.all([
+        fetch('/api/claude-hooks/config', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }),
+        fetch('/api/claude-hooks/sounds', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        })
+      ]);
+      
+      if (configResponse.ok) {
+        const configData = await configResponse.json();
+        setHooksConfig(configData.config);
+      }
+      
+      if (soundsResponse.ok) {
+        const soundsData = await soundsResponse.json();
+        setAvailableSounds(soundsData.sounds);
+      }
+      
+    } catch (error) {
+      console.error('Error fetching hooks config:', error);
+    } finally {
+      setHooksLoading(false);
+    }
+  };
+
+  const handleHooksToggle = async (enabled: boolean) => {
+    try {
+      const token = localStorage.getItem('auth-token');
+      
+      if (enabled) {
+        const response = await fetch('/api/claude-hooks/setup', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            soundType: 'system',
+            soundName: 'Glass',
+            enableStopHook: true,
+            enableNotificationHook: true,
+            includeVisualNotification: true
+          })
+        });
+        
+        if (response.ok) {
+          await fetchHooksConfig();
+        }
+      } else {
+        const response = await fetch('/api/claude-hooks/remove', {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (response.ok) {
+          await fetchHooksConfig();
+        }
+      }
+    } catch (error) {
+      console.error('Error toggling hooks:', error);
+    }
+  };
+
+  const handleTestHookSound = async (soundType: string, soundName: string) => {
+    try {
+      const token = localStorage.getItem('auth-token');
+      const response = await fetch('/api/claude-hooks/test-sound', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ soundType, soundName })
+      });
+      
+      const data = await response.json();
+      if (!data.success) {
+        console.error('Error testing sound:', data.error);
+      }
+    } catch (error) {
+      console.error('Error testing hook sound:', error);
+    }
+  };
+
   const handleSave = async () => {
     if (!config) return;
     setSaving(true);
@@ -132,8 +238,9 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
   useEffect(() => {
     if (open) {
       fetchMcpServers();
+      fetchHooksConfig();
       
-      // Set up auto-refresh every 3 seconds for real-time updates
+      // Set up auto-refresh every 3 seconds for MCP servers
       const interval = setInterval(() => {
         fetchMcpServers();
       }, 3000);
@@ -171,7 +278,8 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
           <div className="flex">
             {[
               { id: 'tools', label: 'Tools', icon: Settings },
-              { id: 'mcp', label: 'MCP Servers', icon: Server }
+              { id: 'mcp', label: 'MCP Servers', icon: Server },
+              { id: 'claude-hooks', label: 'Claude Hooks', icon: Volume2 }
             ].map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
@@ -444,6 +552,131 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
                       )}
                     </div>
                   ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Claude Hooks Tab */}
+          {activeTab === 'claude-hooks' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-medium flex items-center gap-2">
+                    <Volume2 className="w-4 h-4" />
+                    Claude Code Hooks
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    Configure native Claude Code CLI hooks for sound notifications when tasks complete
+                  </p>
+                </div>
+              </div>
+
+              {hooksLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  Loading hooks configuration...
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Hooks Status */}
+                  <div className="bg-muted/30 border border-border rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <div 
+                          className={`w-3 h-3 rounded-full ${
+                            hooksConfig?.stopHook || hooksConfig?.notificationHook ? 'bg-green-500' : 'bg-gray-400'
+                          }`}
+                        />
+                        <span className="font-medium text-sm">
+                          Sound Notifications: {hooksConfig?.stopHook || hooksConfig?.notificationHook ? 'Enabled' : 'Disabled'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleHooksToggle(!(hooksConfig?.stopHook || hooksConfig?.notificationHook))}
+                          className="h-7"
+                        >
+                          {hooksConfig?.stopHook || hooksConfig?.notificationHook ? 'Disable' : 'Enable'}
+                        </Button>
+                      </div>
+                    </div>
+                    
+                    {hooksConfig?.currentSound && (
+                      <div className="text-xs text-muted-foreground">
+                        Current Sound: <code className="bg-muted px-1 rounded">{hooksConfig.currentSound}</code>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Available Sounds */}
+                  {(availableSounds.system.length > 0 || availableSounds.custom.length > 0) && (
+                    <div className="space-y-3">
+                      <h4 className="text-sm font-medium">Available Sounds</h4>
+                      
+                      {/* System Sounds */}
+                      {availableSounds.system.length > 0 && (
+                        <div>
+                          <h5 className="text-xs font-medium text-muted-foreground mb-2">System Sounds (macOS)</h5>
+                          <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto">
+                            {availableSounds.system.map((sound: any) => (
+                              <div key={sound.name} className="flex items-center justify-between bg-muted/20 rounded p-2">
+                                <span className="text-xs truncate">{sound.name}</span>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleTestHookSound('system', sound.name)}
+                                  className="h-6 w-6 p-0"
+                                  title="Test sound"
+                                >
+                                  <Play className="w-3 h-3" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Custom Sounds */}
+                      {availableSounds.custom.length > 0 && (
+                        <div>
+                          <h5 className="text-xs font-medium text-muted-foreground mb-2">Custom Sounds</h5>
+                          <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto">
+                            {availableSounds.custom.map((sound: any) => (
+                              <div key={sound.name} className="flex items-center justify-between bg-muted/20 rounded p-2">
+                                <span className="text-xs truncate">{sound.name}</span>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleTestHookSound('custom', sound.name)}
+                                  className="h-6 w-6 p-0"
+                                  title="Test sound"
+                                >
+                                  <Play className="w-3 h-3" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Hooks Info */}
+                  <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+                    <div className="flex items-start gap-2">
+                      <Terminal className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium text-blue-800 dark:text-blue-200">How it works</p>
+                        <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+                          Hooks are configured directly in Claude Code CLI (~/.claude/config.json). 
+                          Sound notifications will play whenever Claude completes a task, regardless of which interface you're using.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>

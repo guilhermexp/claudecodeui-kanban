@@ -7,6 +7,7 @@ import { SearchAddon } from '@xterm/addon-search';
 import { useDropzone } from 'react-dropzone';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import PreviewPanel from './PreviewPanel';
+import { useConfig } from './vibe-kanban/config-provider';
 import 'xterm/css/xterm.css';
 
 // CSS to make xterm responsive and remove focus outline
@@ -145,6 +146,22 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   
   // Terminal theme state
   const [terminalTheme, setTerminalTheme] = useState('dark');
+  
+  // Config for sound notifications (same as Vibe Kanban)
+  const configContext = useConfig();
+  const config = configContext?.config;
+  
+  // Sound notification function (same as SettingsModal)
+  const playCompletionSound = async () => {
+    if (config?.sound_alerts && config?.sound_file) {
+      const audio = new Audio(`/api/sounds/${config.sound_file}.wav`);
+      try {
+        await audio.play();
+      } catch (err) {
+        console.error('Failed to play completion sound:', err);
+      }
+    }
+  };
   
   // Heartbeat interval reference
   const heartbeatInterval = useRef(null);
@@ -1104,6 +1121,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
 
     // Handle terminal input and track commands for history
     let currentLineBuffer = '';
+    
     terminal.current.onData((data) => {
       if (ws.current && ws.current.readyState === WebSocket.OPEN) {
         // Track input for command history
@@ -1625,6 +1643,9 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
             window.open(data.url, '_blank');
           } else if (data.type === 'pong') {
             // Server responded to our ping - connection is alive
+          } else if (data.type === 'claude-complete') {
+            // Claude finished a task - play completion sound
+            playCompletionSound();
           }
         } catch (error) {
         }
@@ -1944,15 +1965,15 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
                     </span>
                   )}
                 </div>
-                <div className="flex items-center space-x-1 sm:space-x-2">
+                <div className="flex items-center space-x-1 min-w-0 flex-shrink-0">
                   
-                  {/* Terminal Theme Toggle */}
+                  {/* Terminal Theme Toggle - always shows icon */}
                   <button
                     onClick={cycleTerminalTheme}
-                    className="p-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent rounded transition-colors"
+                    className="p-1 sm:p-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent rounded transition-all duration-200 flex-shrink-0"
                     title={`Terminal theme: ${terminalTheme} (click to change)`}
                   >
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
                         d={terminalTheme === 'light' 
                           ? "M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"
@@ -1964,10 +1985,10 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
                     </svg>
                   </button>
                   
-                  {/* Bypass Permissions Toggle */}
+                  {/* Bypass Permissions Toggle - adaptive text visibility */}
                   <button
                     onClick={toggleBypassPermissions}
-                    className={`px-1.5 sm:px-3 py-1 text-xs rounded flex items-center space-x-1 transition-colors ${
+                    className={`px-1 sm:px-2 lg:px-3 py-1 text-xs rounded flex items-center space-x-1 transition-all duration-200 flex-shrink-0 ${
                       isBypassingPermissions 
                         ? 'bg-yellow-600 text-white hover:bg-yellow-700' 
                         : 'bg-muted text-muted-foreground hover:bg-accent'
@@ -1982,7 +2003,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
                         } 
                       />
                     </svg>
-                    <span className="hidden sm:inline whitespace-nowrap">
+                    <span className="hidden lg:inline whitespace-nowrap text-xs">
                       {isBypassingPermissions ? 'Bypass ON' : 'Bypass OFF'}
                     </span>
                   </button>
@@ -2006,26 +2027,26 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
             {isConnected && (
               <button
                 onClick={disconnectFromShell}
-                className="px-1.5 sm:px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 flex items-center space-x-1"
+                className="px-1 sm:px-2 lg:px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 flex items-center space-x-1 transition-all duration-200 flex-shrink-0"
                 title="Disconnect from shell"
               >
                 <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
-                <span className="hidden sm:inline">Disconnect</span>
+                <span className="hidden lg:inline whitespace-nowrap">Disconnect</span>
               </button>
             )}
             
             <button
               onClick={restartShell}
               disabled={isRestarting || isConnected}
-              className="p-1 sm:px-2 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1"
+              className="p-1 sm:px-1.5 lg:px-2 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1 hover:bg-accent rounded transition-all duration-200 flex-shrink-0"
               title="Restart Shell (disconnect first)"
             >
               <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
-              <span className="hidden sm:inline">Restart</span>
+              <span className="hidden lg:inline whitespace-nowrap">Restart</span>
             </button>
             </div>
           </div>

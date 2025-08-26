@@ -50,6 +50,7 @@ import authRoutes from './routes/auth.js';
 import usageRoutes from './routes/usage.js';
 import systemRoutes from './routes/system.js';
 import filesRoutes from './routes/files.js';
+import claudeHooksRoutes from './routes/claude-hooks.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 import cleanupService from './cleanupService.js';
@@ -370,6 +371,28 @@ app.use('/api/git', authenticateToken, gitRoutes);
 app.use('/api/usage', usageRoutes);
 app.use('/api/system', authenticateToken, systemRoutes);
 app.use('/api/files', filesRoutes);
+app.use('/api/claude-hooks', authenticateToken, claudeHooksRoutes);
+
+// Sound files API route for Vibe Kanban sound notifications
+app.get('/api/sounds/:soundFile', (req, res) => {
+  try {
+    const soundFile = req.params.soundFile;
+    const soundPath = path.join(__dirname, '../vibe-kanban/backend/sounds', soundFile);
+    
+    // Check if file exists and is within sounds directory
+    if (!fs.existsSync(soundPath)) {
+      return res.status(404).json({ error: 'Sound file not found' });
+    }
+    
+    // Serve the sound file with proper MIME type
+    const mimeType = mime.lookup(soundPath) || 'audio/wav';
+    res.setHeader('Content-Type', mimeType);
+    res.sendFile(path.resolve(soundPath));
+  } catch (error) {
+    console.error('Error serving sound file:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 // Vibe Kanban Cleanup API Routes
 app.get('/api/cleanup/status', authenticateToken, (req, res) => {
