@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { authenticatedFetch } from '../utils/api';
 
 function ResourceMonitor() {
   const [isOpen, setIsOpen] = useState(false);
@@ -14,15 +15,24 @@ function ResourceMonitor() {
   const fetchSystemInfo = async () => {
     if (!isOpen) return;
     
+    console.log('[ResourceMonitor] Fetching system info...');
     setIsLoading(true);
     try {
-      const response = await fetch('/api/system/info');
-      if (response.ok) {
-        const data = await response.json();
-        setSystemInfo(data);
-      }
+      const data = await authenticatedFetch('/api/system/info');
+      console.log('[ResourceMonitor] Received data:', data);
+      setSystemInfo({
+        activePorts: data?.activePorts || [],
+        memoryUsage: data?.memoryUsage || 0,
+        cpuUsage: data?.cpuUsage || 0,
+        ...data
+      });
     } catch (error) {
-      console.error('Failed to fetch system info:', error);
+      console.error('[ResourceMonitor] Failed to fetch system info:', error);
+      setSystemInfo({
+        activePorts: [],
+        memoryUsage: 0,
+        cpuUsage: 0
+      });
     } finally {
       setIsLoading(false);
     }
@@ -51,7 +61,7 @@ function ResourceMonitor() {
 
   const handlePortAction = async (port, action) => {
     try {
-      await fetch('/api/system/ports', {
+      await authenticatedFetch('/api/system/ports', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ port, action })
@@ -147,15 +157,15 @@ function ResourceMonitor() {
             {/* Active Ports */}
             <div className="p-3">
               <div className="flex items-center justify-between mb-3">
-                <span className="text-sm font-medium">Active Ports ({systemInfo.activePorts.length})</span>
+                <span className="text-sm font-medium">Active Ports ({systemInfo.activePorts?.length || 0})</span>
                 {isLoading && (
                   <div className="w-4 h-4 border-2 border-muted border-t-primary rounded-full animate-spin" />
                 )}
               </div>
               
-              {systemInfo.activePorts.length > 0 ? (
+              {systemInfo.activePorts?.length > 0 ? (
                 <div className="space-y-2">
-                  {systemInfo.activePorts.map((port, index) => (
+                  {systemInfo.activePorts?.map((port, index) => (
                     <div key={index} className="flex items-center justify-between text-sm">
                       <div className="flex items-center gap-2">
                         <span className="font-mono font-medium">:{port.port}</span>

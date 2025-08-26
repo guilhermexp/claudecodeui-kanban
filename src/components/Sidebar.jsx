@@ -568,9 +568,9 @@ function Sidebar({
   }, [searchFilter]);
 
   return (
-    <div className="h-full flex flex-col bg-card/95 backdrop-blur-sm border-r border-border md:select-none">
+    <div className="h-full flex flex-col md:select-none">
       {/* Header */}
-      <div className="h-12 md:h-14 px-3 md:px-4 border-b border-border flex items-center">
+      <div className="h-12 md:h-14 px-3 md:px-4 flex items-center">
         {/* Desktop Header */}
           <div className="hidden md:flex items-center justify-between w-full">
           <div className="flex items-center gap-3">
@@ -578,7 +578,7 @@ function Sidebar({
               <ClaudeLogo className="w-5 h-5" />
             </div>
             <div>
-              <h1 className="text-base font-semibold text-foreground">CodeUI</h1>
+              <h1 className="text-base font-semibold text-foreground">vibeclaude</h1>
               
             </div>
           </div>
@@ -603,7 +603,7 @@ function Sidebar({
                 <ClaudeLogo className="w-6 h-6" />
               </div>
               <div>
-                <h1 className="text-base font-semibold text-foreground">CodeUI</h1>
+                <h1 className="text-base font-semibold text-foreground">vibeclaude</h1>
                 <p className="text-xs text-muted-foreground">
                   {searchFilter.trim() ? (
                     `${filteredProjects.length} of ${totalFilteredProjects} projects`
@@ -863,7 +863,7 @@ function Sidebar({
                       }}
                     >
                       <Terminal className="w-4 h-4" />
-                      Claude Code Projects
+                      vibeclaude Projects
                     </button>
                     <button
                       className={cn(
@@ -1402,7 +1402,7 @@ function Sidebar({
       
       {/* Version Update Notification */}
       {updateAvailable && (
-        <div className="md:px-3 md:py-2 border-t border-border/50 flex-shrink-0">
+        <div className="md:px-3 md:py-2 flex-shrink-0">
           {/* Desktop Version Notification */}
           <div className="hidden md:block">
             <Button
@@ -1445,7 +1445,7 @@ function Sidebar({
       )}
       
       {/* Footer Section */}
-      <div className="border-t border-border flex-shrink-0">
+      <div className="flex-shrink-0">
         {/* Desktop Footer */}
         <div className="hidden md:block p-3 space-y-2">
           {/* VibeKanban Button */}

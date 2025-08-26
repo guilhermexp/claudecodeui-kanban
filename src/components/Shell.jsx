@@ -945,11 +945,12 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
 
     // Add keyboard shortcuts for copy/paste and command history
     terminal.current.attachCustomKeyEventHandler((event) => {
-      // Allow Tab and arrow keys to work normally in terminal for autocompletion
+      // Let Tab and arrow keys pass through to terminal completely
       if (event.key === 'Tab' || 
           event.key === 'ArrowUp' || event.key === 'ArrowDown' || 
           event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-        return false; // Let terminal handle these keys completely
+        // Return true to let the terminal's native key handling take over
+        return true;
       }
       
       
@@ -1752,19 +1753,21 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
           <div className="text-center max-w-sm w-full">
             <button
               onClick={connectToShell}
-              className="px-4 sm:px-6 py-2 sm:py-3 bg-success text-success-foreground rounded-lg hover:bg-success/90 transition-colors flex items-center justify-center space-x-2 text-sm sm:text-base font-medium w-full"
+              className="px-4 sm:px-6 py-3 sm:py-4 bg-neutral-900 text-white rounded-xl hover:bg-neutral-800 transition-all duration-200 flex items-center justify-center space-x-3 text-sm sm:text-base font-semibold w-full shadow-lg hover:shadow-xl transform hover:scale-[1.02]"
               title="Connect to shell"
             >
-              <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
+              <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-lg bg-white/20 flex items-center justify-center">
+                <svg className="w-3 h-3 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </div>
               <span>Continue in Shell</span>
             </button>
-            <p className="text-muted-foreground text-xs sm:text-sm mt-2 sm:mt-3 px-2 break-words">
+            <p className="text-muted-foreground text-sm sm:text-base mt-3 sm:mt-4 px-2 break-words font-medium">
               {selectedSession ? (
                 <>Resume session: {selectedSession.summary.slice(0, isMobile ? 30 : 50)}...</>
               ) : (
-                'Start a new Claude session'
+                'Start a new vibeclaude session'
               )}
             </p>
             <p className="text-muted-foreground text-xs mt-1 px-2 text-center">

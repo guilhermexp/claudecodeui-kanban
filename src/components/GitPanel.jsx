@@ -1104,7 +1104,7 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
             <div className="border-b border-gray-200 dark:border-gray-700">
               <button
                 onClick={() => setShowLegend(!showLegend)}
-                className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-750 text-xs text-gray-600 dark:text-gray-400 flex items-center justify-center gap-1"
+                className="w-full px-4 py-2 bg-muted hover:bg-muted/80 text-xs text-muted-foreground flex items-center justify-center gap-1"
               >
                 <Info className="w-3 h-3" />
                 <span>File Status Guide</span>
@@ -1112,31 +1112,31 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
               </button>
               
               {showLegend && (
-                <div className="px-4 py-3 bg-gray-50 dark:bg-gray-800 text-xs">
+                <div className="px-4 py-3 bg-muted text-xs">
                   <div className={`${isMobile ? 'grid grid-cols-2 gap-3 justify-items-center' : 'flex justify-center gap-6'}`}>
                     <div className="flex items-center gap-2">
                       <span className="inline-flex items-center justify-center w-5 h-5 bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300 rounded border border-yellow-200 dark:border-yellow-800 font-bold text-xs">
                         M
                       </span>
-                      <span className="text-gray-600 dark:text-gray-400 italic">Modified</span>
+                      <span className="text-muted-foreground italic">Modified</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="inline-flex items-center justify-center w-5 h-5 bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 rounded border border-green-200 dark:border-green-800 font-bold text-xs">
                         A
                       </span>
-                      <span className="text-gray-600 dark:text-gray-400 italic">Added</span>
+                      <span className="text-muted-foreground italic">Added</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="inline-flex items-center justify-center w-5 h-5 bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 rounded border border-red-200 dark:border-red-800 font-bold text-xs">
                         D
                       </span>
-                      <span className="text-gray-600 dark:text-gray-400 italic">Deleted</span>
+                      <span className="text-muted-foreground italic">Deleted</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="inline-flex items-center justify-center w-5 h-5 bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 rounded border border-gray-300 dark:border-gray-600 font-bold text-xs">
                         U
                       </span>
-                      <span className="text-gray-600 dark:text-gray-400 italic">Untracked</span>
+                      <span className="text-muted-foreground italic">Untracked</span>
                     </div>
                   </div>
                 </div>
