@@ -1,24 +1,28 @@
 import React from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import SetupForm from './SetupForm';
-import LoginForm from './LoginForm';
+import ModernLoginForm from './ModernLoginForm';
 import { MessageSquare } from 'lucide-react';
 
 const LoadingScreen = () => (
   <div className="min-h-screen bg-background flex items-center justify-center p-4">
     <div className="text-center">
-      <div className="flex justify-center mb-4">
-        <div className="w-16 h-16 bg-primary rounded-lg flex items-center justify-center shadow-sm">
-          <MessageSquare className="w-8 h-8 text-primary-foreground" />
+      <div className="flex justify-center mb-6">
+        <div className="w-16 h-16 rounded-2xl overflow-hidden shadow-lg">
+          <img 
+            src="/icons/claude-ai-icon.svg" 
+            alt="Claude AI" 
+            className="w-full h-full object-cover"
+          />
         </div>
       </div>
-      <h1 className="text-2xl font-bold text-foreground mb-2">Claude Code UI</h1>
-      <div className="flex items-center justify-center space-x-2">
-        <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
-        <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-        <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+      <h1 className="text-3xl font-bold text-foreground mb-4">vibeclaude</h1>
+      <div className="flex items-center justify-center space-x-1 mb-2">
+        <div className="w-2 h-2 bg-primary rounded-full animate-bounce"></div>
+        <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+        <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
       </div>
-      <p className="text-muted-foreground mt-2">Loading...</p>
+      <p className="text-muted-foreground">Loading...</p>
     </div>
   </div>
 );
@@ -35,7 +39,7 @@ const ProtectedRoute = ({ children }) => {
   }
 
   if (!user) {
-    return <LoginForm />;
+    return <ModernLoginForm />;
   }
 
   return children;

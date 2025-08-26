@@ -368,7 +368,7 @@ app.use('/api/git', authenticateToken, gitRoutes);
 
 // Usage API Routes (protected)
 app.use('/api/usage', usageRoutes);
-app.use('/api/system', systemRoutes);
+app.use('/api/system', authenticateToken, systemRoutes);
 app.use('/api/files', filesRoutes);
 
 // Vibe Kanban Cleanup API Routes
@@ -1098,9 +1098,17 @@ function handleShellConnection(ws, request) {
       const data = JSON.parse(message);
       
       if (data.type === 'init') {
-        const projectPath = data.projectPath || process.cwd();
-        const sessionId = data.sessionId;
-        const hasSession = data.hasSession;
+        // Handle standalone mode - use home directory, never resume sessions
+        let projectPath = data.projectPath || process.cwd();
+        let sessionId = data.sessionId;
+        let hasSession = data.hasSession;
+        
+        if (projectPath === 'STANDALONE_MODE') {
+          projectPath = process.env.HOME || process.env.USERPROFILE || process.cwd();
+          sessionId = null; // Never resume - always fresh session
+          hasSession = false; // Never has session - always new
+        }
+        
         bypassPermissions = data.bypassPermissions || false;
         
         // Shell process will be created fresh for each connection
@@ -1108,10 +1116,13 @@ function handleShellConnection(ws, request) {
         
         // Create new shell session
           
-          // Send welcome message
-          const welcomeMsg = hasSession ? 
-            `\x1b[36mResuming Claude session ${sessionId} in: ${projectPath}\x1b[0m\r\n` :
-            `\x1b[36mStarting new Claude session in: ${projectPath}\x1b[0m\r\n`;
+          // Send welcome message - standalone mode is always fresh
+          const isStandalone = data.projectPath === 'STANDALONE_MODE';
+          const welcomeMsg = isStandalone ? 
+            `\x1b[36mStarting fresh Claude session (no project)\x1b[0m\r\n` :
+            (hasSession ? 
+              `\x1b[36mResuming Claude session ${sessionId} in: ${projectPath}\x1b[0m\r\n` :
+              `\x1b[36mStarting new Claude session in: ${projectPath}\x1b[0m\r\n`);
           
           ws.send(JSON.stringify({
             type: 'output',

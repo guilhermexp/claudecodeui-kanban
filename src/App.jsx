@@ -50,15 +50,8 @@ function AppContent() {
       chatState.timestamp && 
       (Date.now() - chatState.timestamp < 30 * 60 * 1000); // 30 minutes
     
-    // Smart sidebar initial state based on screen size
-    const isMobileScreen = window.innerWidth < 768;
-    let sidebarOpenDefault = !isMobileScreen; // Open on desktop, closed on mobile
-    
-    // If we have a saved state, use it only for desktop
-    // Mobile should always start closed to avoid overlay issues
-    if (savedState[appStatePersistence.KEYS.SIDEBAR_OPEN] !== undefined) {
-      sidebarOpenDefault = isMobileScreen ? false : savedState[appStatePersistence.KEYS.SIDEBAR_OPEN];
-    }
+    // Always start with sidebar closed
+    let sidebarOpenDefault = false;
     
     return {
       selectedProject: shouldRestoreSession ? savedState[appStatePersistence.KEYS.SELECTED_PROJECT] : null,
@@ -219,15 +212,9 @@ function AppContent() {
         
         setIsMobile(nowMobile);
         
-        // Smart sidebar management on screen size change
+        // Keep sidebar closed on screen size changes
         if (wasMobile !== nowMobile) {
-          if (nowMobile) {
-            // Switching to mobile: close sidebar to avoid overlay
-            setSidebarOpen(false);
-          } else {
-            // Switching to desktop: open sidebar for better UX
-            setSidebarOpen(true);
-          }
+          setSidebarOpen(false);
         }
         
         previousWidth = currentWidth;
@@ -448,18 +435,16 @@ function AppContent() {
     setSelectedProject(project);
     setSelectedSession(null);
     navigate('/');
-    if (isMobile) {
-      setSidebarOpen(false);
-    }
+    // Always close sidebar when project is selected
+    setSidebarOpen(false);
   };
 
   const handleSessionSelect = (session) => {
     setSelectedSession(session);
     // Only switch to chat tab when user explicitly selects a session
     // Keep current tab when navigating to sessions
-    if (isMobile) {
-      setSidebarOpen(false);
-    }
+    // Always close sidebar when session is selected
+    setSidebarOpen(false);
     navigate(`/session/${session.id}`);
   };
 
@@ -468,9 +453,8 @@ function AppContent() {
     setSelectedSession(null);
     setActiveTab('shell'); // Switch to shell tab for new session
     navigate('/');
-    if (isMobile) {
-      setSidebarOpen(false);
-    }
+    // Always close sidebar when creating new session
+    setSidebarOpen(false);
   };
 
   const handleSessionDelete = (sessionId) => {
@@ -595,6 +579,24 @@ function AppContent() {
     }
   };
 
+  // handleStartStandaloneSession: Start fresh Claude session (like opening terminal and typing 'claude')
+  const handleStartStandaloneSession = () => {
+    // Create a standalone project - no sessions, always fresh
+    const standaloneProject = {
+      name: 'claude-standalone',
+      displayName: 'Claude Standalone',
+      path: 'STANDALONE_MODE',
+      fullPath: 'STANDALONE_MODE',
+      isStandalone: true,
+      sessions: [] // Always empty - never resume
+    };
+    
+    setSelectedProject(standaloneProject);
+    setSelectedSession(null); // Never select a session - always fresh
+    setActiveTab('shell');
+    navigate('/');
+  };
+
   // Version Upgrade Modal removed along with version checking
 
   return (
@@ -605,14 +607,13 @@ function AppContent() {
         cursor: isResizing ? 'col-resize' : 'default'
       }}
     >
-      <div className="flex w-full h-full rounded-xl overflow-hidden bg-card border border-border">
       {/* Desktop Sidebar - Integrated Mode (no side panels active) */}
       {!isMobile && (sidebarOpen || showToolsSettings) && !shouldUseSidebarOverlay && (
         <div 
-          className="flex-shrink-0 border-r border-border bg-card relative"
+          className="flex-shrink-0 bg-card relative rounded-xl border border-border mr-2 overflow-hidden"
           style={{ width: `${sidebarWidth}px` }}
         >
-          <div className="h-full overflow-y-auto">
+          <div className="h-full overflow-y-auto rounded-xl">
             <Sidebar
               projects={projects}
               selectedProject={selectedProject}
@@ -650,10 +651,10 @@ function AppContent() {
             onClick={() => setSidebarOpen(false)}
           />
           <div 
-            className="relative bg-card border-r border-border h-full shadow-xl"
+            className="relative bg-card border border-border rounded-xl h-full shadow-xl m-2 overflow-hidden"
             style={{ width: `${sidebarWidth}px` }}
           >
-            <div className="h-full overflow-y-auto">
+            <div className="h-full overflow-y-auto rounded-xl">
               <Sidebar
                 projects={projects}
                 selectedProject={selectedProject}
@@ -691,7 +692,7 @@ function AppContent() {
             }}
           />
           <div 
-            className={`relative w-[85vw] max-w-sm sm:w-80 bg-card border-r border-border h-full transform transition-transform duration-150 ease-out ${
+            className={`relative w-[85vw] max-w-sm sm:w-80 bg-card border border-border rounded-r-xl h-full transform transition-transform duration-150 ease-out overflow-hidden ${
               sidebarOpen ? 'translate-x-0' : '-translate-x-full'
             }`}
             onClick={(e) => e.stopPropagation()}
@@ -716,7 +717,7 @@ function AppContent() {
       )}
 
       {/* Main Content Area - Flexible */}
-      <div className={`flex-1 flex flex-col min-w-0 relative ${isMobile ? 'pb-14' : ''}`}>
+      <div className={`flex-1 flex flex-col min-w-0 relative ${isMobile ? 'pb-14' : ''} ${!isMobile ? 'bg-card rounded-xl border border-border overflow-hidden' : ''}`}>
         <MainContent
           selectedProject={selectedProject}
           selectedSession={selectedSession}
@@ -737,6 +738,7 @@ function AppContent() {
           onReplaceTemporarySession={replaceTemporarySession}
           onNavigateToSession={(sessionId) => navigate(`/session/${sessionId}`)}
           onShowSettings={() => setShowToolsSettings(true)}
+          onStartStandaloneSession={handleStartStandaloneSession}
           onShellConnectionChange={setIsShellConnected}
           shellHasActiveSession={shellHasActiveSession}
           onShellSessionStateChange={setShellHasActiveSession}
@@ -781,7 +783,6 @@ function AppContent() {
 
       {/* Session Keep Alive Component */}
       <SessionKeepAlive />
-      </div>
     </div>
   );
 }

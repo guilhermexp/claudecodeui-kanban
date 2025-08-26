@@ -5,24 +5,32 @@ const router = express.Router();
 
 const execAsync = promisify(exec);
 
+
 // Get system information including active ports and resource usage
 router.get('/info', async (req, res) => {
   try {
+    console.log('[SYSTEM] System info requested from:', req.ip);
+    
     // Get active ports
     const activePorts = await getActivePorts();
+    console.log('[SYSTEM] Found active ports:', activePorts.length);
     
     // Get memory and CPU usage
     const memoryUsage = await getMemoryUsage();
     const cpuUsage = await getCpuUsage();
+    console.log('[SYSTEM] Resource usage - Memory:', memoryUsage, '% CPU:', cpuUsage, '%');
 
-    res.json({
+    const result = {
       activePorts,
       memoryUsage,
       cpuUsage,
       timestamp: new Date().toISOString()
-    });
+    };
+    
+    console.log('[SYSTEM] Sending response:', JSON.stringify(result, null, 2).slice(0, 200) + '...');
+    res.json(result);
   } catch (error) {
-    console.error('System info error:', error);
+    console.error('[SYSTEM] System info error:', error);
     res.status(500).json({ 
       error: 'Failed to get system information',
       activePorts: [],
@@ -56,17 +64,8 @@ router.post('/ports', async (req, res) => {
 // Helper functions
 async function getActivePorts() {
   try {
-    // macOS/Linux: Use lsof to find active ports
-    let command;
-    if (process.platform === 'darwin' || process.platform === 'linux') {
-      command = "lsof -i -P -n | grep LISTEN | awk '{print $1, $9}' | sort -u";
-    } else if (process.platform === 'win32') {
-      command = 'netstat -ano | findstr LISTENING';
-    } else {
-      return [];
-    }
-
-    const { stdout } = await execAsync(command);
+    // Use a simpler approach that's more reliable
+    const { stdout } = await execAsync("lsof -i -P -n | grep LISTEN | awk '{print $1, $9}' | sort -u");
     const lines = stdout.trim().split('\n').filter(line => line.trim());
     
     const ports = [];
@@ -74,54 +73,47 @@ async function getActivePorts() {
 
     for (const line of lines) {
       try {
-        let port, process;
-        
-        if (process.platform === 'win32') {
-          // Windows format parsing
-          const parts = line.trim().split(/\s+/);
+        const parts = line.trim().split(/\s+/);
+        if (parts.length >= 2) {
+          const processName = parts[0];
           const address = parts[1];
+          
+          // Extract port from address (handles both *:PORT and IP:PORT)
           const portMatch = address.match(/:(\d+)$/);
           if (portMatch) {
-            port = parseInt(portMatch[1]);
-            process = 'unknown';
-          }
-        } else {
-          // macOS/Linux format parsing
-          const parts = line.trim().split(/\s+/);
-          if (parts.length >= 2) {
-            process = parts[0];
-            const address = parts[1];
-            const portMatch = address.match(/:(\d+)$/);
-            if (portMatch) {
-              port = parseInt(portMatch[1]);
+            const port = parseInt(portMatch[1]);
+            
+            if (port && !seenPorts.has(port)) {
+              seenPorts.add(port);
+              
+              // Determine process type and add URL if applicable
+              let processType = processName;
+              let url = null;
+              
+              // Common development ports
+              if (port === 3000 || port === 5173 || port === 5892) {
+                processType = 'frontend';
+                url = `http://localhost:${port}`;
+              } else if (port === 7347) {
+                processType = 'backend';
+                url = `http://localhost:${port}`;
+              } else if (port === 6734) {
+                processType = 'vibe-kanban';
+                url = `http://localhost:${port}`;
+              } else if (port === 8000 || port === 8080) {
+                url = `http://localhost:${port}`;
+              } else if (port === 4040) {
+                processType = 'ngrok';
+                url = `http://localhost:${port}`;
+              }
+              
+              ports.push({
+                port,
+                process: processType,
+                url
+              });
             }
           }
-        }
-
-        if (port && !seenPorts.has(port)) {
-          seenPorts.add(port);
-          
-          // Determine process type and add URL if applicable
-          let processType = process;
-          let url = null;
-          
-          // Common development ports
-          if (port === 3000 || port === 5173 || port === 5892) {
-            processType = 'node';
-            url = `http://localhost:${port}`;
-          } else if (port === 8000 || port === 8080) {
-            url = `http://localhost:${port}`;
-          } else if (port === 6734) {
-            processType = 'vibe-kanb';
-          } else if (port === 7347) {
-            processType = 'node';
-          }
-          
-          ports.push({
-            port,
-            process: processType,
-            url
-          });
         }
       } catch (parseError) {
         // Skip lines that can't be parsed

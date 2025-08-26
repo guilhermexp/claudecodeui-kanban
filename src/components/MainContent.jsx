@@ -18,7 +18,9 @@ import Shell from './Shell';
 import GitPanel from './GitPanel';
 import VibeTaskPanel from './VibeTaskPanel';
 import Dashboard from './Dashboard';
+import ResourceMonitor from './ResourceMonitor';
 import ErrorBoundary from './ErrorBoundary';
+import { TextShimmer } from './ui/text-shimmer';
 
 function MainContent({ 
   selectedProject, 
@@ -42,6 +44,7 @@ function MainContent({
   onReplaceTemporarySession, // Replace temporary session ID with real session ID from WebSocket
   onNavigateToSession,    // Navigate to a specific session (for Claude CLI session duplication workaround)
   onShowSettings,         // Show tools settings panel
+  onStartStandaloneSession, // Function to start standalone Claude session
   autoExpandTools,        // Auto-expand tool accordions
   showRawParameters,      // Show raw parameters in tool accordions
   autoScrollToBottom,     // Auto-scroll to bottom when new messages arrive
@@ -99,7 +102,7 @@ function MainContent({
       <div className="h-full flex flex-col">
         {/* Header with menu button for mobile */}
         {isMobile && (
-          <div className="bg-card border-b border-border p-3 md:p-4 flex-shrink-0">
+          <div className="bg-card p-3 md:p-4 flex-shrink-0">
             <button
               onClick={onMenuClick}
               className="p-1.5 text-muted-foreground hover:text-foreground rounded-xl hover:bg-accent"
@@ -111,19 +114,53 @@ function MainContent({
           </div>
         )}
         <div className="flex-1 flex items-center justify-center">
-          <div className="text-center text-muted-foreground">
-            <div className="w-12 h-12 mx-auto mb-4">
-              <div 
-                className="w-full h-full rounded-full border-4 border-muted border-t-muted-foreground" 
-                style={{ 
-                  animation: 'spin 1s linear infinite',
-                  WebkitAnimation: 'spin 1s linear infinite',
-                  MozAnimation: 'spin 1s linear infinite'
-                }} 
-              />
+          <div className="text-center">
+            {/* Logo */}
+            <div className="flex justify-center mb-6">
+              <div className="w-16 h-16 rounded-2xl overflow-hidden shadow-lg">
+                <img 
+                  src="/icons/claude-ai-icon.svg" 
+                  alt="Claude AI" 
+                  className="w-full h-full object-cover"
+                />
+              </div>
             </div>
-            <h2 className="text-xl font-semibold mb-2 text-foreground">Loading Claude Code UI</h2>
-            <p>Setting up your workspace...</p>
+
+            {/* Title */}
+            <h1 className="text-4xl font-bold leading-tight tracking-tight text-foreground mb-2">
+              vibeclaude
+            </h1>
+            <p className="text-lg text-muted-foreground font-light mb-8">
+              Setting up your workspace
+            </p>
+
+            {/* Modern Loading Animation */}
+            <div className="relative w-20 h-20 mx-auto mb-6">
+              <div className="absolute inset-0 rounded-full border-4 border-muted animate-pulse"></div>
+              <div 
+                className="absolute inset-0 rounded-full border-4 border-transparent border-t-primary border-r-primary"
+                style={{ 
+                  animation: 'spin 1.5s linear infinite',
+                  WebkitAnimation: 'spin 1.5s linear infinite',
+                  MozAnimation: 'spin 1.5s linear infinite'
+                }}
+              ></div>
+              <div 
+                className="absolute inset-2 rounded-full border-2 border-transparent border-b-accent border-l-accent"
+                style={{ 
+                  animation: 'spin 2s linear infinite reverse',
+                  WebkitAnimation: 'spin 2s linear infinite reverse',
+                  MozAnimation: 'spin 2s linear infinite reverse'
+                }}
+              ></div>
+            </div>
+
+            {/* Loading dots */}
+            <div className="flex justify-center space-x-1">
+              <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+              <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+              <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+            </div>
           </div>
         </div>
       </div>
@@ -135,7 +172,7 @@ function MainContent({
       <div className="h-full flex flex-col">
         {/* Header with menu button for mobile */}
         {isMobile && (
-          <div className="bg-card border-b border-border p-3 md:p-4 flex-shrink-0">
+          <div className="bg-card p-3 md:p-4 flex-shrink-0">
             <button
               onClick={onMenuClick}
               className="p-1.5 text-muted-foreground hover:text-foreground rounded-xl hover:bg-accent"
@@ -146,21 +183,90 @@ function MainContent({
             </button>
           </div>
         )}
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center text-muted-foreground max-w-md mx-auto px-6">
-            <div className="w-16 h-16 mx-auto mb-6 bg-muted rounded-full flex items-center justify-center">
-              <svg className="w-8 h-8 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-5l-2-2H5a2 2 0 00-2 2z" />
-              </svg>
+        <div className="flex-1 flex items-center justify-center bg-background relative">
+          {/* Discrete sidebar toggle button */}
+          <button
+            onClick={onSidebarOpen}
+            className="absolute top-4 left-4 p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-md transition-colors z-10"
+            title="Open Projects"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h8m-8 6h16" />
+            </svg>
+          </button>
+          <div className="text-center max-w-lg mx-auto px-8">
+            {/* Header Section */}
+            <div className="mb-12">
+              {/* Logo */}
+              <div className="flex justify-center mb-8">
+                <div className="w-20 h-20 rounded-2xl overflow-hidden shadow-lg">
+                  <img 
+                    src="/icons/claude-ai-icon.svg" 
+                    alt="Claude AI" 
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              </div>
+              
+              {/* App Name */}
+              <h1 className="text-4xl font-bold text-foreground mb-2">vibeclaude</h1>
+              <p className="text-lg text-muted-foreground font-light mb-4">Choose Your Project</p>
+              <div className="w-20 h-0.5 bg-gradient-to-r from-primary to-accent mx-auto"></div>
             </div>
-            <h2 className="text-2xl font-semibold mb-3 text-foreground">Choose Your Project</h2>
-            <p className="text-muted-foreground mb-6 leading-relaxed">
-              Select a project from the sidebar to start coding with Claude. Each project contains your chat sessions and file history.
-            </p>
-            <div className="bg-muted rounded-2xl p-4 border border-border">
-              <p className="text-sm text-muted-foreground">
-                💡 <strong>Tip:</strong> {isMobile ? 'Tap the menu button above to access projects' : 'Create a new project by clicking the folder icon in the sidebar'}
-              </p>
+            
+            {/* Action Section */}
+            <div className="space-y-8">
+              {/* Primary Action */}
+              <div className="space-y-4">
+                <button
+                  onClick={() => {
+                    if (onStartStandaloneSession) {
+                      onStartStandaloneSession();
+                    }
+                  }}
+                  className="group inline-flex items-center gap-3 px-8 py-4 bg-neutral-900 text-white rounded-xl font-semibold hover:bg-neutral-800 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-[1.02]"
+                >
+                  <div className="w-6 h-6 rounded-lg bg-white/20 flex items-center justify-center">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3" />
+                    </svg>
+                  </div>
+                  <TextShimmer 
+                    duration={6}
+                    className="text-lg font-semibold"
+                  >
+                    Start vibeclaude Session
+                  </TextShimmer>
+                </button>
+                <p className="text-sm text-muted-foreground">
+                  Launch vibeclaude without any project constraints
+                </p>
+              </div>
+
+              {/* Divider */}
+              <div className="flex items-center gap-4">
+                <div className="flex-1 h-px bg-border"></div>
+                <span className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Or</span>
+                <div className="flex-1 h-px bg-border"></div>
+              </div>
+
+              {/* Secondary Action */}
+              <div className="space-y-4">
+                <button
+                  onClick={onSidebarOpen}
+                  className="inline-flex items-center gap-3 px-6 py-3 bg-secondary text-secondary-foreground rounded-xl font-medium hover:bg-secondary/90 transition-all duration-200 border border-border/50 shadow-md hover:shadow-lg transform hover:scale-[1.02]"
+                >
+                  <div className="w-5 h-5 rounded-md bg-primary/10 flex items-center justify-center">
+                    <svg className="w-3 h-3 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-5l-2-2H5a2 2 0 00-2 2z" />
+                    </svg>
+                  </div>
+                  Browse Projects
+                </button>
+                <p className="text-sm text-muted-foreground">
+                  Select from your existing projects
+                </p>
+              </div>
             </div>
           </div>
         </div>
@@ -171,7 +277,7 @@ function MainContent({
   return (
     <div className="h-full min-h-0 flex flex-col relative overflow-hidden">
       {/* Header with tabs */}
-      <div className="bg-card/95 backdrop-blur-sm border-b border-border h-12 md:h-14 px-3 md:px-4 flex items-center flex-shrink-0 relative z-50">
+      <div className="h-12 md:h-14 px-3 md:px-4 flex items-center flex-shrink-0 relative z-50">
         <div className="flex items-center justify-between gap-4 md:gap-6 w-full">
           <div className="flex items-center space-x-2 sm:space-x-3 flex-1 order-1">
             {isMobile && (
@@ -200,16 +306,16 @@ function MainContent({
               </button>
             )}
             <div className="flex items-center gap-3 flex-1">
-              <div className="min-w-0 max-w-[200px] md:max-w-[250px]">
+              <div className="min-w-0 flex-1">
                 {
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white">
+                  <div className="flex items-center gap-3">
+                    <h2 className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white whitespace-nowrap">
                       Shell {activeSidePanel && `+ ${activeSidePanel === 'files' ? 'Files' : 
                                                       activeSidePanel === 'git' ? 'Source Control' :
                                                       activeSidePanel === 'tasks' ? 'Tasks' :
                                                       activeSidePanel === 'dashboard' ? 'Dashboard' : ''}`}
                     </h2>
-                    <span className="inline-block px-2 py-0.5 text-xs rounded-full bg-gradient-to-r from-primary/20 to-accent/20 dark:from-primary/30 dark:to-accent/30 text-primary dark:text-primary-foreground font-medium">
+                    <span className="inline-block px-2 py-0.5 text-xs rounded-full bg-gradient-to-r from-primary/20 to-accent/20 dark:from-primary/30 dark:to-accent/30 text-primary dark:text-primary-foreground font-medium shrink-0">
                       {selectedProject.displayName}
                     </span>
                   </div>
@@ -344,6 +450,11 @@ function MainContent({
               </button>
             </div>
           </div>
+          
+          {/* System Monitor - Right Side */}
+          <div className="flex-shrink-0 order-4">
+            <ResourceMonitor />
+          </div>
         </div>
         
         {/* Shell Terminal Tabs removed - single terminal mode only */}
@@ -382,12 +493,12 @@ function MainContent({
           <>
             {/* Files Panel */}
             <div 
-              className={`absolute top-0 right-0 h-full w-96 sm:w-[440px] md:w-[520px] lg:w-[600px] bg-background border-l border-border shadow-xl transform transition-transform duration-300 ease-in-out ${
+              className={`absolute top-0 right-0 h-full w-96 sm:w-[440px] md:w-[520px] lg:w-[600px] bg-background shadow-xl transform transition-transform duration-300 ease-in-out ${
                 activeSidePanel === 'files' ? 'translate-x-0' : 'translate-x-full'
               }`}
             >
               <div className="h-full flex flex-col">
-                <div className="flex-shrink-0 border-b border-border px-3 md:px-4 flex flex-col">
+                <div className="flex-shrink-0 px-3 md:px-4 flex flex-col">
                   <div className="h-12 md:h-14 flex items-center justify-between">
                     <h3 className="text-lg font-semibold text-foreground">Files</h3>
                     <button
@@ -419,12 +530,12 @@ function MainContent({
 
             {/* Git Panel */}
             <div 
-              className={`absolute top-0 right-0 h-full w-96 sm:w-[440px] md:w-[520px] lg:w-[600px] bg-background border-l border-border shadow-xl transform transition-transform duration-300 ease-in-out ${
+              className={`absolute top-0 right-0 h-full w-96 sm:w-[440px] md:w-[520px] lg:w-[600px] bg-background shadow-xl transform transition-transform duration-300 ease-in-out ${
                 activeSidePanel === 'git' ? 'translate-x-0' : 'translate-x-full'
               }`}
             >
               <div className="h-full flex flex-col">
-                <div className="flex-shrink-0 border-b border-border h-12 md:h-14 px-3 md:px-4 flex items-center justify-between">
+                <div className="flex-shrink-0 h-12 md:h-14 px-3 md:px-4 flex items-center justify-between">
                   <h3 className="text-lg font-semibold text-foreground">Source Control</h3>
                   <button
                     onClick={() => setActiveSidePanel(null)}
@@ -443,7 +554,7 @@ function MainContent({
 
             {/* Tasks Panel */}
             <div 
-              className={`absolute top-0 right-0 h-full w-96 sm:w-[440px] md:w-[520px] lg:w-[600px] bg-background border-l border-border shadow-xl transform transition-transform duration-300 ease-in-out ${
+              className={`absolute top-0 right-0 h-full w-96 sm:w-[440px] md:w-[520px] lg:w-[600px] bg-background shadow-xl transform transition-transform duration-300 ease-in-out ${
                 activeSidePanel === 'tasks' ? 'translate-x-0' : 'translate-x-full'
               }`}
             >
@@ -452,12 +563,12 @@ function MainContent({
 
             {/* Dashboard Panel */}
             <div 
-              className={`absolute top-0 right-0 h-full w-96 sm:w-[440px] md:w-[520px] lg:w-[600px] bg-background border-l border-border shadow-xl transform transition-transform duration-300 ease-in-out ${
+              className={`absolute top-0 right-0 h-full w-96 sm:w-[440px] md:w-[520px] lg:w-[600px] bg-background shadow-xl transform transition-transform duration-300 ease-in-out ${
                 activeSidePanel === 'dashboard' ? 'translate-x-0' : 'translate-x-full'
               }`}
             >
               <div className="h-full flex flex-col">
-                <div className="flex-shrink-0 border-b border-border h-12 md:h-14 px-3 md:px-4 flex items-center justify-between">
+                <div className="flex-shrink-0 h-12 md:h-14 px-3 md:px-4 flex items-center justify-between">
                   <h3 className="text-lg font-semibold text-foreground">Dashboard</h3>
                   <button
                     onClick={() => setActiveSidePanel(null)}

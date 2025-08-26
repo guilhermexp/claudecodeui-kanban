@@ -149,7 +149,7 @@ export function Navbar() {
               {(() => {
                 const path = location.pathname;
                 if (path === '/vibe-kanban' || path === '/vibe-kanban/' || path === '/vibe-kanban/projects') {
-                  return 'Claude Code UI';
+                  return 'vibeclaude';
                 } else if (path.includes('/vibe-kanban/projects/') && path.includes('/tasks')) {
                   return 'Projeto';
                 } else if (path.match(/^\/vibe-kanban\/projects\/[^\/]+$/)) {

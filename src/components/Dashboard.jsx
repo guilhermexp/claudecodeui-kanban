@@ -139,7 +139,7 @@ const Dashboard = memo(({ onBack }) => {
       style: 'currency',
       currency: 'USD',
       minimumFractionDigits: 2,
-      maximumFractionDigits: 4
+      maximumFractionDigits: 2
     }).format(amount);
   };
 
