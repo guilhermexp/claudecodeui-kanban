@@ -1,0 +1,36 @@
+{
+  "name": "@stagewise/agent-tools",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsx build.ts && tsc --emitDeclarationOnly",
+    "dev": "tsx build.ts --watch",
+    "clean": "rimraf dist",
+    "lint": "echo 'No linting for tools-client package'",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "ai": "5.0.9"
+  },
+  "devDependencies": {
+    "@stagewise/agent-runtime-interface": "workspace:*",
+    "@stagewise/agent-types": "workspace:*",
+    "esbuild": "0.25.9",
+    "rimraf": "^5.0.0",
+    "typescript": "^5.0.0",
+    "zod": "4.0.17",
+    "zod-to-json-schema": "^3.24.5"
+  }
+}

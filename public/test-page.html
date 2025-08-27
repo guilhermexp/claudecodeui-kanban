@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Page for Element Selection</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 30px;
+            border-radius: 10px;
+            backdrop-filter: blur(10px);
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .card {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.3s;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+            background: rgba(255, 255, 255, 0.3);
+        }
+        button {
+            background: white;
+            color: #667eea;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            margin: 10px;
+        }
+        button:hover {
+            background: #f0f0f0;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+        .grid-item {
+            background: rgba(255, 255, 255, 0.15);
+            padding: 15px;
+            text-align: center;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Element Selection Test Page</h1>
+        
+        <div class="card" id="card1">
+            <h2>Card 1</h2>
+            <p>This is a test card. Click to select this element.</p>
+            <button onclick="alert('Button 1 clicked!')">Click Me</button>
+        </div>
+        
+        <div class="card" id="card2">
+            <h2>Card 2</h2>
+            <p>Another test card with different content.</p>
+            <button onclick="alert('Button 2 clicked!')">Another Button</button>
+        </div>
+        
+        <div class="grid">
+            <div class="grid-item" data-item="1">Grid Item 1</div>
+            <div class="grid-item" data-item="2">Grid Item 2</div>
+            <div class="grid-item" data-item="3">Grid Item 3</div>
+            <div class="grid-item" data-item="4">Grid Item 4</div>
+        </div>
+    </div>
+    
+    <script>
+        // Listen for element selection messages
+        window.addEventListener('message', (event) => {
+            if (event.data?.type === 'enable-element-selection') {
+                if (event.data.enabled) {
+                    console.log('Element selection enabled via postMessage');
+                    document.body.style.cursor = 'crosshair';
+                    
+                    let hoveredElement = null;
+                    
+                    // Create highlight styles
+                    const style = document.createElement('style');
+                    style.id = 'element-selector-styles';
+                    style.innerHTML = `
+                        .element-highlight {
+                            outline: 2px solid #3b82f6 !important;
+                            outline-offset: 2px !important;
+                            background-color: rgba(59, 130, 246, 0.1) !important;
+                            cursor: crosshair !important;
+                            transition: all 0.2s ease !important;
+                        }
+                        .element-highlight * {
+                            cursor: crosshair !important;
+                        }
+                    `;
+                    document.head.appendChild(style);
+                    
+                    const handleMouseMove = (e) => {
+                        const element = e.target;
+                        
+                        // Remove previous highlight
+                        if (hoveredElement && hoveredElement !== element) {
+                            hoveredElement.classList.remove('element-highlight');
+                        }
+                        
+                        // Add highlight to current element
+                        if (element && element !== document.body && element !== document.documentElement) {
+                            element.classList.add('element-highlight');
+                            hoveredElement = element;
+                        }
+                    };
+                    
+                    const handleClick = (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        
+                        const element = e.target;
+                        const rect = element.getBoundingClientRect();
+                        
+                        // Remove highlight
+                        if (hoveredElement) {
+                            hoveredElement.classList.remove('element-highlight');
+                        }
+                        
+                        window.parent.postMessage({
+                            type: 'element-selected',
+                            data: {
+                                html: element.outerHTML.substring(0, 500),
+                                text: element.textContent?.substring(0, 200),
+                                tag: element.tagName.toLowerCase(),
+                                id: element.id,
+                                className: element.className,
+                                rect: {
+                                    top: rect.top,
+                                    left: rect.left,
+                                    width: rect.width,
+                                    height: rect.height
+                                }
+                            }
+                        }, '*');
+                        
+                        // Cleanup
+                        document.body.style.cursor = '';
+                        document.removeEventListener('click', handleClick, true);
+                        document.removeEventListener('mousemove', handleMouseMove, true);
+                        style.remove();
+                    };
+                    
+                    document.addEventListener('click', handleClick, true);
+                    document.addEventListener('mousemove', handleMouseMove, true);
+                } else {
+                    console.log('Element selection disabled via postMessage');
+                    document.body.style.cursor = '';
+                    // Remove any existing highlight
+                    const highlighted = document.querySelector('.element-highlight');
+                    if (highlighted) {
+                        highlighted.classList.remove('element-highlight');
+                    }
+                    const style = document.querySelector('#element-selector-styles');
+                    if (style) {
+                        style.remove();
+                    }
+                }
+            }
+        });
+        
+        console.log('Test page loaded and ready for element selection');
+    </script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+{
+  "name": "@stagewise/flappy-game",
+  "author": "tiq UG (haftungsbeschränkt)",
+  "license": "MIT",
+  "type": "module",
+  "private": true,
+  "files": [
+    "index.html"
+  ]
+}

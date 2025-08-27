@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 
-function PreviewPanel({ url, onClose, onRefresh, onOpenExternal, isMobile }) {
+function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, isMobile }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [currentUrl, setCurrentUrl] = useState(url);
@@ -10,6 +10,9 @@ function PreviewPanel({ url, onClose, onRefresh, onOpenExternal, isMobile }) {
   const [pausedUrl, setPausedUrl] = useState(null); // Store URL when paused
   const [microphoneStatus, setMicrophoneStatus] = useState('idle'); // idle, granted, denied, requesting
   const [showPermissionInfo, setShowPermissionInfo] = useState(false);
+  const [useStagewise, setUseStagewise] = useState(false); // Toggle for Stagewise mode
+  const [elementSelectionMode, setElementSelectionMode] = useState(false); // Direct element selection
+  const [selectedElement, setSelectedElement] = useState(null); // Captured element data
   const iframeRef = useRef(null);
   const logsRef = useRef(null);
 
@@ -397,8 +400,17 @@ function PreviewPanel({ url, onClose, onRefresh, onOpenExternal, isMobile }) {
     if (iframeRef.current && !isPaused) {
       setIsLoading(true);
       setError(null);
-      // Load URL directly for full functionality
-      iframeRef.current.src = currentUrl;
+      
+      if (useStagewise) {
+        // For Stagewise, send message to update URL with project path
+        iframeRef.current.contentWindow?.postMessage(
+          { type: 'loadUrl', url: currentUrl, projectPath: projectPath },
+          '*'
+        );
+      } else {
+        // Load URL directly for full functionality
+        iframeRef.current.src = currentUrl;
+      }
     }
   };
   
@@ -448,6 +460,224 @@ function PreviewPanel({ url, onClose, onRefresh, onOpenExternal, isMobile }) {
       };
     }
   }, [showLogs]);
+  
+  // Handle element selection mode
+  useEffect(() => {
+    if (!elementSelectionMode || !iframeRef.current) return;
+    
+    // Don't inject into Stagewise toolbar iframe
+    if (useStagewise) return;
+    
+    const handleElementSelected = (event) => {
+      if (event.data?.type === 'element-selected') {
+        console.log('Element selected:', event.data.data);
+        setSelectedElement(event.data.data);
+        setElementSelectionMode(false);
+        
+        // If Stagewise is enabled, send element context to the toolbar
+        if (useStagewise && iframeRef.current) {
+          // Send to Stagewise toolbar iframe
+          const stagewiseFrame = iframeRef.current;
+          if (stagewiseFrame.contentWindow) {
+            stagewiseFrame.contentWindow.postMessage({
+              type: 'element-context',
+              data: event.data.data
+            }, '*');
+            console.log('Element context sent to Stagewise toolbar');
+          }
+        }
+        
+        // Also store globally for other uses
+        if (window.selectedElementContext !== undefined) {
+          window.selectedElementContext = event.data.data;
+        }
+      }
+    };
+    
+    window.addEventListener('message', handleElementSelected);
+    
+    // Inject selection script after a delay
+    const timer = setTimeout(() => {
+      if (iframeRef.current && elementSelectionMode && !useStagewise) {
+        try {
+          const iframe = iframeRef.current;
+          // Log the current URL to debug
+          console.log('Injecting element selector into iframe with URL:', iframe.src);
+          
+          const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+          if (iframeDoc) {
+            // Check if script already injected
+            if (iframeDoc.querySelector('#element-selector-script')) {
+              console.log('Element selector already injected');
+              return;
+            }
+            
+            // Inject element selection code
+            const script = iframeDoc.createElement('script');
+            script.id = 'element-selector-script';
+            script.textContent = `
+              (function() {
+                document.body.style.cursor = 'crosshair';
+                let hoveredElement = null;
+                
+                // Create style for highlighting
+                const style = document.createElement('style');
+                style.id = 'element-selector-highlight-styles';
+                style.textContent = \`
+                  .element-selector-hover {
+                    outline: 2px solid #3b82f6 !important;
+                    outline-offset: 2px !important;
+                    background-color: rgba(59, 130, 246, 0.1) !important;
+                    cursor: crosshair !important;
+                    position: relative !important;
+                  }
+                  .element-selector-hover::after {
+                    content: attr(data-selector-info) !important;
+                    position: absolute !important;
+                    bottom: 100% !important;
+                    left: 0 !important;
+                    background: #3b82f6 !important;
+                    color: white !important;
+                    padding: 4px 8px !important;
+                    border-radius: 4px !important;
+                    font-size: 12px !important;
+                    white-space: nowrap !important;
+                    z-index: 10000 !important;
+                    pointer-events: none !important;
+                    margin-bottom: 4px !important;
+                    font-family: monospace !important;
+                  }
+                  .element-selector-hover * {
+                    cursor: crosshair !important;
+                  }
+                \`;
+                document.head.appendChild(style);
+                
+                // Handle mouse move for highlighting
+                const handleMouseMove = (e) => {
+                  const element = e.target;
+                  
+                  // Remove previous highlight
+                  if (hoveredElement && hoveredElement !== element) {
+                    hoveredElement.classList.remove('element-selector-hover');
+                    hoveredElement.removeAttribute('data-selector-info');
+                  }
+                  
+                  // Add highlight to current element
+                  if (element && element !== document.body && element !== document.documentElement) {
+                    element.classList.add('element-selector-hover');
+                    // Add selector info as tooltip
+                    const selectorInfo = element.tagName.toLowerCase() + 
+                                       (element.id ? '#' + element.id : '') + 
+                                       (element.className && typeof element.className === 'string' ? '.' + element.className.split(' ').filter(c => c && !c.includes('element-selector')).join('.') : '');
+                    element.setAttribute('data-selector-info', selectorInfo);
+                    hoveredElement = element;
+                  }
+                };
+                
+                // Handle click
+                const handleClick = (e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  
+                  const element = e.target;
+                  const rect = element.getBoundingClientRect();
+                  
+                  // Remove highlight
+                  if (hoveredElement) {
+                    hoveredElement.classList.remove('element-selector-hover');
+                    hoveredElement.removeAttribute('data-selector-info');
+                  }
+                  
+                  window.parent.postMessage({
+                    type: 'element-selected',
+                    data: {
+                      html: element.outerHTML.substring(0, 500),
+                      text: element.textContent?.substring(0, 200),
+                      tag: element.tagName.toLowerCase(),
+                      id: element.id,
+                      classes: element.className,
+                      path: element.tagName.toLowerCase() + (element.id ? '#' + element.id : ''),
+                    }
+                  }, '*');
+                  
+                  // Cleanup
+                  document.body.style.cursor = '';
+                  document.removeEventListener('click', handleClick, true);
+                  document.removeEventListener('mousemove', handleMouseMove, true);
+                  style.remove();
+                  return false;
+                };
+                
+                // Handle escape key to cancel
+                const handleKeyDown = (e) => {
+                  if (e.key === 'Escape') {
+                    if (hoveredElement) {
+                      hoveredElement.classList.remove('element-selector-hover');
+                      hoveredElement.removeAttribute('data-selector-info');
+                    }
+                    document.body.style.cursor = '';
+                    document.removeEventListener('click', handleClick, true);
+                    document.removeEventListener('mousemove', handleMouseMove, true);
+                    document.removeEventListener('keydown', handleKeyDown);
+                    style.remove();
+                  }
+                };
+                
+                document.addEventListener('click', handleClick, true);
+                document.addEventListener('mousemove', handleMouseMove, true);
+                document.addEventListener('keydown', handleKeyDown);
+              })();
+            `;
+            iframeDoc.body.appendChild(script);
+            console.log('Element selector script injected successfully');
+          } else {
+            console.error('Cannot access iframe document - might be cross-origin');
+          }
+        } catch (error) {
+          console.error('Failed to inject element selector:', error);
+          // Try alternative approach with postMessage
+          const iframe = iframeRef.current;
+          if (iframe && iframe.contentWindow) {
+            console.log('Trying postMessage approach');
+            iframe.contentWindow.postMessage({ 
+              type: 'enable-element-selection',
+              enabled: true 
+            }, '*');
+          }
+        }
+      }
+    }, 500);
+    
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('message', handleElementSelected);
+      
+      // Clean up injected script
+      if (iframeRef.current && !useStagewise) {
+        try {
+          const iframe = iframeRef.current;
+          const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+          if (iframeDoc) {
+            iframeDoc.body.style.cursor = '';
+            const script = iframeDoc.querySelector('#element-selector-script');
+            if (script) {
+              script.remove();
+            }
+          }
+          // Also send disable message
+          if (iframe.contentWindow) {
+            iframe.contentWindow.postMessage({ 
+              type: 'enable-element-selection',
+              enabled: false 
+            }, '*');
+          }
+        } catch (e) {
+          console.log('Cleanup error (expected for cross-origin):', e);
+        }
+      }
+    };
+  }, [elementSelectionMode, useStagewise]);
 
   const handleOpenExternal = () => {
     window.open(currentUrl, '_blank');
@@ -540,6 +770,41 @@ function PreviewPanel({ url, onClose, onRefresh, onOpenExternal, isMobile }) {
 
           {/* Action Buttons */}
           <div className="flex items-center gap-1">
+            {/* Stagewise Toggle */}
+            <button
+              onClick={() => setUseStagewise(!useStagewise)}
+              className={`px-2 py-1 rounded-md transition-colors text-xs font-medium ${
+                useStagewise 
+                  ? 'bg-purple-500/20 text-purple-600 dark:text-purple-400 hover:bg-purple-500/30' 
+                  : 'bg-muted hover:bg-accent'
+              }`}
+              title={useStagewise ? "Using Stagewise AI toolbar" : "Click to enable Stagewise AI toolbar"}
+            >
+              {useStagewise ? '🤖 Stagewise ON' : '🤖 Stagewise OFF'}
+            </button>
+            
+            {/* Element Selection Toggle - Works with both modes */}
+            <button
+              onClick={() => {
+                if (useStagewise) {
+                  // If using Stagewise, send a message to toggle selection there
+                  alert('Element selection in Stagewise mode coming soon!');
+                } else {
+                  // Normal element selection for regular preview
+                  setElementSelectionMode(!elementSelectionMode);
+                }
+              }}
+              className={`px-2 py-1 rounded-md transition-colors text-xs font-medium ${
+                elementSelectionMode 
+                  ? 'bg-blue-500/20 text-blue-600 dark:text-blue-400 hover:bg-blue-500/30' 
+                  : 'bg-muted hover:bg-accent'
+              }`}
+              title={elementSelectionMode ? "Element selection active - Click any element" : "Click to select elements"}
+              disabled={useStagewise}
+            >
+              {elementSelectionMode ? '🎯 Click Element' : '🎯 Select Element'}
+            </button>
+            
             {/* Microphone Permission Button */}
             <button
               onClick={() => {
@@ -828,17 +1093,87 @@ function PreviewPanel({ url, onClose, onRefresh, onOpenExternal, isMobile }) {
 
         <iframe
           ref={iframeRef}
-          src={isPaused ? 'about:blank' : currentUrl}
+          src={
+            isPaused 
+              ? 'about:blank' 
+              : useStagewise 
+              ? 'http://localhost:5555/simple-toolbar.html'
+              : currentUrl
+          }
           className="w-full h-full border-0"
-          onLoad={handleIframeLoad}
+          onLoad={(e) => {
+            handleIframeLoad(e);
+            // If using Stagewise, send the URL and project path to load
+            if (useStagewise && !isPaused && iframeRef.current) {
+              setTimeout(() => {
+                iframeRef.current.contentWindow?.postMessage(
+                  { type: 'loadUrl', url: currentUrl, projectPath: projectPath },
+                  '*'
+                );
+              }, 500);
+            }
+          }}
           onError={handleIframeError}
           title="Preview"
           loading="lazy"
           data-preview-frame="true"
           allow="microphone *; camera *; geolocation *; accelerometer *; gyroscope *; magnetometer *; midi *; encrypted-media *"
-          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads"
         />
       </div>
+      
+      {/* Element Selection Preview */}
+      {selectedElement && !useStagewise && (
+        <div className="absolute bottom-4 left-4 right-4 max-w-lg mx-auto bg-card border border-border rounded-lg shadow-xl p-4 z-50">
+          <div className="flex justify-between items-start mb-2">
+            <h3 className="text-sm font-semibold">Element Selected</h3>
+            <button
+              onClick={() => setSelectedElement(null)}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          
+          <div className="text-xs space-y-1">
+            <div><span className="font-medium">Tag:</span> {selectedElement.tag}</div>
+            {selectedElement.id && <div><span className="font-medium">ID:</span> {selectedElement.id}</div>}
+            {selectedElement.classes && <div><span className="font-medium">Classes:</span> {selectedElement.classes}</div>}
+            <div><span className="font-medium">Path:</span> {selectedElement.path}</div>
+          </div>
+          
+          <div className="mt-3 flex gap-2">
+            <button
+              onClick={() => {
+                // Send to Stagewise chat
+                if (window.opener || window.parent !== window) {
+                  window.parent.postMessage({
+                    type: 'element-context',
+                    data: selectedElement
+                  }, '*');
+                }
+                // Also set global context for Stagewise
+                window.selectedElementContext = selectedElement;
+                setSelectedElement(null);
+              }}
+              className="px-3 py-1 bg-primary text-primary-foreground rounded-md text-xs hover:bg-primary/90"
+            >
+              Send to Chat
+            </button>
+            <button
+              onClick={() => {
+                // Copy element HTML to clipboard
+                navigator.clipboard.writeText(selectedElement.html);
+                setSelectedElement(null);
+              }}
+              className="px-3 py-1 bg-muted hover:bg-accent rounded-md text-xs"
+            >
+              Copy HTML
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -2016,7 +2016,9 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
                         } else {
                           // Try to detect URL from terminal or use default
                           const urls = detectUrlsInTerminal() || new Set();
-                          const firstUrl = urls.size > 0 ? Array.from(urls)[0] : 'http://localhost:3000';
+                          // Default to our Vite app port since that's what's running
+                          const firstUrl = urls.size > 0 ? Array.from(urls)[0] : 'http://localhost:5892';
+                          console.log('Opening preview with URL:', firstUrl);
                           setPreviewUrl(firstUrl);
                           setShowPreview(true);
                         }
@@ -2098,6 +2100,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
         <Panel defaultSize={75} minSize={30} className="h-full">
           <PreviewPanel
             url={previewUrl}
+            projectPath={selectedProject?.path}
             onClose={() => setShowPreview(false)}
             onRefresh={() => detectUrlsInTerminal()}
             isMobile={false}
