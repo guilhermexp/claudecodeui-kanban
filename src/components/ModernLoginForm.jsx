@@ -274,11 +274,10 @@ const ModernLoginForm = () => {
                               <motion.div 
                                 key="loading"
                                 className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full"
-                                animate={{ rotate: 360 }}
-                                transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
                                 initial={{ opacity: 0, scale: 0.5 }}
-                                animate={{ opacity: 1, scale: 1 }}
+                                animate={{ opacity: 1, scale: 1, rotate: 360 }}
                                 exit={{ opacity: 0, scale: 0.5 }}
+                                transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
                               />
                             ) : (
                               <motion.div

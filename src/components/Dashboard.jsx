@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, memo } from 'react';
+import React, { useState, useEffect, useCallback, memo, useRef } from 'react';
 import {
   ArrowLeft,
   Loader2,
@@ -23,6 +23,8 @@ const Dashboard = memo(({ onBack }) => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastRefresh, setLastRefresh] = useState(new Date());
   const [isImporting, setIsImporting] = useState(false);
+  const containerRef = useRef(null);
+  const [containerWidth, setContainerWidth] = useState(0);
 
   // Removed auto-refresh - only manual refresh now
 
@@ -97,6 +99,19 @@ const Dashboard = memo(({ onBack }) => {
   useEffect(() => {
     loadUsageStats();
   }, [loadUsageStats]);
+
+  // Track container width so we can adapt layout when panel is narrow
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const ro = new ResizeObserver(entries => {
+      const entry = entries[0];
+      if (entry) setContainerWidth(entry.contentRect.width);
+    });
+    ro.observe(containerRef.current);
+    return () => ro.disconnect();
+  }, []);
+
+  const compact = containerWidth > 0 && containerWidth < 360; // dashboard alongside preview
 
   const handleRefresh = () => {
     setIsRefreshing(true);
@@ -210,7 +225,7 @@ const Dashboard = memo(({ onBack }) => {
   }
 
   return (
-    <div className="h-full flex flex-col bg-card border border-border rounded-lg overflow-hidden">
+    <div ref={containerRef} className="h-full flex flex-col bg-card border border-border rounded-lg overflow-hidden">
       {/* Header */}
       <div className="border-b border-border px-4 py-3 flex items-center justify-between bg-muted/30">
         <div className="flex items-center gap-3 min-w-0">
@@ -252,18 +267,18 @@ const Dashboard = memo(({ onBack }) => {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 overflow-y-auto p-3 sm:p-4">
 
         {/* Main Stats Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4 mb-6">
+        <div className={`grid [grid-template-columns:repeat(auto-fit,minmax(150px,1fr))] gap-2 ${compact ? 'mb-4' : 'sm:gap-4 mb-6'}`}>
           {/* Total Cost Card */}
-          <div className="bg-card border border-border/50 rounded-lg p-3 sm:p-4 min-h-[110px] sm:min-h-[120px] flex flex-col shadow-sm">
+          <div className={`bg-card border border-border/50 rounded-lg ${compact ? 'p-2 min-h-[96px]' : 'p-3 sm:p-4 min-h-[110px] sm:min-h-[120px]'} flex flex-col shadow-sm min-w-0`}>
             <div className="flex items-center justify-between mb-2">
               <DollarSign className="w-4 h-4 sm:w-5 sm:h-5 text-success-foreground flex-shrink-0" />
               <span className="text-xs text-muted-foreground">7 days</span>
             </div>
             <div className="flex-1 flex flex-col justify-center space-y-1">
-              <p className="text-lg sm:text-xl font-bold text-foreground leading-tight overflow-hidden text-ellipsis">
+              <p className={`${compact ? 'text-base' : 'text-lg sm:text-xl'} font-bold text-foreground leading-tight overflow-hidden text-ellipsis`}>
                 {formatCurrency(stats?.totalCost || 0)}
               </p>
               <p className="text-xs text-muted-foreground">Total Cost</p>
@@ -279,13 +294,13 @@ const Dashboard = memo(({ onBack }) => {
           </div>
 
           {/* Total Tokens Card */}
-          <div className="bg-card border border-border/50 rounded-lg p-3 sm:p-4 min-h-[110px] sm:min-h-[120px] flex flex-col shadow-sm">
+          <div className={`bg-card border border-border/50 rounded-lg ${compact ? 'p-2 min-h-[96px]' : 'p-3 sm:p-4 min-h-[110px] sm:min-h-[120px]'} flex flex-col shadow-sm min-w-0`}>
             <div className="flex items-center justify-between mb-2">
               <Zap className="w-4 h-4 sm:w-5 sm:h-5 text-warning flex-shrink-0" />
               <span className="text-xs text-muted-foreground">7 days</span>
             </div>
             <div className="flex-1 flex flex-col justify-center space-y-1">
-              <p className="text-lg sm:text-xl font-bold text-foreground leading-tight overflow-hidden text-ellipsis">
+              <p className={`${compact ? 'text-base' : 'text-lg sm:text-xl'} font-bold text-foreground leading-tight overflow-hidden text-ellipsis`}>
                 {formatNumber(stats?.totalTokens || 0)}
               </p>
               <p className="text-xs text-muted-foreground">Total Tokens</p>
@@ -297,13 +312,13 @@ const Dashboard = memo(({ onBack }) => {
           </div>
 
           {/* Active Sessions Card */}
-          <div className="bg-card border border-border/50 rounded-lg p-3 sm:p-4 min-h-[110px] sm:min-h-[120px] flex flex-col shadow-sm">
+          <div className={`bg-card border border-border/50 rounded-lg ${compact ? 'p-2 min-h-[96px]' : 'p-3 sm:p-4 min-h-[110px] sm:min-h-[120px]'} flex flex-col shadow-sm min-w-0`}>
             <div className="flex items-center justify-between mb-2">
               <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5 text-primary flex-shrink-0" />
               <span className="text-xs text-muted-foreground">Today</span>
             </div>
             <div className="flex-1 flex flex-col justify-center space-y-1">
-              <p className="text-lg sm:text-xl font-bold text-foreground leading-tight">
+              <p className={`${compact ? 'text-base' : 'text-lg sm:text-xl'} font-bold text-foreground leading-tight`}>
                 {stats?.todaySessions || 0}
               </p>
               <p className="text-xs text-muted-foreground">Sessions</p>
@@ -314,13 +329,13 @@ const Dashboard = memo(({ onBack }) => {
           </div>
 
           {/* Average Response Time */}
-          <div className="bg-card border border-border rounded-lg p-3 sm:p-4 min-h-[110px] sm:min-h-[120px] flex flex-col">
+          <div className={`bg-card border border-border rounded-lg ${compact ? 'p-2 min-h-[96px]' : 'p-3 sm:p-4 min-h-[110px] sm:min-h-[120px]'} flex flex-col min-w-0`}>
             <div className="flex items-center justify-between mb-2">
               <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground flex-shrink-0" />
               <span className="text-xs text-muted-foreground">Avg</span>
             </div>
             <div className="flex-1 flex flex-col justify-center space-y-1">
-              <p className="text-lg sm:text-xl font-bold text-foreground leading-tight">
+              <p className={`${compact ? 'text-base' : 'text-lg sm:text-xl'} font-bold text-foreground leading-tight`}>
                 {formatDuration(stats?.avgResponseTime || 0)}
               </p>
               <p className="text-xs text-muted-foreground">Response Time</p>
@@ -332,7 +347,7 @@ const Dashboard = memo(({ onBack }) => {
         </div>
 
         {/* Model Usage */}
-        <div className="bg-card border border-border rounded-lg p-3 sm:p-4 mb-6">
+        <div className={`bg-card border border-border rounded-lg ${compact ? 'p-2' : 'p-3 sm:p-4'} mb-6`}>
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <Brain className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
@@ -377,7 +392,7 @@ const Dashboard = memo(({ onBack }) => {
         </div>
 
         {/* Recent Activity */}
-        <div className="bg-card border border-border rounded-lg p-3 sm:p-4">
+        <div className={`bg-card border border-border rounded-lg ${compact ? 'p-2' : 'p-3 sm:p-4'}`}> 
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <FileText className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />

@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Errors</title>
+</head>
+<body>
+    <h1>Error Test Page</h1>
+    <p>This page will generate real JavaScript errors for testing.</p>
+    
+    <button onclick="generateError1()">Test Error 1: Undefined Property</button>
+    <button onclick="generateError2()">Test Error 2: Type Error</button>
+    <button onclick="generateError3()">Test Error 3: Reference Error</button>
+    <button onclick="generateError4()">Test Error 4: Promise Rejection</button>
+    
+    <script>
+        // Test different types of real errors
+        
+        function generateError1() {
+            // This will cause: Cannot read property 'foo' of undefined
+            let obj;
+            console.log(obj.foo.bar);
+        }
+        
+        function generateError2() {
+            // This will cause: TypeError
+            null.toString();
+        }
+        
+        function generateError3() {
+            // This will cause: ReferenceError
+            nonExistentFunction();
+        }
+        
+        function generateError4() {
+            // This will cause: Unhandled Promise Rejection
+            Promise.reject(new Error('This is a promise rejection error'));
+        }
+        
+        // Auto-generate an error after 2 seconds for testing
+        setTimeout(() => {
+            console.log('Generating automatic test error...');
+            const testArray = [1, 2, 3];
+            console.log(testArray[10].property); // This will error
+        }, 2000);
+    </script>
+</body>
+</html>
