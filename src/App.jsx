@@ -20,7 +20,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate, useParams } from 'react-router-dom';
-import Sidebar from './components/Sidebar';
+// Sidebar removed - using ProjectsModal instead
 import MainContent from './components/MainContent';
 import MobileNav from './components/MobileNav';
 import ToolsSettings from './components/ToolsSettings';
@@ -50,8 +50,7 @@ function AppContent() {
       chatState.timestamp && 
       (Date.now() - chatState.timestamp < 30 * 60 * 1000); // 30 minutes
     
-    // Always start with sidebar closed
-    let sidebarOpenDefault = false;
+    // Sidebar removed
     
     return {
       selectedProject: shouldRestoreSession ? savedState[appStatePersistence.KEYS.SELECTED_PROJECT] : null,
@@ -61,7 +60,7 @@ function AppContent() {
                   savedState[appStatePersistence.KEYS.ACTIVE_TAB] === 'git'
         ? savedState[appStatePersistence.KEYS.ACTIVE_TAB]
         : 'shell',
-      sidebarOpen: sidebarOpenDefault,
+      // sidebarOpen removed
     };
   };
 
@@ -72,7 +71,8 @@ function AppContent() {
   const [selectedSession, setSelectedSession] = useState(persistedState.selectedSession);
   const [activeTab, setActiveTab] = useState(persistedState.activeTab); // 'shell', 'files', 'git'
   const [isMobile, setIsMobile] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(persistedState.sidebarOpen);
+  // Sidebar removed - using ProjectsModal instead
+  // const [sidebarOpen, setSidebarOpen] = useState(persistedState.sidebarOpen);
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [isShellConnected, setIsShellConnected] = useState(false);
@@ -87,13 +87,7 @@ function AppContent() {
   // until the conversation completes or is aborted.
   const [activeSessions, setActiveSessions] = useState(new Set()); // Track sessions with active conversations
   
-  // Sidebar resizing states
-  const [isResizing, setIsResizing] = useState(false);
-  const [sidebarWidth, setSidebarWidth] = useState(() => {
-    // Load saved width from localStorage or use default
-    const saved = localStorage.getItem('sidebar-width');
-    return saved ? parseInt(saved, 10) : 280;
-  });
+  // Sidebar removed - resizing states no longer needed
   
   // Get auth context to know when auth is ready
   const { isLoading: authLoading, user } = useAuth();
@@ -102,7 +96,7 @@ function AppContent() {
   const { ws, sendMessage, messages, reconnect } = useWebSocket(authReady);
 
   // Determine if sidebar should use overlay mode (when side panels are active)
-  const shouldUseSidebarOverlay = !isMobile && activeSidePanel !== null;
+  // Sidebar overlay mode no longer needed
 
   // Monitor authentication changes and reconnect WebSocket
   useEffect(() => {
@@ -126,40 +120,12 @@ function AppContent() {
       [appStatePersistence.KEYS.SELECTED_PROJECT]: selectedProject,
       [appStatePersistence.KEYS.SELECTED_SESSION]: selectedSession,
       [appStatePersistence.KEYS.ACTIVE_TAB]: activeTab,
-      [appStatePersistence.KEYS.SIDEBAR_OPEN]: !isMobile ? sidebarOpen : true, // Always save 'true' for desktop default
+      // Sidebar open state removed
     };
     appStatePersistence.saveState(stateToSave);
-  }, [selectedProject, selectedSession, activeTab, sidebarOpen, isMobile]);
+  }, [selectedProject, selectedSession, activeTab, isMobile]);
   
-  // Handle sidebar resizing
-  useEffect(() => {
-    if (!isResizing) return;
-    
-    const handleMouseMove = (e) => {
-      const newWidth = e.clientX;
-      // Set min and max width limits
-      const minWidth = 200; // Minimum 200px
-      const maxWidth = 500; // Maximum 500px
-      
-      if (newWidth >= minWidth && newWidth <= maxWidth) {
-        setSidebarWidth(newWidth);
-      }
-    };
-    
-    const handleMouseUp = () => {
-      setIsResizing(false);
-      // Save to localStorage when resize ends
-      localStorage.setItem('sidebar-width', sidebarWidth.toString());
-    };
-    
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-    
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isResizing, sidebarWidth]);
+  // Sidebar resizing removed - no longer needed
 
   // Save navigation context when navigating away
   useEffect(() => {
@@ -214,7 +180,7 @@ function AppContent() {
         
         // Keep sidebar closed on screen size changes
         if (wasMobile !== nowMobile) {
-          setSidebarOpen(false);
+          // Sidebar close removed
         }
         
         previousWidth = currentWidth;
@@ -436,7 +402,7 @@ function AppContent() {
     setSelectedSession(null);
     navigate('/');
     // Always close sidebar when project is selected
-    setSidebarOpen(false);
+    // Sidebar close removed
   };
 
   const handleSessionSelect = (session) => {
@@ -444,7 +410,7 @@ function AppContent() {
     // Only switch to chat tab when user explicitly selects a session
     // Keep current tab when navigating to sessions
     // Always close sidebar when session is selected
-    setSidebarOpen(false);
+    // Sidebar close removed
     navigate(`/session/${session.id}`);
   };
 
@@ -454,7 +420,7 @@ function AppContent() {
     setActiveTab('shell'); // Switch to shell tab for new session
     navigate('/');
     // Always close sidebar when creating new session
-    setSidebarOpen(false);
+    // Sidebar close removed
   };
 
   const handleSessionDelete = (sessionId) => {
@@ -601,123 +567,19 @@ function AppContent() {
 
   return (
     <div 
-      className="fixed inset-x-0 top-0 bottom-0 flex bg-background p-2" 
+      className="fixed inset-x-0 top-0 bottom-0 flex bg-background" 
       style={{ 
-        height: '100%',
-        cursor: isResizing ? 'col-resize' : 'default'
+        height: '100%'
       }}
     >
-      {/* Desktop Sidebar - Integrated Mode (no side panels active) */}
-      {!isMobile && (sidebarOpen || showToolsSettings) && !shouldUseSidebarOverlay && (
-        <div 
-          className="flex-shrink-0 bg-card relative rounded-xl border border-border mr-2 overflow-hidden"
-          style={{ width: `${sidebarWidth}px` }}
-        >
-          <div className="h-full overflow-y-auto rounded-xl">
-            <Sidebar
-              projects={projects}
-              selectedProject={selectedProject}
-              selectedSession={selectedSession}
-              onProjectSelect={handleProjectSelect}
-              onSessionSelect={handleSessionSelect}
-              onNewSession={handleNewSession}
-              onSessionDelete={handleSessionDelete}
-              onProjectDelete={handleProjectDelete}
-              isLoading={isLoadingProjects}
-              onRefresh={handleSidebarRefresh}
-              onShowSettings={() => setShowToolsSettings(true)}
-              onSidebarClose={() => setSidebarOpen(false)}
-            />
-          </div>
-          
-          {/* Resize Handle */}
-          <div
-            className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/20 active:bg-primary/30 transition-colors group"
-            onMouseDown={(e) => {
-              e.preventDefault();
-              setIsResizing(true);
-            }}
-          >
-            <div className="absolute inset-y-0 -left-1 -right-1 group-hover:bg-primary/10" />
-          </div>
-        </div>
-      )}
+      {/* Desktop Sidebar removed - using ProjectsModal instead */}
 
-      {/* Desktop Sidebar - Overlay Mode (when side panels are active) */}
-      {!isMobile && (sidebarOpen || showToolsSettings) && shouldUseSidebarOverlay && (
-        <div className="fixed inset-0 z-[60] flex">
-          <div 
-            className="absolute inset-0 bg-black/20 backdrop-blur-sm"
-            onClick={() => setSidebarOpen(false)}
-          />
-          <div 
-            className="relative bg-card border border-border rounded-xl h-full shadow-xl m-2 overflow-hidden"
-            style={{ width: `${sidebarWidth}px` }}
-          >
-            <div className="h-full overflow-y-auto rounded-xl">
-              <Sidebar
-                projects={projects}
-                selectedProject={selectedProject}
-                selectedSession={selectedSession}
-                onProjectSelect={handleProjectSelect}
-                onSessionSelect={handleSessionSelect}
-                onNewSession={handleNewSession}
-                onSessionDelete={handleSessionDelete}
-                onProjectDelete={handleProjectDelete}
-                isLoading={isLoadingProjects}
-                onRefresh={handleSidebarRefresh}
-                onShowSettings={() => setShowToolsSettings(true)}
-                onSidebarClose={() => setSidebarOpen(false)}
-              />
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Desktop Sidebar Overlay removed - using ProjectsModal instead */}
 
-      {/* Mobile Sidebar Overlay */}
-      {isMobile && (
-        <div className={`fixed inset-0 z-[60] flex transition-all duration-150 ease-out ${
-          sidebarOpen ? 'opacity-100 visible' : 'opacity-0 invisible'
-        }`}>
-          <div 
-            className="fixed inset-0 bg-background transition-opacity duration-150 ease-out"
-            onClick={(e) => {
-              e.stopPropagation();
-              setSidebarOpen(false);
-            }}
-            onTouchStart={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              setSidebarOpen(false);
-            }}
-          />
-          <div 
-            className={`relative w-[85vw] max-w-sm sm:w-80 bg-card border border-border rounded-r-xl h-full transform transition-transform duration-150 ease-out overflow-hidden ${
-              sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-            }`}
-            onClick={(e) => e.stopPropagation()}
-            onTouchStart={(e) => e.stopPropagation()}
-          >
-            <Sidebar
-              projects={projects}
-              selectedProject={selectedProject}
-              selectedSession={selectedSession}
-              onProjectSelect={handleProjectSelect}
-              onSessionSelect={handleSessionSelect}
-              onNewSession={handleNewSession}
-              onSessionDelete={handleSessionDelete}
-              onProjectDelete={handleProjectDelete}
-              isLoading={isLoadingProjects}
-              onRefresh={handleSidebarRefresh}
-              onShowSettings={() => setShowToolsSettings(true)}
-              onSidebarClose={() => setSidebarOpen(false)}
-            />
-          </div>
-        </div>
-      )}
+      {/* Mobile Sidebar removed - using ProjectsModal instead */}
 
-      {/* Main Content Area - Flexible */}
-      <div className={`flex-1 flex flex-col min-w-0 relative ${isMobile ? 'pb-14' : ''} ${!isMobile ? 'bg-card rounded-xl border border-border overflow-hidden' : ''}`}>
+      {/* Main Content Area - Now takes full width */}
+      <div className={`flex-1 flex flex-col min-w-0 relative ${isMobile ? 'pb-14' : ''} ${!isMobile ? 'bg-card overflow-hidden' : ''}`}>
         <MainContent
           selectedProject={selectedProject}
           selectedSession={selectedSession}
@@ -727,12 +589,21 @@ function AppContent() {
           sendMessage={sendMessage}
           messages={messages}
           isMobile={isMobile}
-          onMenuClick={() => setSidebarOpen(true)}
-          onSidebarOpen={() => setSidebarOpen(!sidebarOpen)}
-          sidebarOpen={sidebarOpen}
+          onMenuClick={() => {}} // No longer needed
+          onSidebarOpen={() => {}} // No longer needed
+          // Sidebar open prop removed
           onActiveSidePanelChange={setActiveSidePanel}
           isLoading={isLoadingProjects}
           onInputFocusChange={setIsInputFocused}
+          // New props for ProjectsModal
+          projects={projects}
+          onProjectSelect={handleProjectSelect}
+          onSessionSelect={handleSessionSelect}
+          onNewSession={handleNewSession}
+          onSessionDelete={handleSessionDelete}
+          onProjectDelete={handleProjectDelete}
+          onRefresh={handleSidebarRefresh}
+          // Session protection props
           onSessionActive={markSessionAsActive}
           onSessionInactive={markSessionAsInactive}
           onReplaceTemporarySession={replaceTemporarySession}
