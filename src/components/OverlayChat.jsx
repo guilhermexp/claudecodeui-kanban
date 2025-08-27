@@ -20,6 +20,7 @@ export default function OverlayChat({ projectPath }) {
   ]);
   const [isTyping, setIsTyping] = useState(false);
   const [selectedElement, setSelectedElement] = useState(null);
+  const [attachments, setAttachments] = useState([]); // chips like "div", "span" etc
   const [buttonPosition, setButtonPosition] = useState({ x: null, y: null });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
@@ -104,15 +105,12 @@ export default function OverlayChat({ projectPath }) {
   // Expose global function for element selection
   useEffect(() => {
     const fn = (html, elementData) => {
-      if (elementData) {
-        setSelectedElement(elementData);
-        const elementInfo = `\ud83c\udfaf Selected: \`<${elementData.tag}>\` ${elementData.id ? `#${elementData.id}` : ''} ${elementData.classes ? `.${elementData.classes.split(' ').join('.')}` : ''}`;
-        addMessage({ 
-          type: 'system', 
-          text: elementInfo
-        });
-        setOpen(true);
-      }
+      if (!html) return;
+      const tag = (elementData?.tag || 'div').toLowerCase();
+      // Add as an attachment chip (do NOT send yet)
+      setAttachments(prev => [...prev, { type: 'html', tag, html }]);
+      setSelectedElement(elementData || null);
+      setOpen(true);
     };
     window.pushToOverlayChat = fn;
     
@@ -180,13 +178,13 @@ export default function OverlayChat({ projectPath }) {
     // Display user message with timestamp
     addMessage({ type: 'user', text: message });
     
-    // Add element context if available
-    let fullMessage = message;
-    if (selectedElement) {
-      const ctx = selectedElement;
-      fullMessage = `[Context: Selected element is a ${ctx.tag} with id="${ctx.id || 'none'}" and classes="${ctx.classes || 'none'}"]\n\n${message}`;
-      setSelectedElement(null);
+    // Build final content: attachments as code blocks + user text
+    let prefix = '';
+    if (attachments.length > 0) {
+      const blocks = attachments.map((att, idx) => `Selected ${att.tag} (${idx + 1}):\n\n\u0060\u0060\u0060html\n${att.html}\n\u0060\u0060\u0060`).join('\n\n');
+      prefix = blocks + '\n\n';
     }
+    const fullMessage = prefix + message;
     
     // Show typing indicator
     setIsTyping(true);
@@ -198,6 +196,7 @@ export default function OverlayChat({ projectPath }) {
     };
     
     sendMessage({ type: 'codex-command', command: fullMessage, options });
+    setAttachments([]);
     setInput('');
   };
 
@@ -457,27 +456,41 @@ export default function OverlayChat({ projectPath }) {
           
           {/* Input area */}
           <div className="p-4 border-t border-border bg-card">
+            {/* Attachment chips */}
+            {attachments.length > 0 && (
+              <div className="mb-2 flex flex-wrap gap-2">
+                {attachments.map((att, idx) => (
+                  <span key={idx} className="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-[#101826] border border-border text-xs">
+                    <span className="inline-flex items-center gap-1">
+                      <svg className="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6l7 4-7 4-7-4 7-4z" />
+                      </svg>
+                      <span className="text-blue-300 font-medium">{att.tag}</span>
+                    </span>
+                    <button className="text-muted-foreground hover:text-foreground" onClick={() => setAttachments(a => a.filter((_, i) => i !== idx))} title="Remove">×</button>
+                  </span>
+                ))}
+              </div>
+            )}
             <div className="flex items-end gap-2">
               <textarea
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Ask Codex to help with your code..."
-                className="flex-1 text-sm bg-background border border-border rounded-lg px-3 py-2 min-h-[40px] max-h-[120px] resize-none focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
+                placeholder="Ask a follow-up..."
+                className="flex-1 text-sm bg-background border border-border rounded-2xl px-3 py-2 min-h-[56px] max-h-[140px] resize-none focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
                 disabled={!isConnected}
-                rows={1}
-                style={{
-                  height: 'auto',
-                  overflow: 'auto'
-                }}
+                rows={2}
+                style={{ height: 'auto', overflow: 'auto' }}
               />
               <button
                 onClick={handleSend}
-                className="px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
-                disabled={!isConnected || !input.trim()}
+                className="w-10 h-10 bg-primary text-primary-foreground hover:bg-primary/90 rounded-xl text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center"
+                disabled={!isConnected || (!input.trim() && attachments.length === 0)}
+                title="Send"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M12 5l7 7-7 7" />
                 </svg>
               </button>
             </div>

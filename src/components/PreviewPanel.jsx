@@ -237,13 +237,16 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
                           if (message.includes('WebSocket')) return;
                           if (message.toLowerCase().includes('connect')) return;
                           
-                          window.parent.postMessage({
-                            type: 'console-message',
-                            level: method,
-                            message: message,
-                            timestamp: new Date().toISOString(),
-                            url: window.location.href
-                          }, '*');
+                          // Only send if we can safely communicate with parent
+                          if (window.parent !== window && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+                            window.parent.postMessage({
+                              type: 'console-message',
+                              level: method,
+                              message: message,
+                              timestamp: new Date().toISOString(),
+                              url: window.location.href
+                            }, '*');
+                          }
                         } catch (e) {}
                       };
                     });
@@ -256,18 +259,20 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
                         if (msg.includes('[HMR]')) return;
                         if (msg.includes('WebSocket')) return;
                         
-                        // Only send real JavaScript errors
-                        window.parent.postMessage({
-                          type: 'console-message',
-                          level: 'error',
-                          message: msg || 'Unknown error',
-                          timestamp: new Date().toISOString(),
-                          url: window.location.href,
-                          filename: event.filename,
-                          line: event.lineno,
-                          column: event.colno,
-                          stack: event.error?.stack
-                        }, '*');
+                        // Only send real JavaScript errors if we can safely communicate with parent
+                        if (window.parent !== window && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+                          window.parent.postMessage({
+                            type: 'console-message',
+                            level: 'error',
+                            message: msg || 'Unknown error',
+                            timestamp: new Date().toISOString(),
+                            url: window.location.href,
+                            filename: event.filename,
+                            line: event.lineno,
+                            column: event.colno,
+                            stack: event.error?.stack
+                          }, '*');
+                        }
                       } catch (e) {}
                     });
                     
@@ -281,23 +286,33 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
                           if (reason.includes('WebSocket')) return;
                         }
                         
-                        window.parent.postMessage({
-                          type: 'console-message',
-                          level: 'error',
-                          message: 'Unhandled Promise Rejection: ' + (event.reason?.message || event.reason || 'Unknown'),
-                          timestamp: new Date().toISOString(),
-                          url: window.location.href,
-                          stack: event.reason?.stack
-                        }, '*');
+                        // Only send if we can safely communicate with parent
+                        if (window.parent !== window && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+                          window.parent.postMessage({
+                            type: 'console-message',
+                            level: 'error',
+                            message: 'Unhandled Promise Rejection: ' + (event.reason?.message || event.reason || 'Unknown'),
+                            timestamp: new Date().toISOString(),
+                            url: window.location.href,
+                            stack: event.reason?.stack
+                          }, '*');
+                        }
                       } catch (e) {}
                     });
                     
                     // Don't log initialization - it's just noise
-                    // Silently notify parent that we're ready
-                    window.parent.postMessage({
-                      type: 'console-capture-ready',
-                      timestamp: new Date().toISOString()
-                    }, '*');
+                    // Silently notify parent that we're ready - but only if same origin or localhost
+                    try {
+                      // Check if we can access parent window safely
+                      if (window.parent !== window && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+                        window.parent.postMessage({
+                          type: 'console-capture-ready',
+                          timestamp: new Date().toISOString()
+                        }, '*');
+                      }
+                    } catch (e) {
+                      // Cross-origin, ignore silently
+                    }
                     
                     // Also capture React errors
                     if (window.React && window.React.createElement) {
@@ -332,17 +347,19 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
                             const frame = errorFrame ? errorFrame.textContent : '';
                             const stack = errorStack ? errorStack.textContent : '';
                             
-                            // Send the error to parent
-                            window.parent.postMessage({
-                              type: 'console-message',
-                              level: 'error',
-                              message: '[Vite Error] ' + message,
-                              timestamp: new Date().toISOString(),
-                              url: window.location.href,
-                              filename: file,
-                              stack: frame + '\\n' + stack,
-                              source: 'vite-overlay'
-                            }, '*');
+                            // Send the error to parent if we can safely communicate
+                            if (window.parent !== window && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+                              window.parent.postMessage({
+                                type: 'console-message',
+                                level: 'error',
+                                message: '[Vite Error] ' + message,
+                                timestamp: new Date().toISOString(),
+                                url: window.location.href,
+                                filename: file,
+                                stack: frame + '\\n' + stack,
+                                source: 'vite-overlay'
+                              }, '*');
+                            }
                           }
                         }
                       }
@@ -352,7 +369,7 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
                       if (errorOverlay && !errorOverlay.dataset.captured) {
                         errorOverlay.dataset.captured = 'true';
                         const errorText = errorOverlay.textContent || errorOverlay.innerText;
-                        if (errorText) {
+                        if (errorText && window.parent !== window && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
                           window.parent.postMessage({
                             type: 'console-message',
                             level: 'error',
@@ -708,17 +725,20 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
                     hoveredElement.removeAttribute('data-selector-info');
                   }
                   
-                  window.parent.postMessage({
-                    type: 'element-selected',
-                    data: {
-                      html: element.outerHTML.substring(0, 500),
-                      text: element.textContent?.substring(0, 200),
-                      tag: element.tagName.toLowerCase(),
-                      id: element.id,
-                      classes: element.className,
-                      path: element.tagName.toLowerCase() + (element.id ? '#' + element.id : ''),
-                    }
-                  }, '*');
+                  // Only send if we can safely communicate with parent
+                  if (window.parent !== window && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+                    window.parent.postMessage({
+                      type: 'element-selected',
+                      data: {
+                        html: element.outerHTML.substring(0, 500),
+                        text: element.textContent?.substring(0, 200),
+                        tag: element.tagName.toLowerCase(),
+                        id: element.id,
+                        classes: element.className,
+                        path: element.tagName.toLowerCase() + (element.id ? '#' + element.id : ''),
+                      }
+                    }, '*');
+                  }
                   
                   // Cleanup
                   document.body.style.cursor = '';

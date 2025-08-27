@@ -63,6 +63,13 @@ function FileManagerSimple({ selectedProject }) {
   const fetchFiles = useCallback(async () => {
     if (!selectedProject) return;
     
+    // Skip fetching for standalone mode or invalid projects
+    if (selectedProject.isStandalone || selectedProject.path === 'STANDALONE_MODE') {
+      setFiles([]);
+      setLoading(false);
+      return;
+    }
+    
     setLoading(true);
     try {
       const response = await api.getFiles(selectedProject.name);
@@ -99,6 +106,13 @@ function FileManagerSimple({ selectedProject }) {
   // Load files when project changes
   useEffect(() => {
     if (selectedProject) {
+      // Skip for standalone mode
+      if (selectedProject.isStandalone || selectedProject.path === 'STANDALONE_MODE') {
+        setFiles([]);
+        setLoading(false);
+        return;
+      }
+      
       // Only fetch if project actually changed
       if (lastProjectPath.current !== selectedProject.path) {
         fetchFiles();
@@ -568,7 +582,17 @@ function FileManagerSimple({ selectedProject }) {
         
         {/* File Tree */}
         <ScrollArea className={`flex-1 ${compact ? 'p-2' : 'p-4'}`}>
-          {files.length === 0 ? (
+          {selectedProject?.isStandalone || selectedProject?.path === 'STANDALONE_MODE' ? (
+            <div className="text-center py-8">
+              <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center mx-auto mb-3">
+                <Info className="w-6 h-6 text-muted-foreground" />
+              </div>
+              <h4 className="font-medium text-foreground mb-1">Standalone Mode</h4>
+              <p className="text-sm text-muted-foreground">
+                No project files in Claude standalone mode
+              </p>
+            </div>
+          ) : files.length === 0 ? (
             <div className="text-center py-8">
               <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center mx-auto mb-3">
                 <Folder className="w-6 h-6 text-muted-foreground" />

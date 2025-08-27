@@ -1,4 +1,7 @@
 import { spawn } from 'child_process';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
 
 /**
  * Spawn Codex CLI (OpenAI subscription-based CLI)
@@ -25,11 +28,27 @@ export async function spawnCodex(prompt, options = {}, ws) {
     // Add the prompt as the last argument
     codexArgs.push(prompt);
     
-    console.log('Starting Codex with command:', '/opt/homebrew/bin/codex', codexArgs.join(' '));
-    
-    // Start Codex process (use full path to codex to avoid PATH issues)
-    const codexPath = '/opt/homebrew/bin/codex';
-    const codexProcess = spawn(codexPath, codexArgs, {
+    // Resolve Codex executable: prefer system 'codex', then Homebrew path, then npx fallback
+    const envBin = process.env.CODEX_BIN && process.env.CODEX_BIN.trim();
+    const candidates = envBin ? [envBin] : [
+      'codex',
+      '/opt/homebrew/bin/codex',
+      '/usr/local/bin/codex'
+    ];
+    // Return the first existing candidate; otherwise null (we'll use npx)
+    const resolveExec = () => {
+      for (const p of candidates) {
+        try {
+          // If it's a bare command, let spawn resolve via PATH
+          if (!p.includes('/')) return p;
+          if (fs.existsSync(p)) return p;
+        } catch {}
+      }
+      return null;
+    };
+    let execCmd = resolveExec();
+    let execArgs = codexArgs;
+    let spawnOpts = {
       shell: false,
       stdio: ['pipe', 'pipe', 'pipe'],
       env: {
@@ -37,7 +56,16 @@ export async function spawnCodex(prompt, options = {}, ws) {
         NODE_NO_WARNINGS: '1'
       },
       cwd: workingDir
-    });
+    };
+
+    if (!execCmd) {
+      // Fallback to npx @openai/codex
+      execCmd = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+      execArgs = ['@openai/codex', ...codexArgs];
+    }
+
+    console.log('Starting Codex with command:', execCmd, execArgs.join(' '));
+    const codexProcess = spawn(execCmd, execArgs, spawnOpts);
     
     // Handle stdout (JSON responses)
     codexProcess.stdout.on('data', (data) => {
