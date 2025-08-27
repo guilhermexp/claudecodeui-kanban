@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stagewise Toolbar Fixed</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+        'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+        sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      background: transparent;
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+    }
+    
+    #user-app-iframe {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border: none;
+      margin: 0;
+      padding: 0;
+      background: white;
+      z-index: 1;
+    }
+    
+    /* Stagewise toolbar container */
+    #stagewise-toolbar-app {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 2147483647;
+      pointer-events: none;
+    }
+    
+    #stagewise-toolbar-app > * {
+      pointer-events: auto;
+    }
+    
+    /* Stagewise anchor element */
+    stagewise-companion-anchor {
+      position: fixed;
+      inset: 0;
+      z-index: 2147483647;
+      pointer-events: none;
+    }
+  </style>
+  
+  <!-- Stagewise toolbar CSS -->
+  <link rel="stylesheet" href="http://localhost:5555/toolbar/toolbar.css">
+</head>
+<body>
+  <!-- User app iframe - MUST be first for Stagewise to find it -->
+  <iframe 
+    id="user-app-iframe" 
+    src="http://localhost:5173"
+    title="User Application">
+  </iframe>
+
+  <!-- Stagewise toolbar will be injected here -->
+  <div id="stagewise-toolbar-app"></div>
+
+  <!-- Import map for module resolution -->
+  <script type="importmap">
+  {
+    "imports": {
+      "react": "https://esm.sh/react@18",
+      "react-dom": "https://esm.sh/react-dom@18",
+      "react-dom/client": "https://esm.sh/react-dom@18/client",
+      "react/jsx-runtime": "https://esm.sh/react@18/jsx-runtime",
+      "@stagewise/toolbar/config": "http://localhost:5555/toolbar/config.js",
+      "index-DbrV0kO5.js": "http://localhost:5555/toolbar/index-DbrV0kO5.js"
+    }
+  }
+  </script>
+
+  <script type="module">
+    // Configuration for Stagewise
+    window.stagewiseConfig = {
+      agentInterface: {
+        wsUrl: 'ws://localhost:3456/ws',
+        httpUrl: 'http://localhost:3456'
+      },
+      plugins: [],
+      devAppPort: 5173,
+      appPort: 5173
+    };
+    
+    // Wait for iframe to load before initializing toolbar
+    const iframe = document.getElementById('user-app-iframe');
+    
+    const initStagewise = async () => {
+      try {
+        console.log('Initializing Stagewise toolbar...');
+        
+        // Dynamically import React and ReactDOM first
+        const React = await import('https://esm.sh/react@18');
+        const ReactDOM = await import('https://esm.sh/react-dom@18/client');
+        
+        // Make them globally available
+        window.React = React.default || React;
+        window.ReactDOM = ReactDOM;
+        
+        // Import the toolbar
+        await import('http://localhost:5555/toolbar/index.js');
+        
+        console.log('Stagewise toolbar loaded successfully');
+      } catch (err) {
+        console.error('Failed to load Stagewise toolbar:', err);
+      }
+    };
+    
+    // Initialize when iframe is ready
+    if (iframe) {
+      iframe.addEventListener('load', () => {
+        console.log('Iframe loaded, initializing toolbar...');
+        setTimeout(initStagewise, 100);
+      });
+      
+      // If iframe is already loaded
+      if (iframe.contentWindow && iframe.contentWindow.document.readyState === 'complete') {
+        setTimeout(initStagewise, 100);
+      }
+    }
+    
+    // Listen for messages from parent (PreviewPanel)
+    window.addEventListener('message', (event) => {
+      if (event.data.type === 'loadUrl') {
+        iframe.src = event.data.url;
+      }
+    });
+    
+    // Notify parent that toolbar is ready
+    if (window.parent !== window) {
+      window.parent.postMessage({ type: 'toolbarReady' }, '*');
+    }
+  </script>
+</body>
+</html>

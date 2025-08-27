@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stagewise Toolbar</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+        'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+        sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      background: #f5f5f5;
+    }
+    
+    #user-app-iframe {
+      width: 100%;
+      height: 100vh;
+      border: none;
+      background: white;
+    }
+    
+    #stagewise-toolbar-app {
+      position: fixed;
+      z-index: 999999;
+    }
+    
+    .loading-message {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      z-index: 10;
+    }
+  </style>
+</head>
+<body>
+  <!-- Loading message -->
+  <div id="loading" class="loading-message">
+    Loading Stagewise toolbar...
+  </div>
+
+  <!-- Iframe onde o app do usuário será carregado -->
+  <iframe 
+    id="user-app-iframe" 
+    src="about:blank"
+    title="User Application">
+  </iframe>
+
+  <!-- Container do Stagewise toolbar -->
+  <div id="stagewise-toolbar-app"></div>
+
+  <script>
+    // Configuração do toolbar
+    window.__STAGEWISE_CONFIG__ = {
+      devAppPort: 5173, // Porta do app do usuário
+      appPort: 5173,
+      plugins: [],
+      urlSync: {
+        enableLocationPatching: true,
+        navigationTimeout: 5000,
+        debounceDelay: 100
+      },
+      experimental: {
+        enableStagewiseMCP: false,
+        enableToolCalls: false
+      }
+    };
+
+    // Configuração do Karton (comunicação com o adapter)
+    window.__KARTON_CONFIG__ = {
+      wsUrl: 'ws://localhost:3456/ws', // URL do nosso adapter server
+      httpUrl: 'http://localhost:3456'
+    };
+
+    // Função para carregar URL no iframe
+    window.loadInIframe = function(url) {
+      const iframe = document.getElementById('user-app-iframe');
+      const loading = document.getElementById('loading');
+      if (iframe) {
+        iframe.src = url;
+        if (loading) {
+          loading.style.display = 'none';
+        }
+      }
+    };
+
+    // Listener para mensagens do parent (PreviewPanel)
+    window.addEventListener('message', (event) => {
+      if (event.data.type === 'loadUrl') {
+        window.loadInIframe(event.data.url);
+      }
+      if (event.data.type === 'setAdapterUrl') {
+        window.__KARTON_CONFIG__.wsUrl = event.data.wsUrl;
+        window.__KARTON_CONFIG__.httpUrl = event.data.httpUrl;
+      }
+    });
+
+    // Notifica parent que está pronto
+    if (window.parent !== window) {
+      window.parent.postMessage({ type: 'toolbarReady' }, '*');
+    }
+    
+    // Auto-load default URL after a delay
+    setTimeout(() => {
+      if (document.getElementById('user-app-iframe').src === 'about:blank') {
+        window.loadInIframe('http://localhost:5173');
+      }
+    }, 1000);
+  </script>
+
+  <!-- Carrega o toolbar do Stagewise como script regular (não module) -->
+  <link rel="stylesheet" href="/toolbar/toolbar.css">
+  <script defer src="/toolbar/index.js"></script>
+</body>
+</html>

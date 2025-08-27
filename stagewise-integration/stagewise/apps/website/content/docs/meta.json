@@ -1,0 +1,10 @@
+{
+  "pages": [
+    "index",
+    "community",
+    "upgrade-to-new-cli",
+    "advanced-usage",
+    "troubleshooting",
+    "developer-guides"
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "ui": "tui",
+  "globalPassThroughEnv": [
+    "POSTHOG_API_KEY",
+    "POSTHOG_HOST",
+    "STAGEWISE_CONSOLE_URL",
+    "API_URL"
+  ],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*"],
+      "outputs": [".next/**", "!.next/cache/**", "out/**", "dist/**", "tmp/**"]
+    },
+    "//#check": {
+      "cache": false
+    },
+    "//#check:fix": {
+      "cache": false
+    },
+    "clean": {
+      "cache": false
+    },
+    "lint": {
+      "dependsOn": ["^lint"]
+    },
+    "dev": {
+      "dependsOn": ["^dev"],
+      "cache": false
+    },
+    "typecheck": {
+      "dependsOn": ["^typecheck"]
+    },
+    "test": {
+      "cache": false,
+      "persistent": false
+    }
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "title": "Advanced usage",
+  "pages": ["cli-deep-dive", "install-plugins", "use-different-agents"],
+  "defaultOpen": true
+}

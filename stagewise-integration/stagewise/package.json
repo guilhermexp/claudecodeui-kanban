@@ -1,0 +1,53 @@
+{
+  "name": "stagewise",
+  "private": true,
+  "scripts": {
+    "build": "turbo run build",
+    "build:apps": "turbo run build --filter='./apps/*'",
+    "build:packages": "turbo run build --filter='./packages/*'",
+    "build:toolbar": "turbo run build --filter='./toolbar/*'",
+    "build:plugins": "turbo run build --filter='./plugins/*'",
+    "clean": "git clean -xdf node_modules",
+    "clean:workspaces": "turbo clean",
+    "dev": "turbo watch dev --concurrency 20",
+    "dev:playgrounds": "turbo watch dev --filter='./playgrounds/*' --concurrency 20",
+    "dev:examples": "turbo watch dev --filter='./examples/*' --concurrency 20",
+    "dev:toolbar": "turbo watch dev --filter='./toolbar/*' --concurrency 20",
+    "dev:plugins": "turbo watch dev --filter='./plugins/*' --concurrency 20",
+    "changeset": "pnpm dlx @changesets/cli",
+    "check": "biome check .",
+    "check:fix": "biome check . --write",
+    "sherif": "pnpm dlx sherif --fix",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "copy-readme": "ts-node --esm scripts/copy-readme.ts",
+    "version-and-format": "pnpm changeset version && pnpm biome format --write ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.0.6",
+    "@changesets/cli": "^2.29.5",
+    "@commitlint/cli": "^19.8.1",
+    "@commitlint/config-conventional": "^19.8.1",
+    "@stagewise/typescript-config": "workspace:*",
+    "@types/node": "22.15.2",
+    "lefthook": "^1.12.2",
+    "ts-node": "10.9.2",
+    "turbo": "^2.5.4",
+    "typescript": "^5.8.3"
+  },
+  "packageManager": "pnpm@10.10.0",
+  "engines": {
+    "node": ">=18"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ],
+    "ignoredBuiltDependencies": [
+      "keytar"
+    ]
+  },
+  "dependencies": {
+    "tsx": "^4.20.3"
+  }
+}
