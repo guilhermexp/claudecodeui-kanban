@@ -110,12 +110,8 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
       
       // Handle Stagewise button toggle for element selection
       if (event.data && event.data.type === 'stagewise-toggle-selection') {
-        console.log('Stagewise requested element selection:', event.data.enabled);
-        if (event.data.enabled) {
-          setElementSelectionMode(true);
-        } else {
-          setElementSelectionMode(false);
-        }
+        console.log('🟣 Stagewise requested element selection:', event.data.enabled);
+        setElementSelectionMode(event.data.enabled);
       }
     };
 
@@ -475,9 +471,6 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
   useEffect(() => {
     if (!elementSelectionMode || !iframeRef.current) return;
     
-    // Don't inject into Stagewise toolbar iframe
-    if (useStagewise) return;
-    
     const handleElementSelected = (event) => {
       if (event.data?.type === 'element-selected') {
         console.log('Element selected:', event.data.data);
@@ -508,13 +501,14 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
     
     // Inject selection script after a delay
     const timer = setTimeout(() => {
-      if (iframeRef.current && elementSelectionMode && !useStagewise) {
+      if (iframeRef.current && elementSelectionMode) {
+        const iframe = iframeRef.current;
+        console.log('Activating element selector, iframe URL:', iframe.src);
+        
+        // SIMPLES: Sempre tenta injetar no iframe principal (que agora sempre é a aplicação)
         try {
-          const iframe = iframeRef.current;
-          // Log the current URL to debug
-          console.log('Injecting element selector into iframe with URL:', iframe.src);
-          
           const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+          
           if (iframeDoc) {
             // Check if script already injected
             if (iframeDoc.querySelector('#element-selector-script')) {
@@ -664,10 +658,11 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
       window.removeEventListener('message', handleElementSelected);
       
       // Clean up injected script
-      if (iframeRef.current && !useStagewise) {
+      if (iframeRef.current) {
         try {
           const iframe = iframeRef.current;
           const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+          
           if (iframeDoc) {
             iframeDoc.body.style.cursor = '';
             const script = iframeDoc.querySelector('#element-selector-script');
@@ -675,7 +670,8 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
               script.remove();
             }
           }
-          // Also send disable message
+          
+          // Also send disable message via postMessage for cross-origin
           if (iframe.contentWindow) {
             iframe.contentWindow.postMessage({ 
               type: 'enable-element-selection',
@@ -1103,34 +1099,53 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
           </div>
         )}
 
+        {/* Iframe principal - sempre mostra a aplicação */}
         <iframe
           ref={iframeRef}
           src={
             isPaused 
               ? 'about:blank' 
-              : useStagewise 
-              ? 'http://localhost:5555/simple-toolbar.html'
               : currentUrl
           }
           className="w-full h-full border-0"
-          onLoad={(e) => {
-            handleIframeLoad(e);
-            // If using Stagewise, send the URL and project path to load
-            if (useStagewise && !isPaused && iframeRef.current) {
-              setTimeout(() => {
-                iframeRef.current.contentWindow?.postMessage(
-                  { type: 'loadUrl', url: currentUrl, projectPath: projectPath },
-                  '*'
-                );
-              }, 500);
-            }
-          }}
+          onLoad={handleIframeLoad}
           onError={handleIframeError}
           title="Preview"
           loading="lazy"
           data-preview-frame="true"
           allow="microphone *; camera *; geolocation *; accelerometer *; gyroscope *; magnetometer *; midi *; encrypted-media *"
         />
+        
+        {/* Stagewise como componente flutuante SOBRE a página */}
+        {useStagewise && !isPaused && (
+          <iframe
+            src="http://localhost:5555/simple-toolbar.html"
+            className="absolute bottom-4 left-1/2 transform -translate-x-1/2"
+            style={{
+              width: '90%',
+              maxWidth: '800px',
+              height: '400px',
+              border: 'none',
+              borderRadius: '12px',
+              boxShadow: '0 10px 40px rgba(0,0,0,0.2)',
+              background: 'white',
+              zIndex: 1000
+            }}
+            onLoad={(e) => {
+              // Envia URL e project path para o Stagewise carregar no seu iframe interno
+              const stagewiseFrame = e.target;
+              if (stagewiseFrame.contentWindow) {
+                setTimeout(() => {
+                  stagewiseFrame.contentWindow.postMessage(
+                    { type: 'loadUrl', url: currentUrl, projectPath: projectPath },
+                    '*'
+                  );
+                }, 100);
+              }
+            }}
+            title="Stagewise Toolbar"
+          />
+        )}
       </div>
       
       {/* Element Selection Preview */}

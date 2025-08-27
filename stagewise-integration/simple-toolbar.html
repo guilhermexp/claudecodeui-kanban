@@ -411,14 +411,21 @@
           
           // Escuta mensagens do parent
           window.addEventListener('message', function(event) {
-            if (event.data.type === 'enableSelection') {
+            console.log('🟣 App iframe received message:', event.data.type);
+            
+            // Aceita ambos os tipos de mensagem
+            if (event.data.type === 'enableSelection' || 
+                (event.data.type === 'enable-element-selection' && event.data.enabled)) {
               isSelectionMode = true;
               document.body.style.cursor = 'crosshair';
               addSelectionListeners();
-            } else if (event.data.type === 'disableSelection') {
+              console.log('🟣 Selection mode ACTIVATED in app iframe');
+            } else if (event.data.type === 'disableSelection' || 
+                      (event.data.type === 'enable-element-selection' && !event.data.enabled)) {
               isSelectionMode = false;
               document.body.style.cursor = '';
               removeSelectionListeners();
+              console.log('🟣 Selection mode DEACTIVATED in app iframe');
             }
           });
           
@@ -450,8 +457,10 @@
           function handleClick(e) {
             if (!isSelectionMode) return;
             
+            // Impede TOTALMENTE o clique de propagar
             e.preventDefault();
             e.stopPropagation();
+            e.stopImmediatePropagation();
             
             const element = e.target;
             const info = {
@@ -461,11 +470,18 @@
               text: element.textContent?.substring(0, 100)
             };
             
+            console.log('🟣 Element clicked in selection mode:', info);
+            
             // Envia informação do elemento para o parent
             window.parent.postMessage({
               type: 'elementSelected',
               element: info
             }, '*');
+            
+            // Desativa seleção após clicar
+            isSelectionMode = false;
+            document.body.style.cursor = '';
+            removeSelectionListeners();
             
             return false;
           }
@@ -538,6 +554,46 @@
         if (event.data.projectPath) {
           currentProjectPath = event.data.projectPath;
           console.log('Updated project path:', currentProjectPath);
+        }
+      }
+      
+      // SIMPLES: Ativa seleção quando recebe mensagem do PreviewPanel
+      if (event.data.type === 'activate-element-selection') {
+        console.log('Stagewise received activation request');
+        const appIframe = document.getElementById('user-app-iframe');
+        if (appIframe && appIframe.contentWindow) {
+          // Apenas repassa a mensagem para o iframe da aplicação
+          appIframe.contentWindow.postMessage({
+            type: 'enable-element-selection',
+            enabled: true
+          }, '*');
+        }
+      }
+      
+      // Forward element selection message to app iframe
+      if (event.data.type === 'forward-to-app-iframe') {
+        const appIframe = document.getElementById('user-app-iframe');
+        console.log('🟣 Stagewise received forward request, app iframe exists:', !!appIframe);
+        if (appIframe && appIframe.contentWindow) {
+          console.log('🟣 Forwarding to app iframe:', event.data.message);
+          appIframe.contentWindow.postMessage(event.data.message, '*');
+          
+          // Também tenta injetar diretamente se possível
+          try {
+            const iframeDoc = appIframe.contentDocument;
+            if (iframeDoc && event.data.message.type === 'enable-element-selection' && event.data.message.enabled) {
+              console.log('🟣 Attempting direct injection in app iframe');
+              // Verifica se o script já foi injetado
+              if (!iframeDoc.querySelector('#stagewise-listener')) {
+                injectSelectionScript(iframeDoc);
+                console.log('🟣 Selection script injected successfully');
+              }
+            }
+          } catch (e) {
+            console.log('🟣 Cannot access app iframe directly (CORS), relying on postMessage');
+          }
+        } else {
+          console.error('🟣 App iframe not found or not accessible!');
         }
       }
       
