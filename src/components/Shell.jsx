@@ -8,6 +8,7 @@ import { useDropzone } from 'react-dropzone';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import PreviewPanel from './PreviewPanel';
 import { useConfig } from './vibe-kanban/config-provider';
+import { detectBestPreviewUrl } from '../utils/detectPreviewUrl';
 import 'xterm/css/xterm.css';
 
 // CSS to make xterm responsive and remove focus outline
@@ -138,13 +139,32 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   
   // Preview panel states
   const [showPreview, setShowPreview] = useState(false);
+  // Terminal width lock when opening side panels
+  const terminalPanelRef = useRef(null);
+  const [lockedTerminalWidth, setLockedTerminalWidth] = useState(null);
+  const [wasPreviewOpen, setWasPreviewOpen] = useState(false);
   
   // Notify parent when preview state changes
   useEffect(() => {
     if (onPreviewStateChange) {
       onPreviewStateChange(showPreview);
     }
+    // Track preview having been opened to preserve terminal width lock
+    setWasPreviewOpen(prev => prev || showPreview);
   }, [showPreview, onPreviewStateChange]);
+
+  // Lock current terminal width when a side panel opens (so shell doesn't shift)
+  useEffect(() => {
+    if (activeSidePanel && (showPreview || wasPreviewOpen)) {
+      const el = terminalPanelRef.current;
+      if (el) {
+        const rect = el.getBoundingClientRect();
+        if (rect && rect.width) setLockedTerminalWidth(Math.round(rect.width));
+      }
+    } else if (!activeSidePanel) {
+      setLockedTerminalWidth(null);
+    }
+  }, [activeSidePanel, showPreview, wasPreviewOpen]);
   const [previewUrl, setPreviewUrl] = useState('');
   const [detectedUrls, setDetectedUrls] = useState(new Set());
   
@@ -1944,8 +1964,14 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   return (
     <PanelGroup direction="horizontal" className="h-full w-full flex gap-1">
       {/* Terminal Panel - Always present */}
-      <Panel defaultSize={showPreview && !isMobile && !activeSidePanel ? 30 : 100} minSize={30} className="h-full">
+      <Panel 
+        defaultSize={showPreview && !isMobile && !activeSidePanel ? 30 : 100} 
+        minSize={30} 
+        className="h-full"
+        style={lockedTerminalWidth ? { flex: `0 0 ${lockedTerminalWidth}px` } : undefined}
+      >
         <div 
+          ref={terminalPanelRef}
           className="h-full min-h-0 flex flex-col bg-card rounded-xl border border-border" 
           {...dropzoneProps}>
           <input {...inputProps} />
@@ -2023,8 +2049,20 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
                         } else {
                           // Try to detect URL from terminal or use default
                           const urls = detectUrlsInTerminal() || new Set();
-                          // Default to our Vite app port since that's what's running
-                          const firstUrl = urls.size > 0 ? Array.from(urls)[0] : 'http://localhost:5892';
+                          // Use detected URLs from terminal or smart detection
+                          let firstUrl = 'http://localhost:5892';
+                          
+                          if (urls.size > 0) {
+                            firstUrl = Array.from(urls)[0];
+                          } else {
+                            // Use async detection for best URL
+                            detectBestPreviewUrl().then(url => {
+                              console.log('Detected best preview URL:', url);
+                              setPreviewUrl(url);
+                            }).catch(() => {
+                              // Fallback already set
+                            });
+                          }
                           console.log('Opening preview with URL:', firstUrl);
                           setPreviewUrl(firstUrl);
                           setShowPreview(true);
@@ -2095,8 +2133,8 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       </div>
     </Panel>
     
-    {/* Conditionally render resize handle and preview panel - Hide when side panel is open */}
-    {showPreview && !isMobile && !activeSidePanel && (
+    {/* Preview panel remains visible; container padding in MainContent prevents overlap */}
+    {showPreview && !isMobile && (
       <>
         {/* Resize Handle - invisible but functional */}
         <PanelResizeHandle className="w-2 bg-transparent hover:bg-accent/20 transition-colors cursor-col-resize" />

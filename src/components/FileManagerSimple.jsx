@@ -26,6 +26,8 @@ function FileManagerSimple({ selectedProject }) {
   const [showHiddenFiles, setShowHiddenFiles] = useState(false);
   const [showMarkdownPreview, setShowMarkdownPreview] = useState(false);
   const codeEditorRef = useRef(null);
+  const containerRef = useRef(null);
+  const [containerWidth, setContainerWidth] = useState(0);
   
   // Context Menu State
   const [contextMenu, setContextMenu] = useState(null);
@@ -42,6 +44,20 @@ function FileManagerSimple({ selectedProject }) {
   // Refs for caching
   const lastProjectPath = useRef(null);
   const expandedCache = useRef(new Set());
+
+  // Observe container width for responsive tweaks when used in a narrow side panel
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const ro = new ResizeObserver(entries => {
+      const entry = entries[0];
+      if (entry) setContainerWidth(entry.contentRect.width);
+    });
+    ro.observe(containerRef.current);
+    return () => ro.disconnect();
+  }, []);
+
+  const compact = containerWidth > 0 && containerWidth < 360;
+  const tight = containerWidth > 0 && containerWidth < 300;
   
   // Fetch files from server
   const fetchFiles = useCallback(async () => {
@@ -366,6 +382,9 @@ function FileManagerSimple({ selectedProject }) {
       ? filterFiles(items)
       : filterFiles(items.filter(item => !item.name.startsWith('.')));
     
+    const indentSize = compact ? 8 : 10;
+    const indentBase = compact ? 6 : 8;
+
     return filtered.map((item) => {
       const isExpanded = expandedDirs.has(item.path);
       
@@ -373,10 +392,11 @@ function FileManagerSimple({ selectedProject }) {
         <div key={item.path} className="select-none">
           <div
             className={cn(
-              "w-full flex items-center justify-start py-1 px-2 h-auto cursor-pointer rounded-sm hover:bg-accent transition-colors",
-              "touch-manipulation active:bg-accent/80 min-h-[28px] md:min-h-0",
+              "w-full flex items-center justify-start px-2 h-auto cursor-pointer rounded-sm hover:bg-accent transition-colors",
+              compact ? "py-0.5" : "py-1",
+              "touch-manipulation active:bg-accent/80 min-h-[26px] md:min-h-0",
             )}
-            style={{ paddingLeft: `${level * 10 + 8}px` }}
+            style={{ paddingLeft: `${level * indentSize + indentBase}px` }}
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
@@ -425,7 +445,7 @@ function FileManagerSimple({ selectedProject }) {
                   autoFocus
                 />
               ) : (
-                <span className="text-xs truncate max-w-[150px] text-foreground" title={item.name}>
+                <span className={`truncate text-foreground ${compact ? 'text-[11px] max-w-[120px]' : 'text-xs max-w-[150px]'}`} title={item.name}>
                   {item.name}
                 </span>
               )}
@@ -457,91 +477,97 @@ function FileManagerSimple({ selectedProject }) {
   
   return (
     <>
-    <div className="h-full flex bg-card rounded-xl border border-border overflow-hidden">
+    <div ref={containerRef} className="h-full flex bg-card rounded-xl border border-border overflow-hidden">
       {/* Files List */}
       <div className={`flex flex-col transition-all duration-300 ease-in-out ${
         showFilePanel ? 'hidden md:flex md:w-[25%] lg:w-[20%] xl:w-[18%]' : 'flex-1'
       }`}>
         {/* Header */}
-        <div className="py-3 px-3 md:px-4 border-b border-border flex items-center justify-between">
-          <h3 className="text-foreground font-medium">
-            Files
-          </h3>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setShowHiddenFiles(!showHiddenFiles)}
-              className={cn(
-                "p-1 hover:bg-accent rounded-md transition-colors",
-                showHiddenFiles && "bg-accent"
+        <div className={`${compact ? 'py-2' : 'py-3'} px-3 md:px-4 border-b border-border`}> 
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <h3 className={`text-foreground font-medium ${compact ? 'text-sm' : ''}`}>Files</h3>
+              {selectedProject?.path && (
+                <div className={`mt-1 flex items-center gap-1 text-muted-foreground/70 ${compact ? 'text-[10px]' : 'text-[11px] sm:text-xs'}`}>
+                  <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-5l-2-2H5a2 2 0 00-2 2z" />
+                  </svg>
+                  <span className={`truncate ${compact ? 'max-w-[120px]' : 'max-w-[160px] sm:max-w-[220px]'}`} title={selectedProject.path}>
+                    {selectedProject.path.split('/').pop()}
+                  </span>
+                </div>
               )}
-              title={showHiddenFiles ? "Hide hidden files" : "Show hidden files"}
-            >
-              {showHiddenFiles ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-            </button>
-            <button
-              onClick={() => {
-                setCreateType('file');
-                setCreateType('file');
-                setShowCreateModal(true);
-                setCreatePath('');
-                setCreateName('');
-                setCreateError('');
-              }}
-              className="p-1 hover:bg-accent rounded-md transition-colors"
-              title="New File"
-            >
-              <FilePlus className="w-4 h-4 text-muted-foreground" />
-            </button>
-            <button
-              onClick={() => {
-                setCreateType('folder');
-                setShowCreateModal(true);
-                setCreatePath('');
-                setCreateName('');
-                setCreateError('');
-              }}
-              className="p-1 hover:bg-accent rounded-md transition-colors"
-              title="New Folder"
-            >
-              <FolderPlus className="w-4 h-4 text-muted-foreground" />
-            </button>
-            <button
-              onClick={handleRefresh}
-              className={cn(
-                "p-1 hover:bg-accent rounded-md transition-colors",
-                loading && "animate-spin"
-              )}
-              title="Refresh"
-            >
-              <RefreshCw className="w-4 h-4 text-muted-foreground" />
-            </button>
+            </div>
+            <div className={`flex items-center ${compact ? 'gap-0.5' : 'gap-1'}`}>
+             <button
+               onClick={() => setShowHiddenFiles(!showHiddenFiles)}
+              className={cn("hover:bg-accent rounded-md transition-colors", compact ? 'p-0.5' : 'p-1', showHiddenFiles && "bg-accent")}
+               title={showHiddenFiles ? "Hide hidden files" : "Show hidden files"}
+             >
+              {showHiddenFiles ? <Eye className={`${compact ? 'w-3.5 h-3.5' : 'w-4 h-4'}`} /> : <EyeOff className={`${compact ? 'w-3.5 h-3.5' : 'w-4 h-4'}`} />}
+              </button>
+              <button
+                onClick={() => {
+                  setCreateType('file');
+                  setCreateType('file');
+                  setShowCreateModal(true);
+                  setCreatePath('');
+                  setCreateName('');
+                  setCreateError('');
+                }}
+              className={`hover:bg-accent rounded-md transition-colors ${compact ? 'p-0.5' : 'p-1'}`}
+                title="New File"
+              >
+              <FilePlus className={`${compact ? 'w-3.5 h-3.5' : 'w-4 h-4'} text-muted-foreground`} />
+              </button>
+              <button
+                onClick={() => {
+                  setCreateType('folder');
+                  setShowCreateModal(true);
+                  setCreatePath('');
+                  setCreateName('');
+                  setCreateError('');
+                }}
+              className={`hover:bg-accent rounded-md transition-colors ${compact ? 'p-0.5' : 'p-1'}`}
+                title="New Folder"
+              >
+              <FolderPlus className={`${compact ? 'w-3.5 h-3.5' : 'w-4 h-4'} text-muted-foreground`} />
+              </button>
+              <button
+                onClick={handleRefresh}
+              className={cn(`hover:bg-accent rounded-md transition-colors ${compact ? 'p-0.5' : 'p-1'}`, loading && "animate-spin")}
+                title="Refresh"
+              >
+              <RefreshCw className={`${compact ? 'w-3.5 h-3.5' : 'w-4 h-4'} text-muted-foreground`} />
+              </button>
+            </div>
           </div>
         </div>
         
         {/* Search Bar */}
-        <div className="p-2 border-b border-border">
+        <div className={`${compact ? 'p-1.5' : 'p-2'} border-b border-border`}>
           <div className="relative">
-            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Search className={`absolute left-2 top-1/2 -translate-y-1/2 ${compact ? 'w-3.5 h-3.5' : 'w-4 h-4'} text-muted-foreground`} />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search files..."
-              className="w-full pl-8 pr-8 py-1 text-sm bg-background border rounded focus:outline-none focus:ring-1 focus:ring-primary"
+              className={`w-full ${compact ? 'pl-7 pr-7 py-1 text-[13px]' : 'pl-8 pr-8 py-1 text-sm'} bg-background border rounded focus:outline-none focus:ring-1 focus:ring-primary`}
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 hover:bg-accent rounded"
+                className={`absolute right-2 top-1/2 -translate-y-1/2 ${compact ? 'p-0.5' : 'p-0.5'} hover:bg-accent rounded`}
               >
-                <X className="w-3 h-3" />
+                <X className={`${compact ? 'w-3 h-3' : 'w-3 h-3'}`} />
               </button>
             )}
           </div>
         </div>
         
         {/* File Tree */}
-        <ScrollArea className="flex-1 p-4">
+        <ScrollArea className={`flex-1 ${compact ? 'p-2' : 'p-4'}`}>
           {files.length === 0 ? (
             <div className="text-center py-8">
               <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center mx-auto mb-3">

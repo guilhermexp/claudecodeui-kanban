@@ -464,13 +464,10 @@ function MainContent({
 
       {/* Main content wrapper with side panels */}
       <div className="flex-1 min-h-0 flex relative">
-        {/* Shell Area - Always visible, shrinks when panels open */}
-        <div 
-          className={`min-h-0 flex flex-col transition-all duration-300 px-2 md:px-4 ${
-            activeSidePanel && hasPreviewOpen ? 'w-[calc(100%-12rem)] sm:w-[calc(100%-14rem)] md:w-[calc(100%-16rem)]' : 
-            activeSidePanel ? 'w-[calc(100%-24rem)] sm:w-[calc(100%-27.5rem)] md:w-[calc(100%-32.5rem)]' : 'flex-1'
-          }`}
-        >
+        {/* Shell Area - Keep width stable; side panels overlay on top */}
+        <div className={`min-h-0 flex flex-col transition-all duration-300 px-2 md:px-4 flex-1 ${
+          activeSidePanel && hasPreviewOpen ? 'pr-48 sm:pr-56 md:pr-64' : ''
+        }`}>
           <div className="h-full overflow-hidden mt-2">
             <ConfigProvider>
               <Shell 
@@ -507,30 +504,6 @@ function MainContent({
               }`}
             >
               <div className="h-full flex flex-col">
-                <div className="flex-shrink-0 px-3 md:px-4 flex flex-col">
-                  <div className="h-12 md:h-14 flex items-center justify-between">
-                    <h3 className="text-lg font-semibold text-foreground">Files</h3>
-                    <button
-                      onClick={() => setActiveSidePanel(null)}
-                      className="h-8 w-8 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent rounded-md transition-colors"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
-                  {/* Current path indicator */}
-                  <div className="pb-3">
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground/70 bg-muted/30 px-2 py-1 rounded-md font-mono">
-                      <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-5l-2-2H5a2 2 0 00-2 2z" />
-                      </svg>
-                      <span className="truncate" title={selectedProject.path}>
-                        {selectedProject.path}
-                      </span>
-                    </div>
-                  </div>
-                </div>
                 <div className="flex-1 overflow-hidden">
                   <FileManagerSimple selectedProject={selectedProject} />
                 </div>
@@ -546,17 +519,6 @@ function MainContent({
               }`}
             >
               <div className="h-full flex flex-col">
-                <div className="flex-shrink-0 h-12 md:h-14 px-3 md:px-4 flex items-center justify-between">
-                  <h3 className="text-lg font-semibold text-foreground">Source Control</h3>
-                  <button
-                    onClick={() => setActiveSidePanel(null)}
-                    className="h-8 w-8 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent rounded-md transition-colors"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
                 <div className="flex-1 overflow-hidden">
                   <GitPanel selectedProject={selectedProject} isMobile={false} isVisible={activeSidePanel === 'git'} />
                 </div>
@@ -583,17 +545,6 @@ function MainContent({
               }`}
             >
               <div className="h-full flex flex-col">
-                <div className="flex-shrink-0 h-12 md:h-14 px-3 md:px-4 flex items-center justify-between">
-                  <h3 className="text-lg font-semibold text-foreground">Dashboard</h3>
-                  <button
-                    onClick={() => setActiveSidePanel(null)}
-                    className="h-8 w-8 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent rounded-md transition-colors"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
                 <div className="flex-1 overflow-hidden">
                   <Dashboard onBack={() => setActiveSidePanel(null)} />
                 </div>

@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import OverlayChat from './OverlayChat';
 
 function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, isMobile }) {
   const [isLoading, setIsLoading] = useState(true);
@@ -6,15 +7,15 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
   const [currentUrl, setCurrentUrl] = useState(url);
   const [isPaused, setIsPaused] = useState(false);
   const [logs, setLogs] = useState([]);
+  const [captureReady, setCaptureReady] = useState(false);
+  const captureReadyTimer = useRef(null);
   const [showLogs, setShowLogs] = useState(false);
   const [pausedUrl, setPausedUrl] = useState(null); // Store URL when paused
   const [microphoneStatus, setMicrophoneStatus] = useState('idle'); // idle, granted, denied, requesting
   const [showPermissionInfo, setShowPermissionInfo] = useState(false);
-  const [useStagewise, setUseStagewise] = useState(false); // Toggle for Stagewise mode
   const [elementSelectionMode, setElementSelectionMode] = useState(false); // Direct element selection
   const [selectedElement, setSelectedElement] = useState(null); // Captured element data
   const iframeRef = useRef(null);
-  const stagewiseRef = useRef(null);
   const logsRef = useRef(null);
 
   useEffect(() => {
@@ -98,6 +99,12 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
 
       // Handle console messages from iframe
       if (event.data && event.data.type === 'console-message') {
+        // Filter out vite/HMR noise that sometimes leaks as errors
+        const raw = String(event.data.message || '');
+        const low = raw.toLowerCase();
+        if (raw.includes('[vite]') || raw.includes('[HMR]') || low.includes('websocket') || low.includes('connecting') || low.includes('connected')) {
+          return;
+        }
         const { level, message, timestamp, url, filename, line, column, stack } = event.data;
         
         const logEntry = {
@@ -136,14 +143,13 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
       // Handle console capture ready notification
       if (event.data && event.data.type === 'console-capture-ready') {
         console.log('Console capture initialized for preview');
+        setCaptureReady(true);
+        if (captureReadyTimer.current) {
+          clearTimeout(captureReadyTimer.current);
+          captureReadyTimer.current = null;
+        }
       }
       
-      // Handle Stagewise button toggle for element selection
-      if (event.data && event.data.type === 'stagewise-toggle-selection') {
-        console.log('🟣 Stagewise requested element selection:', event.data.enabled);
-        alert('🟣 FUNCIONOU! Stagewise pediu seleção: ' + event.data.enabled);
-        setElementSelectionMode(event.data.enabled);
-      }
     };
 
     window.addEventListener('message', handleMessage);
@@ -155,6 +161,12 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
 
   // Inject console capture script when iframe loads
   useEffect(() => {
+    // Reset capture state on URL change
+    setCaptureReady(false);
+    if (captureReadyTimer.current) {
+      clearTimeout(captureReadyTimer.current);
+      captureReadyTimer.current = null;
+    }
     const injectConsoleCapture = () => {
       if (iframeRef.current && !isPaused) {
         try {
@@ -208,7 +220,7 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
                       }
                     }
                     
-                    // Only capture errors, not warnings or regular logs
+                    // Only capture real errors, not warnings or regular logs
                     ['error'].forEach(method => {
                       console[method] = function(...args) {
                         originalConsole[method].apply(console, args);
@@ -218,8 +230,12 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
                             return String(arg);
                           }).join(' ');
                           
-                          // Skip empty or meaningless messages
+                          // Skip empty, Vite connection messages, and other non-error logs
                           if (!message || message.trim() === '') return;
+                          if (message.includes('[vite]')) return;
+                          if (message.includes('[HMR]')) return;
+                          if (message.includes('WebSocket')) return;
+                          if (message.toLowerCase().includes('connect')) return;
                           
                           window.parent.postMessage({
                             type: 'console-message',
@@ -234,10 +250,17 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
                     
                     window.addEventListener('error', function(event) {
                       try {
+                        // Skip Vite and other non-application errors
+                        const msg = event.message || '';
+                        if (msg.includes('[vite]')) return;
+                        if (msg.includes('[HMR]')) return;
+                        if (msg.includes('WebSocket')) return;
+                        
+                        // Only send real JavaScript errors
                         window.parent.postMessage({
                           type: 'console-message',
                           level: 'error',
-                          message: event.message || 'Unknown error',
+                          message: msg || 'Unknown error',
                           timestamp: new Date().toISOString(),
                           url: window.location.href,
                           filename: event.filename,
@@ -250,6 +273,14 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
                     
                     window.addEventListener('unhandledrejection', function(event) {
                       try {
+                        // Skip non-application promise rejections
+                        const reason = event.reason?.message || event.reason || '';
+                        if (typeof reason === 'string') {
+                          if (reason.includes('[vite]')) return;
+                          if (reason.includes('[HMR]')) return;
+                          if (reason.includes('WebSocket')) return;
+                        }
+                        
                         window.parent.postMessage({
                           type: 'console-message',
                           level: 'error',
@@ -426,9 +457,34 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
         });
       }
       
+      // If cross-origin and capture not ready soon, show info log
+      try {
+        const topUrl = new URL(window.location.href);
+        const frameUrl = new URL(currentUrl);
+        const sameOrigin = topUrl.protocol === frameUrl.protocol && topUrl.hostname === frameUrl.hostname && topUrl.port === frameUrl.port;
+        if (!sameOrigin) {
+          captureReadyTimer.current = setTimeout(() => {
+            if (!captureReady) {
+              setLogs(prev => ([
+                ...prev,
+                {
+                  type: 'info',
+                  message: 'Cross-origin preview: console capture limited. To capture errors here, run the helper snippet in the app or open with proxy.',
+                  timestamp: new Date().toLocaleTimeString(),
+                }
+              ]));
+            }
+          }, 1500);
+        }
+      } catch {}
+
       return () => {
         iframe.removeEventListener('load', injectConsoleCapture);
         observer.disconnect();
+        if (captureReadyTimer.current) {
+          clearTimeout(captureReadyTimer.current);
+          captureReadyTimer.current = null;
+        }
       };
     }
   }, [isPaused, currentUrl]);
@@ -440,16 +496,8 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
       // Clear logs on refresh - errors will be re-captured if they still exist
       setLogs([]);
       
-      if (useStagewise) {
-        // For Stagewise, send message to update URL with project path
-        iframeRef.current.contentWindow?.postMessage(
-          { type: 'loadUrl', url: currentUrl, projectPath: projectPath },
-          '*'
-        );
-      } else {
-        // Load URL directly for full functionality
-        iframeRef.current.src = currentUrl;
-      }
+      // Load URL directly for full functionality
+      iframeRef.current.src = currentUrl;
     }
   };
   
@@ -492,6 +540,9 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
       iframeRef.current.src = iframeRef.current.src;
     }
   };
+
+  // Helper snippet that users can paste in the target app console (only once)
+  const helperSnippet = `(() => {try{const send=(m,s)=>parent.postMessage({type:'console-message',level:'error',message:String(m),timestamp:new Date().toISOString(),url:location.href,stack:s},'*');const oe=console.error;console.error=(...a)=>{try{send(a.map(x=>x&&x.message?x.message:typeof x==='object'?JSON.stringify(x):String(x)).join(' '),a[0]&&a[0].stack);}catch{}oe.apply(console,a)};addEventListener('error',e=>{try{send(e.message,e.error&&e.error.stack)}catch{}});addEventListener('unhandledrejection',e=>{try{send('Unhandled Promise Rejection: '+(e.reason&&e.reason.message?e.reason.message:String(e.reason)),e.reason&&e.reason.stack)}catch{}});parent.postMessage({type:'console-capture-ready'},'*')}catch{}})();`;
 
   const copyLogsToClipboard = () => {
     const errorText = logs.map(log => {
@@ -548,18 +599,7 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
         setSelectedElement(event.data.data);
         setElementSelectionMode(false);
         
-        // If Stagewise is enabled, send element context to the toolbar
-        if (useStagewise && stagewiseRef.current) {
-          // Send to Stagewise toolbar iframe
-          const stagewiseFrame = stagewiseRef.current;
-          if (stagewiseFrame && stagewiseFrame.contentWindow) {
-            stagewiseFrame.contentWindow.postMessage({
-              type: 'element-context',
-              data: event.data.data
-            }, '*');
-            console.log('Element context sent to Stagewise toolbar');
-          }
-        }
+        // Element selection now handled by OverlayChat component
         
         // Also store globally for other uses
         if (window.selectedElementContext !== undefined) {
@@ -574,7 +614,6 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
     const timer = setTimeout(() => {
       console.log('🎯 Element selection useEffect check:');
       console.log('  - elementSelectionMode:', elementSelectionMode);
-      console.log('  - useStagewise:', useStagewise);
       console.log('  - iframeRef.current exists:', !!iframeRef.current);
       
       if (iframeRef.current && elementSelectionMode) {
@@ -759,7 +798,7 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
         }
       }
     };
-  }, [elementSelectionMode, useStagewise]);
+  }, [elementSelectionMode]);
 
   const handleOpenExternal = () => {
     window.open(currentUrl, '_blank');
@@ -779,12 +818,31 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
     setError('Unable to load preview. The server might not be running or the URL might be incorrect.');
   };
 
-  // Validate URL to ensure it's a localhost URL
+  // Validate URL to ensure it's a safe preview URL
   const isValidPreviewUrl = (url) => {
     try {
       const urlObj = new URL(url);
+      const hostname = urlObj.hostname;
+      
+      // Allow localhost and local IPs
       const validHosts = ['localhost', '127.0.0.1', '0.0.0.0', '[::1]'];
-      return validHosts.includes(urlObj.hostname);
+      if (validHosts.includes(hostname)) return true;
+      
+      // Allow private network IPs (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
+      if (hostname.startsWith('192.168.') || 
+          hostname.startsWith('10.') ||
+          hostname.match(/^172\.(1[6-9]|2[0-9]|3[0-1])\./)) {
+        return true;
+      }
+      
+      // Allow ngrok domains
+      if (hostname.includes('ngrok.app') || 
+          hostname.includes('ngrok-free.app') ||
+          hostname.includes('ngrok.io')) {
+        return true;
+      }
+      
+      return false;
     } catch {
       return false;
     }
@@ -816,7 +874,7 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
             </div>
             <h3 className="text-lg font-semibold text-foreground mb-2">Invalid URL</h3>
             <p className="text-sm text-muted-foreground">
-              Only localhost URLs can be previewed for security reasons.
+              Only local network and ngrok URLs can be previewed for security.
             </p>
           </div>
         </div>
@@ -852,41 +910,16 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
 
           {/* Action Buttons */}
           <div className="flex items-center gap-1">
-            {/* Stagewise Toggle */}
-            <button
-              onClick={() => setUseStagewise(!useStagewise)}
-              className={`p-1.5 rounded-md transition-colors ${
-                useStagewise 
-                  ? 'bg-purple-500/20 text-purple-600 dark:text-purple-400 hover:bg-purple-500/30' 
-                  : 'hover:bg-accent'
-              }`}
-              title={useStagewise ? "Disable Stagewise AI mode" : "Enable Stagewise AI mode"}
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-            </button>
             
-            {/* Element Selection Toggle - Works with both modes */}
+            {/* Element Selection Toggle */}
             <button
-              onClick={() => {
-                if (useStagewise) {
-                  // Show info that selection is controlled by Stagewise button
-                  alert('Use the purple button in the Stagewise toolbar below to select elements!');
-                } else {
-                  // Normal element selection for regular preview
-                  setElementSelectionMode(!elementSelectionMode);
-                }
-              }}
+              onClick={() => setElementSelectionMode(!elementSelectionMode)}
               className={`p-1.5 rounded-md transition-colors ${
                 elementSelectionMode 
                   ? 'bg-blue-500/20 text-blue-600 dark:text-blue-400 hover:bg-blue-500/30' 
-                  : useStagewise
-                  ? 'opacity-50 cursor-not-allowed'
                   : 'hover:bg-accent'
               }`}
-              title={useStagewise ? "Use Stagewise toolbar button for selection" : elementSelectionMode ? "Element selection active - Click any element" : "Click to select elements"}
-              disabled={useStagewise}
+              title={elementSelectionMode ? "Element selection active - Click any element" : "Click to select elements"}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2z" />
@@ -990,6 +1023,18 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
                       >
                         Clear
                       </button>
+                      {/* Helper for cross-origin pages */}
+                      {!captureReady && (
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(helperSnippet).then(() => alert('Helper snippet copied. Paste it in the target app console once.'));
+                          }}
+                          className="text-xs px-2 py-1 hover:bg-accent rounded transition-colors"
+                          title="Copy helper to forward errors from cross-origin apps"
+                        >
+                          Helper
+                        </button>
+                      )}
                     </div>
                   </div>
                   <div className="overflow-y-auto max-h-80 p-2 space-y-1">
@@ -1130,11 +1175,15 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
                 </svg>
               </div>
               <h3 className="text-lg font-semibold text-foreground mb-2">Preview Paused</h3>
-              <p className="text-sm text-muted-foreground mb-4">Click the play button to resume preview</p>
+              <p className="text-sm text-muted-foreground mb-4">Content is disconnected to save resources</p>
               <button
                 onClick={handleTogglePause}
-                className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+                className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors flex items-center gap-2 mx-auto"
               >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
                 Resume Preview
               </button>
             </div>
@@ -1192,38 +1241,10 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
           allow="microphone *; camera *; geolocation *; accelerometer *; gyroscope *; magnetometer *; midi *; encrypted-media *"
         />
         
-        {/* Stagewise como componente flutuante SOBRE a página */}
-        {useStagewise && !isPaused && (
-          <iframe
-            ref={stagewiseRef}
-            src="http://localhost:5555/simple-toolbar.html"
-            className="absolute inset-0"
-            style={{
-              width: '100%',
-              height: '100%',
-              border: 'none',
-              background: 'transparent',
-              zIndex: 1000
-            }}
-            onLoad={(e) => {
-              // Envia project path para o Stagewise (não precisa mais da URL)
-              const stagewiseFrame = e.target;
-              if (stagewiseFrame.contentWindow) {
-                setTimeout(() => {
-                  stagewiseFrame.contentWindow.postMessage(
-                    { projectPath: projectPath },
-                    '*'
-                  );
-                }, 100);
-              }
-            }}
-            title="Stagewise Toolbar"
-          />
-        )}
       </div>
       
       {/* Element Selection Preview */}
-      {selectedElement && !useStagewise && (
+      {selectedElement && (
         <div className="absolute bottom-4 left-4 right-4 max-w-lg mx-auto bg-card border border-border rounded-lg shadow-xl p-4 z-50">
           <div className="flex justify-between items-start mb-2">
             <h3 className="text-sm font-semibold">Element Selected</h3>
@@ -1247,14 +1268,12 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
           <div className="mt-3 flex gap-2">
             <button
               onClick={() => {
-                // Send to Stagewise chat
-                if (window.opener || window.parent !== window) {
-                  window.parent.postMessage({
-                    type: 'element-context',
-                    data: selectedElement
-                  }, '*');
+                // Send to OverlayChat (our internal chat)
+                if (window.pushToOverlayChat) {
+                  // Send the complete element data, not just HTML
+                  window.pushToOverlayChat(selectedElement.html, selectedElement);
                 }
-                // Also set global context for Stagewise
+                // Set global context for compatibility
                 window.selectedElementContext = selectedElement;
                 setSelectedElement(null);
               }}
@@ -1275,6 +1294,9 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
           </div>
         </div>
       )}
+      
+      {/* OverlayChat - floating button for internal chat */}
+      <OverlayChat projectPath={projectPath} />
     </div>
   );
 }

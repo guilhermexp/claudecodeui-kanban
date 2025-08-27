@@ -9,6 +9,7 @@ function ResourceMonitor() {
     cpuUsage: 0
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
   const intervalRef = useRef(null);
   const isMountedRef = useRef(true);
 
@@ -40,14 +41,16 @@ function ResourceMonitor() {
       }
       
       console.log('[ResourceMonitor] Received data:', data);
+      const clamp = v => Math.max(0, Math.min(100, Math.round(v)));
       const newSystemInfo = {
         activePorts: data?.activePorts || [],
-        memoryUsage: data?.memoryUsage || 0,
-        cpuUsage: data?.cpuUsage || 0,
+        memoryUsage: clamp(data?.memoryUsage || 0),
+        cpuUsage: clamp(data?.cpuUsage || 0),
         ...data
       };
       console.log('[ResourceMonitor] Setting system info:', newSystemInfo);
       setSystemInfo(newSystemInfo);
+      setError(null);
     } catch (error) {
       console.error('[ResourceMonitor] Failed to fetch system info:', error);
       if (isMountedRef.current) {
@@ -56,6 +59,7 @@ function ResourceMonitor() {
           memoryUsage: 0,
           cpuUsage: 0
         });
+        setError('Failed to load system info');
       }
     } finally {
       if (isMountedRef.current) {
@@ -92,9 +96,8 @@ function ResourceMonitor() {
       // Fetch immediately
       fetchSystemInfo();
       
-      // Set up interval - NO CHECK INSIDE THE INTERVAL
-      // The interval will be cleared when isOpen changes
-      intervalRef.current = setInterval(fetchSystemInfo, 10000); // Increased to 10 seconds
+      // Poll every 8s for snappier updates (cleared on close)
+      intervalRef.current = setInterval(fetchSystemInfo, 8000);
       console.log('[ResourceMonitor] Interval created with ID:', intervalRef.current);
     } else {
       console.log('[ResourceMonitor] Panel closed - stopping monitoring');
@@ -182,6 +185,9 @@ function ResourceMonitor() {
           <div className="max-h-80 overflow-y-auto">
             {/* System Stats */}
             <div className="p-3 border-b border-border">
+              {error && (
+                <div className="mb-2 text-xs text-destructive">{error}</div>
+              )}
               <div className="flex justify-between items-center mb-2">
                 <span className="text-sm text-muted-foreground">Memory Usage</span>
                 <span className={`text-sm font-medium ${getMemoryColor()}`}>

@@ -44,6 +44,7 @@ import mime from 'mime-types';
 
 import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, deleteProjectCompletely, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } from './projects.js';
 import { spawnClaude, abortClaudeSession } from './claude-cli.js';
+import { spawnCodex } from './codex-cli.js';
 import gitRoutes from './routes/git.js';
 import authRoutes from './routes/auth.js';
 // import mcpRoutes from './routes/mcp.js'; // MCP removed - managed directly by Claude CLI
@@ -945,6 +946,89 @@ app.post('/api/files/create', authenticateToken, async (req, res) => {
   }
 });
 
+// Read file (binary) by absolute path - used by FileManager image preview/download
+app.get('/api/files/read', authenticateToken, async (req, res) => {
+  try {
+    const { path: filePath } = req.query;
+    if (!filePath || !path.isAbsolute(filePath)) {
+      return res.status(400).json({ error: 'Invalid file path' });
+    }
+    try {
+      await fsPromises.access(filePath);
+    } catch (e) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+    const mimeType = mime.lookup(filePath) || 'application/octet-stream';
+    res.setHeader('Content-Type', mimeType);
+    const stream = fs.createReadStream(filePath);
+    stream.pipe(res);
+    stream.on('error', err => {
+      console.error('Error streaming file:', err);
+      if (!res.headersSent) res.status(500).json({ error: 'Error reading file' });
+    });
+  } catch (error) {
+    console.error('Error in /api/files/read:', error);
+    if (!res.headersSent) res.status(500).json({ error: error.message });
+  }
+});
+
+// Rename a file or folder within a project
+app.post('/api/files/rename', authenticateToken, async (req, res) => {
+  try {
+    const { projectName, oldPath, newName } = req.body;
+    if (!projectName || !oldPath || !newName) {
+      return res.status(400).json({ error: 'projectName, oldPath and newName are required' });
+    }
+    const projectDir = await extractProjectDirectory(projectName).catch(() => null);
+    if (!projectDir) return res.status(404).json({ error: 'Project not found' });
+    if (!path.isAbsolute(oldPath)) return res.status(400).json({ error: 'oldPath must be absolute' });
+    const targetDir = path.dirname(oldPath);
+    const newPath = path.join(targetDir, newName);
+    // Ensure both old and new paths remain inside the project directory
+    const insideProject = p => path.resolve(p).startsWith(path.resolve(projectDir));
+    if (!insideProject(oldPath) || !insideProject(newPath)) {
+      return res.status(400).json({ error: 'Path outside project directory' });
+    }
+    await fsPromises.rename(oldPath, newPath);
+    res.json({ success: true, path: newPath });
+  } catch (error) {
+    console.error('Error renaming file/folder:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete a file or folder within a project
+app.delete('/api/files/delete', authenticateToken, async (req, res) => {
+  try {
+    const { projectName, path: targetPath } = req.body || {};
+    if (!projectName || !targetPath) {
+      return res.status(400).json({ error: 'projectName and path are required' });
+    }
+    const projectDir = await extractProjectDirectory(projectName).catch(() => null);
+    if (!projectDir) return res.status(404).json({ error: 'Project not found' });
+    if (!path.isAbsolute(targetPath)) return res.status(400).json({ error: 'path must be absolute' });
+    const resolved = path.resolve(targetPath);
+    if (!resolved.startsWith(path.resolve(projectDir))) {
+      return res.status(400).json({ error: 'Path outside project directory' });
+    }
+    let stats;
+    try {
+      stats = await fsPromises.stat(resolved);
+    } catch (e) {
+      return res.status(404).json({ error: 'File or folder not found' });
+    }
+    if (stats.isDirectory()) {
+      await fsPromises.rm(resolved, { recursive: true, force: true });
+    } else {
+      await fsPromises.unlink(resolved);
+    }
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting file/folder:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get('/api/projects/:projectName/files', authenticateToken, async (req, res) => {
   try {
     
@@ -1084,6 +1168,15 @@ function handleChatConnection(ws, request) {
         }
         
         await spawnClaude(data.command, data.options, ws);
+      } else if (data.type === 'codex-command') {
+        
+        // Register user's active project for smart broadcasting
+        if (data.options?.projectPath) {
+          const projectName = data.options.projectPath.split('/').pop();
+          registerUserProject(ws, projectName);
+        }
+        
+        await spawnCodex(data.command, data.options, ws);
       } else if (data.type === 'abort-session') {
         const success = abortClaudeSession(data.sessionId);
         ws.send(JSON.stringify({

@@ -1,6 +1,7 @@
 import express from 'express';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import os from 'os';
 const router = express.Router();
 
 const execAsync = promisify(exec);
@@ -273,78 +274,13 @@ async function getActivePorts() {
 
 async function getMemoryUsage() {
   try {
-    if (process.platform === 'darwin' || process.platform === 'linux') {
-      // Get memory info for Unix-like systems
-      let command;
-      if (process.platform === 'darwin') {
-        // macOS
-        command = 'vm_stat | head -n 10';
-      } else {
-        // Linux
-        command = 'free -m';
-      }
-      
-      const { stdout } = await execAsync(command);
-      
-      if (process.platform === 'darwin') {
-        // Parse macOS vm_stat output
-        const lines = stdout.split('\n');
-        let pageSize = 4096; // Default page size
-        let pagesUsed = 0;
-        let pagesTotal = 0;
-
-        for (const line of lines) {
-          if (line.includes('page size of')) {
-            const match = line.match(/(\d+) bytes/);
-            if (match) pageSize = parseInt(match[1]);
-          } else if (line.includes('Pages free:')) {
-            const match = line.match(/(\d+)\./);
-            if (match) pagesTotal += parseInt(match[1]);
-          } else if (line.includes('Pages active:') || line.includes('Pages inactive:') || 
-                     line.includes('Pages wired down:')) {
-            const match = line.match(/(\d+)\./);
-            if (match) {
-              pagesUsed += parseInt(match[1]);
-              pagesTotal += parseInt(match[1]);
-            }
-          }
-        }
-
-        if (pagesTotal > 0) {
-          return Math.round((pagesUsed / pagesTotal) * 100);
-        }
-      } else {
-        // Parse Linux free output
-        const lines = stdout.split('\n');
-        const memLine = lines.find(line => line.startsWith('Mem:'));
-        if (memLine) {
-          const parts = memLine.split(/\s+/);
-          const total = parseInt(parts[1]);
-          const used = parseInt(parts[2]);
-          if (total > 0) {
-            return Math.round((used / total) * 100);
-          }
-        }
-      }
-    } else if (process.platform === 'win32') {
-      // Windows
-      const { stdout } = await execAsync('wmic OS get TotalVisibleMemorySize,FreePhysicalMemory /value');
-      const lines = stdout.split('\n');
-      let total = 0, free = 0;
-      
-      for (const line of lines) {
-        if (line.includes('TotalVisibleMemorySize=')) {
-          total = parseInt(line.split('=')[1]);
-        } else if (line.includes('FreePhysicalMemory=')) {
-          free = parseInt(line.split('=')[1]);
-        }
-      }
-      
-      if (total > 0) {
-        return Math.round(((total - free) / total) * 100);
-      }
+    // Cross‑platform: prefer Node's os module for stability
+    const total = os.totalmem();
+    const free = os.freemem();
+    if (total > 0) {
+      const usedPct = Math.round(((total - free) / total) * 100);
+      return Math.max(0, Math.min(100, usedPct));
     }
-    
     return 0;
   } catch (error) {
     console.error('Error getting memory usage:', error);
