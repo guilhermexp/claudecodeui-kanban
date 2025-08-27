@@ -20,7 +20,7 @@ import {
   Command // Keyboard Command key
 } from 'lucide-react';
 import { getEnhancedProjectAnalysis } from './projectAnalyzer.js';
-import { api, authenticatedFetch } from './api';
+import { api } from './api';
 
 // Technology detection patterns based on files/dependencies
 const TECH_PATTERNS = {

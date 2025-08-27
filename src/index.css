@@ -859,14 +859,7 @@ body {
 
 /* Custom spinner animation for mobile compatibility */
 @layer utilities {
-  @keyframes spin {
-    from {
-      transform: rotate(0deg);
-    }
-    to {
-      transform: rotate(360deg);
-    }
-  }
+  /* spin animation already defined globally at line 59 */
   
   .animate-spin {
     animation: spin 1s linear infinite;
@@ -987,8 +980,9 @@ body {
     color: rgb(213 218 229) !important;
   }
   
-  /* Fade in animation */
-  @keyframes fade-in {
+  /* fade-in animation already defined at line 339 with different transform */
+  /* Using different name to avoid conflict */
+  @keyframes fade-in-scale {
     from {
       opacity: 0;
       transform: scale(0.8);

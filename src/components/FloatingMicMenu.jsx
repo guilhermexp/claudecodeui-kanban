@@ -60,7 +60,9 @@ export function FloatingMicMenu({ onTranscript }) {
         throw new Error('Microphone access not available. Please use HTTPS or a supported browser.');
       }
 
+      console.log('Requesting microphone permission...');
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      console.log('Microphone permission granted');
       streamRef.current = stream;
 
       const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4';
@@ -98,7 +100,9 @@ export function FloatingMicMenu({ onTranscript }) {
         }
         
         try {
+          console.log('Starting transcription, blob size:', blob.size);
           const text = await transcribeWithWhisper(blob);
+          console.log('Transcription completed, text:', text);
           if (text) {
             setTranscribedText(text);
             if (onTranscript) {
@@ -106,9 +110,12 @@ export function FloatingMicMenu({ onTranscript }) {
             }
           }
         } catch (err) {
+          console.error('Transcription error in FloatingMicMenu:', err);
           // Check for API key error
           if (err.message && err.message.includes('API key')) {
             setError('OpenAI API key não configurada. Configure OPENAI_API_KEY no servidor.');
+          } else if (err.message && err.message.includes('Access denied')) {
+            setError('Erro de autenticação. Por favor, faça login novamente.');
           } else {
             setError(err.message || 'Erro na transcrição');
           }
