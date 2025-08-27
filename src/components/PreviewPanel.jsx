@@ -107,6 +107,16 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
       if (event.data && event.data.type === 'console-capture-ready') {
         console.log('Console capture initialized for preview');
       }
+      
+      // Handle Stagewise button toggle for element selection
+      if (event.data && event.data.type === 'stagewise-toggle-selection') {
+        console.log('Stagewise requested element selection:', event.data.enabled);
+        if (event.data.enabled) {
+          setElementSelectionMode(true);
+        } else {
+          setElementSelectionMode(false);
+        }
+      }
     };
 
     window.addEventListener('message', handleMessage);
@@ -787,8 +797,8 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
             <button
               onClick={() => {
                 if (useStagewise) {
-                  // If using Stagewise, send a message to toggle selection there
-                  alert('Element selection in Stagewise mode coming soon!');
+                  // Show info that selection is controlled by Stagewise button
+                  alert('Use the purple button in the Stagewise toolbar below to select elements!');
                 } else {
                   // Normal element selection for regular preview
                   setElementSelectionMode(!elementSelectionMode);
@@ -797,9 +807,11 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
               className={`px-2 py-1 rounded-md transition-colors text-xs font-medium ${
                 elementSelectionMode 
                   ? 'bg-blue-500/20 text-blue-600 dark:text-blue-400 hover:bg-blue-500/30' 
+                  : useStagewise
+                  ? 'bg-gray-200 dark:bg-gray-700 opacity-50 cursor-not-allowed'
                   : 'bg-muted hover:bg-accent'
               }`}
-              title={elementSelectionMode ? "Element selection active - Click any element" : "Click to select elements"}
+              title={useStagewise ? "Use Stagewise toolbar button for selection" : elementSelectionMode ? "Element selection active - Click any element" : "Click to select elements"}
               disabled={useStagewise}
             >
               {elementSelectionMode ? '🎯 Click Element' : '🎯 Select Element'}
