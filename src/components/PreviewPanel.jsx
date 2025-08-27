@@ -14,6 +14,7 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
   const [elementSelectionMode, setElementSelectionMode] = useState(false); // Direct element selection
   const [selectedElement, setSelectedElement] = useState(null); // Captured element data
   const iframeRef = useRef(null);
+  const stagewiseRef = useRef(null);
   const logsRef = useRef(null);
 
   useEffect(() => {
@@ -22,6 +23,8 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
       setCurrentUrl(url);
       setIsLoading(true);
       setError(null);
+      // Clear logs when URL changes - new page means fresh error state
+      setLogs([]);
     }
     // If paused, just update the stored URL for when we resume
     else {
@@ -74,6 +77,14 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
   // Handle console messages from iframe via postMessage
   useEffect(() => {
     const handleMessage = (event) => {
+      // Debug all messages
+      if (event.data) {
+        console.log('📨 PreviewPanel got message:', event.data);
+        if (event.data.type === 'test-message') {
+          alert('📨 TEST MESSAGE RECEIVED FROM: ' + event.data.from);
+        }
+      }
+      
       // Validate origin is localhost
       try {
         const origin = new URL(event.origin);
@@ -97,10 +108,29 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
           filename: filename,
           line: line,
           column: column,
-          stack: stack
+          stack: stack,
+          count: 1
         };
         
-        setLogs(prev => [...prev.slice(-99), logEntry]); // Keep last 100 logs
+        setLogs(prev => {
+          // Check if the last error is identical (same message and location)
+          const lastLog = prev[prev.length - 1];
+          if (lastLog && 
+              lastLog.message === logEntry.message && 
+              lastLog.filename === logEntry.filename && 
+              lastLog.line === logEntry.line) {
+            // Increment count of the last error instead of adding duplicate
+            const updatedLogs = [...prev];
+            updatedLogs[updatedLogs.length - 1] = {
+              ...lastLog,
+              count: (lastLog.count || 1) + 1,
+              timestamp: logEntry.timestamp // Update timestamp to latest
+            };
+            return updatedLogs;
+          }
+          // Add new error, keeping only last 100 unique errors
+          return [...prev.slice(-99), logEntry];
+        });
       }
       
       // Handle console capture ready notification
@@ -111,6 +141,7 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
       // Handle Stagewise button toggle for element selection
       if (event.data && event.data.type === 'stagewise-toggle-selection') {
         console.log('🟣 Stagewise requested element selection:', event.data.enabled);
+        alert('🟣 FUNCIONOU! Stagewise pediu seleção: ' + event.data.enabled);
         setElementSelectionMode(event.data.enabled);
       }
     };
@@ -120,7 +151,7 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
     return () => {
       window.removeEventListener('message', handleMessage);
     };
-  }, []);
+  }, []); // Sem dependências - listener criado apenas uma vez
 
   // Inject console capture script when iframe loads
   useEffect(() => {
@@ -177,8 +208,8 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
                       }
                     }
                     
-                    // Only capture errors and warnings, not regular logs
-                    ['error', 'warn'].forEach(method => {
+                    // Only capture errors, not warnings or regular logs
+                    ['error'].forEach(method => {
                       console[method] = function(...args) {
                         originalConsole[method].apply(console, args);
                         try {
@@ -406,6 +437,8 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
     if (iframeRef.current && !isPaused) {
       setIsLoading(true);
       setError(null);
+      // Clear logs on refresh - errors will be re-captured if they still exist
+      setLogs([]);
       
       if (useStagewise) {
         // For Stagewise, send message to update URL with project path
@@ -451,6 +484,44 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
     setLogs([]);
   };
 
+  const refreshLogs = () => {
+    // Clear logs and re-inject console capture to get fresh state
+    setLogs([]);
+    if (iframeRef.current) {
+      // Force reload to clear any cached errors
+      iframeRef.current.src = iframeRef.current.src;
+    }
+  };
+
+  const copyLogsToClipboard = () => {
+    const errorText = logs.map(log => {
+      const count = log.count > 1 ? ` (${log.count}×)` : '';
+      const location = log.filename ? `\n  File: ${log.filename}:${log.line}:${log.column}` : '';
+      const stack = log.stack ? `\n  Stack: ${log.stack}` : '';
+      return `ERROR${count}: ${log.message}${location}${stack}`;
+    }).join('\n\n');
+
+    if (!errorText) {
+      alert('No errors to copy');
+      return;
+    }
+
+    navigator.clipboard.writeText(errorText).then(() => {
+      // Visual feedback
+      const button = document.querySelector('[data-copy-button]');
+      if (button) {
+        const originalText = button.textContent;
+        button.textContent = 'Copied!';
+        setTimeout(() => {
+          button.textContent = originalText;
+        }, 2000);
+      }
+    }).catch(err => {
+      console.error('Failed to copy:', err);
+      alert('Failed to copy to clipboard');
+    });
+  };
+
   // Close logs dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -478,10 +549,10 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
         setElementSelectionMode(false);
         
         // If Stagewise is enabled, send element context to the toolbar
-        if (useStagewise && iframeRef.current) {
+        if (useStagewise && stagewiseRef.current) {
           // Send to Stagewise toolbar iframe
-          const stagewiseFrame = iframeRef.current;
-          if (stagewiseFrame.contentWindow) {
+          const stagewiseFrame = stagewiseRef.current;
+          if (stagewiseFrame && stagewiseFrame.contentWindow) {
             stagewiseFrame.contentWindow.postMessage({
               type: 'element-context',
               data: event.data.data
@@ -501,9 +572,14 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
     
     // Inject selection script after a delay
     const timer = setTimeout(() => {
+      console.log('🎯 Element selection useEffect check:');
+      console.log('  - elementSelectionMode:', elementSelectionMode);
+      console.log('  - useStagewise:', useStagewise);
+      console.log('  - iframeRef.current exists:', !!iframeRef.current);
+      
       if (iframeRef.current && elementSelectionMode) {
         const iframe = iframeRef.current;
-        console.log('Activating element selector, iframe URL:', iframe.src);
+        console.log('🎯 Activating element selector, iframe URL:', iframe.src);
         
         // SIMPLES: Sempre tenta injetar no iframe principal (que agora sempre é a aplicação)
         try {
@@ -779,14 +855,16 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
             {/* Stagewise Toggle */}
             <button
               onClick={() => setUseStagewise(!useStagewise)}
-              className={`px-2 py-1 rounded-md transition-colors text-xs font-medium ${
+              className={`p-1.5 rounded-md transition-colors ${
                 useStagewise 
                   ? 'bg-purple-500/20 text-purple-600 dark:text-purple-400 hover:bg-purple-500/30' 
-                  : 'bg-muted hover:bg-accent'
+                  : 'hover:bg-accent'
               }`}
-              title={useStagewise ? "Using Stagewise AI toolbar" : "Click to enable Stagewise AI toolbar"}
+              title={useStagewise ? "Disable Stagewise AI mode" : "Enable Stagewise AI mode"}
             >
-              {useStagewise ? '🤖 Stagewise ON' : '🤖 Stagewise OFF'}
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
             </button>
             
             {/* Element Selection Toggle - Works with both modes */}
@@ -800,20 +878,22 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
                   setElementSelectionMode(!elementSelectionMode);
                 }
               }}
-              className={`px-2 py-1 rounded-md transition-colors text-xs font-medium ${
+              className={`p-1.5 rounded-md transition-colors ${
                 elementSelectionMode 
                   ? 'bg-blue-500/20 text-blue-600 dark:text-blue-400 hover:bg-blue-500/30' 
                   : useStagewise
-                  ? 'bg-gray-200 dark:bg-gray-700 opacity-50 cursor-not-allowed'
-                  : 'bg-muted hover:bg-accent'
+                  ? 'opacity-50 cursor-not-allowed'
+                  : 'hover:bg-accent'
               }`}
               title={useStagewise ? "Use Stagewise toolbar button for selection" : elementSelectionMode ? "Element selection active - Click any element" : "Click to select elements"}
               disabled={useStagewise}
             >
-              {elementSelectionMode ? '🎯 Click Element' : '🎯 Select Element'}
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2z" />
+              </svg>
             </button>
             
-            {/* Microphone Permission Button */}
+            {/* Microphone Permission Button - Hidden but functional */}
             <button
               onClick={() => {
                 if (microphoneStatus === 'prompt' || microphoneStatus === 'denied') {
@@ -822,32 +902,9 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
                   requestMicrophonePermission();
                 }
               }}
-              className={`p-1.5 rounded-md transition-colors relative ${
-                microphoneStatus === 'granted' 
-                  ? 'text-green-500 hover:bg-green-500/10' 
-                  : microphoneStatus === 'denied'
-                  ? 'text-red-500 hover:bg-red-500/10'
-                  : microphoneStatus === 'requesting'
-                  ? 'text-yellow-500 hover:bg-yellow-500/10'
-                  : 'hover:bg-accent'
-              }`}
-              title={
-                microphoneStatus === 'granted' 
-                  ? "Microphone permission granted" 
-                  : microphoneStatus === 'denied'
-                  ? "Microphone permission denied - click to request"
-                  : microphoneStatus === 'requesting'
-                  ? "Requesting microphone permission..."
-                  : "Request microphone permission"
-              }
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-              </svg>
-              {microphoneStatus === 'denied' && (
-                <span className="absolute -top-1 -right-1 bg-red-500 rounded-full w-2 h-2"></span>
-              )}
-            </button>
+              className="hidden"
+              aria-hidden="true"
+            />
 
             <button
               onClick={handleTogglePause}
@@ -876,26 +933,22 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
               </svg>
             </button>
             
-            {/* Error Console Button with Dropdown - Only show if there are errors */}
+            {/* Error Console Button - Only highlight if there are errors */}
             <div className="relative" ref={logsRef}>
               <button
                 onClick={() => setShowLogs(!showLogs)}
                 className={`p-1.5 hover:bg-accent rounded-md transition-colors relative ${
-                  logs.filter(l => l.type === 'error').length > 0 
+                  logs.length > 0 
                     ? 'text-red-500 animate-pulse' 
-                    : logs.length > 0 
-                    ? 'text-yellow-500' 
                     : 'text-muted-foreground opacity-50'
                 }`}
-                title={`Console errors (${logs.filter(l => l.type === 'error').length}) / warnings (${logs.filter(l => l.type === 'warn').length})`}
+                title={`Console Errors (${logs.length})`}
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 {logs.length > 0 && (
-                  <span className={`absolute -top-1 -right-1 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center ${
-                    logs.filter(l => l.type === 'error').length > 0 ? 'bg-red-500' : 'bg-yellow-500'
-                  }`}>
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
                     {logs.length > 99 ? '99+' : logs.length}
                   </span>
                 )}
@@ -906,38 +959,61 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
                 <div className="absolute right-0 mt-2 w-96 max-h-96 bg-card border border-border rounded-lg shadow-lg overflow-hidden z-50">
                   <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-muted/50">
                     <span className="text-sm font-medium">
-                      Console Errors & Warnings ({logs.filter(l => l.type === 'error').length} errors, {logs.filter(l => l.type === 'warn').length} warnings)
+                      Console Errors ({logs.length} {logs.length === 1 ? 'error' : 'errors'})
                     </span>
-                    <button
-                      onClick={clearLogs}
-                      className="text-xs px-2 py-1 hover:bg-accent rounded transition-colors"
-                    >
-                      Clear
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={refreshLogs}
+                        className="text-xs px-2 py-1 hover:bg-accent rounded transition-colors flex items-center gap-1"
+                        title="Refresh errors"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        Refresh
+                      </button>
+                      <button
+                        onClick={copyLogsToClipboard}
+                        className="text-xs px-2 py-1 hover:bg-accent rounded transition-colors flex items-center gap-1"
+                        data-copy-button
+                        title="Copy all errors to clipboard"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                        Copy
+                      </button>
+                      <button
+                        onClick={clearLogs}
+                        className="text-xs px-2 py-1 hover:bg-accent rounded transition-colors"
+                        title="Clear all errors"
+                      >
+                        Clear
+                      </button>
+                    </div>
                   </div>
                   <div className="overflow-y-auto max-h-80 p-2 space-y-1">
                     {logs.length === 0 ? (
                       <div className="text-center py-4 text-muted-foreground text-sm">
-                        No errors or warnings detected
+                        No errors detected
                       </div>
                     ) : (
                       logs.map((log, index) => (
                         <div
                           key={index}
-                          className={`p-2 rounded text-xs font-mono ${
-                            log.type === 'error'
-                              ? 'bg-red-500/10 border border-red-500/20 text-red-400'
-                              : log.type === 'warn'
-                              ? 'bg-yellow-500/10 border border-yellow-500/20 text-yellow-400'
-                              : 'bg-accent/50 border border-border text-foreground'
-                          }`}
+                          className="p-2 rounded text-xs font-mono bg-red-500/10 border border-red-500/20 text-red-400"
                         >
                           <div className="flex items-start justify-between gap-2 mb-1">
-                            <span className={`uppercase text-xs font-bold ${
-                              log.type === 'error' ? 'text-red-500' : 'text-yellow-500'
-                            }`}>
-                              {log.type === 'error' ? '⚠️ ERROR' : '⚠️ WARNING'}
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="uppercase text-xs font-bold text-red-500">
+                                ⚠️ ERROR
+                              </span>
+                              {log.count > 1 && (
+                                <span className="px-1.5 py-0.5 bg-red-500/20 text-red-400 rounded-full text-xs font-bold">
+                                  {log.count}×
+                                </span>
+                              )}
+                            </div>
                             <span className="text-muted-foreground text-xs">{log.timestamp}</span>
                           </div>
                           <div className="break-all whitespace-pre-wrap font-medium">{log.message}</div>
@@ -1119,25 +1195,23 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
         {/* Stagewise como componente flutuante SOBRE a página */}
         {useStagewise && !isPaused && (
           <iframe
+            ref={stagewiseRef}
             src="http://localhost:5555/simple-toolbar.html"
-            className="absolute bottom-4 left-1/2 transform -translate-x-1/2"
+            className="absolute inset-0"
             style={{
-              width: '90%',
-              maxWidth: '800px',
-              height: '400px',
+              width: '100%',
+              height: '100%',
               border: 'none',
-              borderRadius: '12px',
-              boxShadow: '0 10px 40px rgba(0,0,0,0.2)',
-              background: 'white',
+              background: 'transparent',
               zIndex: 1000
             }}
             onLoad={(e) => {
-              // Envia URL e project path para o Stagewise carregar no seu iframe interno
+              // Envia project path para o Stagewise (não precisa mais da URL)
               const stagewiseFrame = e.target;
               if (stagewiseFrame.contentWindow) {
                 setTimeout(() => {
                   stagewiseFrame.contentWindow.postMessage(
-                    { type: 'loadUrl', url: currentUrl, projectPath: projectPath },
+                    { projectPath: projectPath },
                     '*'
                   );
                 }, 100);

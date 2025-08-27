@@ -11,26 +11,27 @@
       box-sizing: border-box;
     }
     
+    html {
+      background: transparent !important;
+    }
+    
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
         'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
         sans-serif;
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
-      background: transparent;
-      width: 100vw;
-      height: 100vh;
-      position: relative;
+      background: transparent !important;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      pointer-events: none; /* Permite clicar através do body */
+      width: 100%;
+      height: 100%;
     }
     
     #user-app-iframe {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      border: none;
-      background: white;
+      display: none; /* Esconde o iframe interno do Stagewise - não precisamos mais dele */
     }
     
     /* Stagewise Toolbar Styles */
@@ -48,6 +49,7 @@
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2) !important;
       z-index: 2147483647 !important;
       border: 1px solid rgba(0, 0, 0, 0.1) !important;
+      pointer-events: auto !important; /* Toolbar pode ser clicado */
     }
     
     .toolbar-button {
@@ -97,6 +99,7 @@
       display: none;
       flex-direction: column;
       z-index: 999998;
+      pointer-events: auto !important; /* Chat panel pode ser clicado */
     }
     
     .chat-panel.open {
@@ -222,12 +225,7 @@
   </style>
 </head>
 <body>
-  <!-- User app iframe -->
-  <iframe 
-    id="user-app-iframe" 
-    src="about:blank"
-    title="User Application">
-  </iframe>
+  <!-- No iframe needed - this is just an overlay -->
 
   <!-- Stagewise Toolbar -->
   <div class="stagewise-toolbar">
@@ -383,112 +381,7 @@
       messagesEl.scrollTop = messagesEl.scrollHeight;
     }
     
-    // Load URL in iframe
-    function loadInIframe(url) {
-      const iframe = document.getElementById('user-app-iframe');
-      iframe.src = url;
-      
-      // Injeta script de seleção após carregar
-      iframe.onload = () => {
-        try {
-          const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-          if (iframeDoc) {
-            injectSelectionScript(iframeDoc);
-          }
-        } catch (e) {
-          console.log('Não foi possível injetar script de seleção devido a restrições cross-origin');
-        }
-      };
-    }
-    
-    // Injeta script de seleção no iframe
-    function injectSelectionScript(iframeDoc) {
-      const script = iframeDoc.createElement('script');
-      script.textContent = `
-        (function() {
-          let isSelectionMode = false;
-          let hoverElement = null;
-          
-          // Escuta mensagens do parent
-          window.addEventListener('message', function(event) {
-            console.log('🟣 App iframe received message:', event.data.type);
-            
-            // Aceita ambos os tipos de mensagem
-            if (event.data.type === 'enableSelection' || 
-                (event.data.type === 'enable-element-selection' && event.data.enabled)) {
-              isSelectionMode = true;
-              document.body.style.cursor = 'crosshair';
-              addSelectionListeners();
-              console.log('🟣 Selection mode ACTIVATED in app iframe');
-            } else if (event.data.type === 'disableSelection' || 
-                      (event.data.type === 'enable-element-selection' && !event.data.enabled)) {
-              isSelectionMode = false;
-              document.body.style.cursor = '';
-              removeSelectionListeners();
-              console.log('🟣 Selection mode DEACTIVATED in app iframe');
-            }
-          });
-          
-          function addSelectionListeners() {
-            document.addEventListener('mouseover', handleHover, true);
-            document.addEventListener('click', handleClick, true);
-          }
-          
-          function removeSelectionListeners() {
-            document.removeEventListener('mouseover', handleHover, true);
-            document.removeEventListener('click', handleClick, true);
-            if (hoverElement) {
-              hoverElement.style.outline = '';
-              hoverElement = null;
-            }
-          }
-          
-          function handleHover(e) {
-            if (!isSelectionMode) return;
-            
-            if (hoverElement && hoverElement !== e.target) {
-              hoverElement.style.outline = '';
-            }
-            
-            hoverElement = e.target;
-            hoverElement.style.outline = '2px solid #667eea';
-          }
-          
-          function handleClick(e) {
-            if (!isSelectionMode) return;
-            
-            // Impede TOTALMENTE o clique de propagar
-            e.preventDefault();
-            e.stopPropagation();
-            e.stopImmediatePropagation();
-            
-            const element = e.target;
-            const info = {
-              tag: element.tagName,
-              id: element.id,
-              classes: element.className,
-              text: element.textContent?.substring(0, 100)
-            };
-            
-            console.log('🟣 Element clicked in selection mode:', info);
-            
-            // Envia informação do elemento para o parent
-            window.parent.postMessage({
-              type: 'elementSelected',
-              element: info
-            }, '*');
-            
-            // Desativa seleção após clicar
-            isSelectionMode = false;
-            document.body.style.cursor = '';
-            removeSelectionListeners();
-            
-            return false;
-          }
-        })();
-      `;
-      iframeDoc.head.appendChild(script);
-    }
+    // Função removida - não temos mais iframe para carregar
     
     // UI Event handlers
     document.getElementById('chat-button').onclick = () => {
@@ -507,6 +400,7 @@
     let selectedElements = [];
     
     document.getElementById('select-button').onclick = () => {
+      console.log('🟣 STAGEWISE: Select button clicked!');
       isSelecting = !isSelecting;
       document.getElementById('select-button').classList.toggle('active', isSelecting);
       
@@ -514,15 +408,18 @@
         // Mostra mensagem de seleção ativa
         displayMessage('🎯 Modo de seleção ativado - Clique em qualquer elemento na página', 'system');
         
-        // Notifica o parent (PreviewPanel) para ativar a seleção de elementos
+        // Envia mensagem para o PreviewPanel ativar a seleção
+        console.log('🟣 STAGEWISE: Sending activation message to parent');
         window.parent.postMessage({ 
           type: 'stagewise-toggle-selection',
           enabled: true 
         }, '*');
+        
       } else {
         displayMessage('Modo de seleção desativado', 'system');
         
-        // Notifica o parent para desativar a seleção
+        // Envia mensagem para desativar seleção
+        console.log('🟣 STAGEWISE: Sending deactivation message to parent');
         window.parent.postMessage({ 
           type: 'stagewise-toggle-selection',
           enabled: false 
@@ -542,96 +439,30 @@
     };
     
     document.getElementById('home-button').onclick = () => {
-      loadInIframe('http://localhost:5173');
+      // Home button não faz nada agora - somos apenas um overlay
+      console.log('Home button clicked - we are just an overlay');
     };
     
     // Listen for messages
     window.addEventListener('message', (event) => {
-      // Mensagem para carregar URL
-      if (event.data.type === 'loadUrl') {
-        loadInIframe(event.data.url);
-        // Store project path if provided
-        if (event.data.projectPath) {
-          currentProjectPath = event.data.projectPath;
-          console.log('Updated project path:', currentProjectPath);
-        }
+      // Store project path if provided
+      if (event.data.projectPath) {
+        currentProjectPath = event.data.projectPath;
+        console.log('Updated project path:', currentProjectPath);
       }
       
-      // SIMPLES: Ativa seleção quando recebe mensagem do PreviewPanel
-      if (event.data.type === 'activate-element-selection') {
-        console.log('Stagewise received activation request');
-        const appIframe = document.getElementById('user-app-iframe');
-        if (appIframe && appIframe.contentWindow) {
-          // Apenas repassa a mensagem para o iframe da aplicação
-          appIframe.contentWindow.postMessage({
-            type: 'enable-element-selection',
-            enabled: true
-          }, '*');
-        }
-      }
-      
-      // Forward element selection message to app iframe
-      if (event.data.type === 'forward-to-app-iframe') {
-        const appIframe = document.getElementById('user-app-iframe');
-        console.log('🟣 Stagewise received forward request, app iframe exists:', !!appIframe);
-        if (appIframe && appIframe.contentWindow) {
-          console.log('🟣 Forwarding to app iframe:', event.data.message);
-          appIframe.contentWindow.postMessage(event.data.message, '*');
-          
-          // Também tenta injetar diretamente se possível
-          try {
-            const iframeDoc = appIframe.contentDocument;
-            if (iframeDoc && event.data.message.type === 'enable-element-selection' && event.data.message.enabled) {
-              console.log('🟣 Attempting direct injection in app iframe');
-              // Verifica se o script já foi injetado
-              if (!iframeDoc.querySelector('#stagewise-listener')) {
-                injectSelectionScript(iframeDoc);
-                console.log('🟣 Selection script injected successfully');
-              }
-            }
-          } catch (e) {
-            console.log('🟣 Cannot access app iframe directly (CORS), relying on postMessage');
-          }
-        } else {
-          console.error('🟣 App iframe not found or not accessible!');
-        }
-      }
-      
-      // Receive element context from parent (new element selection)
+      // Receive element context from parent (when element is selected)
       if (event.data.type === 'element-context') {
         const element = event.data.data;
         if (element) {
           window.selectedElementContext = element;
-          displayMessage(`✅ Element context received: <${element.tag}> ready to send with next message`, 'system');
+          displayMessage(`✅ Element selected: <${element.tag}> ready to send with next message`, 'system');
           
           // Desativa o modo de seleção automaticamente após receber elemento
           if (isSelecting) {
             isSelecting = false;
             document.getElementById('select-button').classList.remove('active');
           }
-        }
-      }
-      
-      // Mensagem de elemento selecionado do iframe
-      if (event.data.type === 'elementSelected') {
-        const element = event.data.element;
-        const message = `✅ Elemento selecionado: <${element.tag}${element.id ? ' id="' + element.id + '"' : ''}${element.classes ? ' class="' + element.classes + '"' : ''}>`;
-        displayMessage(message, 'system');
-        
-        // Desativa modo de seleção
-        isSelecting = false;
-        document.getElementById('select-button').classList.remove('active');
-        
-        // Tenta desativar no iframe
-        const iframe = document.getElementById('user-app-iframe');
-        if (iframe && iframe.contentWindow) {
-          iframe.contentWindow.postMessage({ type: 'disableSelection' }, '*');
-        }
-        
-        // Adiciona contexto do elemento para o chat
-        if (isConnected && ws) {
-          // Podemos enviar contexto do elemento selecionado junto com próxima mensagem
-          window.selectedElementContext = element;
         }
       }
     });
@@ -641,11 +472,16 @@
       window.parent.postMessage({ type: 'toolbarReady' }, '*');
     }
     
-    // Initialize WebSocket and load default URL
+    // Initialize WebSocket only (we're just an overlay)
     initWebSocket();
-    setTimeout(() => {
-      loadInIframe('http://localhost:5173');
-    }, 500);
+    
+    // Log that Stagewise loaded successfully
+    console.log('🟣 STAGEWISE LOADED SUCCESSFULLY!');
+    console.log('🟣 Select button exists:', !!document.getElementById('select-button'));
+    
+    // TEST: Send a test message immediately
+    console.log('🟣 TEST: Sending test message to parent');
+    window.parent.postMessage({ type: 'test-message', from: 'stagewise' }, '*');
   </script>
 </body>
 </html>

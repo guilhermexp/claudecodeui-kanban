@@ -60,6 +60,7 @@ function MainContent({
   const [shellResizeTrigger, setShellResizeTrigger] = useState(0);
   // Panel states - only one can be open at a time
   const [activeSidePanel, setActiveSidePanel] = useState(null); // 'files' | 'git' | 'tasks' | 'dashboard' | null
+  const [hasPreviewOpen, setHasPreviewOpen] = useState(false); // Track if preview is open
   // Shell terminals state removed - single terminal mode only
 
   // Notify parent component about active side panel changes
@@ -465,8 +466,9 @@ function MainContent({
       <div className="flex-1 min-h-0 flex relative">
         {/* Shell Area - Always visible, shrinks when panels open */}
         <div 
-          className={`flex-1 min-h-0 flex flex-col transition-all duration-300 px-2 md:px-4 ${
-            activeSidePanel ? 'mr-96 sm:mr-[440px] md:mr-[520px] lg:mr-[600px]' : ''
+          className={`min-h-0 flex flex-col transition-all duration-300 px-2 md:px-4 ${
+            activeSidePanel && hasPreviewOpen ? 'w-[calc(100%-12rem)] sm:w-[calc(100%-14rem)] md:w-[calc(100%-16rem)]' : 
+            activeSidePanel ? 'w-[calc(100%-24rem)] sm:w-[calc(100%-27.5rem)] md:w-[calc(100%-32.5rem)]' : 'flex-1'
           }`}
         >
           <div className="h-full overflow-hidden mt-2">
@@ -480,6 +482,8 @@ function MainContent({
                 onSessionStateChange={handleShellSessionStateChange}
                 isMobile={isMobile}
                 resizeTrigger={shellResizeTrigger}
+                activeSidePanel={activeSidePanel}
+                onPreviewStateChange={setHasPreviewOpen}
                 onSidebarClose={() => {
                   if (sidebarOpen && onSidebarOpen) {
                     onSidebarOpen(); // This toggles the sidebar (closes it when open)
@@ -496,8 +500,10 @@ function MainContent({
           <>
             {/* Files Panel */}
             <div 
-              className={`absolute top-0 right-0 h-full w-96 sm:w-[440px] md:w-[520px] lg:w-[600px] bg-background shadow-xl transform transition-transform duration-300 ease-in-out ${
+              className={`absolute top-0 right-0 h-full bg-background shadow-xl transform transition-transform duration-300 ease-in-out ${
                 activeSidePanel === 'files' ? 'translate-x-0' : 'translate-x-full'
+              } ${
+                activeSidePanel === 'files' && hasPreviewOpen ? 'w-48 sm:w-56 md:w-64' : 'w-96 sm:w-[440px] md:w-[520px]'
               }`}
             >
               <div className="h-full flex flex-col">
@@ -533,8 +539,10 @@ function MainContent({
 
             {/* Git Panel */}
             <div 
-              className={`absolute top-0 right-0 h-full w-96 sm:w-[440px] md:w-[520px] lg:w-[600px] bg-background shadow-xl transform transition-transform duration-300 ease-in-out ${
+              className={`absolute top-0 right-0 h-full bg-background shadow-xl transform transition-transform duration-300 ease-in-out ${
                 activeSidePanel === 'git' ? 'translate-x-0' : 'translate-x-full'
+              } ${
+                activeSidePanel === 'git' && hasPreviewOpen ? 'w-48 sm:w-56 md:w-64' : 'w-96 sm:w-[440px] md:w-[520px]'
               }`}
             >
               <div className="h-full flex flex-col">
@@ -557,8 +565,10 @@ function MainContent({
 
             {/* Tasks Panel */}
             <div 
-              className={`absolute top-0 right-0 h-full w-96 sm:w-[440px] md:w-[520px] lg:w-[600px] bg-background shadow-xl transform transition-transform duration-300 ease-in-out ${
+              className={`absolute top-0 right-0 h-full bg-background shadow-xl transform transition-transform duration-300 ease-in-out ${
                 activeSidePanel === 'tasks' ? 'translate-x-0' : 'translate-x-full'
+              } ${
+                activeSidePanel === 'tasks' && hasPreviewOpen ? 'w-48 sm:w-56 md:w-64' : 'w-96 sm:w-[440px] md:w-[520px]'
               }`}
             >
               <VibeTaskPanel isVisible={activeSidePanel === 'tasks'} onClose={() => setActiveSidePanel(null)} />
@@ -566,8 +576,10 @@ function MainContent({
 
             {/* Dashboard Panel */}
             <div 
-              className={`absolute top-0 right-0 h-full w-96 sm:w-[440px] md:w-[520px] lg:w-[600px] bg-background shadow-xl transform transition-transform duration-300 ease-in-out ${
+              className={`absolute top-0 right-0 h-full bg-background shadow-xl transform transition-transform duration-300 ease-in-out ${
                 activeSidePanel === 'dashboard' ? 'translate-x-0' : 'translate-x-full'
+              } ${
+                activeSidePanel === 'dashboard' && hasPreviewOpen ? 'w-48 sm:w-56 md:w-64' : 'w-96 sm:w-[440px] md:w-[520px]'
               }`}
             >
               <div className="h-full flex flex-col">
