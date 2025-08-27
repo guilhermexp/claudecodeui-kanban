@@ -10,7 +10,6 @@ import {
   MessageSquare,
   Zap,
   RefreshCw,
-  Calendar,
   Brain,
   Database
 } from 'lucide-react';

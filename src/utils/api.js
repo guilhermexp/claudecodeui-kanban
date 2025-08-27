@@ -13,6 +13,9 @@ export const authenticatedFetch = (url, options = {}) => {
   
   if (token) {
     defaultHeaders['Authorization'] = `Bearer ${token}`;
+    console.log('Auth token being sent with request to:', url);
+  } else {
+    console.warn('No auth token available for request to:', url);
   }
   
   // Ensure URL is properly formatted

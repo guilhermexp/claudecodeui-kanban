@@ -270,7 +270,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   };
 
   const detectUrlsInTerminal = () => {
-    if (!terminal.current) return;
+    if (!terminal.current) return new Set();
     
     const urls = new Set();
     const patterns = [
@@ -299,6 +299,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     }
     
     setDetectedUrls(urls);
+    return urls;
   };
   
   // Scroll to bottom functionality
@@ -1936,7 +1937,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   return (
     <PanelGroup direction="horizontal" className="h-full w-full flex gap-3">
       {/* Terminal Panel - Always present */}
-      <Panel defaultSize={showPreview && !isMobile ? 30 : 100} minSize={20} className="h-full">
+      <Panel defaultSize={showPreview && !isMobile ? 25 : 100} minSize={25} className="h-full">
         <div 
           className="h-full min-h-0 flex flex-col bg-card rounded-xl border border-border" 
           {...dropzoneProps}>
@@ -1985,17 +1986,17 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
                     </svg>
                   </button>
                   
-                  {/* Bypass Permissions Toggle - adaptive text visibility */}
+                  {/* Bypass Permissions Toggle - Minimalista */}
                   <button
                     onClick={toggleBypassPermissions}
-                    className={`px-1 sm:px-2 lg:px-3 py-1 text-xs rounded flex items-center space-x-1 transition-all duration-200 flex-shrink-0 ${
+                    className={`p-1.5 rounded-md transition-all duration-200 ${
                       isBypassingPermissions 
-                        ? 'bg-yellow-600 text-white hover:bg-yellow-700' 
-                        : 'bg-muted text-muted-foreground hover:bg-accent'
+                        ? 'bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30' 
+                        : 'hover:bg-accent text-muted-foreground hover:text-foreground'
                     }`}
-                    title={isBypassingPermissions ? "Disable bypass permissions" : "Enable bypass permissions"}
+                    title={isBypassingPermissions ? "Bypass permissions enabled (sudo mode)" : "Enable bypass permissions (sudo mode)"}
                   >
-                    <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
                         d={isBypassingPermissions 
                           ? "M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" 
@@ -2003,13 +2004,40 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
                         } 
                       />
                     </svg>
-                    <span className="hidden lg:inline whitespace-nowrap text-xs">
-                      {isBypassingPermissions ? 'Bypass ON' : 'Bypass OFF'}
-                    </span>
                   </button>
+                  
+                  {/* Preview Toggle Button */}
+                  {!isMobile && (
+                    <button
+                      onClick={() => {
+                        if (showPreview) {
+                          setShowPreview(false);
+                          setPreviewUrl('');
+                        } else {
+                          // Try to detect URL from terminal or use default
+                          const urls = detectUrlsInTerminal() || new Set();
+                          const firstUrl = urls.size > 0 ? Array.from(urls)[0] : 'http://localhost:3000';
+                          setPreviewUrl(firstUrl);
+                          setShowPreview(true);
+                        }
+                      }}
+                      className={`p-1 sm:p-1.5 text-xs rounded transition-all duration-200 flex-shrink-0 ${
+                        showPreview 
+                          ? 'text-blue-500 hover:text-blue-600 bg-blue-500/10 hover:bg-blue-500/20' 
+                          : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                      }`}
+                      title={showPreview ? "Close preview panel" : "Open preview panel"}
+                    >
+                      <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                          d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" 
+                        />
+                      </svg>
+                    </button>
+                  )}
             
             {/* Preview Close Button - Only shows when preview is open */}
-            {!isMobile && showPreview && (
+            {false && !isMobile && showPreview && (
               <button
               onClick={() => {
                 setShowPreview(false);
@@ -2027,13 +2055,12 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
             {isConnected && (
               <button
                 onClick={disconnectFromShell}
-                className="px-1 sm:px-2 lg:px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 flex items-center space-x-1 transition-all duration-200 flex-shrink-0"
+                className="p-1.5 rounded-md bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-all duration-200"
                 title="Disconnect from shell"
               >
-                <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
-                <span className="hidden lg:inline whitespace-nowrap">Disconnect</span>
               </button>
             )}
             
@@ -2068,7 +2095,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
         </PanelResizeHandle>
         
         {/* Preview Panel */}
-        <Panel defaultSize={70} minSize={30} className="h-full">
+        <Panel defaultSize={75} minSize={30} className="h-full">
           <PreviewPanel
             url={previewUrl}
             onClose={() => setShowPreview(false)}
