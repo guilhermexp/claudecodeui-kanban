@@ -474,10 +474,10 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     if (terminal.current) {
       const themes = {
         dark: {
-          background: '#0d0d0d',
+          background: '#000000',
           foreground: '#f2f2f2',
           cursor: '#ffffff',
-          cursorAccent: '#0d0d0d',
+          cursorAccent: '#000000',
           selection: '#333333',
           selectionForeground: '#ffffff',
         },
@@ -853,10 +853,10 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     // Terminal theme configurations
     const themes = {
       dark: {
-        background: '#0d0d0d',
+        background: '#000000',
         foreground: '#f2f2f2',
         cursor: '#ffffff',
-        cursorAccent: '#0d0d0d',
+        cursorAccent: '#000000',
         selection: '#333333',
         selectionForeground: '#ffffff',
       },
@@ -1791,14 +1791,14 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       
       {/* Loading state */}
       {!isInitialized && (
-        <div className="absolute inset-0 flex items-center justify-center bg-card bg-opacity-90">
+        <div className="absolute inset-0 flex items-center justify-center bg-background bg-opacity-90">
           <div className="text-white text-sm sm:text-base">Loading terminal...</div>
         </div>
       )}
       
       {/* Connect button when not connected */}
       {isInitialized && !isConnected && !isConnecting && (
-        <div className="absolute inset-0 flex items-center justify-center bg-card bg-opacity-90 p-3 sm:p-4">
+        <div className="absolute inset-0 flex items-center justify-center bg-background bg-opacity-90 p-3 sm:p-4">
           <div className="text-center max-w-sm w-full">
             <button
               onClick={connectToShell}
@@ -1836,7 +1836,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       
       {/* Connecting state */}
       {isConnecting && (
-        <div className="absolute inset-0 flex items-center justify-center bg-card bg-opacity-90 p-3 sm:p-4">
+        <div className="absolute inset-0 flex items-center justify-center bg-background bg-opacity-90 p-3 sm:p-4">
           <div className="text-center max-w-sm w-full">
             <div className="flex items-center justify-center space-x-2 sm:space-x-3 text-warning">
               <div className="w-5 h-5 sm:w-6 sm:h-6 animate-spin rounded-full border-2 border-warning border-t-transparent"></div>
@@ -1851,7 +1851,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
 
       {/* Search Bar */}
       {showSearch && (
-        <div className="absolute top-4 right-4 z-20 bg-card border border-border rounded-lg shadow-lg p-2 flex items-center space-x-2">
+        <div className="absolute top-4 right-4 z-20 bg-background border border-border rounded-lg shadow-lg p-2 flex items-center space-x-2">
           <input
             ref={searchInputRef}
             type="text"
@@ -1972,7 +1972,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       >
         <div 
           ref={terminalPanelRef}
-          className="h-full min-h-0 flex flex-col bg-card rounded-xl border border-border" 
+          className="h-full min-h-0 flex flex-col bg-background rounded-xl border border-border" 
           {...dropzoneProps}>
           <input {...inputProps} />
             {/* Status Bar (aligned with Files header) */}

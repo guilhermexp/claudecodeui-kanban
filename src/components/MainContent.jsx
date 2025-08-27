@@ -22,6 +22,9 @@ import ResourceMonitor from './ResourceMonitor';
 import ErrorBoundary from './ErrorBoundary';
 import { TextShimmer } from './ui/text-shimmer';
 import { ConfigProvider } from './vibe-kanban/config-provider';
+import ProjectsModal from './ProjectsModal';
+import KanbanModal from './KanbanModal';
+import { Folder, Kanban } from 'lucide-react';
 
 function MainContent({ 
   selectedProject, 
@@ -32,12 +35,19 @@ function MainContent({
   sendMessage, 
   messages,
   isMobile,
-  onMenuClick,
   onSidebarOpen,          // Function to open sidebar (for desktop)
   sidebarOpen,            // Sidebar open state (for desktop)
   onActiveSidePanelChange, // Callback to report active side panel state
   isLoading,
   onInputFocusChange,
+  // New props for projects modal
+  projects,
+  onProjectSelect,
+  onSessionSelect,
+  onNewSession,
+  onSessionDelete,
+  onProjectDelete,
+  onRefresh,
   // Session Protection Props: Functions passed down from App.jsx to manage active session state
   // These functions control when project updates are paused during active conversations
   onSessionActive,        // Mark session as active when user sends message
@@ -62,6 +72,10 @@ function MainContent({
   const [activeSidePanel, setActiveSidePanel] = useState(null); // 'files' | 'git' | 'tasks' | 'dashboard' | null
   const [hasPreviewOpen, setHasPreviewOpen] = useState(false); // Track if preview is open
   // Shell terminals state removed - single terminal mode only
+  
+  // Modal states
+  const [showProjectsModal, setShowProjectsModal] = useState(false);
+  const [showKanbanModal, setShowKanbanModal] = useState(false);
 
   // Notify parent component about active side panel changes
   useEffect(() => {
@@ -102,19 +116,6 @@ function MainContent({
   if (isLoading) {
     return (
       <div className="h-full flex flex-col">
-        {/* Header with menu button for mobile */}
-        {isMobile && (
-          <div className="bg-card p-3 md:p-4 flex-shrink-0">
-            <button
-              onClick={onMenuClick}
-              className="p-1.5 text-muted-foreground hover:text-foreground rounded-xl hover:bg-accent"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-            </button>
-          </div>
-        )}
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center">
             {/* Logo */}
@@ -171,31 +172,9 @@ function MainContent({
 
   if (!selectedProject) {
     return (
+      <>
       <div className="h-full flex flex-col">
-        {/* Header with menu button for mobile */}
-        {isMobile && (
-          <div className="bg-card p-3 md:p-4 flex-shrink-0">
-            <button
-              onClick={onMenuClick}
-              className="p-1.5 text-muted-foreground hover:text-foreground rounded-xl hover:bg-accent"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-            </button>
-          </div>
-        )}
         <div className="flex-1 flex items-center justify-center bg-background relative">
-          {/* Discrete sidebar toggle button */}
-          <button
-            onClick={onSidebarOpen}
-            className="absolute top-4 left-4 p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-md transition-colors z-10"
-            title="Open Projects"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h8m-8 6h16" />
-            </svg>
-          </button>
           <div className="text-center max-w-lg mx-auto px-8">
             {/* Header Section */}
             <div className="mb-12">
@@ -255,7 +234,7 @@ function MainContent({
               {/* Secondary Action */}
               <div className="space-y-4">
                 <button
-                  onClick={onSidebarOpen}
+                  onClick={() => setShowProjectsModal(true)}
                   className="inline-flex items-center gap-3 px-6 py-3 bg-secondary text-secondary-foreground rounded-xl font-medium hover:bg-secondary/90 transition-all duration-200 border border-border/50 shadow-md hover:shadow-lg transform hover:scale-[1.02]"
                 >
                   <div className="w-5 h-5 rounded-md bg-primary/10 flex items-center justify-center">
@@ -273,6 +252,23 @@ function MainContent({
           </div>
         </div>
       </div>
+      
+      {/* Projects Modal */}
+      <ProjectsModal
+        isOpen={showProjectsModal}
+        onClose={() => setShowProjectsModal(false)}
+        projects={projects}
+        selectedProject={selectedProject}
+        selectedSession={selectedSession}
+        onProjectSelect={onProjectSelect}
+        onSessionSelect={onSessionSelect}
+        onNewSession={onNewSession}
+        onSessionDelete={onSessionDelete}
+        onProjectDelete={onProjectDelete}
+        isLoading={false}
+        onRefresh={onRefresh}
+      />
+      </>
     );
   }
 
@@ -284,27 +280,26 @@ function MainContent({
           <div className="flex items-center space-x-2 sm:space-x-3 flex-1 order-1">
             {isMobile && (
               <button
-                onClick={onMenuClick}
+                onClick={() => setShowProjectsModal(true)}
                 onTouchStart={(e) => {
                   e.preventDefault();
-                  onMenuClick();
+                  setShowProjectsModal(true);
                 }}
-                className="p-2.5 text-muted-foreground hover:text-foreground rounded-md hover:bg-accent touch-manipulation active:scale-95"
+                className="p-2.5 text-muted-foreground hover:text-foreground rounded-md hover:bg-accent touch-manipulation active:scale-95 flex items-center gap-1"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
+                <Folder className="w-5 h-5" />
+                <span className="text-xs font-medium">Projects</span>
               </button>
             )}
-            {!isMobile && !sidebarOpen && onSidebarOpen && (
+            {/* Projects button for desktop */}
+            {!isMobile && (
               <button
-                onClick={onSidebarOpen}
-                className="p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent transition-colors"
-                title="Open sidebar (Ctrl+B)"
+                onClick={() => setShowProjectsModal(true)}
+                className="p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent transition-colors flex items-center gap-2"
+                title="Open Projects"
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
+                <Folder className="w-5 h-5" />
+                <span className="text-sm font-medium">Projects</span>
               </button>
             )}
             <div className="flex items-center gap-3 flex-1">
@@ -369,6 +364,18 @@ function MainContent({
                   <span className="hidden sm:inline">Files</span>
                 </span>
               </button>
+              
+              {/* Kanban button - Opens modal */}
+              <button
+                onClick={() => setShowKanbanModal(true)}
+                className={`relative inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 text-muted-foreground hover:text-foreground hover:bg-accent`}
+              >
+                <span className="flex items-center gap-1 sm:gap-1.5 leading-none">
+                  <Kanban className="w-3 sm:w-3.5 h-3 sm:h-3.5" />
+                  <span className="hidden sm:inline">Kanban</span>
+                </span>
+              </button>
+              
               <button
                 onClick={() => {
                   // Toggle Git panel
@@ -596,6 +603,30 @@ function MainContent({
           projectPath={selectedProject?.path}
         />
       )}
+      
+      {/* Projects Modal */}
+      <ProjectsModal
+        isOpen={showProjectsModal}
+        onClose={() => setShowProjectsModal(false)}
+        projects={projects}
+        selectedProject={selectedProject}
+        selectedSession={selectedSession}
+        onProjectSelect={onProjectSelect}
+        onSessionSelect={onSessionSelect}
+        onNewSession={onNewSession}
+        onSessionDelete={onSessionDelete}
+        onProjectDelete={onProjectDelete}
+        isLoading={false}
+        onRefresh={onRefresh}
+      />
+      
+      {/* Kanban Modal */}
+      <KanbanModal
+        isOpen={showKanbanModal}
+        onClose={() => setShowKanbanModal(false)}
+        selectedProject={selectedProject}
+        isMobile={isMobile}
+      />
     </div>
   );
 }
