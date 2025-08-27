@@ -112,7 +112,7 @@ if (typeof document !== 'undefined') {
 // Global store for shell sessions to persist across tab switches AND project switches
 const shellSessions = new Map();
 
-function Shell({ selectedProject, selectedSession, isActive, onConnectionChange, onSessionStateChange, isMobile, resizeTrigger, onSidebarClose }) {
+function Shell({ selectedProject, selectedSession, isActive, onConnectionChange, onSessionStateChange, isMobile, resizeTrigger, onSidebarClose, activeSidePanel, onPreviewStateChange }) {
   const terminalRef = useRef(null);
   const terminal = useRef(null);
   const fitAddon = useRef(null);
@@ -138,6 +138,13 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   
   // Preview panel states
   const [showPreview, setShowPreview] = useState(false);
+  
+  // Notify parent when preview state changes
+  useEffect(() => {
+    if (onPreviewStateChange) {
+      onPreviewStateChange(showPreview);
+    }
+  }, [showPreview, onPreviewStateChange]);
   const [previewUrl, setPreviewUrl] = useState('');
   const [detectedUrls, setDetectedUrls] = useState(new Set());
   
@@ -1935,9 +1942,9 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   
   // Always use PanelGroup for consistent DOM structure
   return (
-    <PanelGroup direction="horizontal" className="h-full w-full flex gap-3">
+    <PanelGroup direction="horizontal" className="h-full w-full flex gap-1">
       {/* Terminal Panel - Always present */}
-      <Panel defaultSize={showPreview && !isMobile ? 25 : 100} minSize={25} className="h-full">
+      <Panel defaultSize={showPreview && !isMobile && !activeSidePanel ? 30 : 100} minSize={30} className="h-full">
         <div 
           className="h-full min-h-0 flex flex-col bg-card rounded-xl border border-border" 
           {...dropzoneProps}>
@@ -2088,16 +2095,14 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       </div>
     </Panel>
     
-    {/* Conditionally render resize handle and preview panel */}
-    {showPreview && !isMobile && (
+    {/* Conditionally render resize handle and preview panel - Hide when side panel is open */}
+    {showPreview && !isMobile && !activeSidePanel && (
       <>
-        {/* Resize Handle with spacing */}
-        <PanelResizeHandle className="w-3 bg-transparent hover:bg-accent/10 transition-colors cursor-col-resize relative">
-          <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-1 bg-border hover:bg-accent transition-colors" />
-        </PanelResizeHandle>
+        {/* Resize Handle - invisible but functional */}
+        <PanelResizeHandle className="w-2 bg-transparent hover:bg-accent/20 transition-colors cursor-col-resize" />
         
         {/* Preview Panel */}
-        <Panel defaultSize={75} minSize={30} className="h-full">
+        <Panel defaultSize={70} minSize={30} className="h-full">
           <PreviewPanel
             url={previewUrl}
             projectPath={selectedProject?.path}
