@@ -2133,21 +2133,31 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       </div>
     </Panel>
     
-    {/* Preview panel remains visible; container padding in MainContent prevents overlap */}
-    {showPreview && !isMobile && (
+    {/* Preview panel - always render for consistent DOM structure */}
+    {!isMobile && (
       <>
-        {/* Resize Handle - invisible but functional */}
-        <PanelResizeHandle className="w-2 bg-transparent hover:bg-accent/20 transition-colors cursor-col-resize" />
+        {/* Resize Handle - only interactive when preview shown */}
+        <PanelResizeHandle 
+          className={showPreview ? "w-2 bg-transparent hover:bg-accent/20 transition-colors cursor-col-resize" : "w-0 pointer-events-none"} 
+          disabled={!showPreview}
+        />
         
-        {/* Preview Panel */}
-        <Panel defaultSize={70} minSize={30} className="h-full">
-          <PreviewPanel
-            url={previewUrl}
-            projectPath={selectedProject?.path}
-            onClose={() => setShowPreview(false)}
-            onRefresh={() => detectUrlsInTerminal()}
-            isMobile={false}
-          />
+        {/* Preview Panel - hidden when not in use */}
+        <Panel 
+          defaultSize={showPreview ? 70 : 0} 
+          minSize={showPreview ? 30 : 0}
+          maxSize={showPreview ? 100 : 0}
+          className={showPreview ? "h-full" : "h-full hidden"}
+        >
+          {showPreview && (
+            <PreviewPanel
+              url={previewUrl}
+              projectPath={selectedProject?.path}
+              onClose={() => setShowPreview(false)}
+              onRefresh={() => detectUrlsInTerminal()}
+              isMobile={false}
+            />
+          )}
         </Panel>
       </>
     )}
