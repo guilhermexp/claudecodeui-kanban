@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import OverlayChat from './OverlayChat';
 
-function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, isMobile }) {
+function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, isMobile, initialPaused = false }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [currentUrl, setCurrentUrl] = useState(url);
-  const [isPaused, setIsPaused] = useState(false);
+  const [isPaused, setIsPaused] = useState(initialPaused);
   const [logs, setLogs] = useState([]);
   const [captureReady, setCaptureReady] = useState(false);
   const captureReadyTimer = useRef(null);
@@ -433,8 +433,11 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
                 console.log('Console capture injected successfully');
               }
             } catch (e) {
-              // Cross-origin restriction, can't inject script
-              console.log('Cannot inject console capture script:', e.message);
+              // Cross-origin restriction, can't inject script - this is expected for external URLs
+              // Only log if not a cross-origin error
+              if (!e.message.includes('cross-origin')) {
+                console.warn('Cannot inject console capture script:', e.message);
+              }
             }
           };
 
@@ -903,7 +906,7 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
   }
 
   return (
-    <div className="h-full flex flex-col bg-card rounded-xl border border-border">
+    <div className="h-full flex flex-col bg-card rounded-xl border border-border relative">
       {/* Preview Toolbar */}
       <div className="flex items-center justify-between px-3 py-3 border-b border-border">
         <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -1315,7 +1318,7 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
         </div>
       )}
       
-      {/* OverlayChat - floating button for internal chat */}
+      {/* OverlayChat - floating button/tray inside Preview */}
       <OverlayChat projectPath={projectPath} />
     </div>
   );

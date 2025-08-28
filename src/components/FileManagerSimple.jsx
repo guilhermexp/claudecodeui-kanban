@@ -14,7 +14,7 @@ import ImageViewer from './ImageViewer';
 import { formatFileSize, formatRelativeTime } from '../utils/formatters';
 
 // Simple File Manager - Updates only on manual refresh or project change
-function FileManagerSimple({ selectedProject }) {
+function FileManagerSimple({ selectedProject, onClose }) {
   // State Management
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -513,13 +513,22 @@ function FileManagerSimple({ selectedProject }) {
               )}
             </div>
             <div className={`flex items-center ${compact ? 'gap-0.5' : 'gap-1'}`}>
-             <button
+              <button
                onClick={() => setShowHiddenFiles(!showHiddenFiles)}
               className={cn("hover:bg-accent rounded-md transition-colors", compact ? 'p-0.5' : 'p-1', showHiddenFiles && "bg-accent")}
                title={showHiddenFiles ? "Hide hidden files" : "Show hidden files"}
              >
               {showHiddenFiles ? <Eye className={`${compact ? 'w-3.5 h-3.5' : 'w-4 h-4'}`} /> : <EyeOff className={`${compact ? 'w-3.5 h-3.5' : 'w-4 h-4'}`} />}
               </button>
+              {onClose && (
+                <button
+                  onClick={onClose}
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                  title="Close"
+                >
+                  <X className={`${compact ? 'w-3.5 h-3.5' : 'w-4 h-4'}`} />
+                </button>
+              )}
               <button
                 onClick={() => {
                   setCreateType('file');

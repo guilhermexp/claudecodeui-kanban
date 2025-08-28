@@ -3,7 +3,7 @@ import { GitBranch, GitCommit, Plus, RefreshCw, Check, X, ChevronDown, ChevronRi
 import { MicButton } from './MicButton.jsx';
 import { authenticatedFetch } from '../utils/api';
 
-function GitPanel({ selectedProject, isMobile, isVisible = false }) {
+function GitPanel({ selectedProject, isMobile, isVisible = false, onClose }) {
   // Error state for user-friendly messages
   const [errorMessage, setErrorMessage] = useState(null);
   const errorTimeoutRef = useRef(null);
@@ -914,6 +914,15 @@ function GitPanel({ selectedProject, isMobile, isVisible = false }) {
           >
             <RefreshCw className={`${isLoading ? 'animate-spin' : ''} ${isMobile ? 'w-3 h-3' : 'w-4 h-4'}`} />
           </button>
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+              title="Close"
+            >
+              <X className={`${isMobile ? 'w-3 h-3' : 'w-4 h-4'}`} />
+            </button>
+          )}
         </div>
       </div>
 

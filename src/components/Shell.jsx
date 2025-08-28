@@ -12,7 +12,7 @@ import { detectBestPreviewUrl } from '../utils/detectPreviewUrl';
 import 'xterm/css/xterm.css';
 
 // CSS to make xterm responsive and remove focus outline
-const xtermStyles = `
+  const xtermStyles = `
   .xterm .xterm-screen {
     outline: none !important;
   }
@@ -139,6 +139,10 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   
   // Preview panel states
   const [showPreview, setShowPreview] = useState(false);
+  const [initialPreviewPaused, setInitialPreviewPaused] = useState(true); // Start paused by default
+  // Resizable Panels handles (imperative) to control sizes when toggling preview
+  const terminalPanelHandleRef = useRef(null);
+  const previewPanelHandleRef = useRef(null);
   // Terminal width lock when opening side panels
   const terminalPanelRef = useRef(null);
   const [lockedTerminalWidth, setLockedTerminalWidth] = useState(null);
@@ -165,7 +169,33 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       setLockedTerminalWidth(null);
     }
   }, [activeSidePanel, showPreview, wasPreviewOpen]);
+
+  // Ensure preview opens at 70% and terminal at 30% when toggled
+  useEffect(() => {
+    if (isMobile) return;
+    try {
+      if (showPreview) {
+        if (previewPanelHandleRef.current && previewPanelHandleRef.current.resize) {
+          previewPanelHandleRef.current.resize(70);
+        }
+        if (terminalPanelHandleRef.current && terminalPanelHandleRef.current.resize) {
+          terminalPanelHandleRef.current.resize(30);
+        }
+      } else {
+        if (terminalPanelHandleRef.current && terminalPanelHandleRef.current.resize) {
+          terminalPanelHandleRef.current.resize(100);
+        }
+        if (previewPanelHandleRef.current && previewPanelHandleRef.current.resize) {
+          previewPanelHandleRef.current.resize(0);
+        }
+      }
+    } catch (e) {
+      // Non-fatal: fall back to library defaults if imperative resize fails
+      // console.warn('Panel resize failed:', e);
+    }
+  }, [showPreview, isMobile]);
   const [previewUrl, setPreviewUrl] = useState('');
+  // (Removed global publish of preview URL; assistant now lives inside preview again)
   const [detectedUrls, setDetectedUrls] = useState(new Set());
   
   // Image drag & drop states
@@ -273,11 +303,17 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
         window.refreshPreview();
       }
     };
+    // Allow other components to close the preview explicitly
+    window.closePreview = () => {
+      setShowPreview(false);
+      setPreviewUrl('');
+    };
     
     return () => {
       delete window.previewGoBack;
       delete window.previewGoForward;
       delete window.previewRefresh;
+      delete window.closePreview;
     };
   }, []);
 
@@ -1965,6 +2001,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     <PanelGroup direction="horizontal" className="h-full w-full flex gap-1">
       {/* Terminal Panel - Always present */}
       <Panel 
+        ref={terminalPanelHandleRef}
         defaultSize={showPreview && !isMobile && !activeSidePanel ? 30 : 100} 
         minSize={30} 
         className="h-full"
@@ -2065,6 +2102,10 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
                           }
                           console.log('Opening preview with URL:', firstUrl);
                           setPreviewUrl(firstUrl);
+                          // Close any right side panel to avoid overcrowding
+                          if (onSidebarClose) {
+                            onSidebarClose();
+                          }
                           setShowPreview(true);
                         }
                       }}
@@ -2144,6 +2185,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
         
         {/* Preview Panel - hidden when not in use */}
         <Panel 
+          ref={previewPanelHandleRef}
           defaultSize={showPreview ? 70 : 0} 
           minSize={showPreview ? 30 : 0}
           maxSize={showPreview ? 100 : 0}
@@ -2156,6 +2198,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
               onClose={() => setShowPreview(false)}
               onRefresh={() => detectUrlsInTerminal()}
               isMobile={false}
+              initialPaused={initialPreviewPaused}
             />
           )}
         </Panel>

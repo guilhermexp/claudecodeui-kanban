@@ -184,6 +184,93 @@ impl CodexExecutor {
             command: "npx @openai/codex exec --json --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check".to_string(),
         }
     }
+    
+    /// Create a new CodexExecutor with specific working directory
+    pub fn new_with_dir(working_dir: String) -> Self {
+        Self {
+            executor_type: "Codex".to_string(),
+            command: format!("npx @openai/codex exec --json --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check -C \"{}\"", working_dir),
+        }
+    }
+    
+    /// Execute a single command and return the output
+    pub async fn execute_command(&mut self, prompt: &str) -> Result<String, ExecutorError> {
+        use tokio::process::Command;
+        use std::process::Stdio;
+        use crate::command_runner::CommandError;
+        use crate::executor::SpawnContext;
+        
+        let (shell_cmd, shell_arg) = get_shell_command();
+        
+        let output = Command::new(&shell_cmd)
+            .arg(&shell_arg)
+            .arg(&self.command)
+            .arg(prompt)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .await
+            .map_err(|e| ExecutorError::SpawnFailed {
+                error: CommandError::SpawnFailed {
+                    command: shell_cmd.to_string(),
+                    error: e,
+                },
+                context: SpawnContext {
+                    executor_type: self.executor_type.clone(),
+                    command: shell_cmd.to_string(),
+                    args: vec![shell_arg.to_string(), self.command.clone(), prompt.to_string()],
+                    working_dir: std::env::current_dir()
+                        .map(|p| p.to_string_lossy().to_string())
+                        .unwrap_or_default(),
+                    task_id: None,
+                    task_title: None,
+                    additional_context: Some("Codex chat execution".to_string()),
+                },
+            })?;
+        
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(ExecutorError::GitError(format!("Codex execution failed: {}", stderr)));
+        }
+        
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        
+        // Parse JSON output and extract messages
+        let mut result = String::new();
+        for line in stdout.lines() {
+            if line.trim().is_empty() {
+                continue;
+            }
+            
+            if let Ok(json) = serde_json::from_str::<Value>(line) {
+                // Skip system config messages
+                if is_system_config_message(&json) {
+                    continue;
+                }
+                
+                // Extract agent messages
+                if let Some(msg) = json.get("msg") {
+                    if let Some(msg_type) = msg.get("type").and_then(|t| t.as_str()) {
+                        if msg_type == "agent_message" {
+                            if let Some(message) = msg.get("message").and_then(|m| m.as_str()) {
+                                if !result.is_empty() {
+                                    result.push('\n');
+                                }
+                                result.push_str(message);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        if result.is_empty() {
+            return Err(ExecutorError::GitError("No response from Codex".to_string()));
+        }
+        
+        Ok(result)
+    }
 }
 
 #[async_trait]

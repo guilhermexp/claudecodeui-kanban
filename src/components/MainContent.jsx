@@ -71,6 +71,7 @@ function MainContent({
   // Panel states - only one can be open at a time
   const [activeSidePanel, setActiveSidePanel] = useState(null); // 'files' | 'git' | 'tasks' | 'dashboard' | null
   const [hasPreviewOpen, setHasPreviewOpen] = useState(false); // Track if preview is open
+  const assistantContainerRef = React.useRef(null);
   // Shell terminals state removed - single terminal mode only
   
   // Modal states
@@ -83,6 +84,8 @@ function MainContent({
       onActiveSidePanelChange(activeSidePanel);
     }
   }, [activeSidePanel, onActiveSidePanelChange]);
+
+  // (Removed assistant side panel integration)
   
   // Expose tab switching globally for Shell image drops
   useEffect(() => {
@@ -344,6 +347,10 @@ function MainContent({
                   if (activeSidePanel === 'files') {
                     setActiveSidePanel(null);
                   } else {
+                    // If preview is open, close it to avoid overcrowding
+                    if (hasPreviewOpen && window.closePreview) {
+                      window.closePreview();
+                    }
                     setActiveSidePanel('files');
                     if (sidebarOpen && onSidebarOpen) {
                       onSidebarOpen();
@@ -382,6 +389,9 @@ function MainContent({
                   if (activeSidePanel === 'git') {
                     setActiveSidePanel(null);
                   } else {
+                    if (hasPreviewOpen && window.closePreview) {
+                      window.closePreview();
+                    }
                     setActiveSidePanel('git');
                     if (sidebarOpen && onSidebarOpen) {
                       onSidebarOpen();
@@ -404,17 +414,20 @@ function MainContent({
               </button>
               {/* Tasks button - Only show on desktop */}
               {!isMobile && (
-                <button
-                  onClick={() => {
-                    // Toggle Tasks panel
-                    if (activeSidePanel === 'tasks') {
-                      setActiveSidePanel(null);
-                    } else {
-                      setActiveSidePanel('tasks');
-                      if (sidebarOpen && onSidebarOpen) {
-                        onSidebarOpen();
-                      }
+              <button
+                onClick={() => {
+                  // Toggle Tasks panel
+                  if (activeSidePanel === 'tasks') {
+                    setActiveSidePanel(null);
+                  } else {
+                    if (hasPreviewOpen && window.closePreview) {
+                      window.closePreview();
                     }
+                    setActiveSidePanel('tasks');
+                    if (sidebarOpen && onSidebarOpen) {
+                      onSidebarOpen();
+                    }
+                  }
                     setTimeout(() => setShellResizeTrigger(prev => prev + 1), 350);
                   }}
                   className={`relative inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
@@ -437,6 +450,9 @@ function MainContent({
                   if (activeSidePanel === 'dashboard') {
                     setActiveSidePanel(null);
                   } else {
+                    if (hasPreviewOpen && window.closePreview) {
+                      window.closePreview();
+                    }
                     setActiveSidePanel('dashboard');
                     if (sidebarOpen && onSidebarOpen) {
                       onSidebarOpen();
@@ -475,7 +491,7 @@ function MainContent({
         <div className={`min-h-0 flex flex-col transition-all duration-300 px-2 md:px-4 flex-1 ${
           activeSidePanel && hasPreviewOpen ? 'pr-48 sm:pr-56 md:pr-64' : ''
         }`}>
-          <div className="h-full overflow-hidden mt-2">
+          <div className="h-full overflow-hidden">
             <ConfigProvider>
               <Shell 
                 selectedProject={selectedProject} 
@@ -504,38 +520,40 @@ function MainContent({
           <>
             {/* Files Panel */}
             <div 
-              className={`absolute top-0 right-0 h-full bg-background shadow-xl transform transition-transform duration-300 ease-in-out ${
-                activeSidePanel === 'files' ? 'translate-x-0' : 'translate-x-full'
+              className={`absolute top-0 right-0 h-full bg-background shadow-xl transform transition-transform duration-300 ease-in-out z-20 ${
+                activeSidePanel === 'files' ? 'translate-x-0 pointer-events-auto' : 'translate-x-full pointer-events-none'
               } ${
                 activeSidePanel === 'files' && hasPreviewOpen ? 'w-48 sm:w-56 md:w-64' : 'w-96 sm:w-[440px] md:w-[520px]'
               }`}
             >
               <div className="h-full flex flex-col">
                 <div className="flex-1 overflow-hidden">
-                  <FileManagerSimple selectedProject={selectedProject} />
+                  <FileManagerSimple selectedProject={selectedProject} onClose={() => setActiveSidePanel(null)} />
                 </div>
               </div>
             </div>
 
+            
+
             {/* Git Panel */}
             <div 
-              className={`absolute top-0 right-0 h-full bg-background shadow-xl transform transition-transform duration-300 ease-in-out ${
-                activeSidePanel === 'git' ? 'translate-x-0' : 'translate-x-full'
+              className={`absolute top-0 right-0 h-full bg-background shadow-xl transform transition-transform duration-300 ease-in-out z-20 ${
+                activeSidePanel === 'git' ? 'translate-x-0 pointer-events-auto' : 'translate-x-full pointer-events-none'
               } ${
                 activeSidePanel === 'git' && hasPreviewOpen ? 'w-48 sm:w-56 md:w-64' : 'w-96 sm:w-[440px] md:w-[520px]'
               }`}
             >
               <div className="h-full flex flex-col">
                 <div className="flex-1 overflow-hidden">
-                  <GitPanel selectedProject={selectedProject} isMobile={false} isVisible={activeSidePanel === 'git'} />
+                  <GitPanel selectedProject={selectedProject} isMobile={false} isVisible={activeSidePanel === 'git'} onClose={() => setActiveSidePanel(null)} />
                 </div>
               </div>
             </div>
 
             {/* Tasks Panel */}
             <div 
-              className={`absolute top-0 right-0 h-full bg-background shadow-xl transform transition-transform duration-300 ease-in-out ${
-                activeSidePanel === 'tasks' ? 'translate-x-0' : 'translate-x-full'
+              className={`absolute top-0 right-0 h-full bg-background shadow-xl transform transition-transform duration-300 ease-in-out z-20 ${
+                activeSidePanel === 'tasks' ? 'translate-x-0 pointer-events-auto' : 'translate-x-full pointer-events-none'
               } ${
                 activeSidePanel === 'tasks' && hasPreviewOpen ? 'w-48 sm:w-56 md:w-64' : 'w-96 sm:w-[440px] md:w-[520px]'
               }`}
@@ -545,8 +563,8 @@ function MainContent({
 
             {/* Dashboard Panel */}
             <div 
-              className={`absolute top-0 right-0 h-full bg-background shadow-xl transform transition-transform duration-300 ease-in-out ${
-                activeSidePanel === 'dashboard' ? 'translate-x-0' : 'translate-x-full'
+              className={`absolute top-0 right-0 h-full bg-background shadow-xl transform transition-transform duration-300 ease-in-out z-20 ${
+                activeSidePanel === 'dashboard' ? 'translate-x-0 pointer-events-auto' : 'translate-x-full pointer-events-none'
               } ${
                 activeSidePanel === 'dashboard' && hasPreviewOpen ? 'w-48 sm:w-56 md:w-64' : 'w-96 sm:w-[440px] md:w-[520px]'
               }`}

@@ -11,7 +11,8 @@ import {
   Zap,
   RefreshCw,
   Brain,
-  Database
+  Database,
+  X
 } from 'lucide-react';
 import { authenticatedFetch } from '../utils/api';
 import './Dashboard.css';
@@ -262,6 +263,14 @@ const Dashboard = memo(({ onBack }) => {
             title="Refresh"
           >
             <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+          </button>
+          {/* Close */}
+          <button
+            onClick={onBack}
+            className="text-muted-foreground hover:text-foreground transition-colors"
+            title="Close"
+          >
+            <X className="w-4 h-4" />
           </button>
         </div>
       </div>
