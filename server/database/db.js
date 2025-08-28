@@ -21,7 +21,7 @@ try {
   
   db = new Database(DB_PATH);
   db.pragma('journal_mode = WAL');
-  console.log('✅ Database connected successfully');
+  // Database connected successfully
 } catch (error) {
   console.error('Failed to connect to SQLite database:', error);
   throw error;
@@ -32,6 +32,8 @@ const initializeDatabase = async () => {
   try {
     const initSQL = fs.readFileSync(INIT_SQL_PATH, 'utf8');
     db.exec(initSQL);
+    // Return the active DB connection for callers expecting it
+    return db;
   } catch (error) {
     console.error('Error initializing database:', error.message);
     throw error;

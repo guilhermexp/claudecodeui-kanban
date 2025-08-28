@@ -3,8 +3,9 @@ import { projectsApi, tasksApi } from '../lib/vibe-kanban/api';
 import { TaskFormDialog } from './vibe-kanban/tasks/TaskFormDialog';
 import { ConfigProvider } from './vibe-kanban/config-provider';
 import { TaskDetailsPanel } from './vibe-kanban/tasks/TaskDetailsPanel';
+import { cn } from '../lib/utils';
 
-function VibeTaskPanel({ isVisible, onClose }) {
+function VibeTaskPanel({ isVisible, onClose, embedded = false }) {
   const [projects, setProjects] = useState([]);
   const [selectedProject, setSelectedProject] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -143,23 +144,31 @@ function VibeTaskPanel({ isVisible, onClose }) {
   }
 
   return (
-    <div className="h-full flex flex-col bg-card border border-border rounded-lg overflow-hidden relative max-w-full min-w-0">
-      {/* Header - matching Files and Source Control modals */}
-      <div className="flex-shrink-0 px-4 py-3 flex items-center justify-between border-b border-border">
-        <h3 className="text-foreground font-medium">Tasks</h3>
-        <button
-          onClick={onClose}
-          className="text-muted-foreground hover:text-foreground transition-colors"
-          title="Close"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
+    <div className={cn(
+      "h-full flex flex-col overflow-hidden relative max-w-full min-w-0",
+      !embedded && "bg-card border border-border rounded-lg"
+    )}>
+      {/* Header - only show when not embedded */}
+      {!embedded && (
+        <div className="flex-shrink-0 px-4 py-3 flex items-center justify-between border-b border-border">
+          <h3 className="text-foreground font-medium">Tasks</h3>
+          <button
+            onClick={onClose}
+            className="text-muted-foreground hover:text-foreground transition-colors"
+            title="Close"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
 
-      {/* Content - matching other modals background */}
-      <div className="flex-1 overflow-y-auto bg-card">
+      {/* Content */}
+      <div className={cn(
+        "flex-1 overflow-y-auto",
+        !embedded && "bg-card"
+      )}>
         <div className="p-4 space-y-3">
         {loading && (
           <div className="flex items-center justify-center py-6">

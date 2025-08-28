@@ -30,6 +30,7 @@ function ProjectsModal({
   const navigate = useNavigate();
   const [editingProject, setEditingProject] = useState(null);
   const [showNewProject, setShowNewProject] = useState(false);
+  const [showFolderPicker, setShowFolderPicker] = useState(false);
   const [editingName, setEditingName] = useState('');
   const [newProjectPath, setNewProjectPath] = useState('');
   const [creatingProject, setCreatingProject] = useState(false);
@@ -137,7 +138,8 @@ function ProjectsModal({
   });
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <>
+      <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-7xl max-h-[90vh] p-0" onOpenChange={onClose}>
         <DialogHeader className="px-4 pr-12 pt-4 pb-3 border-b border-border/50 bg-background/50">
           <div className="flex items-center justify-between">
@@ -210,11 +212,24 @@ function ProjectsModal({
           {showNewProject && (
             <div className="mb-4 p-3 bg-card/50 rounded-lg border border-border/50">
               <div className="space-y-2">
-                <FolderPicker
-                  value={newProjectPath}
-                  onChange={setNewProjectPath}
-                  placeholder="Select project folder..."
-                />
+                <div className="flex gap-2 items-center">
+                  <Input
+                    value={newProjectPath}
+                    onChange={(e) => setNewProjectPath(e.target.value)}
+                    placeholder="Select project folder..."
+                    readOnly
+                    className="flex-1"
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setShowFolderPicker(true)}
+                    className="text-foreground hover:bg-accent"
+                  >
+                    <FolderSearch className="w-4 h-4 mr-1" />
+                    Browse
+                  </Button>
+                </div>
                 <div className="flex gap-2">
                   <Button
                     size="sm"
@@ -419,6 +434,20 @@ function ProjectsModal({
         </ScrollArea>
       </DialogContent>
     </Dialog>
+
+    {/* Folder Picker Dialog */}
+    <FolderPicker
+      open={showFolderPicker}
+      onClose={() => setShowFolderPicker(false)}
+      onSelect={(path) => {
+        setNewProjectPath(path);
+        setShowFolderPicker(false);
+      }}
+      value={newProjectPath}
+      title="Select Project Folder"
+      description="Choose a folder to create your Claude Code project"
+    />
+    </>
   );
 }
 
