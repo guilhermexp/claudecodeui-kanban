@@ -1100,6 +1100,8 @@ function handleChatConnection(ws, request) {
     lastActivity: Date.now()
   });
   
+  // Track Codex session per connection
+  let codexSession = null; // { sessionId, rolloutPath }
   
   ws.on('message', async (message) => {
     try {
@@ -1186,8 +1188,23 @@ function handleChatConnection(ws, request) {
           const projectName = data.options.projectPath.split('/').pop();
           registerUserProject(ws, projectName);
         }
-        
-        await spawnCodex(data.command, data.options, ws);
+        // Use session resume if available
+        const opts = {
+          ...(data.options || {}),
+          resumeRolloutPath: codexSession?.rolloutPath || null,
+          onSession: (sessionId, rolloutPath) => {
+            codexSession = { sessionId, rolloutPath };
+          }
+        };
+        await spawnCodex(data.command, opts, ws);
+      } else if (data.type === 'codex-start-session') {
+        // Acknowledgement-only: do NOT spawn Codex here to avoid autonomous actions
+        // The first real user message will start Codex and capture the session/rollout
+        codexSession = null;
+        ws.send(JSON.stringify({ type: 'codex-session-started' }));
+      } else if (data.type === 'codex-end-session') {
+        codexSession = null;
+        ws.send(JSON.stringify({ type: 'codex-session-closed' }));
       } else if (data.type === 'abort-session') {
         const success = abortClaudeSession(data.sessionId);
         ws.send(JSON.stringify({
@@ -2338,8 +2355,7 @@ async function startServer() {
     
     // Listen on all interfaces (0.0.0.0) to allow access from network
     server.listen(PORT, '0.0.0.0', async () => {
-      console.log(`✅ Server running on http://localhost:${PORT}`);
-      console.log(`✅ Network access: http://${localIP}:${PORT}`);
+      // Server started silently
       
       // Start watching the projects folder for changes
       await setupProjectsWatcher(); // Re-enabled with better-sqlite3
@@ -2351,17 +2367,14 @@ async function startServer() {
           global.gc();
           const after = v8.getHeapStatistics();
           const freed = (before.used_heap_size - after.used_heap_size) / 1024 / 1024;
-          if (freed > 10) {
-            console.log(`[Memory] Garbage collected ${freed.toFixed(2)} MB`);
-          }
+          // Silent garbage collection
         }, 2 * 60 * 1000);
-        console.log('✅ Memory optimization enabled (manual GC)');
+        // Memory optimization enabled
       } else {
-        console.log('⚠️  Memory optimization disabled (run with --expose-gc flag to enable)');
+        // Memory optimization not available
       }
       
-      // Start Vibe Kanban cleanup service
-      console.log('🧹 Starting Vibe Kanban cleanup service...');
+      // Start Vibe Kanban cleanup service silently
       cleanupService.start();
     });
   } catch (error) {

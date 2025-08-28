@@ -13,9 +13,7 @@ router.get('/test', (req, res) => {
 // Check auth status and setup requirements
 router.get('/status', async (req, res) => {
   try {
-    console.log('Auth status route called');
     const hasUsers = userDb.hasUsers();
-    console.log('Has users:', hasUsers);
     res.json({ 
       needsSetup: !hasUsers,
       isAuthenticated: false // Will be overridden by frontend if token exists

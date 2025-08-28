@@ -3,20 +3,19 @@ import fsSync from 'fs';
 import path from 'path';
 import readline from 'readline';
 
-// Cache for extracted project directories
+// Cache for extracted project directories with individual timestamps
 const projectDirectoryCache = new Map();
-let cacheTimestamp = Date.now();
+const PROJECT_DIR_CACHE_DURATION = 2 * 60 * 60 * 1000; // 2 hours per directory
 
 // Cache for projects list to reduce memory usage
 const projectsCache = { data: null, timestamp: 0 };
-const PROJECTS_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+const PROJECTS_CACHE_DURATION = 30 * 60 * 1000; // 30 minutes - increase cache to reduce load
 
 // Clear cache when needed (called when project files change)
 function clearProjectDirectoryCache() {
   projectDirectoryCache.clear();
   projectsCache.data = null;
   projectsCache.timestamp = 0;
-  cacheTimestamp = Date.now();
 }
 
 // Load project configuration file
@@ -73,9 +72,10 @@ async function generateDisplayName(projectName, actualProjectDir = null) {
 
 // Extract the actual project directory from JSONL sessions (with caching)
 async function extractProjectDirectory(projectName) {
-  // Check cache first
-  if (projectDirectoryCache.has(projectName)) {
-    return projectDirectoryCache.get(projectName);
+  // Check cache first with timestamp validation
+  const cached = projectDirectoryCache.get(projectName);
+  if (cached && (Date.now() - cached.timestamp) < PROJECT_DIR_CACHE_DURATION) {
+    return cached.value;
   }
   
   
@@ -166,8 +166,8 @@ async function extractProjectDirectory(projectName) {
       }
     }
     
-    // Cache the result
-    projectDirectoryCache.set(projectName, extractedPath);
+    // Cache the result with timestamp
+    projectDirectoryCache.set(projectName, { value: extractedPath, timestamp: Date.now() });
     
     return extractedPath;
     
@@ -176,8 +176,8 @@ async function extractProjectDirectory(projectName) {
     // Fall back to decoded project name
     extractedPath = projectName.replace(/-/g, '/');
     
-    // Cache the fallback result too
-    projectDirectoryCache.set(projectName, extractedPath);
+    // Cache the fallback result too with timestamp
+    projectDirectoryCache.set(projectName, { value: extractedPath, timestamp: Date.now() });
     
     return extractedPath;
   }
@@ -203,8 +203,14 @@ async function getProjects() {
         existingProjects.add(entry.name);
         const projectPath = path.join(claudeDir, entry.name);
         
-        // Extract actual project directory from JSONL sessions
-        const actualProjectDir = await extractProjectDirectory(entry.name);
+        // Extract actual project directory from JSONL sessions (with caching)
+        let actualProjectDir;
+        try {
+          actualProjectDir = await extractProjectDirectory(entry.name);
+        } catch (err) {
+          // If extraction fails, use fallback path silently
+          actualProjectDir = entry.name.replace(/-/g, '/');
+        }
         
         // Get display name from config or generate one
         const customName = config[entry.name]?.displayName;
@@ -222,9 +228,8 @@ async function getProjects() {
         
         // Load basic session info for display in project cards
         try {
-          console.log(`[DEBUG] Loading sessions for project: ${entry.name}`);
+          // Load sessions (getSessions already has its own logging)
           const sessionData = await getSessions(entry.name, 10, 0); // limit=10, offset=0
-          console.log(`[DEBUG] Sessions loaded for ${entry.name}:`, sessionData.sessions.length, 'sessions');
           project.sessions = sessionData.sessions || [];
           project.sessionMeta = {
             hasMore: sessionData.hasMore || false,
@@ -290,7 +295,7 @@ async function getSessions(projectName, limit = 5, offset = 0) {
   try {
     const files = await fs.readdir(projectDir);
     const jsonlFiles = files.filter(file => file.endsWith('.jsonl'));
-    console.log(`[DEBUG] Found ${jsonlFiles.length} .jsonl files for ${projectName}`);
+    // Remove debug logging - not needed in production
     
     if (jsonlFiles.length === 0) {
       return { sessions: [], hasMore: false, total: 0 };

@@ -16,7 +16,6 @@ import FileManagerSimple from './FileManagerSimple';
 import CodeEditor from './CodeEditor';
 import Shell from './Shell';
 import GitPanel from './GitPanel';
-import VibeTaskPanel from './VibeTaskPanel';
 import Dashboard from './Dashboard';
 import ResourceMonitor from './ResourceMonitor';
 import ErrorBoundary from './ErrorBoundary';
@@ -69,7 +68,7 @@ function MainContent({
   const [contextWindowPercentage, setContextWindowPercentage] = useState(null);
   const [shellResizeTrigger, setShellResizeTrigger] = useState(0);
   // Panel states - only one can be open at a time
-  const [activeSidePanel, setActiveSidePanel] = useState(null); // 'files' | 'git' | 'tasks' | 'dashboard' | null
+  const [activeSidePanel, setActiveSidePanel] = useState(null); // 'files' | 'git' | 'dashboard' | null
   const [hasPreviewOpen, setHasPreviewOpen] = useState(false); // Track if preview is open
   const assistantContainerRef = React.useRef(null);
   // Shell terminals state removed - single terminal mode only
@@ -77,6 +76,8 @@ function MainContent({
   // Modal states
   const [showProjectsModal, setShowProjectsModal] = useState(false);
   const [showKanbanModal, setShowKanbanModal] = useState(false);
+  const [showGitModal, setShowGitModal] = useState(false);
+  const [showDashboardModal, setShowDashboardModal] = useState(false);
 
   // Notify parent component about active side panel changes
   useEffect(() => {
@@ -384,26 +385,8 @@ function MainContent({
               </button>
               
               <button
-                onClick={() => {
-                  // Toggle Git panel
-                  if (activeSidePanel === 'git') {
-                    setActiveSidePanel(null);
-                  } else {
-                    if (hasPreviewOpen && window.closePreview) {
-                      window.closePreview();
-                    }
-                    setActiveSidePanel('git');
-                    if (sidebarOpen && onSidebarOpen) {
-                      onSidebarOpen();
-                    }
-                  }
-                  setTimeout(() => setShellResizeTrigger(prev => prev + 1), 350);
-                }}
-                className={`relative inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
-                  activeSidePanel === 'git'
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-                }`}
+                onClick={() => setShowGitModal(true)}
+                className="relative inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 text-muted-foreground hover:text-foreground hover:bg-accent"
               >
                 <span className="flex items-center gap-1 sm:gap-1.5 leading-none">
                   <svg className="w-3 sm:w-3.5 h-3 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -412,59 +395,9 @@ function MainContent({
                   <span className="hidden sm:inline">Source Control</span>
                 </span>
               </button>
-              {/* Tasks button - Only show on desktop */}
-              {!isMobile && (
               <button
-                onClick={() => {
-                  // Toggle Tasks panel
-                  if (activeSidePanel === 'tasks') {
-                    setActiveSidePanel(null);
-                  } else {
-                    if (hasPreviewOpen && window.closePreview) {
-                      window.closePreview();
-                    }
-                    setActiveSidePanel('tasks');
-                    if (sidebarOpen && onSidebarOpen) {
-                      onSidebarOpen();
-                    }
-                  }
-                    setTimeout(() => setShellResizeTrigger(prev => prev + 1), 350);
-                  }}
-                  className={`relative inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
-                    activeSidePanel === 'tasks'
-                      ? 'bg-background text-foreground shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-                  }`}
-                >
-                <span className="flex items-center gap-1 sm:gap-1.5 leading-none">
-                  <svg className="w-3 sm:w-3.5 h-3 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-                  </svg>
-                  <span className="hidden sm:inline">Tasks</span>
-                </span>
-                </button>
-              )}
-              <button
-                onClick={() => {
-                  // Toggle Dashboard panel
-                  if (activeSidePanel === 'dashboard') {
-                    setActiveSidePanel(null);
-                  } else {
-                    if (hasPreviewOpen && window.closePreview) {
-                      window.closePreview();
-                    }
-                    setActiveSidePanel('dashboard');
-                    if (sidebarOpen && onSidebarOpen) {
-                      onSidebarOpen();
-                    }
-                  }
-                  setTimeout(() => setShellResizeTrigger(prev => prev + 1), 350);
-                }}
-                className={`relative inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
-                  activeSidePanel === 'dashboard'
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-                  }`}
+                onClick={() => setShowDashboardModal(true)}
+                className="relative inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 text-muted-foreground hover:text-foreground hover:bg-accent"
               >
                 <span className="flex items-center gap-1 sm:gap-1.5 leading-none">
                   <svg className="w-3 sm:w-3.5 h-3 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -551,15 +484,6 @@ function MainContent({
             </div>
 
             {/* Tasks Panel */}
-            <div 
-              className={`absolute top-0 right-0 h-full bg-background shadow-xl transform transition-transform duration-300 ease-in-out z-20 ${
-                activeSidePanel === 'tasks' ? 'translate-x-0 pointer-events-auto' : 'translate-x-full pointer-events-none'
-              } ${
-                activeSidePanel === 'tasks' && hasPreviewOpen ? 'w-48 sm:w-56 md:w-64' : 'w-96 sm:w-[440px] md:w-[520px]'
-              }`}
-            >
-              <VibeTaskPanel isVisible={activeSidePanel === 'tasks'} onClose={() => setActiveSidePanel(null)} />
-            </div>
 
             {/* Dashboard Panel */}
             <div 
@@ -592,13 +516,6 @@ function MainContent({
               <div className="absolute inset-0 bg-background z-10 mobile-modal ios-sides-safe">
                 <div className="h-full mobile-content overflow-y-auto scrollable-content">
                   <GitPanel selectedProject={selectedProject} isMobile={true} isVisible={true} />
-                </div>
-              </div>
-            )}
-            {activeTab === 'tasks' && (
-              <div className="absolute inset-0 bg-background z-10 mobile-modal ios-sides-safe">
-                <div className="h-full mobile-content overflow-y-auto scrollable-content">
-                  <VibeTaskPanel isVisible={true} onClose={() => setActiveTab('shell')} isMobile={true} />
                 </div>
               </div>
             )}
@@ -645,6 +562,31 @@ function MainContent({
         selectedProject={selectedProject}
         isMobile={isMobile}
       />
+
+      {/* Git Modal */}
+      {showGitModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/50" onClick={() => setShowGitModal(false)} />
+          <div className="relative z-50 w-full max-w-4xl max-h-[85vh] bg-background rounded-lg shadow-xl overflow-hidden">
+            <GitPanel 
+              selectedProject={selectedProject} 
+              isMobile={false} 
+              isVisible={true} 
+              onClose={() => setShowGitModal(false)} 
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Dashboard Modal */}
+      {showDashboardModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/50" onClick={() => setShowDashboardModal(false)} />
+          <div className="relative z-50 w-full max-w-5xl max-h-[85vh] bg-background rounded-lg shadow-xl overflow-hidden">
+            <Dashboard onBack={() => setShowDashboardModal(false)} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

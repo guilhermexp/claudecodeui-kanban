@@ -5,6 +5,7 @@ import { createRequire } from 'module';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { existsSync } from 'fs';
+import chokidar from 'chokidar';
 // Port protection removed - was causing issues with browser processes
 
 const require = createRequire(import.meta.url);
@@ -48,7 +49,7 @@ async function killPortProcesses(ports) {
           if (pid) {
             try {
               process.kill(parseInt(pid), 'SIGTERM');
-              log('CLEANUP', `Killed process ${pid} on port ${port}`, colors.yellow);
+              // Silent cleanup - don't log every killed process
             } catch (e) {
               // Process might already be dead
             }
@@ -82,7 +83,10 @@ function spawnService(name, command, args, options = {}) {
   };
 
   function start() {
-    log(name, `Starting: ${command} ${args.join(' ')}`, service.color);
+    // Only log startup for main services, not the full command
+    if (name === 'SERVER' || name === 'CLIENT' || name === 'VIBE-BACKEND') {
+      log(name, 'Starting...', service.color);
+    }
     
     service.process = spawn(command, args, {
       cwd: options.cwd || rootDir,
@@ -92,7 +96,17 @@ function spawnService(name, command, args, options = {}) {
 
     service.process.stdout?.on('data', (data) => {
       const output = data.toString().trim();
-      if (output) log(name, output, service.color);
+      // Filter out noisy logs
+      if (output && 
+          !output.includes('VITE v') && 
+          !output.includes('➜') &&
+          !output.includes('ready in') &&
+          !output.includes('[INFO]') &&
+          !output.includes('[DEBUG]') &&
+          !output.includes('Has users:') &&
+          !output.includes('Auth status')) {
+        log(name, output, service.color);
+      }
     });
 
     service.process.stderr?.on('data', (data) => {
@@ -134,7 +148,8 @@ function spawnService(name, command, args, options = {}) {
 
 // Main execution
 async function main() {
-  log('INIT', 'Starting Claude Code UI Development Environment', colors.cyan);
+  // Simple startup message
+  console.log(`${colors.cyan}🚀 Starting Claude Code UI...${colors.reset}`);
   
   // Initialize Port Protection Service (but don't start monitoring yet)
   // const portProtector = new PortProtector(PORTS);
@@ -150,17 +165,54 @@ async function main() {
   const allowedProcesses = {};
 
   // Start Server (Claude Code UI Backend) with memory optimizations
-  const serverService = spawnService(
-    'SERVER',
-    'node',
-    ['--expose-gc', '--max-old-space-size=2048', 'server/index.js'],
-    {
-      color: colors.green,
-      env: { PORT: PORTS.SERVER },
-      registerCallback: (pid) => {} // portProtector.registerAllowedProcess('SERVER', pid)
-    }
-  );
+  const startServer = () => spawnService(
+      'SERVER',
+      'node',
+      ['--expose-gc', '--max-old-space-size=2048', 'server/index.js'],
+      {
+        color: colors.green,
+        env: { PORT: PORTS.SERVER },
+        registerCallback: (pid) => {} // portProtector.registerAllowedProcess('SERVER', pid)
+      }
+    );
+
+  let serverService = startServer();
   services.push(serverService);
+
+  // Hot-reload for server: watch server/ and restart process on changes
+  let restartTimer = null;
+  const serverWatcher = chokidar.watch([
+    'server/**/*.js',
+    'server/**/*.mjs',
+    'server/**/*.cjs'
+  ], {
+    cwd: rootDir,
+    ignoreInitial: true,
+    ignored: ['**/node_modules/**', '**/.git/**']
+  });
+
+  const scheduleRestart = (reason) => {
+    clearTimeout(restartTimer);
+    restartTimer = setTimeout(() => {
+      try {
+        log('SERVER', `Change detected (${reason}). Restarting...`, colors.yellow);
+        if (serverService?.process && !serverService.process.killed) {
+          serverService.process.once('exit', () => {
+            serverService = startServer();
+          });
+          serverService.process.kill('SIGTERM');
+        } else {
+          serverService = startServer();
+        }
+      } catch (e) {
+        log('SERVER', `Hot-reload failed: ${e.message}`, colors.red);
+      }
+    }, 200);
+  };
+
+  serverWatcher.on('all', (event, filePath) => {
+    scheduleRestart(`${event}: ${filePath}`);
+  });
   
   // Register server process as authorized
   // setTimeout(() => {
@@ -221,6 +273,7 @@ async function main() {
     
     // Stop port protection first
     // portProtector.stop();
+    try { serverWatcher?.close(); } catch {}
     
     services.forEach(service => {
       if (service.process && !service.process.killed) {
@@ -250,8 +303,10 @@ async function main() {
   //   await portProtector.start();
   // }, 4000); // Wait longer to ensure all processes are registered
   
-  // Keep the process alive
-  log('READY', `Development servers starting on ports: Client(${PORTS.CLIENT}), Server(${PORTS.SERVER}), Vibe-Backend(${PORTS.VIBE_BACKEND})`, colors.cyan);
+  // Simple ready message
+  setTimeout(() => {
+    console.log(`${colors.green}✅ Ready at http://localhost:${PORTS.CLIENT}${colors.reset}`);
+  }, 2000);
 }
 
 main().catch(console.error);

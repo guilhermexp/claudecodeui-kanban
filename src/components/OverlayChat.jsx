@@ -12,25 +12,82 @@ import { normalizeCodexEvent } from '../utils/codex-normalizer';
 export default function OverlayChat({ projectPath, previewUrl, embedded = false, disableInlinePanel = false, useSidebarWhenOpen = false, sidebarContainerRef = null, onBeforeOpen, onPanelClosed }) {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
-  const [messages, setMessages] = useState([
-    { 
-      type: 'assistant', 
-      text: 'Hello! I\'m connected to **Codex** via your internal backend.\n\nI can help you:\n- Modify your code\n- Explain components\n- Fix bugs\n- Add new features\n\nHow can I help you today?',
-      timestamp: new Date().toISOString(),
-      id: 'welcome-msg'
-    }
-  ]);
+  const [messages, setMessages] = useState([]);
   const [isTyping, setIsTyping] = useState(false);
+  const [typingStatus, setTypingStatus] = useState({ mode: 'idle', label: '' });
+  const [typingStart, setTypingStart] = useState(null);
+  const [elapsedSec, setElapsedSec] = useState(0);
   const [selectedElement, setSelectedElement] = useState(null);
   const [attachments, setAttachments] = useState([]); // chips like "div", "span" etc
   const trayInputRef = useRef(null);
   const bottomRef = useRef(null);
+  
+  // Preferences (kept, but control hidden from header)
+  const [hideThinking] = useState(() => {
+    try { return localStorage.getItem('codex-hide-thinking') === '1'; } catch { return false; }
+  });
   
   // Estado para controlar modo de comunicação
   const [useVibeBackend, setUseVibeBackend] = useState(false); // Use Node backend (WebSocket) by default
   
   // Usar o WebSocket INTERNO (porta 7347, /ws) - fallback if needed
   const { ws, sendMessage, messages: wsMessages, isConnected } = useWebSocket(true);
+  const [sessionId, setSessionId] = useState(null);
+  const sessionActive = !!sessionId;
+  const [isSessionInitializing, setIsSessionInitializing] = useState(false);
+  const initTimerRef = useRef(null);
+
+  // Session helpers
+  const startSession = useCallback(() => {
+    const options = { projectPath: projectPath || process.cwd(), cwd: projectPath || process.cwd() };
+    if (isConnected) {
+      sendMessage({ type: 'codex-start-session', options });
+      setIsSessionInitializing(true);
+      // Fallback timeout: stop spinner if backend didn't confirm
+      if (initTimerRef.current) clearTimeout(initTimerRef.current);
+      initTimerRef.current = setTimeout(() => {
+        setIsSessionInitializing(false);
+        addMessage({ type: 'system', text: 'Session start timeout. You can retry or continue without session.' });
+      }, 8000);
+    }
+  }, [isConnected, sendMessage, projectPath]); // Remove addMessage from deps - it's defined after
+
+  const endSession = useCallback(() => {
+    if (isConnected) {
+      sendMessage({ type: 'codex-end-session' });
+    }
+  }, [isConnected, sendMessage]);
+
+  const restartSession = useCallback(() => {
+    endSession();
+    // Small delay to allow server to clear state
+    setTimeout(() => startSession(), 200);
+  }, [endSession, startSession]);
+
+  // Map tool names to small icons
+  const getToolIcon = useCallback((name) => {
+    const n = String(name || '').toLowerCase();
+    if (n.includes('bash') || n.includes('shell')) return '💻';
+    if (n.includes('edit') || n.includes('patch')) return '✏️';
+    if (n.includes('git')) return '🌿';
+    return '🔧';
+  }, []);
+
+  // Elapsed time while thinking/using a tool
+  useEffect(() => {
+    if (isTyping && (typingStatus.mode === 'thinking' || typingStatus.mode === 'tool')) {
+      const start = Date.now();
+      setTypingStart(start);
+      setElapsedSec(0);
+      const id = setInterval(() => {
+        setElapsedSec(Math.max(0, Math.floor((Date.now() - start) / 1000)));
+      }, 1000);
+      return () => clearInterval(id);
+    } else {
+      setTypingStart(null);
+      setElapsedSec(0);
+    }
+  }, [isTyping, typingStatus.mode]);
 
   // Smart message merging logic inspired by Claudable
   const addMessage = useCallback((newMessage) => {
@@ -41,7 +98,30 @@ export default function OverlayChat({ projectPath, previewUrl, embedded = false,
         timestamp,
         id: `msg-${Date.now()}-${Math.random()}`
       };
-      
+
+      // Respect preference: hide "Thinking…" system blocks
+      if (
+        hideThinking &&
+        newMessage?.type === 'system' &&
+        typeof newMessage.text === 'string' &&
+        newMessage.text.startsWith('Thinking…')
+      ) {
+        return prev;
+      }
+
+      // Drop duplicate "Session Parameters" back-to-back
+      if (
+        prev.length > 0 &&
+        newMessage.type === 'system' &&
+        typeof newMessage.text === 'string' &&
+        newMessage.text.startsWith('Session Parameters:')
+      ) {
+        const last = prev[prev.length - 1];
+        if (last.type === 'system' && typeof last.text === 'string' && last.text === newMessage.text) {
+          return prev; // ignore duplicate
+        }
+      }
+
       // Smart merging: combine messages from same role within 5 seconds
       if (prev.length > 0) {
         const lastMessage = prev[prev.length - 1];
@@ -67,7 +147,7 @@ export default function OverlayChat({ projectPath, previewUrl, embedded = false,
       
       return [...prev, messageWithMeta];
     });
-  }, []);
+  }, [hideThinking]);
   
   // Process messages from WebSocket with cleaner formatting
   useEffect(() => {
@@ -75,30 +155,70 @@ export default function OverlayChat({ projectPath, previewUrl, embedded = false,
       const lastMsg = wsMessages[wsMessages.length - 1];
       
       // Normalize Codex events (ported from Vibe Kanban patterns)
+      if (lastMsg.type === 'codex-session-started') {
+        if (initTimerRef.current) { clearTimeout(initTimerRef.current); initTimerRef.current = null; }
+        if (lastMsg.sessionId) {
+          setSessionId(lastMsg.sessionId);
+          addMessage({ type: 'system', text: `Session started (${lastMsg.sessionId.slice(0, 8)}…)` });
+        }
+        setIsSessionInitializing(false);
+        setIsTyping(false);
+        return;
+      }
+      if (lastMsg.type === 'codex-session-closed') {
+        if (initTimerRef.current) { clearTimeout(initTimerRef.current); initTimerRef.current = null; }
+        setSessionId(null);
+        addMessage({ type: 'system', text: 'Session closed' });
+        setIsSessionInitializing(false);
+        setIsTyping(false);
+        return;
+      }
+      if (lastMsg.type === 'codex-error' && isSessionInitializing) {
+        // Stop spinner if warmup failed
+        if (initTimerRef.current) { clearTimeout(initTimerRef.current); initTimerRef.current = null; }
+        setIsSessionInitializing(false);
+      }
+
       const normalized = normalizeCodexEvent(lastMsg) || [];
       if (normalized.length) {
         setIsTyping(false);
+        setTypingStatus({ mode: 'idle', label: '' });
         normalized.forEach((m) => addMessage({ type: m.type, text: m.text }));
         return;
       }
       // Fallbacks for start/complete/tool notices
       if (lastMsg.type === 'codex-start' || lastMsg.type === 'task_started') {
-        setIsTyping(true);
+        if (!isSessionInitializing) {
+          setIsTyping(true);
+          setTypingStatus({ mode: 'thinking', label: 'Thinking' });
+          setTypingStart(Date.now());
+          setElapsedSec(0);
+        }
         return;
       }
       if (lastMsg.type === 'codex-complete') {
         setIsTyping(false);
+        setTypingStatus({ mode: 'idle', label: '' });
+        setTypingStart(null);
+        setElapsedSec(0);
         return;
       }
       if (lastMsg.type === 'codex-error') {
         setIsTyping(false);
+        setTypingStatus({ mode: 'idle', label: '' });
+        setTypingStart(null);
+        setElapsedSec(0);
         addMessage({ type: 'error', text: lastMsg.error });
         return;
       }
       if (lastMsg.type === 'codex-tool') {
         const toolData = lastMsg.data;
         if (toolData && toolData.name && !['reasoning', 'thinking'].includes(toolData.name.toLowerCase())) {
-          addMessage({ type: 'system', text: `🔧 ${toolData.name}` });
+          setIsTyping(true);
+          setTypingStatus({ mode: 'tool', label: toolData.name });
+          addMessage({ type: 'system', text: `${getToolIcon(toolData.name)} ${toolData.name}` });
+          setTypingStart(Date.now());
+          setElapsedSec(0);
         }
         return;
       }
@@ -161,18 +281,51 @@ export default function OverlayChat({ projectPath, previewUrl, embedded = false,
         <div className="flex items-center gap-2">
           <div className="text-sm font-semibold">Codex Assistant</div>
           <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-yellow-500'}`} />
+          {!sessionActive && isSessionInitializing && (
+            <span className="ml-2 inline-flex items-center gap-2 text-xs opacity-80">
+              <span className="w-3 h-3 border-2 border-muted-foreground border-t-transparent rounded-full animate-spin inline-block" />
+              Starting…
+            </span>
+          )}
         </div>
-        <button
-          onClick={() => { setOpen(false); onPanelClosed && onPanelClosed(); }}
-          className="w-6 h-6 rounded-full flex items-center justify-center hover:bg-accent transition-colors"
-          title="Close"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
+        <div className="flex items-center gap-2">
+          {sessionActive && (
+            <>
+              <span className="text-xs opacity-80 inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-border">
+                <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />
+                Session {String(sessionId).slice(0, 8)}
+              </span>
+            <button
+              onClick={restartSession}
+              disabled={!isConnected}
+              className="text-xs px-2 py-1 rounded-md border border-border hover:bg-accent disabled:opacity-50"
+              title="Restart Codex session"
+            >
+              Restart
+            </button>
+            <button
+              onClick={endSession}
+              disabled={!isConnected}
+              className="text-xs px-2 py-1 rounded-md border border-border hover:bg-destructive/10 disabled:opacity-50"
+              title="End Codex session"
+            >
+              End
+            </button>
+          </>
+          )}
+          {/* Hide-thinking control removed from header for cleaner UI */}
+          <button
+            onClick={() => { setOpen(false); onPanelClosed && onPanelClosed(); }}
+            className="w-6 h-6 rounded-full flex items-center justify-center hover:bg-accent transition-colors"
+            title="Close"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
       </div>
-      <div className="overflow-y-auto p-4 space-y-2 bg-background/60 max-h-[50vh]">
+      <div className="overflow-y-auto p-4 space-y-1 bg-background/60 max-h-[50vh]">
         <AnimatePresence initial={false}>
           {messages.map((m) => {
             const isUser = m.type === 'user';
@@ -185,12 +338,46 @@ export default function OverlayChat({ projectPath, previewUrl, embedded = false,
               : isSystem
               ? 'max-w-[82%] text-muted-foreground italic'
               : 'max-w-[82%] text-foreground'; // assistant: no background/padding, plain text
+            
+            // Detect tool messages and extract inline command for copy
+            const isToolMessage = !isError && isSystem && typeof m.text === 'string' && m.text.startsWith('🔧 ');
+            const extractCommand = (txt) => {
+              const match = /`([^`]+)`/.exec(txt || '');
+              return match ? match[1] : '';
+            };
+            
+            const ExpandableMessage = ({ text }) => {
+              const [expanded, setExpanded] = useState(false);
+              const lines = String(text || '').split('\n');
+              const threshold = 24;
+              if (lines.length <= threshold) {
+                return (
+                  <div className="prose prose-sm dark:prose-invert max-w-none leading-relaxed">
+                    <ReactMarkdown components={markdownComponents}>{text}</ReactMarkdown>
+                  </div>
+                );
+              }
+              const shown = expanded ? text : lines.slice(0, 20).join('\n') + '\n…';
+              return (
+                <>
+                  <div className="prose prose-sm dark:prose-invert max-w-none leading-relaxed">
+                    <ReactMarkdown components={markdownComponents}>{shown}</ReactMarkdown>
+                  </div>
+                  <button
+                    onClick={() => setExpanded(e => !e)}
+                    className="mt-1 text-[11px] opacity-70 hover:opacity-100 underline"
+                  >
+                    {expanded ? 'Show less' : 'Show more'}
+                  </button>
+                </>
+              );
+            };
             return (
               <motion.div key={m.id} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }} transition={{ duration: 0.25 }} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
                 <div className={containerClass}>
-                  {/^(Updated Todo List|Lista de tarefas atualizada)/i.test(m.text || '') ? (
+                  {/^(Updated Todo List|Lista de tarefas atualizada|TODO List:|Todo List:)/i.test(m.text || '') ? (
                     <div>
-                      <div className="text-sm font-semibold mb-2">{(m.text.split('\n')[0] || '').trim()}</div>
+                      <div className="text-sm font-semibold mb-1">{(m.text.split('\n')[0] || '').trim()}</div>
                       <ul className="space-y-1 ml-1">
                         {m.text.split('\n').slice(1).filter(line => line.trim()).slice(0, 30).map((line, idx) => {
                           const checked = /(^|\s)(\[x\]|✔)/i.test(line);
@@ -205,9 +392,31 @@ export default function OverlayChat({ projectPath, previewUrl, embedded = false,
                       </ul>
                     </div>
                   ) : (
-                    <div className="prose prose-sm dark:prose-invert max-w-none leading-relaxed">
-                      <ReactMarkdown components={markdownComponents}>{m.text}</ReactMarkdown>
-                    </div>
+                    (isUser || isError)
+                      ? (
+                        <div className="prose prose-sm dark:prose-invert max-w-none leading-relaxed">
+                          <ReactMarkdown components={markdownComponents}>{m.text}</ReactMarkdown>
+                        </div>
+                      ) : isSystem ? (
+                        <div className={`relative ${isToolMessage ? 'pr-14' : ''}`}>
+                          {isToolMessage && (
+                            <button
+                              className="absolute top-0 right-0 text-[11px] px-2 py-1 rounded-md border border-border opacity-70 hover:opacity-100"
+                              title="Copy command"
+                              onClick={async () => {
+                                try { await navigator.clipboard.writeText(extractCommand(m.text)); } catch {}
+                              }}
+                            >
+                              Copy
+                            </button>
+                          )}
+                          <div className={`prose prose-sm dark:prose-invert max-w-none leading-relaxed ${isSystem ? 'opacity-80' : ''}`}>
+                            <ExpandableMessage text={m.text} />
+                          </div>
+                        </div>
+                      ) : (
+                        <ExpandableMessage text={m.text} />
+                      )
                   )}
                   {!isSystem && (
                     <div className={`mt-1 text-[11px] opacity-60 ${isUser ? 'text-right' : 'text-left'}`}>
@@ -220,14 +429,13 @@ export default function OverlayChat({ projectPath, previewUrl, embedded = false,
           })}
         </AnimatePresence>
         {isTyping && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex justify-start">
-            <div className="bg-card border border-border rounded-lg px-4 py-3">
-              <div className="flex space-x-2">
-                <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" />
-                <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-              </div>
-            </div>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-2 text-muted-foreground">
+            <span className="w-4 h-4 border-2 border-muted-foreground/40 border-t-muted-foreground rounded-full animate-spin inline-block" />
+            <span className="text-[12px]">
+              {typingStatus.mode === 'tool' && typingStatus.label
+                ? `${getToolIcon(typingStatus.label)} Using ${typingStatus.label} — ${elapsedSec}s`
+                : `Running… ${elapsedSec}s`}
+            </span>
           </motion.div>
         )}
         <div ref={bottomRef} />
@@ -249,8 +457,8 @@ export default function OverlayChat({ projectPath, previewUrl, embedded = false,
           </div>
         )}
         <div className="flex items-end gap-2">
-          <textarea value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown} placeholder="Ask a follow-up..." className="flex-1 text-sm bg-background border border-border rounded-2xl px-3 py-2 min-h-[56px] max-h-[140px] resize-none focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all" disabled={!isConnected} rows={2} style={{ height: 'auto', overflow: 'auto' }} />
-          <button onClick={handleSend} className="w-10 h-10 bg-primary text-primary-foreground hover:bg-primary/90 rounded-xl text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center" disabled={!isConnected || (!input.trim() && attachments.length === 0)} title="Send">
+          <textarea value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown} placeholder={(isSessionInitializing && !sessionActive) ? 'Aguardando sessão iniciar…' : 'Ask a follow-up...'} className="flex-1 text-sm bg-background border border-border rounded-2xl px-3 py-2 min-h-[56px] max-h-[140px] resize-none focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all" disabled={!isConnected || (isSessionInitializing && !sessionActive)} rows={2} style={{ height: 'auto', overflow: 'auto' }} />
+          <button onClick={handleSend} className="w-10 h-10 bg-primary text-primary-foreground hover:bg-primary/90 rounded-xl text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center" disabled={!isConnected || (isSessionInitializing && !sessionActive) || (!input.trim() && attachments.length === 0)} title="Send">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M12 5l7 7-7 7" />
             </svg>
@@ -484,17 +692,40 @@ export default function OverlayChat({ projectPath, previewUrl, embedded = false,
       
 
       {/* Persistent Open Button */}
-      <div className="absolute right-4 bottom-4 z-40">
-        <button
-          onClick={() => {
-            if (onBeforeOpen) onBeforeOpen();
-            setOpen(true);
-          }}
-          className="px-4 py-2 rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 transition-colors text-sm"
-          title={`Ask about ${getHost()}`}
-        >
-          Ask about this page
-        </button>
+      <div className="absolute right-4 bottom-4 z-40 flex items-center gap-2">
+        {!sessionActive ? (
+          <button
+            onClick={() => {
+              // Start Codex session before opening the panel
+              startSession();
+              if (onBeforeOpen) onBeforeOpen();
+              setOpen(true);
+            }}
+            className="px-4 py-2 rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 transition-colors text-sm disabled:opacity-60"
+            title={`Start Codex session for ${getHost()}`}
+            disabled={isSessionInitializing || !isConnected}
+          >
+            {isSessionInitializing ? 'Starting…' : 'Start Codex Session'}
+          </button>
+        ) : (
+          <>
+            <button
+              onClick={endSession}
+              className="px-3 py-2 rounded-full bg-destructive/80 text-destructive-foreground hover:bg-destructive transition-colors text-xs"
+              title="End Codex session"
+            >
+              End Session
+            </button>
+            {!open && (
+              <button
+                onClick={() => { if (onBeforeOpen) onBeforeOpen(); setOpen(true); }}
+                className="px-3 py-2 rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 transition-colors text-xs"
+              >
+                Open Chat
+              </button>
+            )}
+          </>
+        )}
       </div>
     </>
   );

@@ -161,6 +161,12 @@ function ResourceMonitor() {
           />
         </svg>
         <span className="hidden sm:inline">System</span>
+        {/* Port count badge */}
+        {systemInfo.activePorts && systemInfo.activePorts.length > 0 && (
+          <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/20 text-blue-500">
+            {systemInfo.activePorts.length}
+          </span>
+        )}
       </button>
 
       {/* Dropdown Panel */}

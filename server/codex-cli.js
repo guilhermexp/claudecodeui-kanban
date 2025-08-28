@@ -7,9 +7,41 @@ import os from 'os';
  * Spawn Codex CLI (OpenAI subscription-based CLI)
  * Similar to how Claude Code CLI works - using same approach as Vibe Kanban
  */
+function extractSessionIdFromLine(line) {
+  try {
+    const m = /session_id:\s*([0-9a-fA-F-]{36})/.exec(line);
+    return m ? m[1] : null;
+  } catch { return null; }
+}
+
+function findRolloutFilePath(sessionId) {
+  try {
+    const home = os.homedir();
+    const sessionsDir = path.join(home, '.codex', 'sessions');
+    if (!fs.existsSync(sessionsDir)) return null;
+
+    const stack = [sessionsDir];
+    while (stack.length) {
+      const dir = stack.pop();
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const ent of entries) {
+        const full = path.join(dir, ent.name);
+        if (ent.isDirectory()) {
+          stack.push(full);
+        } else if (ent.isFile()) {
+          if (ent.name.includes(sessionId) && ent.name.startsWith('rollout-') && ent.name.endsWith('.jsonl')) {
+            return full;
+          }
+        }
+      }
+    }
+  } catch {}
+  return null;
+}
+
 export async function spawnCodex(prompt, options = {}, ws) {
   return new Promise((resolve, reject) => {
-    const { projectPath, cwd } = options;
+    const { projectPath, cwd, onSession, resumeRolloutPath, suppressOutput } = options;
 
     // Determine working directory. Avoid invalid placeholders like STANDALONE_MODE
     let workingDir = cwd || projectPath;
@@ -32,6 +64,9 @@ export async function spawnCodex(prompt, options = {}, ws) {
     ];
     if (workingDir) {
       commonArgs.push('-C', workingDir);
+    }
+    if (resumeRolloutPath) {
+      commonArgs.push('-c', `experimental_resume=${resumeRolloutPath}`);
     }
     commonArgs.push(escapedPrompt);
 
@@ -106,15 +141,6 @@ export async function spawnCodex(prompt, options = {}, ws) {
       return reject(err);
     }
 
-    // Choose a robust shell available in most environments
-    const shellCandidates = ['/bin/bash', '/bin/sh', '/usr/bin/bash', '/usr/bin/sh'];
-    const chosenShell = shellCandidates.find(p => {
-      try { return fs.existsSync(p); } catch { return false; }
-    }) || 'sh';
-
-    console.log('Starting Codex with command:', codexCommand);
-    console.log('Using shell:', chosenShell, 'cwd:', workingDir);
-
     // Notify frontend that task started
     ws?.send?.(JSON.stringify({ type: 'codex-start' }));
 
@@ -143,12 +169,14 @@ export async function spawnCodex(prompt, options = {}, ws) {
               error: json.msg.message
             }));
           } else if (json.msg && json.msg.type === 'agent_message' && json.msg.message) {
-            // Send agent messages to frontend
-            console.log('Sending agent_message to frontend:', json.msg.message);
-            ws.send(JSON.stringify({
-              type: 'codex-response',
-              text: json.msg.message
-            }));
+            // Send agent messages to frontend (skip during warmup)
+            if (!suppressOutput) {
+              console.log('Sending agent_message to frontend:', json.msg.message);
+              ws.send(JSON.stringify({
+                type: 'codex-response',
+                text: json.msg.message
+              }));
+            }
           } else if (json.type === 'tool_use') {
             ws.send(JSON.stringify({
               type: 'codex-tool',
@@ -168,9 +196,11 @@ export async function spawnCodex(prompt, options = {}, ws) {
           }
         } catch (parseError) {
           // If not JSON, could be debug output - ignore for now
-          console.log('Non-JSON output from Codex:', line);
-          // Still forward as raw output to allow UI to show something if useful
-          ws?.send?.(JSON.stringify({ type: 'codex-output', data: line }));
+          // Reduce noise: only forward raw lines if not a suppressed warmup
+          if (!suppressOutput) {
+            console.log('Non-JSON output from Codex:', line);
+            ws?.send?.(JSON.stringify({ type: 'codex-output', data: line }));
+          }
         }
       }
     });
@@ -179,10 +209,24 @@ export async function spawnCodex(prompt, options = {}, ws) {
     codexProcess.stderr.on('data', (data) => {
       const error = data.toString();
       console.error('Codex stderr:', error);
-      ws.send(JSON.stringify({
-        type: 'codex-error',
-        error: error
-      }));
+      // Try to extract session id from stderr logs
+      const lines = error.split('\n');
+      let sessionFound = false;
+      for (const line of lines) {
+        const sid = extractSessionIdFromLine(line);
+        if (sid) {
+          const rollout = findRolloutFilePath(sid);
+          sessionFound = true;
+          if (typeof onSession === 'function') {
+            try { onSession(sid, rollout || null); } catch {}
+          }
+          ws?.send?.(JSON.stringify({ type: 'codex-session-started', sessionId: sid, rolloutPath: rollout || null }));
+          break;
+        }
+      }
+      if (!sessionFound) {
+        ws.send(JSON.stringify({ type: 'codex-error', error }));
+      }
     });
     
     // Handle process completion

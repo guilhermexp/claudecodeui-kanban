@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
-import { Kanban, ChevronDown, Loader2, Folder, X, CheckCircle2, Circle, Clock } from 'lucide-react';
+import { Kanban, ChevronDown, Loader2, Folder, X, CheckCircle2, Circle, Clock, ListTodo, LayoutGrid } from 'lucide-react';
 import KanbanModalContent from './KanbanModalContent';
+import VibeTaskPanel from './VibeTaskPanel';
 import { projectsApi, tasksApi } from '../lib/vibe-kanban/api';
 import { api } from '../utils/api';
 import { cn } from '../lib/utils';
@@ -17,6 +18,7 @@ function KanbanModal({
   const [loadingProjects, setLoadingProjects] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [taskCounts, setTaskCounts] = useState({});
+  const [activeTab, setActiveTab] = useState('kanban'); // 'kanban' or 'tasks'
 
   useEffect(() => {
     if (isOpen) {
@@ -108,11 +110,40 @@ function KanbanModal({
             <div className="flex items-center gap-2">
               <Kanban className="w-5 h-5 text-primary/70" />
               <DialogTitle className="text-lg font-semibold text-foreground">
-                Task Board
+                Task Management
               </DialogTitle>
               
-              {/* Project Dropdown */}
-              <div className="ml-4 relative">
+              {/* Tab Navigation */}
+              <div className="ml-6 flex items-center gap-1 p-1 bg-accent/30 rounded-lg">
+                <button
+                  onClick={() => setActiveTab('kanban')}
+                  className={cn(
+                    "flex items-center gap-2 px-3 py-1.5 text-sm rounded-md transition-all",
+                    activeTab === 'kanban' 
+                      ? "bg-background text-foreground shadow-sm" 
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <LayoutGrid className="w-4 h-4" />
+                  <span>Kanban Board</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('tasks')}
+                  className={cn(
+                    "flex items-center gap-2 px-3 py-1.5 text-sm rounded-md transition-all",
+                    activeTab === 'tasks' 
+                      ? "bg-background text-foreground shadow-sm" 
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <ListTodo className="w-4 h-4" />
+                  <span>Background Tasks</span>
+                </button>
+              </div>
+              
+              {/* Project Dropdown - Only show for Kanban tab */}
+              {activeTab === 'kanban' && (
+                <div className="ml-4 relative">
                 <button
                   onClick={() => {
                     console.log('[KanbanModal] Dropdown clicked. Current projects:', vibeProjects);
@@ -235,6 +266,7 @@ function KanbanModal({
                   </div>
                 )}
               </div>
+              )}
             </div>
             
             {/* Close button */}
@@ -249,10 +281,20 @@ function KanbanModal({
         </DialogHeader>
 
         <div className="h-[calc(85vh-4rem)] overflow-hidden bg-background/30">
-          <KanbanModalContent 
-            selectedProject={selectedProject}
-            onClose={onClose}
-          />
+          {activeTab === 'kanban' ? (
+            <KanbanModalContent 
+              selectedProject={selectedProject}
+              onClose={onClose}
+            />
+          ) : (
+            <div className="h-full p-4">
+              <VibeTaskPanel 
+                isVisible={true}
+                onClose={() => {}} 
+                embedded={true}
+              />
+            </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>

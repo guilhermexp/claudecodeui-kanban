@@ -8,6 +8,13 @@ import { extractProjectDirectory } from '../projects.js';
 const router = express.Router();
 const execAsync = promisify(exec);
 
+// Helper function to check if project is standalone mode
+function isStandaloneProject(projectName) {
+  return projectName === 'claude/standalone' || 
+         projectName.includes('standalone') ||
+         projectName === 'claude-standalone';
+}
+
 // Helper function to get the actual project path from the encoded project name
 async function getActualProjectPath(projectName) {
   try {
@@ -57,6 +64,21 @@ router.get('/status', async (req, res) => {
   
   if (!project) {
     return res.status(400).json({ error: 'Project name is required' });
+  }
+
+  // Skip git operations for standalone mode
+  if (isStandaloneProject(project)) {
+    return res.json({
+      branch: null,
+      modified: [],
+      added: [],
+      deleted: [],
+      untracked: [],
+      ahead: 0,
+      behind: 0,
+      isRepository: false,
+      isStandalone: true
+    });
   }
 
   try {
@@ -223,6 +245,15 @@ router.get('/branches', async (req, res) => {
   
   if (!project) {
     return res.status(400).json({ error: 'Project name is required' });
+  }
+
+  // Skip git operations for standalone mode
+  if (isStandaloneProject(project)) {
+    return res.json({
+      branches: [],
+      current: null,
+      isStandalone: true
+    });
   }
 
   try {
@@ -560,6 +591,16 @@ router.get('/remote-status', async (req, res) => {
   
   if (!project) {
     return res.status(400).json({ error: 'Project name is required' });
+  }
+
+  // Skip git operations for standalone mode
+  if (isStandaloneProject(project)) {
+    return res.json({
+      ahead: 0,
+      behind: 0,
+      hasRemote: false,
+      isStandalone: true
+    });
   }
 
   try {
