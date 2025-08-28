@@ -149,11 +149,11 @@ async function main() {
   const services = [];
   const allowedProcesses = {};
 
-  // Start Server (Claude Code UI Backend)
+  // Start Server (Claude Code UI Backend) with memory optimizations
   const serverService = spawnService(
     'SERVER',
     'node',
-    ['server/index.js'],
+    ['--expose-gc', '--max-old-space-size=2048', 'server/index.js'],
     {
       color: colors.green,
       env: { PORT: PORTS.SERVER },

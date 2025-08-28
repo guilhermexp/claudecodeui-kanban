@@ -96,8 +96,8 @@ function ResourceMonitor() {
       // Fetch immediately
       fetchSystemInfo();
       
-      // Poll every 8s for snappier updates (cleared on close)
-      intervalRef.current = setInterval(fetchSystemInfo, 8000);
+      // Poll every 30s to reduce server load (cleared on close)
+      intervalRef.current = setInterval(fetchSystemInfo, 30000);
       console.log('[ResourceMonitor] Interval created with ID:', intervalRef.current);
     } else {
       console.log('[ResourceMonitor] Panel closed - stopping monitoring');

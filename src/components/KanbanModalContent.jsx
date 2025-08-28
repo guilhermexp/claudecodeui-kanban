@@ -65,7 +65,8 @@ function KanbanModalContent({ selectedProject, onClose }) {
     ));
 
     try {
-      await tasksApi.updateTask(taskId, { status: newStatus });
+      // Use the proper API call with projectId
+      await tasksApi.update(selectedProject.id, taskId, { status: newStatus });
     } catch (err) {
       console.error('Failed to update task status:', err);
       // Revert on error
@@ -83,7 +84,7 @@ function KanbanModalContent({ selectedProject, onClose }) {
     if (!confirm('Are you sure you want to delete this task?')) return;
     
     try {
-      await tasksApi.deleteTask(taskId);
+      await tasksApi.delete(selectedProject.id, taskId);
       setTasks(prev => prev.filter(t => t.id !== taskId));
     } catch (err) {
       console.error('Failed to delete task:', err);

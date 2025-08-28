@@ -8,9 +8,19 @@ const execAsync = promisify(exec);
 
 
 
+// Simple cache to prevent excessive system calls
+let systemInfoCache = { data: null, timestamp: 0 };
+const CACHE_DURATION = 5000; // 5 seconds cache
+
 // Get system information including active ports and resource usage
 router.get('/info', async (req, res) => {
   try {
+    // Return cached data if still fresh
+    const now = Date.now();
+    if (systemInfoCache.data && (now - systemInfoCache.timestamp) < CACHE_DURATION) {
+      return res.json(systemInfoCache.data);
+    }
+    
     console.log('[SYSTEM] System info requested from:', req.ip);
     
     // Get active ports
@@ -28,6 +38,9 @@ router.get('/info', async (req, res) => {
       cpuUsage,
       timestamp: new Date().toISOString()
     };
+    
+    // Cache the result
+    systemInfoCache = { data: result, timestamp: Date.now() };
     
     console.log('[SYSTEM] Sending response:', JSON.stringify(result, null, 2).slice(0, 200) + '...');
     res.json(result);
@@ -90,8 +103,8 @@ async function getActivePorts() {
     // Use lsof with better parsing for macOS/Linux
     let command;
     if (process.platform === 'darwin' || process.platform === 'linux') {
-      // Get all listening ports with process info
-      command = "lsof -i -P -n | grep LISTEN";
+      // Get only TCP listening ports to reduce output
+      command = "lsof -iTCP -P -n -sTCP:LISTEN";
     } else if (process.platform === 'win32') {
       // Windows netstat
       command = "netstat -ano | findstr LISTENING";
@@ -155,9 +168,7 @@ async function getActivePorts() {
             if (port && !seenPorts.has(port)) {
               // Smart filtering for relevant development ports
               // Skip very high ports (usually temporary/dynamic ports) except known dev ports
-              if (port > 49152 && 
-                  !(port >= 49585 && port <= 49586) && // Keep Python jupyter/notebooks
-                  !(port >= 50000 && port <= 50100)) { // Keep some common dev tools
+              if (port > 49152) {
                 continue;
               }
               

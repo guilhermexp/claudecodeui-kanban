@@ -247,6 +247,11 @@ export const tasksApi = {
     return handleApiResponse<TaskWithAttemptStatus[]>(response);
   },
 
+  getProjectTasks: async (projectId: string): Promise<TaskWithAttemptStatus[]> => {
+    const response = await makeRequest(`/api/projects/${projectId}/tasks`);
+    return handleApiResponse<TaskWithAttemptStatus[]>(response);
+  },
+
   getById: async (projectId: string, taskId: string): Promise<Task> => {
     const response = await makeRequest(
       `/api/projects/${projectId}/tasks/${taskId}`
@@ -292,6 +297,33 @@ export const tasksApi = {
   },
 
   delete: async (projectId: string, taskId: string): Promise<void> => {
+    const response = await makeRequest(
+      `/api/projects/${projectId}/tasks/${taskId}`,
+      {
+        method: 'DELETE',
+      }
+    );
+    return handleApiResponse<void>(response);
+  },
+
+  updateTask: async (taskId: string, data: any): Promise<Task> => {
+    // First need to find project ID from the task
+    // This is a simplified version for the modal
+    const projectId = data.project_id || 'default';
+    const response = await makeRequest(
+      `/api/projects/${projectId}/tasks/${taskId}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }
+    );
+    return handleApiResponse<Task>(response);
+  },
+
+  deleteTask: async (taskId: string): Promise<void> => {
+    // Simplified version that needs project context
+    // This should be improved to get project from task
+    const projectId = 'default';
     const response = await makeRequest(
       `/api/projects/${projectId}/tasks/${taskId}`,
       {

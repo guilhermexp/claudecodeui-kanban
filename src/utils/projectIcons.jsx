@@ -237,14 +237,22 @@ export const detectProjectTechnology = async (project) => {
  * Check if project is a VibeKanban project
  */
 export const isVibeKanbanProject = (project) => {
-  return project.fullPath && (
-    project.fullPath.includes('/vibe-kanban/') ||
-    project.fullPath.includes('\\vibe-kanban\\') ||
-    project.name.startsWith('vk-') ||
-    project.fullPath.includes('/T/vibe-kanban/') ||
-    project.fullPath.includes('\\T\\vibe-kanban\\') ||
-    project.fullPath.includes('/vk-') ||
-    project.fullPath.includes('\\vk-')
+  // Check both fullPath and path fields
+  const projectPath = project.fullPath || project.path || '';
+  const projectName = project.name || '';
+  
+  return (
+    projectPath.includes('/vibe-kanban/') ||
+    projectPath.includes('\\vibe-kanban\\') ||
+    projectName.startsWith('vk-') ||
+    projectName.startsWith('VK-') ||
+    projectName.toLowerCase().includes('vibe') ||
+    projectPath.includes('/T/vibe-kanban/') ||
+    projectPath.includes('\\T\\vibe-kanban\\') ||
+    projectPath.includes('/vk-') ||
+    projectPath.includes('\\vk-') ||
+    projectPath.includes('/VK-') ||
+    projectPath.includes('\\VK-')
   );
 };
 
