@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import ReactDOM from 'react-dom';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -7,7 +8,7 @@ import { useWebSocket } from '../utils/websocket';
 
 // Overlay Chat com formatação bonita usando ReactMarkdown
 // Usa NOSSO backend interno (porta 7347) - sem servidores externos!
-export default function OverlayChat({ projectPath }) {
+export default function OverlayChat({ projectPath, previewUrl, embedded = false, disableInlinePanel = false, useSidebarWhenOpen = false, sidebarContainerRef = null, onBeforeOpen, onPanelClosed }) {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState([
@@ -21,13 +22,13 @@ export default function OverlayChat({ projectPath }) {
   const [isTyping, setIsTyping] = useState(false);
   const [selectedElement, setSelectedElement] = useState(null);
   const [attachments, setAttachments] = useState([]); // chips like "div", "span" etc
-  const [buttonPosition, setButtonPosition] = useState({ x: null, y: null });
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  const buttonRef = useRef(null);
+  const trayInputRef = useRef(null);
   const bottomRef = useRef(null);
   
-  // Usar o WebSocket INTERNO (porta 7347, /ws)
+  // Estado para controlar modo de comunicação
+  const [useVibeBackend, setUseVibeBackend] = useState(false); // Use Node backend (WebSocket) by default
+  
+  // Usar o WebSocket INTERNO (porta 7347, /ws) - fallback if needed
   const { ws, sendMessage, messages: wsMessages, isConnected } = useWebSocket(true);
 
   // Smart message merging logic inspired by Claudable
@@ -72,15 +73,56 @@ export default function OverlayChat({ projectPath }) {
     if (wsMessages && wsMessages.length > 0) {
       const lastMsg = wsMessages[wsMessages.length - 1];
       
+      // Debug log to see what messages we're receiving
+      console.log('[OverlayChat] Received WebSocket message:', lastMsg);
+      
       // Handle different message types from our backend
       if (lastMsg.type === 'codex-response') {
+        console.log('[OverlayChat] Processing codex-response:', lastMsg.text || lastMsg.data);
         setIsTyping(false);
         addMessage({ type: 'assistant', text: lastMsg.text || lastMsg.data });
       } else if (lastMsg.type === 'codex-output') {
-        // Filter out technical CLI output unless it's important
+        // Show all output from Codex, including JSON responses
         const output = lastMsg.data;
-        if (!output.includes('sandbox') && !output.includes('reasoning') && !output.trim().startsWith('{')) {
-          addMessage({ type: 'assistant', text: output });
+        console.log('[OverlayChat] Processing codex-output:', output);
+        
+        if (output && output.trim()) {
+          // Parse JSON responses if they look like structured data
+          try {
+            const parsed = JSON.parse(output);
+            console.log('[OverlayChat] Parsed JSON:', parsed);
+            
+            // If it's a message object with type and content/text
+            if (parsed.type === 'agent_message' && parsed.message) {
+              console.log('[OverlayChat] Adding agent_message:', parsed.message);
+              setIsTyping(false);
+              addMessage({ type: 'assistant', text: parsed.message });
+            } else if (parsed.type === 'token_count' || parsed.type === 'task_started') {
+              // Skip these system messages
+              console.log('[OverlayChat] Skipping system message:', parsed.type);
+            } else if (parsed.msg) {
+              // Handle simple message format
+              console.log('[OverlayChat] Adding simple message:', parsed.msg);
+              setIsTyping(false);
+              addMessage({ type: 'assistant', text: parsed.msg });
+            } else {
+              // For other JSON, only show if it's not purely technical
+              if (!output.includes('sandbox') && !output.includes('reasoning')) {
+                console.log('[OverlayChat] Adding other JSON output:', output);
+                addMessage({ type: 'assistant', text: output });
+              } else {
+                console.log('[OverlayChat] Filtering technical output:', output);
+              }
+            }
+          } catch (e) {
+            // Not JSON, show as regular text if it's not technical output
+            console.log('[OverlayChat] Not JSON, processing as text:', output);
+            if (!output.includes('sandbox') && !output.includes('reasoning')) {
+              addMessage({ type: 'assistant', text: output });
+            } else {
+              console.log('[OverlayChat] Filtering technical text:', output);
+            }
+          }
         }
       } else if (lastMsg.type === 'codex-error') {
         setIsTyping(false);
@@ -110,6 +152,7 @@ export default function OverlayChat({ projectPath }) {
       // Add as an attachment chip (do NOT send yet)
       setAttachments(prev => [...prev, { type: 'html', tag, html }]);
       setSelectedElement(elementData || null);
+      if (onBeforeOpen) onBeforeOpen();
       setOpen(true);
     };
     window.pushToOverlayChat = fn;
@@ -121,59 +164,149 @@ export default function OverlayChat({ projectPath }) {
     };
   }, [addMessage]);
 
-  // Improved dragging functionality
-  const handleMouseDown = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    
-    const rect = buttonRef.current.getBoundingClientRect();
-    
-    // Calculate offset from click point to button position
-    const currentX = buttonPosition.x !== null ? buttonPosition.x : rect.left;
-    const currentY = buttonPosition.y !== null ? buttonPosition.y : rect.top;
-    
-    const offsetX = e.clientX - currentX;
-    const offsetY = e.clientY - currentY;
-    
-    let hasMoved = false;
-    
-    const handleMouseMove = (e) => {
-      hasMoved = true;
-      setIsDragging(true);
-      
-      const newX = e.clientX - offsetX;
-      const newY = e.clientY - offsetY;
-      
-      // Keep button within viewport
-      const maxX = window.innerWidth - 50;
-      const maxY = window.innerHeight - 50;
-      
-      setButtonPosition({
-        x: Math.max(0, Math.min(newX, maxX)),
-        y: Math.max(0, Math.min(newY, maxY))
-      });
-    };
-
-    const handleMouseUp = () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-      
-      // Only open/close if we didn't drag
-      if (!hasMoved) {
-        setOpen(!open);
-      }
-      
-      setTimeout(() => setIsDragging(false), 10);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
+  // Docked mode: open via the bottom tray input or quick actions
+  
+  const getHost = () => {
+    try {
+      return previewUrl ? new URL(previewUrl).host : 'Current Page';
+    } catch {
+      return 'Current Page';
+    }
   };
 
-  // Send message to our backend
-  const handleSend = () => {
+  // Resolve sidebar element when needed to support portal
+  const [resolvedSidebarEl, setResolvedSidebarEl] = useState(null);
+  useEffect(() => {
+    if (useSidebarWhenOpen && open) {
+      const tryResolve = () => {
+        const el = sidebarContainerRef?.current || null;
+        if (el) {
+          setResolvedSidebarEl(el);
+        } else {
+          // Try again next frame until it mounts
+          requestAnimationFrame(tryResolve);
+        }
+      };
+      tryResolve();
+    } else {
+      setResolvedSidebarEl(null);
+    }
+  }, [useSidebarWhenOpen, open, sidebarContainerRef]);
+
+  // Shared chat panel content (can render inline or into a portal)
+  const renderPanelContent = () => (
+    <div className="w-full max-h-[70vh] bg-background/95 backdrop-blur border border-border rounded-2xl flex flex-col overflow-hidden shadow-xl">
+      <div className="px-4 py-3 border-b border-border flex items-center justify-between bg-card/80">
+        <div className="flex items-center gap-2">
+          <div className="text-sm font-semibold">Codex Assistant</div>
+          <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-yellow-500'}`} />
+        </div>
+        <button
+          onClick={() => { setOpen(false); onPanelClosed && onPanelClosed(); }}
+          className="w-6 h-6 rounded-full flex items-center justify-center hover:bg-accent transition-colors"
+          title="Close"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      <div className="overflow-y-auto p-4 space-y-4 bg-background/60 max-h-[50vh]">
+        <AnimatePresence initial={false}>
+          {messages.map((m) => {
+            const isUser = m.type === 'user';
+            const isError = m.type === 'error';
+            const isSystem = m.type === 'system';
+            return (
+              <motion.div key={m.id} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }} transition={{ duration: 0.25 }} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+                <div className={`max-w-[82%] px-4 py-3 rounded-2xl shadow-sm ${
+                  isUser
+                    ? 'bg-muted text-foreground ml-10'
+                    : isError
+                    ? 'bg-destructive/10 text-destructive border border-destructive/20'
+                    : isSystem
+                    ? 'bg-muted text-muted-foreground text-sm italic'
+                    : 'bg-card border border-border'
+                }`}>
+                  {/^(Updated Todo List|Lista de tarefas atualizada)/i.test(m.text || '') ? (
+                    <div>
+                      <div className="text-sm font-semibold mb-2">{(m.text.split('\n')[0] || '').trim()}</div>
+                      <ul className="space-y-1 ml-1">
+                        {m.text.split('\n').slice(1).filter(line => line.trim()).slice(0, 30).map((line, idx) => {
+                          const checked = /(^|\s)(\[x\]|✔)/i.test(line);
+                          const content = line.replace(/^[-*\d\.\)\s]+/, '');
+                          return (
+                            <li key={idx} className="flex items-start gap-2 text-sm">
+                              <input type="checkbox" disabled checked={checked} className="mt-1 rounded" />
+                              <span>{content}</span>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  ) : (
+                    <div className="prose prose-sm dark:prose-invert max-w-none leading-relaxed">
+                      <ReactMarkdown components={markdownComponents}>{m.text}</ReactMarkdown>
+                    </div>
+                  )}
+                  {!isSystem && (
+                    <div className={`mt-2 text-[11px] opacity-60 ${isUser ? 'text-right' : 'text-left'}`}>
+                      {new Date(m.timestamp).toLocaleTimeString()}
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            );
+          })}
+        </AnimatePresence>
+        {isTyping && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex justify-start">
+            <div className="bg-card border border-border rounded-lg px-4 py-3">
+              <div className="flex space-x-2">
+                <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" />
+                <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+              </div>
+            </div>
+          </motion.div>
+        )}
+        <div ref={bottomRef} />
+      </div>
+      <div className="p-4 border-t border-border bg-card">
+        {attachments.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-2">
+            {attachments.map((att, idx) => (
+              <span key={idx} className="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-[#101826] border border-border text-xs">
+                <span className="inline-flex items-center gap-1">
+                  <svg className="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6l7 4-7 4-7-4 7-4z" />
+                  </svg>
+                  <span className="text-blue-300 font-medium">{att.tag}</span>
+                </span>
+                <button className="text-muted-foreground hover:text-foreground" onClick={() => setAttachments(a => a.filter((_, i) => i !== idx))} title="Remove">×</button>
+              </span>
+            ))}
+          </div>
+        )}
+        <div className="flex items-end gap-2">
+          <textarea value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown} placeholder="Ask a follow-up..." className="flex-1 text-sm bg-background border border-border rounded-2xl px-3 py-2 min-h-[56px] max-h-[140px] resize-none focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all" disabled={!isConnected} rows={2} style={{ height: 'auto', overflow: 'auto' }} />
+          <button onClick={handleSend} className="w-10 h-10 bg-primary text-primary-foreground hover:bg-primary/90 rounded-xl text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center" disabled={!isConnected || (!input.trim() && attachments.length === 0)} title="Send">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M12 5l7 7-7 7" />
+            </svg>
+          </button>
+        </div>
+        {!isConnected && (
+          <div className="mt-2 text-xs text-destructive">Disconnected from backend. Please sign in and ensure the server is running.</div>
+        )}
+      </div>
+    </div>
+  );
+
+  // Send message to backend (either Vibe Kanban or Node.js)
+  const handleSend = async () => {
     const message = input.trim();
-    if (!message || !isConnected) return;
+    if (!message) return;
     
     // Display user message with timestamp
     addMessage({ type: 'user', text: message });
@@ -189,13 +322,56 @@ export default function OverlayChat({ projectPath }) {
     // Show typing indicator
     setIsTyping(true);
     
-    // Send to OUR backend using codex-command
-    const options = {
-      projectPath: projectPath || process.cwd(),
-      cwd: projectPath || process.cwd()
-    };
+    if (useVibeBackend) {
+      // Use Vibe Kanban REST API (Rust backend on port 6734)
+      try {
+        const response = await fetch('http://localhost:6734/api/codex/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            message: fullMessage,
+            project_path: projectPath || process.cwd()
+          })
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          setIsTyping(false);
+          
+          if (data.success && data.data) {
+            addMessage({ type: 'assistant', text: data.data.response });
+          } else {
+            addMessage({ type: 'error', text: data.message || 'Failed to get response from Codex' });
+          }
+        } else {
+          setIsTyping(false);
+          const errorText = await response.text();
+          console.error('Vibe Kanban API error:', errorText);
+          addMessage({ type: 'error', text: `API Error: ${response.status} - ${errorText}` });
+        }
+      } catch (error) {
+        setIsTyping(false);
+        console.error('Failed to call Vibe Kanban API:', error);
+        addMessage({ type: 'error', text: `Connection error: ${error.message}` });
+      }
+    } else {
+      // Fallback to Node.js WebSocket (if needed)
+      if (!isConnected) {
+        setIsTyping(false);
+        addMessage({ type: 'error', text: 'WebSocket not connected' });
+        return;
+      }
+      
+      const options = {
+        projectPath: projectPath || process.cwd(),
+        cwd: projectPath || process.cwd()
+      };
+      
+      sendMessage({ type: 'codex-command', command: fullMessage, options });
+    }
     
-    sendMessage({ type: 'codex-command', command: fullMessage, options });
     setAttachments([]);
     setInput('');
   };
@@ -220,21 +396,31 @@ export default function OverlayChat({ projectPath }) {
       const language = match ? match[1] : '';
       
       if (!inline && language) {
-        return (
-          <SyntaxHighlighter
-            style={vscDarkPlus}
-            language={language}
-            PreTag="div"
-            customStyle={{
-              margin: '0.5rem 0',
-              borderRadius: '0.375rem',
-              fontSize: '0.875rem',
-            }}
-            {...props}
-          >
-            {String(children).replace(/\n$/, '')}
-          </SyntaxHighlighter>
-        );
+        const CodeWithCopy = ({ text }) => {
+          const [copied, setCopied] = useState(false);
+          const handleCopy = async () => {
+            try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1200); } catch {}
+          };
+          return (
+            <div className="relative group">
+              <div className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button onClick={handleCopy} className="px-2 py-1 text-[11px] rounded-md bg-background/80 border border-border hover:bg-accent">
+                  {copied ? 'Copied' : 'Copy'}
+                </button>
+              </div>
+              <SyntaxHighlighter
+                style={vscDarkPlus}
+                language={language}
+                PreTag="div"
+                customStyle={{ margin: '0.5rem 0', borderRadius: '0.5rem', fontSize: '0.875rem' }}
+                {...props}
+              >
+                {String(text).replace(/\n$/, '')}
+              </SyntaxHighlighter>
+            </div>
+          );
+        };
+        return <CodeWithCopy text={String(children)} />;
       }
       
       return (
@@ -288,225 +474,68 @@ export default function OverlayChat({ projectPath }) {
     },
     p({ children, ...props }) {
       return <p className="my-2" {...props}>{children}</p>;
+    },
+    // Basic task list support: - [ ] / - [x]
+    li({ children, ...props }) {
+      const raw = String(children && children[0] ? (children[0].props ? children[0].props.children : children[0]) : '');
+      const unchecked = raw.startsWith('[ ] ') || raw.startsWith('[  ] ');
+      const checked = raw.startsWith('[x] ') || raw.startsWith('[X] ');
+      if (unchecked || checked) {
+        const label = raw.replace(/^\[[xX\s]\]\s+/, '');
+        return (
+          <li className="list-none my-1">
+            <label className="inline-flex items-start gap-2">
+              <input type="checkbox" disabled checked={checked} className="mt-1 rounded" />
+              <span>{label}</span>
+            </label>
+          </li>
+        );
+      }
+      return <li {...props}>{children}</li>;
     }
   };
 
-  // Calculate button position style
-  const buttonStyle = buttonPosition.x !== null ? {
-    position: 'fixed',
-    left: `${buttonPosition.x}px`,
-    top: `${buttonPosition.y}px`,
-    cursor: isDragging ? 'grabbing' : 'grab',
-    userSelect: 'none',
-  } : {
-    position: 'fixed',
-    bottom: '20px',
-    right: '20px',
-    cursor: 'grab',
-    userSelect: 'none',
-  };
+  // Docked panel positioning handled via absolute CSS classes
 
-  // Calculate panel position based on button position
-  const getPanelPosition = () => {
-    if (buttonPosition.x === null) {
-      return { bottom: '80px', right: '20px' };
-    }
-    
-    const panelWidth = 450;
-    const panelHeight = 600;
-    
-    // Check if panel fits on the right
-    if (buttonPosition.x + 60 + panelWidth <= window.innerWidth) {
-      return { 
-        top: `${Math.min(buttonPosition.y, window.innerHeight - panelHeight - 20)}px`,
-        left: `${buttonPosition.x + 60}px` 
-      };
-    } 
-    // Otherwise show on the left
-    else {
-      return { 
-        top: `${Math.min(buttonPosition.y, window.innerHeight - panelHeight - 20)}px`,
-        right: `${window.innerWidth - buttonPosition.x + 20}px` 
-      };
-    }
-  };
+  if (embedded) {
+    return (
+      <div className="h-full w-full">
+        {renderPanelContent()}
+      </div>
+    );
+  }
 
   return (
     <>
-      {/* Draggable floating button with system colors */}
-      <button
-        ref={buttonRef}
-        onMouseDown={handleMouseDown}
-        className={`z-[999999] w-[44px] h-[44px] rounded-full flex items-center justify-center transition-all duration-200 ${
-          isDragging ? '' : 'hover:scale-105'
-        } ${
-          open 
-            ? 'bg-accent text-accent-foreground shadow-lg' 
-            : 'bg-card border border-border text-foreground shadow-md hover:bg-accent/10'
-        }`}
-        style={buttonStyle}
-        title="Codex AI Chat (drag to move, click to toggle)"
-      >
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4-.8L3 20l.8-4A8.94 8.94 0 013 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-        </svg>
-      </button>
-
-      {/* Chat Panel with system colors */}
-      {open && (
+      {/* Docked Chat Panel (expanded) */}
+      {open && !disableInlinePanel && !useSidebarWhenOpen && (
         <div 
-          className="fixed z-[999998] w-[450px] max-w-[90vw] h-[600px] bg-background border border-border rounded-xl flex flex-col overflow-hidden shadow-xl"
-          style={getPanelPosition()}
+          className="absolute right-4 bottom-12 w-[min(360px,80vw)] z-50"
         >
-          {/* Header */}
-          <div className="px-4 py-3 border-b border-border flex items-center justify-between bg-card">
-            <div className="flex items-center gap-2">
-              <div className="text-sm font-semibold">Codex Assistant</div>
-              <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-destructive'}`} />
-            </div>
-            <button
-              onClick={() => setOpen(false)}
-              className="w-6 h-6 rounded-full flex items-center justify-center hover:bg-accent transition-colors"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-          
-          {/* Messages area with animations */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-background">
-            <AnimatePresence initial={false}>
-              {messages.map((m) => {
-                const isUser = m.type === 'user';
-                const isError = m.type === 'error';
-                const isSystem = m.type === 'system';
-                
-                return (
-                  <motion.div
-                    key={m.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -20 }}
-                    transition={{ duration: 0.3 }}
-                    className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}
-                  >
-                    <div 
-                      className={`max-w-[80%] rounded-lg px-4 py-3 ${
-                        isUser
-                          ? 'bg-primary text-primary-foreground ml-12'
-                          : isError
-                          ? 'bg-destructive/10 text-destructive border border-destructive/20'
-                          : isSystem
-                          ? 'bg-muted text-muted-foreground text-sm italic'
-                          : 'bg-card border border-border'
-                      }`}
-                    >
-                      {isError && (
-                        <div className="flex items-center gap-2 mb-2">
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                                  d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                          <span className="font-semibold text-sm">Error</span>
-                        </div>
-                      )}
-                      
-                      {/* Message content with ReactMarkdown */}
-                      <div className="prose prose-sm dark:prose-invert max-w-none">
-                        <ReactMarkdown components={markdownComponents}>
-                          {m.text}
-                        </ReactMarkdown>
-                      </div>
-                      
-                      {/* Timestamp */}
-                      {!isSystem && (
-                        <div className="mt-2 text-xs opacity-50">
-                          {new Date(m.timestamp).toLocaleTimeString()}
-                        </div>
-                      )}
-                    </div>
-                  </motion.div>
-                );
-              })}
-            </AnimatePresence>
-            
-            {/* Typing indicator */}
-            {isTyping && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="flex justify-start"
-              >
-                <div className="bg-card border border-border rounded-lg px-4 py-3">
-                  <div className="flex space-x-2">
-                    <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" 
-                         style={{ animationDelay: '0ms' }} />
-                    <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" 
-                         style={{ animationDelay: '150ms' }} />
-                    <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" 
-                         style={{ animationDelay: '300ms' }} />
-                  </div>
-                </div>
-              </motion.div>
-            )}
-            
-            <div ref={bottomRef} />
-          </div>
-          
-          {/* Input area */}
-          <div className="p-4 border-t border-border bg-card">
-            {/* Attachment chips */}
-            {attachments.length > 0 && (
-              <div className="mb-2 flex flex-wrap gap-2">
-                {attachments.map((att, idx) => (
-                  <span key={idx} className="inline-flex items-center gap-2 px-2.5 py-1 rounded-lg bg-[#101826] border border-border text-xs">
-                    <span className="inline-flex items-center gap-1">
-                      <svg className="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6l7 4-7 4-7-4 7-4z" />
-                      </svg>
-                      <span className="text-blue-300 font-medium">{att.tag}</span>
-                    </span>
-                    <button className="text-muted-foreground hover:text-foreground" onClick={() => setAttachments(a => a.filter((_, i) => i !== idx))} title="Remove">×</button>
-                  </span>
-                ))}
-              </div>
-            )}
-            <div className="flex items-end gap-2">
-              <textarea
-                value={input}
-                onChange={e => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Ask a follow-up..."
-                className="flex-1 text-sm bg-background border border-border rounded-2xl px-3 py-2 min-h-[56px] max-h-[140px] resize-none focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
-                disabled={!isConnected}
-                rows={2}
-                style={{ height: 'auto', overflow: 'auto' }}
-              />
-              <button
-                onClick={handleSend}
-                className="w-10 h-10 bg-primary text-primary-foreground hover:bg-primary/90 rounded-xl text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center"
-                disabled={!isConnected || (!input.trim() && attachments.length === 0)}
-                title="Send"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M12 5l7 7-7 7" />
-                </svg>
-              </button>
-            </div>
-            {!isConnected && (
-              <div className="mt-2 text-xs text-destructive">
-                Disconnected from backend. Check if server is running on port 7347.
-              </div>
-            )}
-            {selectedElement && (
-              <div className="mt-2 text-xs text-muted-foreground">
-                Element context will be included in next message
-              </div>
-            )}
-          </div>
+          {renderPanelContent()}
         </div>
       )}
+      {open && useSidebarWhenOpen && resolvedSidebarEl && (
+        ReactDOM.createPortal(
+          renderPanelContent(),
+          resolvedSidebarEl
+        )
+      )}
+      
+
+      {/* Persistent Open Button */}
+      <div className="absolute right-4 bottom-4 z-40">
+        <button
+          onClick={() => {
+            if (onBeforeOpen) onBeforeOpen();
+            setOpen(true);
+          }}
+          className="px-4 py-2 rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 transition-colors text-sm"
+          title={`Ask about ${getHost()}`}
+        >
+          Ask about this page
+        </button>
+      </div>
     </>
   );
 }

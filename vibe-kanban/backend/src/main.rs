@@ -36,7 +36,7 @@ use middleware::{
 };
 use models::{ApiResponse, Config, Environment};
 use routes::{
-    auth, config, filesystem, github, health, projects, stream, task_attempts, task_templates,
+    auth, codex, config, filesystem, github, health, projects, stream, task_attempts, task_templates,
     tasks,
 };
 use services::PrMonitorService;
@@ -258,7 +258,8 @@ fn main() -> anyhow::Result<()> {
                 .merge(template_routes)
                 .merge(project_routes)
                 .merge(task_routes)
-                .merge(task_attempt_routes);
+                .merge(task_attempt_routes)
+                .merge(codex::codex_router());
 
             if mode.is_cloud() {
                 api_routes = api_routes.merge(github::github_router());
