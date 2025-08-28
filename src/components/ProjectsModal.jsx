@@ -5,7 +5,7 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
-import { Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, ChevronUp, Edit3, Check, X, Trash2, FolderPlus, RefreshCw, Search, Star, Edit2, Loader2, FolderSearch, Filter } from 'lucide-react';
+import { Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, ChevronUp, Edit3, Check, X, Trash2, FolderPlus, RefreshCw, Search, Star, Edit2, Loader2, FolderSearch, Filter, Eye } from 'lucide-react';
 import { ProjectIcon, isVibeKanbanProject as isVibeKanban } from '../utils/projectIcons.jsx';
 import { cn } from '../lib/utils';
 import ClaudeLogo from './ClaudeLogo';
@@ -28,15 +28,11 @@ function ProjectsModal({
   onRefresh
 }) {
   const navigate = useNavigate();
-  const [expandedProjects, setExpandedProjects] = useState(new Set());
   const [editingProject, setEditingProject] = useState(null);
   const [showNewProject, setShowNewProject] = useState(false);
   const [editingName, setEditingName] = useState('');
   const [newProjectPath, setNewProjectPath] = useState('');
   const [creatingProject, setCreatingProject] = useState(false);
-  const [loadingSessions, setLoadingSessions] = useState({});
-  const [additionalSessions, setAdditionalSessions] = useState({});
-  const [initialSessionsLoaded, setInitialSessionsLoaded] = useState(new Set());
   const [currentTime, setCurrentTime] = useState(new Date());
   const [projectSortOrder, setProjectSortOrder] = useState('name');
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -51,28 +47,9 @@ function ProjectsModal({
     return () => clearInterval(interval);
   }, []);
 
-  // Auto-expand selected project
-  useEffect(() => {
-    if (selectedProject && !expandedProjects.has(selectedProject.id)) {
-      setExpandedProjects(prev => new Set(prev).add(selectedProject.id));
-    }
-  }, [selectedProject]);
 
   const handleProjectClick = async (project) => {
-    // Toggle expand/collapse
-    setExpandedProjects(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(project.id)) {
-        newSet.delete(project.id);
-      } else {
-        newSet.add(project.id);
-        // Load additional sessions if needed
-        loadAdditionalSessions(project.id);
-      }
-      return newSet;
-    });
-
-    // Select the project
+    // Select the project and navigate to it
     onProjectSelect(project);
     
     // Auto-select most recent session if available
@@ -87,25 +64,6 @@ function ProjectsModal({
     onClose();
   };
 
-  const loadAdditionalSessions = async (projectId) => {
-    if (loadingSessions[projectId] || initialSessionsLoaded.has(projectId)) {
-      return;
-    }
-
-    setLoadingSessions(prev => ({ ...prev, [projectId]: true }));
-    try {
-      const response = await api.getSessions(projectId, { offset: 10, limit: 50 });
-      setAdditionalSessions(prev => ({
-        ...prev,
-        [projectId]: response.sessions || []
-      }));
-      setInitialSessionsLoaded(prev => new Set(prev).add(projectId));
-    } catch (error) {
-      console.error('Failed to load additional sessions:', error);
-    } finally {
-      setLoadingSessions(prev => ({ ...prev, [projectId]: false }));
-    }
-  };
 
   const handleCreateProject = async () => {
     if (!newProjectPath.trim()) return;
@@ -119,8 +77,8 @@ function ProjectsModal({
         await onRefresh();
       }
       // Select the newly created project
-      if (response.id) {
-        const newProject = projects.find(p => p.id === response.id);
+      if (response.name) {
+        const newProject = projects.find(p => p.name === response.name);
         if (newProject) {
           handleProjectClick(newProject);
         }
@@ -307,20 +265,17 @@ function ProjectsModal({
             </div>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-              {sortedProjects.map(project => {
-                const isExpanded = expandedProjects.has(project.id);
-                const allSessions = [
-                  ...(project.sessions || []),
-                  ...(additionalSessions[project.id] || [])
-                ];
+              {sortedProjects.map((project, index) => {
+                const projectSessions = project.sessions || [];
+                const latestSession = projectSessions[0]; // Pega apenas a última sessão
 
                 return (
                   <div 
-                    key={project.id} 
+                    key={project.name || `project-${index}`} 
                     className={cn(
                       "relative group rounded-lg border bg-card/50 hover:bg-card/70 transition-all duration-200 flex flex-col",
                       "hover:shadow-md hover:border-primary/30",
-                      selectedProject?.id === project.id && "bg-card/80 border-primary/50 shadow-md"
+                      selectedProject?.name === project.name && "bg-card/80 border-primary/50 shadow-md"
                     )}
                   >
                     {/* Card Header */}
@@ -332,7 +287,7 @@ function ProjectsModal({
                         <div className="flex items-center gap-1.5 flex-1 min-w-0">
                           <ProjectIcon project={project} className="w-4 h-4 flex-shrink-0 text-primary/70" />
                           <div className="flex-1 min-w-0">
-                        {editingProject === project.id ? (
+                        {editingProject === project.name ? (
                           <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                             <Input
                               value={editingName}
@@ -384,7 +339,7 @@ function ProjectsModal({
                           className="h-6 w-6 text-muted-foreground hover:text-foreground"
                           onClick={(e) => {
                             e.stopPropagation();
-                            setEditingProject(project.id);
+                            setEditingProject(project.name);
                             setEditingName(project.name);
                           }}
                         >
@@ -397,7 +352,7 @@ function ProjectsModal({
                           onClick={(e) => {
                             e.stopPropagation();
                             if (confirm(`Delete project "${project.name}"?`)) {
-                              onProjectDelete?.(project.id);
+                              onProjectDelete?.(project.name);
                             }
                           }}
                         >
@@ -407,95 +362,53 @@ function ProjectsModal({
                       </div>
                     </div>
 
-                    {/* Sessions Section */}
-                    <div className="border-t border-border/40">
-                      <button
-                        className="w-full px-3 py-2 flex items-center justify-between hover:bg-accent/20 transition-colors"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setExpandedProjects(prev => {
-                            const newSet = new Set(prev);
-                            if (newSet.has(project.id)) {
-                              newSet.delete(project.id);
-                            } else {
-                              newSet.add(project.id);
-                              loadAdditionalSessions(project.id);
-                            }
-                            return newSet;
-                          });
-                        }}
-                      >
-                        <span className="text-xs text-muted-foreground font-medium">Sessions ({allSessions.length})</span>
-                        {isExpanded ? <ChevronDown className="w-3 h-3 text-muted-foreground" /> : <ChevronRight className="w-3 h-3 text-muted-foreground" />}
-                      </button>
-                        
-                      {isExpanded && (
-                        <div className="border-t border-border/30 bg-background/20">
-                          {/* New Session button */}
-                          <button
-                            className="w-full flex items-center gap-1.5 px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent/20 transition-colors"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onNewSession?.(project.id);
-                              onClose();
-                            }}
-                          >
-                            <Plus className="w-3 h-3" />
-                            <span>New Session</span>
-                          </button>
-                          
-                          {/* Show only last 3 sessions */}
-                          <div className="max-h-32 overflow-y-auto">
-                            {allSessions.slice(0, 3).map(session => (
-                          <div
-                            key={session.id}
-                            className={cn(
-                              "group flex items-center gap-1.5 px-3 py-1.5 cursor-pointer transition-colors",
-                              "hover:bg-accent/20",
-                              selectedSession?.id === session.id && "bg-accent/30"
-                            )}
-                            onClick={() => {
-                              onSessionSelect(session);
-                              onClose();
-                            }}
-                          >
-                            <MessageSquare className="w-2.5 h-2.5 text-muted-foreground flex-shrink-0" />
-                            <span className="flex-1 truncate text-xs text-foreground">{session.summary}</span>
-                            <span className="text-xs text-muted-foreground flex-shrink-0">
-                              {formatTimeAgo(session.updated_at, currentTime)}
-                            </span>
-                            
-                            {/* Session action button */}
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (confirm(`Delete session "${session.summary}"?`)) {
-                                  onSessionDelete?.(project.id, session.id);
-                                }
-                              }}
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </Button>
+                    {/* Sessions Section - Simplified */}
+                    <div className="border-t border-border/40 bg-background/20">
+                      {/* Latest Session Preview */}
+                      {latestSession && (
+                        <div 
+                          className="px-3 py-2 hover:bg-accent/10 cursor-pointer transition-colors"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSessionSelect(latestSession);
+                            handleProjectClick(project);
+                          }}
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <MessageSquare className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                            <span className="flex-1 truncate text-xs text-foreground">{latestSession.summary || 'Untitled'}</span>
                           </div>
-                            ))}
-                            
-                            {allSessions.length > 3 && (
-                              <div className="px-3 py-1 text-xs text-center text-muted-foreground border-t border-border/20">
-                                +{allSessions.length - 3} more sessions
-                              </div>
-                            )}
-                          </div>
-                        
-                        {loadingSessions[project.id] && (
-                          <div className="flex items-center justify-center py-2">
-                            <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                          </div>
-                        )}
+                          <span className="text-xs text-muted-foreground ml-4">
+                            {formatTimeAgo(latestSession.updated_at, currentTime)}
+                          </span>
                         </div>
                       )}
+                      
+                      {/* Action Buttons */}
+                      <div className="flex border-t border-border/30">
+                        <button
+                          className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent/20 transition-colors border-r border-border/30"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onNewSession?.(project);
+                            onClose();
+                          }}
+                        >
+                          <Plus className="w-3 h-3" />
+                          <span>New</span>
+                        </button>
+                        <button
+                          className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent/20 transition-colors"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/project/${encodeURIComponent(project.name)}/sessions`);
+                            onClose();
+                          }}
+                        >
+                          <Eye className="w-3 h-3" />
+                          <span>View All ({projectSessions.length})</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );

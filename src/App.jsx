@@ -27,6 +27,7 @@ import ToolsSettings from './components/ToolsSettings';
 import VibeKanbanApp from './components/VibeKanbanApp';
 import SessionKeepAlive from './components/SessionKeepAlive';
 import { FloatingMicMenu } from './components/FloatingMicMenu';
+import SessionsView from './components/SessionsView';
 
 import { useWebSocket } from './utils/websocket';
 import { ThemeProvider } from './contexts/ThemeContext';
@@ -39,7 +40,7 @@ import { appStatePersistence } from './utils/app-state-persistence';
 // Main App component with routing
 function AppContent() {
   const navigate = useNavigate();
-  const { sessionId } = useParams();
+  const { sessionId, projectName } = useParams();
   
   // Load persisted state on mount
   const loadPersistedState = () => {
@@ -335,8 +336,13 @@ function AppContent() {
   const fetchProjects = async () => {
     try {
       setIsLoadingProjects(true);
+      console.log('[DEBUG] Token before fetchProjects:', authPersistence.getToken());
       const response = await api.projects();
+      console.log('[DEBUG] Response status:', response.status);
       const data = await response.json();
+      console.log('[DEBUG] Projects data:', data);
+      // Verificar se há sessões
+      console.log('[DEBUG] First project sessions:', data[0]?.sessions, 'Total:', data[0]?.sessionMeta);
       
       // Optimize to preserve object references when data hasn't changed
       setProjects(prevProjects => {
@@ -411,7 +417,11 @@ function AppContent() {
     // Keep current tab when navigating to sessions
     // Always close sidebar when session is selected
     // Sidebar close removed
-    navigate(`/session/${session.id}`);
+    if (session && session.id) {
+      navigate(`/session/${session.id}`);
+    } else {
+      navigate('/');
+    }
   };
 
   const handleNewSession = (project) => {
@@ -441,6 +451,46 @@ function AppContent() {
         }
       }))
     );
+  };
+
+  const handleProjectDelete = async (projectName) => {
+    try {
+      // First try to delete as empty project
+      let response = await api.deleteProject(projectName);
+      
+      // If it fails because project has sessions, ask user to confirm complete deletion
+      if (!response.ok) {
+        const errorData = await response.json();
+        if (errorData.error && errorData.error.includes('sessions')) {
+          if (confirm('This project has sessions. Do you want to delete it completely including all sessions?')) {
+            // Force delete with all sessions
+            response = await api.deleteProjectCompletely(projectName);
+            if (!response.ok) {
+              throw new Error('Failed to delete project completely');
+            }
+          } else {
+            return; // User cancelled
+          }
+        } else {
+          throw new Error(errorData.error || 'Failed to delete project');
+        }
+      }
+
+      // If the deleted project was currently selected, clear it
+      if (selectedProject?.name === projectName) {
+        setSelectedProject(null);
+        setSelectedSession(null);
+        navigate('/');
+      }
+      
+      // Update projects state locally
+      setProjects(prevProjects => 
+        prevProjects.filter(project => project.name !== projectName)
+      );
+    } catch (error) {
+      console.error('Failed to delete project:', error);
+      alert(`Failed to delete project: ${error.message}`);
+    }
   };
 
   const handleSidebarRefresh = async () => {
@@ -489,20 +539,6 @@ function AppContent() {
     } catch (error) {
       // Error: 'Error refreshing sidebar:', error
     }
-  };
-
-  const handleProjectDelete = (projectName) => {
-    // If the deleted project was currently selected, clear it
-    if (selectedProject?.name === projectName) {
-      setSelectedProject(null);
-      setSelectedSession(null);
-      navigate('/');
-    }
-    
-    // Update projects state locally instead of full refresh
-    setProjects(prevProjects => 
-      prevProjects.filter(project => project.name !== projectName)
-    );
   };
 
   // Session Protection Functions: Manage the lifecycle of active sessions
@@ -580,9 +616,18 @@ function AppContent() {
 
       {/* Main Content Area - Now takes full width */}
       <div className={`flex-1 flex flex-col min-w-0 relative ${isMobile ? 'pb-14' : ''} ${!isMobile ? 'bg-card overflow-hidden' : ''}`}>
-        <MainContent
-          selectedProject={selectedProject}
-          selectedSession={selectedSession}
+        {projectName ? (
+          // Sessions view for specific project
+          <SessionsView
+            onSessionSelect={handleSessionSelect}
+            onNewSession={handleNewSession}
+            onSessionDelete={handleSessionDelete}
+          />
+        ) : (
+          // Main content view
+          <MainContent
+            selectedProject={selectedProject}
+            selectedSession={selectedSession}
           activeTab={activeTab}
           setActiveTab={setActiveTab}
           ws={ws}
@@ -614,6 +659,7 @@ function AppContent() {
           shellHasActiveSession={shellHasActiveSession}
           onShellSessionStateChange={setShellHasActiveSession}
         />
+        )}
       </div>
 
       {/* Mobile Bottom Navigation */}
@@ -671,6 +717,7 @@ function App() {
             <Routes>
               <Route path="/" element={<AppContent />} />
               <Route path="/session/:sessionId" element={<AppContent />} />
+              <Route path="/project/:projectName/sessions" element={<AppContent />} />
               <Route path="/vibe-kanban/*" element={<VibeKanbanApp />} />
             </Routes>
           </Router>
