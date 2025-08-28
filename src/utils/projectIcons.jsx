@@ -265,9 +265,6 @@ const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
 export const getProjectIcon = async (project, isExpanded = false) => {
   try {
-    // DEBUG: Log function call to verify we're using new code
-    console.log('[DEBUG] getProjectIcon called - new version without logo calls');
-    
     const cacheKey = `${project.name}-${isExpanded}`;
     const cached = iconCache.get(cacheKey);
     

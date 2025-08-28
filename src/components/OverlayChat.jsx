@@ -5,6 +5,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useWebSocket } from '../utils/websocket';
+import { normalizeCodexEvent } from '../utils/codex-normalizer';
 
 // Overlay Chat com formatação bonita usando ReactMarkdown
 // Usa NOSSO backend interno (porta 7347) - sem servidores externos!
@@ -73,73 +74,33 @@ export default function OverlayChat({ projectPath, previewUrl, embedded = false,
     if (wsMessages && wsMessages.length > 0) {
       const lastMsg = wsMessages[wsMessages.length - 1];
       
-      // Debug log to see what messages we're receiving
-      console.log('[OverlayChat] Received WebSocket message:', lastMsg);
-      
-      // Handle different message types from our backend
-      if (lastMsg.type === 'codex-response') {
-        console.log('[OverlayChat] Processing codex-response:', lastMsg.text || lastMsg.data);
+      // Normalize Codex events (ported from Vibe Kanban patterns)
+      const normalized = normalizeCodexEvent(lastMsg) || [];
+      if (normalized.length) {
         setIsTyping(false);
-        addMessage({ type: 'assistant', text: lastMsg.text || lastMsg.data });
-      } else if (lastMsg.type === 'codex-output') {
-        // Show all output from Codex, including JSON responses
-        const output = lastMsg.data;
-        console.log('[OverlayChat] Processing codex-output:', output);
-        
-        if (output && output.trim()) {
-          // Parse JSON responses if they look like structured data
-          try {
-            const parsed = JSON.parse(output);
-            console.log('[OverlayChat] Parsed JSON:', parsed);
-            
-            // If it's a message object with type and content/text
-            if (parsed.type === 'agent_message' && parsed.message) {
-              console.log('[OverlayChat] Adding agent_message:', parsed.message);
-              setIsTyping(false);
-              addMessage({ type: 'assistant', text: parsed.message });
-            } else if (parsed.type === 'token_count' || parsed.type === 'task_started') {
-              // Skip these system messages
-              console.log('[OverlayChat] Skipping system message:', parsed.type);
-            } else if (parsed.msg) {
-              // Handle simple message format
-              console.log('[OverlayChat] Adding simple message:', parsed.msg);
-              setIsTyping(false);
-              addMessage({ type: 'assistant', text: parsed.msg });
-            } else {
-              // For other JSON, only show if it's not purely technical
-              if (!output.includes('sandbox') && !output.includes('reasoning')) {
-                console.log('[OverlayChat] Adding other JSON output:', output);
-                addMessage({ type: 'assistant', text: output });
-              } else {
-                console.log('[OverlayChat] Filtering technical output:', output);
-              }
-            }
-          } catch (e) {
-            // Not JSON, show as regular text if it's not technical output
-            console.log('[OverlayChat] Not JSON, processing as text:', output);
-            if (!output.includes('sandbox') && !output.includes('reasoning')) {
-              addMessage({ type: 'assistant', text: output });
-            } else {
-              console.log('[OverlayChat] Filtering technical text:', output);
-            }
-          }
-        }
-      } else if (lastMsg.type === 'codex-error') {
+        normalized.forEach((m) => addMessage({ type: m.type, text: m.text }));
+        return;
+      }
+      // Fallbacks for start/complete/tool notices
+      if (lastMsg.type === 'codex-start' || lastMsg.type === 'task_started') {
+        setIsTyping(true);
+        return;
+      }
+      if (lastMsg.type === 'codex-complete') {
+        setIsTyping(false);
+        return;
+      }
+      if (lastMsg.type === 'codex-error') {
         setIsTyping(false);
         addMessage({ type: 'error', text: lastMsg.error });
-      } else if (lastMsg.type === 'codex-tool') {
-        // Only show tool notifications for important tools
+        return;
+      }
+      if (lastMsg.type === 'codex-tool') {
         const toolData = lastMsg.data;
         if (toolData && toolData.name && !['reasoning', 'thinking'].includes(toolData.name.toLowerCase())) {
-          addMessage({ 
-            type: 'system', 
-            text: `🔧 ${toolData.name}` 
-          });
+          addMessage({ type: 'system', text: `🔧 ${toolData.name}` });
         }
-      } else if (lastMsg.type === 'codex-start' || lastMsg.type === 'task_started') {
-        setIsTyping(true);
-      } else if (lastMsg.type === 'codex-complete') {
-        setIsTyping(false);
+        return;
       }
     }
   }, [wsMessages, addMessage]);
@@ -211,23 +172,22 @@ export default function OverlayChat({ projectPath, previewUrl, embedded = false,
           </svg>
         </button>
       </div>
-      <div className="overflow-y-auto p-4 space-y-4 bg-background/60 max-h-[50vh]">
+      <div className="overflow-y-auto p-4 space-y-2 bg-background/60 max-h-[50vh]">
         <AnimatePresence initial={false}>
           {messages.map((m) => {
             const isUser = m.type === 'user';
             const isError = m.type === 'error';
             const isSystem = m.type === 'system';
+            const containerClass = isUser
+              ? 'max-w-[82%] text-foreground ml-10 text-right'
+              : isError
+              ? 'max-w-[82%] px-4 py-3 rounded-2xl shadow-sm bg-destructive/10 text-destructive border border-destructive/20'
+              : isSystem
+              ? 'max-w-[82%] text-muted-foreground italic'
+              : 'max-w-[82%] text-foreground'; // assistant: no background/padding, plain text
             return (
               <motion.div key={m.id} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }} transition={{ duration: 0.25 }} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[82%] px-4 py-3 rounded-2xl shadow-sm ${
-                  isUser
-                    ? 'bg-muted text-foreground ml-10'
-                    : isError
-                    ? 'bg-destructive/10 text-destructive border border-destructive/20'
-                    : isSystem
-                    ? 'bg-muted text-muted-foreground text-sm italic'
-                    : 'bg-card border border-border'
-                }`}>
+                <div className={containerClass}>
                   {/^(Updated Todo List|Lista de tarefas atualizada)/i.test(m.text || '') ? (
                     <div>
                       <div className="text-sm font-semibold mb-2">{(m.text.split('\n')[0] || '').trim()}</div>
@@ -250,7 +210,7 @@ export default function OverlayChat({ projectPath, previewUrl, embedded = false,
                     </div>
                   )}
                   {!isSystem && (
-                    <div className={`mt-2 text-[11px] opacity-60 ${isUser ? 'text-right' : 'text-left'}`}>
+                    <div className={`mt-1 text-[11px] opacity-60 ${isUser ? 'text-right' : 'text-left'}`}>
                       {new Date(m.timestamp).toLocaleTimeString()}
                     </div>
                   )}

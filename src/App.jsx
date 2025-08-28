@@ -336,13 +336,8 @@ function AppContent() {
   const fetchProjects = async () => {
     try {
       setIsLoadingProjects(true);
-      console.log('[DEBUG] Token before fetchProjects:', authPersistence.getToken());
       const response = await api.projects();
-      console.log('[DEBUG] Response status:', response.status);
       const data = await response.json();
-      console.log('[DEBUG] Projects data:', data);
-      // Verificar se há sessões
-      console.log('[DEBUG] First project sessions:', data[0]?.sessions, 'Total:', data[0]?.sessionMeta);
       
       // Optimize to preserve object references when data hasn't changed
       setProjects(prevProjects => {
