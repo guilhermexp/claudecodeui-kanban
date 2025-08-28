@@ -9,7 +9,7 @@ let cacheTimestamp = Date.now();
 
 // Cache for projects list to reduce memory usage
 const projectsCache = { data: null, timestamp: 0 };
-const PROJECTS_CACHE_DURATION = 30 * 1000; // 30 seconds
+const PROJECTS_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
 // Clear cache when needed (called when project files change)
 function clearProjectDirectoryCache() {
@@ -220,15 +220,25 @@ async function getProjects() {
           sessions: []
         };
         
-        // Try to get sessions for this project (just first 5 for performance)
+        // Load basic session info for display in project cards
         try {
-          const sessionResult = await getSessions(entry.name, 5, 0);
-          project.sessions = sessionResult.sessions || [];
+          console.log(`[DEBUG] Loading sessions for project: ${entry.name}`);
+          const sessionData = await getSessions(entry.name, 0, 10); // Get first 10 sessions
+          console.log(`[DEBUG] Sessions loaded for ${entry.name}:`, sessionData.sessions.length, 'sessions');
+          project.sessions = sessionData.sessions || [];
           project.sessionMeta = {
-            hasMore: sessionResult.hasMore,
-            total: sessionResult.total
+            hasMore: sessionData.hasMore || false,
+            total: sessionData.total || 0,
+            notLoaded: false
           };
-        } catch (e) {
+        } catch (error) {
+          console.error(`[ERROR] Failed to load sessions for ${entry.name}:`, error);
+          project.sessions = [];
+          project.sessionMeta = {
+            hasMore: false,
+            total: 0,
+            notLoaded: true
+          };
         }
         
         projects.push(project);
@@ -314,8 +324,8 @@ async function getSessions(projectName, limit = 5, offset = 0) {
       
       processedCount++;
       
-      // Early exit optimization: if we have enough sessions and processed recent files
-      if (allSessions.size >= (limit + offset) * 2 && processedCount >= Math.min(3, filesWithStats.length)) {
+      // More aggressive early exit - stop after first file if we have enough sessions
+      if (allSessions.size >= limit + offset && processedCount >= 1) {
         break;
       }
     }
@@ -387,8 +397,11 @@ async function parseJsonlSessions(filePath) {
               }
             }
             
-            // Count messages instead of storing them all
-            session.messageCount = (session.messageCount || 0) + 1;
+            // Don't count every message, just track that messages exist
+            if (!session.hasMessages) {
+              session.hasMessages = true;
+              session.messageCount = 1;
+            }
             
             // Update last activity
             if (entry.timestamp) {

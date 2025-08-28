@@ -41,6 +41,7 @@ import os from 'os';
 import pty from 'node-pty';
 import fetch from 'node-fetch';
 import mime from 'mime-types';
+import v8 from 'v8';
 
 import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, deleteProjectCompletely, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } from './projects.js';
 import { spawnClaude, abortClaudeSession } from './claude-cli.js';
@@ -492,9 +493,19 @@ app.post('/api/settings', authenticateToken, async (req, res) => {
 
 app.get('/api/projects', authenticateToken, async (req, res) => {
   try {
-    const projects = await getProjects();
+    // Add timeout to prevent hanging requests
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Request timeout')), 5000)
+    );
+    
+    const projects = await Promise.race([
+      getProjects(),
+      timeoutPromise
+    ]);
+    
     res.json(projects);
   } catch (error) {
+    console.error('[API] /api/projects error:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
@@ -2332,6 +2343,22 @@ async function startServer() {
       
       // Start watching the projects folder for changes
       await setupProjectsWatcher(); // Re-enabled with better-sqlite3
+      
+      // Setup memory optimization - force GC every 2 minutes if available
+      if (global.gc) {
+        setInterval(() => {
+          const before = v8.getHeapStatistics();
+          global.gc();
+          const after = v8.getHeapStatistics();
+          const freed = (before.used_heap_size - after.used_heap_size) / 1024 / 1024;
+          if (freed > 10) {
+            console.log(`[Memory] Garbage collected ${freed.toFixed(2)} MB`);
+          }
+        }, 2 * 60 * 1000);
+        console.log('✅ Memory optimization enabled (manual GC)');
+      } else {
+        console.log('⚠️  Memory optimization disabled (run with --expose-gc flag to enable)');
+      }
       
       // Start Vibe Kanban cleanup service
       console.log('🧹 Starting Vibe Kanban cleanup service...');
