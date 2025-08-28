@@ -223,7 +223,7 @@ async function getProjects() {
         // Load basic session info for display in project cards
         try {
           console.log(`[DEBUG] Loading sessions for project: ${entry.name}`);
-          const sessionData = await getSessions(entry.name, 0, 10); // Get first 10 sessions
+          const sessionData = await getSessions(entry.name, 10, 0); // limit=10, offset=0
           console.log(`[DEBUG] Sessions loaded for ${entry.name}:`, sessionData.sessions.length, 'sessions');
           project.sessions = sessionData.sessions || [];
           project.sessionMeta = {
@@ -290,6 +290,7 @@ async function getSessions(projectName, limit = 5, offset = 0) {
   try {
     const files = await fs.readdir(projectDir);
     const jsonlFiles = files.filter(file => file.endsWith('.jsonl'));
+    console.log(`[DEBUG] Found ${jsonlFiles.length} .jsonl files for ${projectName}`);
     
     if (jsonlFiles.length === 0) {
       return { sessions: [], hasMore: false, total: 0 };
@@ -339,8 +340,15 @@ async function getSessions(projectName, limit = 5, offset = 0) {
     const paginatedSessions = sortedSessions.slice(offset, offset + limit);
     const hasMore = offset + limit < total;
     
+    // Ensure all sessions have proper date fields
+    const sessionsWithDates = paginatedSessions.map(session => ({
+      ...session,
+      updated_at: session.updated_at || session.lastActivity,
+      created_at: session.created_at || session.lastActivity
+    }));
+    
     return {
-      sessions: paginatedSessions,
+      sessions: sessionsWithDates,
       hasMore,
       total,
       offset,
@@ -417,8 +425,13 @@ async function parseJsonlSessions(filePath) {
     console.error('Error reading JSONL file:', error);
   }
   
-  // Convert Map to Array and sort by last activity
-  return Array.from(sessions.values()).sort((a, b) => 
+  // Convert Map to Array, ensure dates are ISO strings, and sort by last activity
+  return Array.from(sessions.values()).map(session => ({
+    ...session,
+    lastActivity: session.lastActivity instanceof Date ? session.lastActivity.toISOString() : session.lastActivity,
+    updated_at: session.lastActivity instanceof Date ? session.lastActivity.toISOString() : session.lastActivity, // Add updated_at alias for compatibility
+    created_at: session.lastActivity instanceof Date ? session.lastActivity.toISOString() : session.lastActivity  // Add created_at as fallback
+  })).sort((a, b) => 
     new Date(b.lastActivity) - new Date(a.lastActivity)
   );
 }

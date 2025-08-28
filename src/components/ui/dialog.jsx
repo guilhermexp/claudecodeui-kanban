@@ -20,19 +20,19 @@ const Dialog = ({ open, onOpenChange, children }) => {
   );
 };
 
-const DialogContent = React.forwardRef(({ className, children, ...props }, ref) => {
+const DialogContent = React.forwardRef(({ className, children, onOpenChange, ...props }, ref) => {
   const dialogRef = useRef(null);
   
   useEffect(() => {
     const handleEscape = (e) => {
-      if (e.key === 'Escape' && props.onOpenChange) {
-        props.onOpenChange(false);
+      if (e.key === 'Escape' && onOpenChange) {
+        onOpenChange(false);
       }
     };
     
     document.addEventListener('keydown', handleEscape);
     return () => document.removeEventListener('keydown', handleEscape);
-  }, [props.onOpenChange]);
+  }, [onOpenChange]);
 
   return (
     <div
@@ -46,9 +46,9 @@ const DialogContent = React.forwardRef(({ className, children, ...props }, ref) 
       {...props}
     >
       {/* Close button */}
-      {props.onOpenChange && (
+      {onOpenChange && (
         <button
-          onClick={() => props.onOpenChange(false)}
+          onClick={() => onOpenChange(false)}
           className="absolute right-4 top-4 p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
         >
           <X className="h-4 w-4" />

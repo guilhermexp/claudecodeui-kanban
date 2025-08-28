@@ -13,9 +13,9 @@ export const authenticatedFetch = (url, options = {}) => {
   
   if (token) {
     defaultHeaders['Authorization'] = `Bearer ${token}`;
-    // Debug logging removed - was creating noise in preview console
+    console.log('[DEBUG] Sending request with token to:', url);
   } else {
-    // Silent - no warning needed for missing token
+    console.log('[DEBUG] No token found for request to:', url);
   }
   
   // Ensure URL is properly formatted
