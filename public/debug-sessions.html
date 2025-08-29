@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Debug Codex Sessions</title>
+  <style>
+    body {
+      font-family: 'SF Mono', Monaco, monospace;
+      background: #0a0a0a;
+      color: #e0e0e0;
+      padding: 20px;
+      line-height: 1.6;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    h1 { color: #3b82f6; }
+    h2 { color: #10b981; margin-top: 30px; }
+    .section {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 15px;
+      margin: 20px 0;
+    }
+    .key { color: #60a5fa; font-weight: bold; }
+    .value { color: #9ca3af; }
+    .error { color: #ef4444; }
+    .success { color: #10b981; }
+    pre {
+      background: #0f0f0f;
+      padding: 10px;
+      border-radius: 4px;
+      overflow-x: auto;
+    }
+    button {
+      background: #3b82f6;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin: 5px;
+    }
+    button:hover { background: #2563eb; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔍 Debug Codex Sessions Storage</h1>
+    
+    <div class="section">
+      <h2>Current Project Path</h2>
+      <div id="currentProject"></div>
+    </div>
+
+    <div class="section">
+      <h2>Method 1: overlayChatSessions (New Format)</h2>
+      <div id="newFormat"></div>
+    </div>
+
+    <div class="section">
+      <h2>Method 2: codex-last-session-* (Old Format)</h2>
+      <div id="oldFormat"></div>
+    </div>
+
+    <div class="section">
+      <h2>Chat History Keys</h2>
+      <div id="chatHistory"></div>
+    </div>
+
+    <div class="section">
+      <h2>Test hasLastSession Function</h2>
+      <input type="text" id="testPath" placeholder="Enter project path to test" style="width: 400px; padding: 5px;">
+      <button onclick="testHasSession()">Test</button>
+      <div id="testResult"></div>
+    </div>
+
+    <div class="section">
+      <h2>Actions</h2>
+      <button onclick="location.reload()">🔄 Refresh</button>
+      <button onclick="migrateOldToNew()">🔀 Migrate Old to New Format</button>
+      <button onclick="fixCurrentProject()">🔧 Fix Current Project</button>
+    </div>
+
+    <div class="section">
+      <h2>Console Output</h2>
+      <pre id="console"></pre>
+    </div>
+  </div>
+
+  <script>
+    function log(msg, type = 'info') {
+      const consoleEl = document.getElementById('console');
+      const color = type === 'error' ? '#ef4444' : type === 'success' ? '#10b981' : '#e0e0e0';
+      consoleEl.innerHTML += `<span style="color: ${color}">${new Date().toLocaleTimeString()}: ${msg}</span>\n`;
+      console.log(msg);
+    }
+
+    function getCurrentProject() {
+      // Try to get from window location or default
+      const path = window.location.pathname;
+      const searchParams = new URLSearchParams(window.location.search);
+      const projectFromUrl = searchParams.get('project');
+      
+      // Common project paths in your system
+      const possiblePaths = [
+        '/Users/guilhermevarela/Documents/Repositorios/Codeui',
+        '/Users/guilhermevarela/Desktop/Claudable',
+        projectFromUrl
+      ].filter(Boolean);
+      
+      return possiblePaths[0] || 'Unknown';
+    }
+
+    function analyzeStorage() {
+      const currentProject = getCurrentProject();
+      document.getElementById('currentProject').innerHTML = `
+        <p class="key">Detected: <span class="value">${currentProject}</span></p>
+      `;
+
+      // Method 1: New format (overlayChatSessions)
+      const overlaySessions = localStorage.getItem('overlayChatSessions');
+      if (overlaySessions) {
+        try {
+          const data = JSON.parse(overlaySessions);
+          const entries = Object.entries(data);
+          document.getElementById('newFormat').innerHTML = `
+            <p class="success">✅ Found ${entries.length} sessions in overlayChatSessions</p>
+            ${entries.map(([path, session]) => `
+              <div style="margin: 10px 0; padding: 10px; background: #0f0f0f; border-radius: 4px;">
+                <p class="key">${path}</p>
+                <p class="value">Session ID: ${session.sessionId || 'N/A'}</p>
+                <p class="value">Rollout: ${session.rolloutPath || 'N/A'}</p>
+                <p class="value">Updated: ${session.updatedAt ? new Date(session.updatedAt).toLocaleString() : 'N/A'}</p>
+              </div>
+            `).join('')}
+            <pre>${JSON.stringify(data, null, 2)}</pre>
+          `;
+          log(`Found ${entries.length} sessions in new format`, 'success');
+        } catch (e) {
+          document.getElementById('newFormat').innerHTML = `<p class="error">Error parsing: ${e.message}</p>`;
+          log(`Error parsing overlayChatSessions: ${e.message}`, 'error');
+        }
+      } else {
+        document.getElementById('newFormat').innerHTML = `<p class="error">❌ No overlayChatSessions key found</p>`;
+        log('No overlayChatSessions key found', 'error');
+      }
+
+      // Method 2: Old format (codex-last-session-*)
+      const oldFormatKeys = Object.keys(localStorage).filter(k => k.startsWith('codex-last-session-'));
+      if (oldFormatKeys.length > 0) {
+        document.getElementById('oldFormat').innerHTML = `
+          <p class="success">✅ Found ${oldFormatKeys.length} old format sessions</p>
+          ${oldFormatKeys.map(key => {
+            const path = key.replace('codex-last-session-', '');
+            const data = localStorage.getItem(key);
+            try {
+              const parsed = JSON.parse(data);
+              return `
+                <div style="margin: 10px 0; padding: 10px; background: #0f0f0f; border-radius: 4px;">
+                  <p class="key">${path}</p>
+                  <p class="value">Data: ${data}</p>
+                </div>
+              `;
+            } catch {
+              return `<p class="error">Error parsing ${key}</p>`;
+            }
+          }).join('')}
+        `;
+        log(`Found ${oldFormatKeys.length} sessions in old format`, 'success');
+      } else {
+        document.getElementById('oldFormat').innerHTML = `<p class="error">❌ No old format sessions found</p>`;
+        log('No old format sessions found');
+      }
+
+      // Chat history
+      const chatKeys = Object.keys(localStorage).filter(k => k.startsWith('codex-chat-history-'));
+      document.getElementById('chatHistory').innerHTML = `
+        <p>Found ${chatKeys.length} chat history keys</p>
+        ${chatKeys.map(key => {
+          const path = key.replace('codex-chat-history-', '');
+          return `<p class="value">• ${path}</p>`;
+        }).join('')}
+      `;
+    }
+
+    function testHasSession() {
+      const path = document.getElementById('testPath').value || getCurrentProject();
+      
+      // Test using the actual function logic
+      const overlaySessions = localStorage.getItem('overlayChatSessions');
+      let hasSession = false;
+      let sessionData = null;
+      
+      if (overlaySessions) {
+        try {
+          const data = JSON.parse(overlaySessions);
+          sessionData = data[path];
+          hasSession = !!(sessionData && (sessionData.sessionId || sessionData.rolloutPath));
+        } catch {}
+      }
+      
+      document.getElementById('testResult').innerHTML = `
+        <p>Testing path: <span class="key">${path}</span></p>
+        <p>Result: <span class="${hasSession ? 'success' : 'error'}">${hasSession ? '✅ Has session' : '❌ No session'}</span></p>
+        ${sessionData ? `<pre>${JSON.stringify(sessionData, null, 2)}</pre>` : ''}
+      `;
+      
+      log(`Tested path "${path}": ${hasSession ? 'Has session' : 'No session'}`);
+    }
+
+    function migrateOldToNew() {
+      const oldKeys = Object.keys(localStorage).filter(k => k.startsWith('codex-last-session-'));
+      if (oldKeys.length === 0) {
+        alert('No old format sessions to migrate');
+        return;
+      }
+      
+      const overlaySessions = JSON.parse(localStorage.getItem('overlayChatSessions') || '{}');
+      
+      oldKeys.forEach(key => {
+        const path = key.replace('codex-last-session-', '');
+        try {
+          const data = JSON.parse(localStorage.getItem(key));
+          overlaySessions[path] = {
+            sessionId: data.sessionId || null,
+            rolloutPath: data.rolloutPath || null,
+            updatedAt: Date.now()
+          };
+          log(`Migrated: ${path}`, 'success');
+        } catch (e) {
+          log(`Failed to migrate ${key}: ${e.message}`, 'error');
+        }
+      });
+      
+      localStorage.setItem('overlayChatSessions', JSON.stringify(overlaySessions));
+      alert(`Migrated ${oldKeys.length} sessions to new format`);
+      location.reload();
+    }
+
+    function fixCurrentProject() {
+      const project = prompt('Enter the exact project path:', getCurrentProject());
+      if (!project) return;
+      
+      const overlaySessions = JSON.parse(localStorage.getItem('overlayChatSessions') || '{}');
+      
+      // Create a dummy session for testing
+      overlaySessions[project] = {
+        sessionId: 'test-session-' + Date.now(),
+        rolloutPath: null,
+        updatedAt: Date.now()
+      };
+      
+      localStorage.setItem('overlayChatSessions', JSON.stringify(overlaySessions));
+      log(`Added test session for: ${project}`, 'success');
+      
+      alert(`Added test session for project: ${project}\nReload the page to see the Resume button`);
+      location.reload();
+    }
+
+    // Run on load
+    window.addEventListener('load', () => {
+      analyzeStorage();
+      log('Page loaded and analysis complete');
+    });
+  </script>
+</body>
+</html>

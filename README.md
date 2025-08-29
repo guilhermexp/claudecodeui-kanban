@@ -93,6 +93,15 @@ VIBE_PORT=8081
 - JWT para autenticação
 - Integração com Claude Code CLI
 
+#### Integração Codex CLI (OpenAI)
+
+O backend também suporta o Codex CLI (OpenAI) via múltiplas estratégias de spawn. Para ambientes com caminhos não padrão, use variáveis de ambiente:
+
+- `CODEX_SCRIPT_PATH`: caminho absoluto para o script `codex.js` (ex.: `/opt/homebrew/lib/node_modules/@openai/codex/bin/codex.js`). Quando definido, o servidor roda `node <execPath> <codex.js> exec ...`.
+- `CODEX_BIN`: comando binário a ser usado (ex.: `codex` ou `npx @openai/codex`). Pode incluir argumentos adicionais antes; o servidor acrescenta `exec --json ...`.
+
+O servidor loga qual estratégia foi usada (bin, node+script ou shell+npx), o `cwd` e o `PATH` efetivo para facilitar diagnóstico de `ENOENT`.
+
 ### Vibe Kanban (Rust + Actix)
 - **Port 8081**: Sistema de tarefas
 - SQLite compartilhado

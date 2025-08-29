@@ -2168,7 +2168,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
         </div>
 
         {/* Terminal */}
-        <div className="flex-1 min-h-0 p-2 md:p-3 pb-2 md:pb-3 overflow-hidden relative">
+        <div className="flex-1 min-h-0 p-1 md:p-2 pb-1 md:pb-2 overflow-hidden relative">
           {terminalContent}
         </div>
       </div>
@@ -2179,7 +2179,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       <>
         {/* Resize Handle - only interactive when preview shown */}
         <PanelResizeHandle 
-          className={showPreview ? "w-2 bg-transparent hover:bg-accent/20 transition-colors cursor-col-resize" : "w-0 pointer-events-none"} 
+          className={showPreview ? "w-1 bg-transparent hover:bg-accent/30 transition-colors cursor-col-resize" : "w-0 pointer-events-none"} 
           disabled={!showPreview}
         />
         
@@ -2193,7 +2193,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
         >
           {showPreview && (
             <PreviewPanel
-              url={previewUrl}
+              url={initialPreviewPaused ? '' : previewUrl}
               projectPath={selectedProject?.path}
               onClose={() => setShowPreview(false)}
               onRefresh={() => detectUrlsInTerminal()}

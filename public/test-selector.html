@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Test Element Selector</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background: #f0f0f0;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    .test-element {
+      margin: 10px 0;
+      padding: 15px;
+      background: #e8f4f8;
+      border: 1px solid #b3d9e6;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    .test-element:hover {
+      background: #d0e9f2;
+      transform: translateX(5px);
+    }
+    button {
+      background: #3b82f6;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin: 5px;
+    }
+    button:hover {
+      background: #2563eb;
+    }
+    #status {
+      margin-top: 20px;
+      padding: 10px;
+      background: #fef3c7;
+      border: 1px solid #fcd34d;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Element Selector Test Page</h1>
+    <p>This page is for testing the element selector functionality in the Preview Panel.</p>
+    
+    <div id="test-div-1" class="test-element">
+      <strong>Test Div 1</strong> - Click me to test selection
+    </div>
+    
+    <div id="test-div-2" class="test-element custom-class">
+      <strong>Test Div 2</strong> - I have a custom class
+    </div>
+    
+    <button id="test-button" onclick="alert('Button clicked!')">
+      Test Button
+    </button>
+    
+    <button onclick="testMessageToParent()">
+      Send Message to Parent
+    </button>
+    
+    <div id="status">
+      Status: Ready for testing
+    </div>
+    
+    <input type="text" id="test-input" placeholder="Test input field" style="margin: 10px 0; padding: 8px; width: 100%;">
+    
+    <select id="test-select" style="margin: 10px 0; padding: 8px;">
+      <option>Option 1</option>
+      <option>Option 2</option>
+      <option>Option 3</option>
+    </select>
+  </div>
+
+  <script>
+    // Listen for element selection mode from parent
+    window.addEventListener('message', (event) => {
+      console.log('Test page received message:', event.data);
+      
+      if (event.data?.type === 'enable-element-selection') {
+        const status = document.getElementById('status');
+        if (event.data.enabled) {
+          status.textContent = 'Status: Element selection mode ENABLED';
+          status.style.background = '#d1fae5';
+          status.style.borderColor = '#34d399';
+        } else {
+          status.textContent = 'Status: Element selection mode DISABLED';
+          status.style.background = '#fef3c7';
+          status.style.borderColor = '#fcd34d';
+        }
+      }
+    });
+    
+    // Test sending message to parent
+    function testMessageToParent() {
+      console.log('Sending test message to parent...');
+      if (window.parent !== window) {
+        window.parent.postMessage({
+          type: 'test-message',
+          from: 'test-selector-page',
+          message: 'Hello from test page!'
+        }, '*');
+        
+        const status = document.getElementById('status');
+        status.textContent = 'Status: Message sent to parent frame';
+        status.style.background = '#dbeafe';
+        status.style.borderColor = '#60a5fa';
+      } else {
+        alert('Not in an iframe!');
+      }
+    }
+    
+    // Log when page loads
+    console.log('Test selector page loaded at', new Date().toISOString());
+    console.log('Is in iframe?', window.parent !== window);
+    console.log('Location:', window.location.href);
+  </script>
+</body>
+</html>

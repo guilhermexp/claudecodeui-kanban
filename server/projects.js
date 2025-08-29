@@ -228,12 +228,12 @@ async function getProjects() {
         
         // Load basic session info for display in project cards
         try {
-          // Load sessions (getSessions already has its own logging)
-          const sessionData = await getSessions(entry.name, 10, 0); // limit=10, offset=0
+          // Load only 2 most recent sessions for performance, but get the real total count
+          const sessionData = await getSessions(entry.name, 2, 0); // limit=2 for performance, offset=0
           project.sessions = sessionData.sessions || [];
           project.sessionMeta = {
             hasMore: sessionData.hasMore || false,
-            total: sessionData.total || 0,
+            total: sessionData.total || 0,  // This contains the REAL total count
             notLoaded: false
           };
         } catch (error) {

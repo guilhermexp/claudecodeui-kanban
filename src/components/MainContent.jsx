@@ -16,13 +16,14 @@ import FileManagerSimple from './FileManagerSimple';
 import CodeEditor from './CodeEditor';
 import Shell from './Shell';
 import GitPanel from './GitPanel';
-import Dashboard from './Dashboard';
+import OverlayChat from './OverlayChat';
 import ResourceMonitor from './ResourceMonitor';
 import ErrorBoundary from './ErrorBoundary';
 import { TextShimmer } from './ui/text-shimmer';
 import { ConfigProvider } from './vibe-kanban/config-provider';
 import ProjectsModal from './ProjectsModal';
 import KanbanModal from './KanbanModal';
+import DarkModeToggle from './DarkModeToggle';
 import { Folder, Kanban } from 'lucide-react';
 
 function MainContent({ 
@@ -64,20 +65,18 @@ function MainContent({
   onShellSessionStateChange // Function to update Shell session protection state
 }) {
   const [editingFile, setEditingFile] = useState(null);
-  const [openShellSessions, setOpenShellSessions] = useState(0);
+  // openShellSessions removed - was set but never used
   const [contextWindowPercentage, setContextWindowPercentage] = useState(null);
   const [shellResizeTrigger, setShellResizeTrigger] = useState(0);
   // Panel states - only one can be open at a time
-  const [activeSidePanel, setActiveSidePanel] = useState(null); // 'files' | 'git' | 'dashboard' | null
+  const [activeSidePanel, setActiveSidePanel] = useState(null); // 'files' | 'git' | 'chat' | null
   const [hasPreviewOpen, setHasPreviewOpen] = useState(false); // Track if preview is open
-  const assistantContainerRef = React.useRef(null);
   // Shell terminals state removed - single terminal mode only
   
   // Modal states
   const [showProjectsModal, setShowProjectsModal] = useState(false);
   const [showKanbanModal, setShowKanbanModal] = useState(false);
   const [showGitModal, setShowGitModal] = useState(false);
-  const [showDashboardModal, setShowDashboardModal] = useState(false);
 
   // Notify parent component about active side panel changes
   useEffect(() => {
@@ -312,9 +311,7 @@ function MainContent({
                   <div className="flex items-center gap-3">
                     <h2 className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white whitespace-nowrap">
                       Shell {activeSidePanel && `+ ${activeSidePanel === 'files' ? 'Files' : 
-                                                      activeSidePanel === 'git' ? 'Source Control' :
-                                                      activeSidePanel === 'tasks' ? 'Tasks' :
-                                                      activeSidePanel === 'dashboard' ? 'Dashboard' : ''}`}
+                                                      activeSidePanel === 'chat' ? 'Assistant' : ''}`}
                     </h2>
                     <span className="inline-block px-2 py-0.5 text-xs rounded-full bg-gradient-to-r from-primary/20 to-accent/20 dark:from-primary/30 dark:to-accent/30 text-primary dark:text-primary-foreground font-medium shrink-0">
                       {selectedProject.displayName}
@@ -395,22 +392,47 @@ function MainContent({
                   <span className="hidden sm:inline">Source Control</span>
                 </span>
               </button>
+              {/* Assistant (Codex) button - opens side chat panel */}
               <button
-                onClick={() => setShowDashboardModal(true)}
-                className="relative inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 text-muted-foreground hover:text-foreground hover:bg-accent"
+                onClick={() => {
+                  if (activeSidePanel === 'chat') {
+                    setActiveSidePanel(null);
+                  } else {
+                    if (hasPreviewOpen && window.closePreview) {
+                      window.closePreview();
+                    }
+                    setActiveSidePanel('chat');
+                    if (sidebarOpen && onSidebarOpen) {
+                      onSidebarOpen();
+                    }
+                  }
+                  setTimeout(() => setShellResizeTrigger(prev => prev + 1), 350);
+                }}
+                className={`relative inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
+                  activeSidePanel === 'chat'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                }`}
+                title="Open Assistant"
               >
                 <span className="flex items-center gap-1 sm:gap-1.5 leading-none">
                   <svg className="w-3 sm:w-3.5 h-3 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h6m-7 7l-2 2V5a2 2 0 012-2h14a2 2 0 012 2v12a2 2 0 01-2 2H7z" />
                   </svg>
-                  <span className="hidden sm:inline">Dashboard</span>
+                  <span className="hidden sm:inline">Assistant</span>
                 </span>
               </button>
+
             </div>
           </div>
           
-          {/* System Monitor - Right Side */}
+          {/* Dark Mode Toggle */}
           <div className="flex-shrink-0 order-4">
+            <DarkModeToggle />
+          </div>
+          
+          {/* System Monitor - Right Side */}
+          <div className="flex-shrink-0 order-5">
             <ResourceMonitor />
           </div>
         </div>
@@ -420,17 +442,15 @@ function MainContent({
 
       {/* Main content wrapper with side panels */}
       <div className="flex-1 min-h-0 flex relative">
-        {/* Shell Area - Keep width stable; side panels overlay on top */}
-        <div className={`min-h-0 flex flex-col transition-all duration-300 px-2 md:px-4 flex-1 ${
-          activeSidePanel && hasPreviewOpen ? 'pr-48 sm:pr-56 md:pr-64' : ''
-        }`}>
+        {/* Shell Area - main content flexes; assistant panel occupies width when open */}
+        <div className={`min-h-0 flex flex-col transition-all duration-300 ${activeSidePanel === 'chat' ? 'px-0' : 'px-2 md:px-4'} flex-1`}>
           <div className="h-full overflow-hidden">
             <ConfigProvider>
               <Shell 
                 selectedProject={selectedProject} 
                 selectedSession={selectedSession}
                 isActive={true}
-                onSessionCountChange={setOpenShellSessions}
+                // onSessionCountChange removed - openShellSessions was never used
                 onConnectionChange={onShellConnectionChange}
                 onSessionStateChange={handleShellSessionStateChange}
                 isMobile={isMobile}
@@ -448,57 +468,39 @@ function MainContent({
           </div>
         </div>
 
-        {/* Side Panels - Only one visible at a time on desktop */}
+        {/* Assistant panel integrated (not overlay) */}
         {!isMobile && (
+          <div className={`transition-all duration-300 ease-in-out overflow-hidden ${
+            activeSidePanel === 'chat' ? 'w-[320px] sm:w-[380px] md:w-[420px] border-l border-border' : 'w-0'
+          }`}>
+            {activeSidePanel === 'chat' && (
+              <OverlayChat 
+                embedded={true}
+                disableInlinePanel={true}
+                projectPath={selectedProject?.path}
+                previewUrl={null}
+                onPanelClosed={() => setActiveSidePanel(null)}
+              />
+            )}
+          </div>
+        )}
+
+        {/* Side Panels - Only one visible at a time on desktop (overlay style for others) */}
+        {!isMobile && activeSidePanel && (
           <>
             {/* Files Panel */}
-            <div 
-              className={`absolute top-0 right-0 h-full bg-background shadow-xl transform transition-transform duration-300 ease-in-out z-20 ${
-                activeSidePanel === 'files' ? 'translate-x-0 pointer-events-auto' : 'translate-x-full pointer-events-none'
-              } ${
-                activeSidePanel === 'files' && hasPreviewOpen ? 'w-48 sm:w-56 md:w-64' : 'w-96 sm:w-[440px] md:w-[520px]'
-              }`}
-            >
-              <div className="h-full flex flex-col">
-                <div className="flex-1 overflow-hidden">
-                  <FileManagerSimple selectedProject={selectedProject} onClose={() => setActiveSidePanel(null)} />
+            {activeSidePanel === 'files' && (
+              <div className="absolute top-0 left-0 h-full bg-background shadow-2xl z-20 w-96 sm:w-[440px] md:w-[520px] animate-in slide-in-from-left duration-200">
+                <div className="h-full flex flex-col">
+                  <div className="flex-1 overflow-hidden">
+                    <FileManagerSimple selectedProject={selectedProject} onClose={() => setActiveSidePanel(null)} />
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
-            
-
-            {/* Git Panel */}
-            <div 
-              className={`absolute top-0 right-0 h-full bg-background shadow-xl transform transition-transform duration-300 ease-in-out z-20 ${
-                activeSidePanel === 'git' ? 'translate-x-0 pointer-events-auto' : 'translate-x-full pointer-events-none'
-              } ${
-                activeSidePanel === 'git' && hasPreviewOpen ? 'w-48 sm:w-56 md:w-64' : 'w-96 sm:w-[440px] md:w-[520px]'
-              }`}
-            >
-              <div className="h-full flex flex-col">
-                <div className="flex-1 overflow-hidden">
-                  <GitPanel selectedProject={selectedProject} isMobile={false} isVisible={activeSidePanel === 'git'} onClose={() => setActiveSidePanel(null)} />
-                </div>
-              </div>
-            </div>
-
-            {/* Tasks Panel */}
-
-            {/* Dashboard Panel */}
-            <div 
-              className={`absolute top-0 right-0 h-full bg-background shadow-xl transform transition-transform duration-300 ease-in-out z-20 ${
-                activeSidePanel === 'dashboard' ? 'translate-x-0 pointer-events-auto' : 'translate-x-full pointer-events-none'
-              } ${
-                activeSidePanel === 'dashboard' && hasPreviewOpen ? 'w-48 sm:w-56 md:w-64' : 'w-96 sm:w-[440px] md:w-[520px]'
-              }`}
-            >
-              <div className="h-full flex flex-col">
-                <div className="flex-1 overflow-hidden">
-                  <Dashboard onBack={() => setActiveSidePanel(null)} />
-                </div>
-              </div>
-            </div>
+            {/* (Git panel uses modal, not side panel) */}
+            {/* (Assistant panel removed from overlay section; now integrated) */}
           </>
         )}
 
@@ -578,15 +580,6 @@ function MainContent({
         </div>
       )}
 
-      {/* Dashboard Modal */}
-      {showDashboardModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-black/50" onClick={() => setShowDashboardModal(false)} />
-          <div className="relative z-50 w-full max-w-5xl max-h-[85vh] bg-background rounded-lg shadow-xl overflow-hidden">
-            <Dashboard onBack={() => setShowDashboardModal(false)} />
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -10,7 +10,7 @@ const CanvasRevealEffect = ({
 }) => {
   return (
     <div className="absolute inset-0 overflow-hidden">
-      <div className="absolute inset-0 bg-black">
+      <div className="absolute inset-0 bg-background dark:bg-black">
         {/* Animated dots pattern */}
         <div className="grid grid-cols-20 gap-1 w-full h-full p-2">
           {Array.from({ length: 400 }).map((_, i) => (
@@ -38,7 +38,7 @@ const CanvasRevealEffect = ({
       </div>
       
       {/* Gradient overlays - less aggressive */}
-      <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-black opacity-60" />
+      <div className="absolute inset-0 bg-gradient-to-t from-background dark:from-black via-transparent to-background dark:to-black opacity-60" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(0,0,0,0.4)_0%,_transparent_70%)]" />
     </div>
   );
@@ -161,7 +161,7 @@ const ModernLoginForm = () => {
   };
 
   return (
-    <div className="flex w-full flex-col min-h-screen bg-black relative overflow-hidden">
+    <div className="flex w-full flex-col min-h-screen bg-background dark:bg-black relative overflow-hidden">
       {/* Background Effects */}
       <div className="absolute inset-0 z-0">
         {/* Initial canvas (forward animation) */}
