@@ -1191,6 +1191,7 @@ function handleChatConnection(ws, request) {
         // Use session resume if available
         const opts = {
           ...(data.options || {}),
+          dangerous: !!(data.options && data.options.dangerous),
           resumeRolloutPath: codexSession?.rolloutPath || null,
           onSession: (sessionId, rolloutPath) => {
             codexSession = { sessionId, rolloutPath };

@@ -610,7 +610,7 @@ function AppContent() {
       {/* Mobile Sidebar removed - using ProjectsModal instead */}
 
       {/* Main Content Area - Now takes full width */}
-      <div className={`flex-1 flex flex-col min-w-0 relative ${isMobile ? 'pb-14' : ''} ${!isMobile ? 'bg-card overflow-hidden' : ''}`}>
+      <div className={`flex-1 flex flex-col min-w-0 relative ${isMobile ? 'pb-14' : ''} bg-card overflow-hidden`}>
         {projectName ? (
           // Sessions view for specific project
           <SessionsView

@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Codex Saved Sessions Checker</title>
+  <style>
+    body {
+      font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+      background: #0a0a0a;
+      color: #e0e0e0;
+      padding: 20px;
+      line-height: 1.6;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    h1 {
+      color: #3b82f6;
+      border-bottom: 2px solid #3b82f6;
+      padding-bottom: 10px;
+    }
+    h2 {
+      color: #10b981;
+      margin-top: 30px;
+    }
+    .project-card {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 15px;
+      margin: 10px 0;
+    }
+    .project-path {
+      color: #60a5fa;
+      font-weight: bold;
+      word-break: break-all;
+    }
+    .session-info {
+      margin-left: 20px;
+      color: #9ca3af;
+      font-size: 14px;
+    }
+    .stats {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 15px;
+      margin: 20px 0;
+    }
+    .no-data {
+      color: #ef4444;
+      font-style: italic;
+    }
+    button {
+      background: #3b82f6;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 6px;
+      cursor: pointer;
+      margin: 10px 5px;
+    }
+    button:hover {
+      background: #2563eb;
+    }
+    .clear-btn {
+      background: #ef4444;
+    }
+    .clear-btn:hover {
+      background: #dc2626;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔍 Codex Saved Sessions Checker</h1>
+    
+    <div class="stats" id="stats">
+      <p>Loading localStorage data...</p>
+    </div>
+
+    <h2>📁 Projects with Saved Sessions</h2>
+    <div id="sessions"></div>
+
+    <h2>💬 Projects with Chat History</h2>
+    <div id="chats"></div>
+
+    <h2>🔧 Other Codex/Claude Data</h2>
+    <div id="other"></div>
+
+    <div style="margin-top: 40px;">
+      <button onclick="location.reload()">🔄 Refresh</button>
+      <button onclick="exportData()">💾 Export Data</button>
+      <button class="clear-btn" onclick="clearSpecificProject()">🗑️ Clear Specific Project</button>
+    </div>
+  </div>
+
+  <script>
+    function analyzeLocalStorage() {
+      const keys = Object.keys(localStorage);
+      const codexSessions = {};
+      const chatHistories = {};
+      const otherKeys = [];
+
+      keys.forEach(key => {
+        // Sessions
+        if (key.startsWith('codex-last-session-')) {
+          const projectPath = key.replace('codex-last-session-', '');
+          try {
+            const sessionData = JSON.parse(localStorage.getItem(key));
+            codexSessions[projectPath] = sessionData;
+          } catch (e) {
+            console.error('Error parsing session:', key, e);
+          }
+        }
+        
+        // Chat histories
+        else if (key.startsWith('codex-chat-history-')) {
+          const projectPath = key.replace('codex-chat-history-', '');
+          try {
+            const chatData = JSON.parse(localStorage.getItem(key));
+            chatHistories[projectPath] = {
+              messages: chatData.messages || [],
+              timestamp: chatData.timestamp || 'unknown'
+            };
+          } catch (e) {
+            console.error('Error parsing chat history:', key, e);
+          }
+        }
+        
+        // Other Codex/Claude keys
+        else if (key.includes('codex') || key.includes('claude') || key.includes('Codex')) {
+          otherKeys.push(key);
+        }
+      });
+
+      // Update stats
+      document.getElementById('stats').innerHTML = `
+        <p>📊 <strong>Statistics:</strong></p>
+        <p>• Total localStorage keys: ${keys.length}</p>
+        <p>• Projects with sessions: ${Object.keys(codexSessions).length}</p>
+        <p>• Projects with chat history: ${Object.keys(chatHistories).length}</p>
+        <p>• Other Codex/Claude keys: ${otherKeys.length}</p>
+        <p>• localStorage size: ~${new Blob([JSON.stringify(localStorage)]).size / 1024} KB</p>
+      `;
+
+      // Display sessions
+      const sessionsDiv = document.getElementById('sessions');
+      if (Object.keys(codexSessions).length === 0) {
+        sessionsDiv.innerHTML = '<p class="no-data">No saved sessions found</p>';
+      } else {
+        sessionsDiv.innerHTML = Object.entries(codexSessions).map(([project, data]) => `
+          <div class="project-card">
+            <div class="project-path">${project}</div>
+            <div class="session-info">
+              • Session ID: ${data.sessionId ? data.sessionId.slice(0, 12) + '...' : 'N/A'}<br>
+              • Rollout Path: ${data.rolloutPath || 'N/A'}<br>
+              • Full Session: <code>${data.sessionId || 'none'}</code>
+            </div>
+          </div>
+        `).join('');
+      }
+
+      // Display chat histories
+      const chatsDiv = document.getElementById('chats');
+      if (Object.keys(chatHistories).length === 0) {
+        chatsDiv.innerHTML = '<p class="no-data">No chat histories found</p>';
+      } else {
+        chatsDiv.innerHTML = Object.entries(chatHistories).map(([project, data]) => {
+          const lastMessage = data.messages.length > 0 ? data.messages[data.messages.length - 1] : null;
+          return `
+            <div class="project-card">
+              <div class="project-path">${project}</div>
+              <div class="session-info">
+                • Messages: ${data.messages.length}<br>
+                • Last Update: ${data.timestamp}<br>
+                ${lastMessage ? `• Last Message Type: ${lastMessage.type}<br>` : ''}
+                ${lastMessage && lastMessage.text ? `• Last Text Preview: "${lastMessage.text.slice(0, 50)}..."` : ''}
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      // Display other keys
+      const otherDiv = document.getElementById('other');
+      if (otherKeys.length === 0) {
+        otherDiv.innerHTML = '<p class="no-data">No other Codex/Claude keys found</p>';
+      } else {
+        otherDiv.innerHTML = otherKeys.map(key => {
+          let value = localStorage.getItem(key);
+          try {
+            value = JSON.stringify(JSON.parse(value), null, 2);
+          } catch {
+            // Keep as string if not JSON
+          }
+          return `
+            <div class="project-card">
+              <div class="project-path">${key}</div>
+              <div class="session-info">
+                Value: <code>${value ? value.slice(0, 100) + (value.length > 100 ? '...' : '') : 'empty'}</code>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      return { codexSessions, chatHistories, otherKeys };
+    }
+
+    function exportData() {
+      const data = analyzeLocalStorage();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `codex-sessions-${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+    }
+
+    function clearSpecificProject() {
+      const project = prompt('Enter the project path to clear (copy from above):');
+      if (project) {
+        const sessionKey = `codex-last-session-${project}`;
+        const chatKey = `codex-chat-history-${project}`;
+        
+        let cleared = [];
+        if (localStorage.getItem(sessionKey)) {
+          localStorage.removeItem(sessionKey);
+          cleared.push('session');
+        }
+        if (localStorage.getItem(chatKey)) {
+          localStorage.removeItem(chatKey);
+          cleared.push('chat history');
+        }
+        
+        if (cleared.length > 0) {
+          alert(`Cleared ${cleared.join(' and ')} for project: ${project}`);
+          location.reload();
+        } else {
+          alert(`No data found for project: ${project}`);
+        }
+      }
+    }
+
+    // Run on load
+    window.addEventListener('load', () => {
+      const result = analyzeLocalStorage();
+      console.log('Analysis complete:', result);
+    });
+  </script>
+</body>
+</html>

@@ -4,34 +4,37 @@ import OverlayChat from './OverlayChat';
 function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, isMobile, initialPaused = false }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [currentUrl, setCurrentUrl] = useState(url);
+  const [currentUrl, setCurrentUrl] = useState(url || '');
   const [isPaused, setIsPaused] = useState(initialPaused);
   const [logs, setLogs] = useState([]);
   const [captureReady, setCaptureReady] = useState(false);
   const captureReadyTimer = useRef(null);
   const [showLogs, setShowLogs] = useState(false);
-  const [pausedUrl, setPausedUrl] = useState(null); // Store URL when paused
+  const [pausedUrl, setPausedUrl] = useState(initialPaused ? (url || '') : null); // Store URL when paused
   const [microphoneStatus, setMicrophoneStatus] = useState('idle'); // idle, granted, denied, requesting
   const [showPermissionInfo, setShowPermissionInfo] = useState(false);
   const [elementSelectionMode, setElementSelectionMode] = useState(false); // Direct element selection
   const [selectedElement, setSelectedElement] = useState(null); // Captured element data
+  
+  // Debug state changes
+  useEffect(() => {
+    console.log('🔍 Element selection mode changed to:', elementSelectionMode);
+  }, [elementSelectionMode]);
   const iframeRef = useRef(null);
   const logsRef = useRef(null);
 
+  // Track if user has manually edited the URL
+  const [userEditedUrl, setUserEditedUrl] = useState(false);
+  
   useEffect(() => {
-    // When paused, don't update the current URL or reload
-    if (!isPaused) {
+    // Only update from props if user hasn't edited the URL
+    if (!userEditedUrl && !isPaused) {
       setCurrentUrl(url);
       setIsLoading(true);
       setError(null);
-      // Clear logs when URL changes - new page means fresh error state
       setLogs([]);
     }
-    // If paused, just update the stored URL for when we resume
-    else {
-      setPausedUrl(url);
-    }
-  }, [url, isPaused]);
+  }, [url]);
 
   // Check microphone permission status
   const checkMicrophonePermission = async () => {
@@ -516,8 +519,14 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
       // Clear logs on refresh - errors will be re-captured if they still exist
       setLogs([]);
       
+      // Format URL if needed
+      let urlToLoad = currentUrl;
+      if (currentUrl && !currentUrl.startsWith('http')) {
+        urlToLoad = 'http://' + currentUrl;
+      }
+      
       // Load URL directly for full functionality
-      iframeRef.current.src = currentUrl;
+      iframeRef.current.src = urlToLoad;
     }
   };
   
@@ -532,15 +541,25 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
   const handleTogglePause = () => {
     setIsPaused(!isPaused);
     if (isPaused && iframeRef.current) {
-      // Resume - use the latest URL if it changed while paused
-      const urlToLoad = pausedUrl || currentUrl;
+      // Resume - use the edited URL (pausedUrl) if it was changed, otherwise use currentUrl
+      let urlToLoad = pausedUrl || currentUrl;
+      
+      // Format URL if needed
+      if (urlToLoad && !urlToLoad.startsWith('http')) {
+        urlToLoad = 'http://' + urlToLoad;
+      }
+      
+      console.log('🎯 Resuming with URL:', urlToLoad, 'pausedUrl:', pausedUrl, 'currentUrl:', currentUrl);
       setCurrentUrl(urlToLoad);
       setPausedUrl(null);
+      setUserEditedUrl(false); // Reset the flag after using the edited URL
       setIsLoading(true);
       setError(null);
+      // Clear logs when resuming with new URL
+      setLogs([]);
       iframeRef.current.src = urlToLoad;
     } else if (!isPaused && iframeRef.current) {
-      // Pause - clear the iframe and store current URL
+      // Pause - clear the iframe and store current URL for editing
       setPausedUrl(currentUrl);
       iframeRef.current.src = 'about:blank';
       setIsLoading(false);
@@ -611,11 +630,24 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
   
   // Handle element selection mode
   useEffect(() => {
-    if (!elementSelectionMode || !iframeRef.current) return;
+    console.log('🔄 Element selection useEffect triggered. Mode:', elementSelectionMode, 'IFrame exists:', !!iframeRef.current);
+    
+    // Reload iframe when selection mode changes to apply/remove sandbox
+    if (iframeRef.current && !isPaused && currentUrl) {
+      const iframe = iframeRef.current;
+      // Force reload to apply new sandbox settings
+      console.log('🔄 Reloading iframe to apply sandbox changes...');
+      iframe.src = iframe.src;
+    }
+    
+    if (!elementSelectionMode || !iframeRef.current) {
+      console.log('⏹️ Element selection disabled or no iframe');
+      return;
+    }
     
     const handleElementSelected = (event) => {
       if (event.data?.type === 'element-selected') {
-        console.log('Element selected:', event.data.data);
+        console.log('✅ Element selected:', event.data.data);
         setSelectedElement(event.data.data);
         setElementSelectionMode(false);
         
@@ -632,13 +664,14 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
     
     // Inject selection script after a delay
     const timer = setTimeout(() => {
-      console.log('🎯 Element selection useEffect check:');
+      console.log('🎯 Element selection activation attempt:');
       console.log('  - elementSelectionMode:', elementSelectionMode);
       console.log('  - iframeRef.current exists:', !!iframeRef.current);
+      console.log('  - iframe src:', iframeRef.current?.src);
       
       if (iframeRef.current && elementSelectionMode) {
         const iframe = iframeRef.current;
-        console.log('🎯 Activating element selector, iframe URL:', iframe.src);
+        console.log('🎯 Injecting element selector script...');
         
         // SIMPLES: Sempre tenta injetar no iframe principal (que agora sempre é a aplicação)
         try {
@@ -772,12 +805,12 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
               })();
             `;
             iframeDoc.body.appendChild(script);
-            console.log('Element selector script injected successfully');
+            console.log('✅ Element selector script injected successfully! Click any element in the preview to select it.');
           } else {
-            console.error('Cannot access iframe document - might be cross-origin');
+            console.error('❌ Cannot access iframe document - iframeDoc is null');
           }
         } catch (error) {
-          console.error('Failed to inject element selector:', error);
+          console.error('❌ Failed to inject element selector:', error.message);
           // Try alternative approach with postMessage
           const iframe = iframeRef.current;
           if (iframe && iframe.contentWindow) {
@@ -843,8 +876,17 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
 
   // Validate URL to ensure it's a safe preview URL
   const isValidPreviewUrl = (url) => {
+    // Empty URL is valid (for paused state)
+    if (!url || url.trim() === '') return true;
+    
     try {
-      const urlObj = new URL(url);
+      // Add http:// if missing
+      let urlToValidate = url;
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        urlToValidate = 'http://' + url;
+      }
+      
+      const urlObj = new URL(urlToValidate);
       const hostname = urlObj.hostname;
       
       // Allow localhost and local IPs
@@ -874,8 +916,8 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
   if (!isValidPreviewUrl(currentUrl)) {
     return (
       <div className="h-full flex flex-col bg-background">
-        <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-card">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between px-2 py-1.5 border-b border-border bg-card">
+          <div className="flex items-center gap-1.5">
             <span className="text-sm font-medium text-foreground">Preview Panel</span>
           </div>
           <button
@@ -908,8 +950,8 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
   return (
     <div className="h-full flex flex-col bg-card rounded-xl border border-border relative">
       {/* Preview Toolbar */}
-      <div className="flex items-center justify-between px-3 py-3 border-b border-border">
-        <div className="flex items-center gap-2 flex-1 min-w-0">
+      <div className="flex items-center justify-between px-2 py-2 border-b border-border">
+        <div className="flex items-center gap-1.5 flex-1 min-w-0">
           {/* URL Display */}
           <div className="flex items-center gap-2 flex-1 min-w-0">
             <div 
@@ -918,16 +960,28 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
             />
             <input
               type="text"
-              value={currentUrl}
-              onChange={(e) => setCurrentUrl(e.target.value)}
+              value={isPaused && pausedUrl ? pausedUrl : currentUrl}
+              onChange={(e) => {
+                setUserEditedUrl(true); // Mark that user has edited
+                if (isPaused) {
+                  // Quando pausado, atualiza a URL que será usada ao despausar
+                  setPausedUrl(e.target.value);
+                } else {
+                  setCurrentUrl(e.target.value);
+                }
+              }}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && !isPaused) {
-                  handleRefresh();
+                if (e.key === 'Enter') {
+                  if (!isPaused) {
+                    handleRefresh();
+                  } else {
+                    // Se estiver pausado e apertar Enter, despausar e ir para a URL
+                    handleTogglePause();
+                  }
                 }
               }}
               className="flex-1 px-2 py-1 text-sm bg-muted rounded-md border border-border focus:outline-none focus:ring-1 focus:ring-ring"
               placeholder="http://localhost:3000"
-              disabled={isPaused}
             />
           </div>
 
@@ -936,13 +990,17 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
             
             {/* Element Selection Toggle */}
             <button
-              onClick={() => setElementSelectionMode(!elementSelectionMode)}
+              onClick={() => {
+                console.log('🎯 Element selection button clicked! Current state:', elementSelectionMode);
+                setElementSelectionMode(!elementSelectionMode);
+              }}
               className={`p-1.5 rounded-md transition-colors ${
                 elementSelectionMode 
                   ? 'bg-blue-500/20 text-blue-600 dark:text-blue-400 hover:bg-blue-500/30' 
                   : 'hover:bg-accent'
               }`}
               title={elementSelectionMode ? "Element selection active - Click any element" : "Click to select elements"}
+              disabled={isPaused}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2z" />
@@ -1253,7 +1311,7 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
           src={
             isPaused 
               ? 'about:blank' 
-              : currentUrl
+              : (currentUrl && !currentUrl.startsWith('http') ? 'http://' + currentUrl : currentUrl)
           }
           className="w-full h-full border-0"
           onLoad={handleIframeLoad}
@@ -1261,6 +1319,10 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
           title="Preview"
           loading="lazy"
           data-preview-frame="true"
+          // Remove sandbox when element selection is active to allow script injection
+          {...(!elementSelectionMode && {
+            sandbox: "allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads allow-storage-access-by-user-activation allow-top-navigation-by-user-activation"
+          })}
           allow="microphone *; camera *; geolocation *; accelerometer *; gyroscope *; magnetometer *; midi *; encrypted-media *"
         />
         

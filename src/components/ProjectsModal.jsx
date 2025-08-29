@@ -29,13 +29,11 @@ function ProjectsModal({
 }) {
   const navigate = useNavigate();
   const [editingProject, setEditingProject] = useState(null);
-  const [showNewProject, setShowNewProject] = useState(false);
   const [showFolderPicker, setShowFolderPicker] = useState(false);
   const [editingName, setEditingName] = useState('');
-  const [newProjectPath, setNewProjectPath] = useState('');
   const [creatingProject, setCreatingProject] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [projectSortOrder, setProjectSortOrder] = useState('name');
+  const [projectSortOrder, setProjectSortOrder] = useState('recent');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [projectFilter, setProjectFilter] = useState('all');
@@ -66,30 +64,6 @@ function ProjectsModal({
   };
 
 
-  const handleCreateProject = async () => {
-    if (!newProjectPath.trim()) return;
-    
-    setCreatingProject(true);
-    try {
-      const response = await api.createProject(newProjectPath);
-      setShowNewProject(false);
-      setNewProjectPath('');
-      if (onRefresh) {
-        await onRefresh();
-      }
-      // Select the newly created project
-      if (response.name) {
-        const newProject = projects.find(p => p.name === response.name);
-        if (newProject) {
-          handleProjectClick(newProject);
-        }
-      }
-    } catch (error) {
-      console.error('Failed to create project:', error);
-    } finally {
-      setCreatingProject(false);
-    }
-  };
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -118,7 +92,7 @@ function ProjectsModal({
     return true;
   });
 
-  // Sort projects
+  // Sort projects - newest first by default
   const sortedProjects = [...filteredProjects].sort((a, b) => {
     switch (projectSortOrder) {
       case 'name':
@@ -140,140 +114,52 @@ function ProjectsModal({
   return (
     <>
       <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-7xl max-h-[90vh] p-0" onOpenChange={onClose}>
-        <DialogHeader className="px-4 pr-12 pt-4 pb-3 border-b border-border/50 bg-background/50">
+      <DialogContent className="max-w-6xl max-h-[85vh] p-0 bg-black/95 border-[#1a1a1a]" onOpenChange={onClose}>
+        <DialogHeader className="px-6 pr-12 pt-5 pb-4 border-b border-[#1a1a1a] bg-black/90">
           <div className="flex items-center justify-between">
-            <DialogTitle className="text-lg font-semibold flex items-center gap-2 text-foreground">
-              <Folder className="w-5 h-5 text-primary/70" />
-              <span>Projects</span>
-            </DialogTitle>
+            <div>
+              <DialogTitle className="text-xl font-semibold text-white">
+                Select Project
+              </DialogTitle>
+              <p className="text-sm text-[#888] mt-1">Choose a project to view its task board</p>
+            </div>
             <div className="flex items-center gap-2 mr-4">
               <Button
                 variant="ghost"
-                size="icon"
-                onClick={handleRefresh}
-                disabled={isRefreshing}
-                className="h-8 w-8"
-              >
-                <RefreshCw className={cn("w-4 h-4", isRefreshing && "animate-spin")} />
-              </Button>
-              <Button
-                variant="ghost"
                 size="sm"
-                onClick={() => setShowNewProject(true)}
-                className="h-8 text-muted-foreground hover:text-foreground hover:bg-accent"
+                onClick={() => setShowFolderPicker(true)}
+                className="h-8 text-[#888] hover:text-white hover:bg-[#1a1a1a]"
               >
-                <Plus className="w-4 h-4 mr-1" />
-                New Project
+                <FolderPlus className="w-4 h-4 mr-1" />
+                Browse
               </Button>
             </div>
           </div>
 
-          {/* Search and filters */}
-          <div className="mt-3 space-y-2">
+          {/* Search */}
+          <div className="mt-4">
             <div className="relative">
-              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                 type="text"
                 placeholder="Search projects..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-8 h-8 bg-background border-border text-foreground"
+                className="pl-10 h-9 bg-[#1a1a1a] border-[#2a2a2a] text-white rounded-lg focus:border-[#3a3a3a] focus:ring-1 focus:ring-[#3a3a3a]"
               />
-            </div>
-            
-            <div className="flex gap-2">
-              <select
-                value={projectFilter}
-                onChange={(e) => setProjectFilter(e.target.value)}
-                className="h-7 px-2 text-xs rounded border border-border bg-background text-foreground"
-              >
-                <option value="all">All Projects</option>
-                <option value="regular">Regular Projects</option>
-                <option value="vibe-kanban">Vibe Kanban</option>
-              </select>
-              
-              <select
-                value={projectSortOrder}
-                onChange={(e) => setProjectSortOrder(e.target.value)}
-                className="h-7 px-2 text-xs rounded border border-border bg-background text-foreground"
-              >
-                <option value="name">Sort by Name</option>
-                <option value="recent">Sort by Recent</option>
-                <option value="starred">Sort by Starred</option>
-              </select>
             </div>
           </div>
         </DialogHeader>
 
-        <ScrollArea className="h-[70vh] bg-background/30">
-          <div className="p-4">
-            {/* New Project Form */}
-          {showNewProject && (
-            <div className="mb-4 p-3 bg-card/50 rounded-lg border border-border/50">
-              <div className="space-y-2">
-                <div className="flex gap-2 items-center">
-                  <Input
-                    value={newProjectPath}
-                    onChange={(e) => setNewProjectPath(e.target.value)}
-                    placeholder="Select project folder..."
-                    readOnly
-                    className="flex-1"
-                  />
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setShowFolderPicker(true)}
-                    className="text-foreground hover:bg-accent"
-                  >
-                    <FolderSearch className="w-4 h-4 mr-1" />
-                    Browse
-                  </Button>
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={handleCreateProject}
-                    disabled={!newProjectPath.trim() || creatingProject}
-                    className="text-foreground hover:bg-accent"
-                  >
-                    {creatingProject ? (
-                      <>
-                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                        Creating...
-                      </>
-                    ) : (
-                      <>
-                        <Check className="w-3 h-3 mr-1" />
-                        Create
-                      </>
-                    )}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => {
-                      setShowNewProject(false);
-                      setNewProjectPath('');
-                    }}
-                    className="text-muted-foreground hover:text-foreground hover:bg-accent"
-                  >
-                    <X className="w-3 h-3 mr-1" />
-                    Cancel
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
-
+        <ScrollArea className="h-[70vh] bg-black/95">
+          <div className="p-6">
           {/* Projects List */}
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
-              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+              <Loader2 className="w-6 h-6 animate-spin text-[#666]" />
             </div>
           ) : sortedProjects.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
+            <div className="text-center py-8 text-[#666]">
               {searchQuery || projectFilter !== 'all' 
                 ? 'No projects match your filters' 
                 : 'No projects yet. Click "New Project" to create one.'}
@@ -283,147 +169,84 @@ function ProjectsModal({
               {sortedProjects.map((project, index) => {
                 const projectSessions = project.sessions || [];
                 const latestSession = projectSessions[0]; // Pega apenas a última sessão
+                const totalSessions = project.sessionMeta?.total || projectSessions.length; // Usa o total real se disponível
 
                 return (
                   <div 
                     key={project.name || `project-${index}`} 
                     className={cn(
-                      "relative group rounded-lg border bg-card/50 hover:bg-card/70 transition-all duration-200 flex flex-col",
-                      "hover:shadow-md hover:border-primary/30",
-                      selectedProject?.name === project.name && "bg-card/80 border-primary/50 shadow-md"
+                      "relative group rounded-xl border border-[#1a1a1a] bg-black/40 hover:bg-black/60 transition-all duration-200 flex flex-col",
+                      "hover:border-[#2a2a2a]",
+                      selectedProject?.name === project.name && "bg-black/70 border-[#3a3a3a]"
                     )}
                   >
-                    {/* Card Header */}
+                    {/* Card Content */}
                     <div
-                      className="p-3 cursor-pointer flex-1"
+                      className="p-4 cursor-pointer flex-1"
                       onClick={() => handleProjectClick(project)}
                     >
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                          <ProjectIcon project={project} className="w-4 h-4 flex-shrink-0 text-primary/70" />
-                          <div className="flex-1 min-w-0">
-                        {editingProject === project.name ? (
-                          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                            <Input
-                              value={editingName}
-                              onChange={(e) => setEditingName(e.target.value)}
-                              className="h-6 text-sm"
-                              autoFocus
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  // Handle rename
-                                  setEditingProject(null);
-                                } else if (e.key === 'Escape') {
-                                  setEditingProject(null);
-                                }
-                              }}
-                            />
-                            <Button size="icon" variant="ghost" className="h-6 w-6">
-                              <Check className="w-3 h-3" />
-                            </Button>
-                            <Button 
-                              size="icon" 
-                              variant="ghost" 
-                              className="h-6 w-6"
-                              onClick={() => setEditingProject(null)}
-                            >
-                              <X className="w-3 h-3" />
-                            </Button>
+                      <div className="flex items-start gap-2 mb-3">
+                        <ProjectIcon project={project} className="w-4 h-4 flex-shrink-0 text-primary/70 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          {/* Show last 2 path segments as title */}
+                          <h3 className="text-sm font-medium text-white leading-tight">
+                            {(() => {
+                              const pathSegments = project.path.split('/').filter(seg => seg);
+                              const lastTwo = pathSegments.slice(-2).join('/');
+                              return lastTwo || project.name;
+                            })()}
+                          </h3>
+                          {/* Show full path below in smaller text */}
+                          <div className="text-[10px] text-[#4a4a4a] mt-1 truncate" title={project.path}>
+                            {project.path}
                           </div>
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium truncate text-foreground">{project.name}</span>
-                            {project.sessions && project.sessions.length > 0 && (
-                              <Badge variant="secondary" className="text-xs px-1 py-0 bg-accent text-accent-foreground">
-                                {project.sessions.length}
-                              </Badge>
-                            )}
-                          </div>
-                        )}
-                            <div className="text-xs text-muted-foreground truncate mt-0.5" title={project.path}>
-                              {project.path.split('/').slice(-2).join('/')}
-                            </div>
-                          </div>
-                        </div>
-                        
-                        {/* Action buttons */}
-                        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-6 w-6 text-muted-foreground hover:text-foreground"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setEditingProject(project.name);
-                            setEditingName(project.name);
-                          }}
-                        >
-                          <Edit2 className="w-3 h-3" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-6 w-6 text-muted-foreground hover:text-destructive"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (confirm(`Delete project "${project.name}"?`)) {
-                              onProjectDelete?.(project.name);
-                            }
-                          }}
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </Button>
                         </div>
                       </div>
-                    </div>
 
-                    {/* Sessions Section - Simplified */}
-                    <div className="border-t border-border/40 bg-background/20">
-                      {/* Latest Session Preview */}
-                      {latestSession && (
-                        <div 
-                          className="px-3 py-2 hover:bg-accent/10 cursor-pointer transition-colors"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onSessionSelect(latestSession);
-                            handleProjectClick(project);
-                          }}
-                        >
+                      {/* Latest Session Preview - more compact */}
+                      {latestSession ? (
+                        <div className="space-y-1">
                           <div className="flex items-center gap-1.5">
-                            <MessageSquare className="w-3 h-3 text-muted-foreground flex-shrink-0" />
-                            <span className="flex-1 truncate text-xs text-foreground">{latestSession.summary || 'Untitled'}</span>
+                            <MessageSquare className="w-3 h-3 text-[#555] flex-shrink-0" />
+                            <span className="flex-1 truncate text-xs text-[#888]">
+                              {latestSession.summary || 'Untitled session'}
+                            </span>
                           </div>
-                          <span className="text-xs text-muted-foreground ml-4">
+                          <span className="text-[10px] text-[#555] pl-4 block">
                             {formatTimeAgo(latestSession.updated_at, currentTime)}
                           </span>
                         </div>
+                      ) : (
+                        <div className="text-xs text-[#555]">
+                          No sessions yet
+                        </div>
                       )}
-                      
-                      {/* Action Buttons */}
-                      <div className="flex border-t border-border/30">
-                        <button
-                          className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent/20 transition-colors border-r border-border/30"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onNewSession?.(project);
-                            onClose();
-                          }}
-                        >
-                          <Plus className="w-3 h-3" />
-                          <span>New</span>
-                        </button>
-                        <button
-                          className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent/20 transition-colors"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            navigate(`/project/${encodeURIComponent(project.name)}/sessions`);
-                            onClose();
-                          }}
-                        >
-                          <Eye className="w-3 h-3" />
-                          <span>View All ({projectSessions.length})</span>
-                        </button>
-                      </div>
+                    </div>
+
+                    {/* Bottom action icons - always visible */}
+                    <div className="flex items-center justify-end gap-1 p-2 pt-0">
+                      <button
+                        className="p-1 rounded hover:bg-[#2a2a2a] transition-colors"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onNewSession?.(project);
+                          onClose();
+                        }}
+                        title="New session"
+                      >
+                        <Plus className="w-3.5 h-3.5 text-[#666] hover:text-white" />
+                      </button>
+                      <button
+                        className="p-1 rounded hover:bg-[#2a2a2a] transition-colors"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/project/${encodeURIComponent(project.name)}/sessions`);
+                          onClose();
+                        }}
+                        title={`View all ${totalSessions} sessions`}
+                      >
+                        <Eye className="w-3.5 h-3.5 text-[#666] hover:text-white" />
+                      </button>
                     </div>
                   </div>
                 );
@@ -439,11 +262,36 @@ function ProjectsModal({
     <FolderPicker
       open={showFolderPicker}
       onClose={() => setShowFolderPicker(false)}
-      onSelect={(path) => {
-        setNewProjectPath(path);
+      onSelect={async (path) => {
         setShowFolderPicker(false);
+        if (!path.trim()) return;
+        
+        setCreatingProject(true);
+        try {
+          const response = await api.createProject(path);
+          if (onRefresh) {
+            await onRefresh();
+          }
+          // Select and focus the newly created project
+          if (response.name) {
+            // Wait for projects to refresh
+            setTimeout(() => {
+              const newProject = projects.find(p => p.name === response.name);
+              if (newProject) {
+                onProjectSelect(newProject);
+                // Scroll to top where new projects appear
+                const scrollArea = document.querySelector('.scroll-area-viewport');
+                if (scrollArea) scrollArea.scrollTop = 0;
+              }
+            }, 100);
+          }
+        } catch (error) {
+          console.error('Failed to create project:', error);
+        } finally {
+          setCreatingProject(false);
+        }
       }}
-      value={newProjectPath}
+      value=""
       title="Select Project Folder"
       description="Choose a folder to create your Claude Code project"
     />

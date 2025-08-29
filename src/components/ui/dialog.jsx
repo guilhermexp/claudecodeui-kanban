@@ -7,9 +7,9 @@ const Dialog = ({ open, onOpenChange, children }) => {
 
   return (
     <div className="fixed inset-0 z-50">
-      {/* Backdrop - mais escuro como o resto do app */}
+      {/* Backdrop */}
       <div 
-        className="fixed inset-0 bg-background/80 backdrop-blur-sm"
+        className="fixed inset-0 bg-black/60 backdrop-blur-sm"
         onClick={() => onOpenChange?.(false)}
       />
       {/* Content */}
@@ -38,7 +38,7 @@ const DialogContent = React.forwardRef(({ className, children, onOpenChange, ...
     <div
       ref={ref || dialogRef}
       className={cn(
-        "relative bg-card/95 backdrop-blur-sm rounded-xl border border-border/50 max-w-4xl w-full max-h-[80vh] overflow-hidden shadow-2xl",
+        "relative bg-black/95 rounded-xl border border-[#1a1a1a] max-w-4xl w-full max-h-[80vh] overflow-hidden shadow-2xl",
         "animate-in fade-in-0 zoom-in-95 duration-200",
         className
       )}
