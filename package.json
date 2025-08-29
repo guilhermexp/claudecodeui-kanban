@@ -83,8 +83,8 @@
     "lucide-react": "^0.515.0",
     "mime-types": "^3.0.1",
     "multer": "^2.0.1",
-    "node-fetch": "^2.7.0",
     "node-pty": "^1.0.0",
+    "openai": "^5.16.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-dropzone": "^14.2.3",
@@ -95,6 +95,7 @@
     "remark-gfm": "^4.0.1",
     "tailwind-merge": "^3.3.1",
     "tailwindcss-animate": "^1.0.7",
+    "uuid": "^11.1.0",
     "ws": "^8.14.2",
     "xterm": "^5.3.0",
     "xterm-addon-fit": "^0.8.0"
@@ -105,6 +106,9 @@
     "@vitejs/plugin-react": "^4.6.0",
     "autoprefixer": "^10.4.16",
     "concurrently": "^8.2.2",
+    "eventsource": "^4.0.0",
+    "node-fetch": "^2.7.0",
+    "playwright": "^1.55.0",
     "postcss": "^8.4.32",
     "tailwindcss": "^3.4.0",
     "vite": "^7.0.4"

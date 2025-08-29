@@ -4,20 +4,19 @@ import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useWebSocket } from '../utils/websocket';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { normalizeCodexEvent } from '../utils/codex-normalizer';
-import { loadPlannerMode, savePlannerMode, loadModelLabel, saveModelLabel } from '../utils/chat-prefs';
+import { normalizeClaudeEvent } from '../utils/claude-normalizer';
 import { hasChatHistory, loadChatHistory, saveChatHistory } from '../utils/chat-history';
 import { hasLastSession, loadLastSession, saveLastSession, clearLastSession } from '../utils/chat-session';
+import useClaudeStream from '../hooks/useClaudeStream';
 
-// Overlay Chat com formatação bonita usando ReactMarkdown
-// Usa NOSSO backend interno (porta 7347) - sem servidores externos!
-const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, embedded = false, disableInlinePanel = false, useSidebarWhenOpen = false, sidebarContainerRef = null, onBeforeOpen, onPanelClosed, chatId = 'default' }) {
+// Claude Chat Component - Optimized ONLY for Claude Code CLI
+// Removed all Codex-specific code for cleaner architecture
+const ClaudeChat = React.memo(function ClaudeChat({ projectPath, previewUrl, embedded = false, disableInlinePanel = false, useSidebarWhenOpen = false, sidebarContainerRef = null, onBeforeOpen, onPanelClosed, chatId = 'claude-default' }) {
   // Debug props - only in development
   if (process.env.NODE_ENV === 'development') {
-    console.log(`🎯 [${chatId}] OverlayChat mounted with:`, { 
+    console.log(`🎯 [${chatId}] ClaudeChat mounted with:`, { 
       chatId,
       projectPath, 
       embedded,
@@ -28,7 +27,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
   
-  // Codex-only states
+  // Claude-only states
   const [messages, setMessages] = useState([]);
   const [sessionId, setSessionId] = useState(null);
   const [sessionActive, setSessionActive] = useState(false);
@@ -53,63 +52,41 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
     try { return localStorage.getItem('codex-hide-thinking') === '1'; } catch { return false; }
   });
   
-  // Estado para controlar modo perigoso (persistido por projeto)
-  const [dangerousMode, setDangerousMode] = useState(() => {
-    try {
-      const key = projectPath ? `codex-dangerous-${projectPath}` : 'codex-dangerous-global';
-      return localStorage.getItem(key) === '1';
-    } catch { return false; }
-  });
-  
-  // Auth-aware WebSocket (connect only once token is available)
+  // Auth-aware connection (only use token for Claude)
   const { isLoading: authLoading, token } = useAuth();
   const authReady = !!token && !authLoading;
-  const { ws, sendMessage, messages: wsMessages, isConnected, reconnect } = useWebSocket(authReady);
   const [clientSessionId, setClientSessionId] = useState(null); // synthetic id when real id is not yet available
   const [resumeRolloutPath, setResumeRolloutPath] = useState(null);
   
+  // Claude Stream Hook
+  const {
+    conversation: claudeConversation,
+    isConnected: claudeStreamConnected,
+    isLoading: claudeStreamLoading,
+    error: claudeStreamError,
+    claudeSessionId: streamClaudeSessionId,
+    establishConnection: establishClaudeConnection,
+    sendMessage: sendClaudeMessage,
+    abortSession: abortClaudeSession,
+    clearConversation: clearClaudeConversation
+  } = useClaudeStream(sessionId, token);
   
   // Debug sessionId changes
   useEffect(() => {
-    console.log('🔍 Session ID changed:', sessionId);
-    console.log('🔍 Session Active:', sessionActive);
+    console.log('🔍 Claude Session ID changed:', sessionId);
+    console.log('🔍 Claude Session Active:', sessionActive);
   }, [sessionId, sessionActive]);
   const [isSessionInitializing, setIsSessionInitializing] = useState(false);
   const [sessionStarted, setSessionStarted] = useState(false); // Track if user started a session
   const initTimerRef = useRef(null);
-  // Carregar/sincronizar toggle perigoso quando o projeto mudar
-  useEffect(() => {
-    try {
-      if (projectPath) {
-        const v = localStorage.getItem(`codex-dangerous-${projectPath}`) === '1';
-        setDangerousMode(v);
-      }
-    } catch {}
-  }, [projectPath]);
-  useEffect(() => {
-    try {
-      if (projectPath) {
-        localStorage.setItem(`codex-dangerous-${projectPath}`, dangerousMode ? '1' : '0');
-      }
-    } catch {}
-  }, [projectPath, dangerousMode]);
+  
   const [nearBottom, setNearBottom] = useState(true);
   const [showJump, setShowJump] = useState(false);
-  const [plannerMode, setPlannerMode] = useState(() => loadPlannerMode());
-  const [modelLabel, setModelLabel] = useState(() => loadModelLabel());
-  const [showModeMenu, setShowModeMenu] = useState(false);
-  const [showModelMenu, setShowModelMenu] = useState(false);
   
   const [hasSavedSession, setHasSavedSession] = useState(false);
   const primedResumeRef = useRef(null);
-  const [codexLimitStatus, setCodexLimitStatus] = useState(null); // { remaining, resetAt, raw }
-  const [queueLength, setQueueLength] = useState(0);
-  const [connectorMode, setConnectorMode] = useState(null); // 'subscription' | 'api' | null
-  const [connectorHasKey, setConnectorHasKey] = useState(null); // boolean | null
   const { theme } = useTheme();
   const themeCodex = theme === 'dark'; // Use Codex theme only in dark mode
-
-  // Do not force any model; keep CLI defaults
 
   // Detect saved history for this project
   useEffect(() => {
@@ -169,35 +146,33 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
   const startSession = useCallback(() => {
     const options = { projectPath: projectPath || process.cwd(), cwd: projectPath || process.cwd() };
     
-    if (isConnected) {
-      // For Codex, use WebSocket
-      const messageType = 'codex-start-session';
-      sendMessage({ type: messageType, options });
-      setIsSessionInitializing(true);
-      setSessionStarted(true);
-      setSessionActive(true);
-      
-      // Fallback timeout
-      if (initTimerRef.current) clearTimeout(initTimerRef.current);
-      initTimerRef.current = setTimeout(() => {
-        setIsSessionInitializing(false);
-        addMessage({ type: 'system', text: 'Session start timeout. You can retry or continue without session.' });
-      }, 8000);
-    }
-  }, [isConnected, sendMessage, projectPath]); // Remove addMessage from deps - it's defined after
+    // For Claude, create a new session ID and establish SSE connection
+    const newSessionId = `claude-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    setSessionId(newSessionId);
+    setSessionActive(true);
+    setIsSessionInitializing(true);
+    setSessionStarted(true);
+    
+    // The connection will be established via useEffect when sessionId changes
+    console.log(`[Claude Stream] Starting new session: ${newSessionId}`);
+    
+    // Fallback timeout
+    if (initTimerRef.current) clearTimeout(initTimerRef.current);
+    initTimerRef.current = setTimeout(() => {
+      setIsSessionInitializing(false);
+      if (!claudeStreamConnected) {
+        addMessage({ type: 'system', text: 'Claude session start timeout. Please retry.' });
+      }
+    }, 8000);
+  }, [claudeStreamConnected]); // Remove addMessage from deps - it's defined after
 
   const endSession = useCallback(() => {
-    if (isConnected) {
-      // For Codex, use WebSocket
-      const messageType = 'codex-end-session';
-      sendMessage({ type: messageType });
-      
-      // Clear session for Codex
-      setSessionActive(false);
-      setSessionId(null);
-      setMessages([]);
-    }
-  }, [isConnected, sendMessage]);
+    // For Claude, abort the stream session
+    abortClaudeSession();
+    setSessionId(null);
+    setSessionActive(false);
+    clearClaudeConversation();
+  }, [abortClaudeSession, clearClaudeConversation]);
 
   const restartSession = useCallback(() => {
     endSession();
@@ -341,209 +316,6 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
     } catch {}
   }, [projectPath]);
 
-  const execStreamsRef = useRef(new Map()); // callId -> { id, buffer, lastTs }
-  
-  // Process messages from WebSocket with cleaner formatting
-  useEffect(() => {
-    if (wsMessages && wsMessages.length > 0) {
-      const lastMsg = wsMessages[wsMessages.length - 1];
-      
-      // Normalize Codex events (ported from Vibe Kanban patterns)
-      if (lastMsg.type === 'codex-session-started') {
-        console.log('🚀 Received codex-session-started event:', lastMsg);
-        if (initTimerRef.current) { clearTimeout(initTimerRef.current); initTimerRef.current = null; }
-        if (lastMsg.sessionId) {
-          // Real session start with ID
-          console.log('📍 Setting session ID:', lastMsg.sessionId);
-          setSessionId(lastMsg.sessionId);
-          // Replace synthetic id if any
-          if (clientSessionId) setClientSessionId(null);
-          if (lastMsg.rolloutPath) setResumeRolloutPath(lastMsg.rolloutPath);
-          try { saveLastSession(projectPath || process.cwd(), { sessionId: lastMsg.sessionId, rolloutPath: lastMsg.rolloutPath || null }); setHasSavedSession(true);} catch {}
-          addMessage({ type: 'system', text: `Session started (${lastMsg.sessionId.slice(0, 8)}…)` });
-          setIsSessionInitializing(false);
-        } else {
-          // Just an acknowledgment, keep waiting for real session
-          console.log('⏳ Received acknowledgment, waiting for real session ID...');
-          // Generate a synthetic client session id for display
-          if (!clientSessionId) {
-            try {
-              const tmp = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-              setClientSessionId(tmp);
-            } catch {
-              const tmp = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-              setClientSessionId(tmp);
-            }
-          }
-          // Set a timeout to enable input after 2 seconds even without full session ID
-          setTimeout(() => {
-            setIsSessionInitializing(false);
-            console.log('⌛ Timeout reached, enabling input anyway');
-          }, 2000);
-        }
-        setIsTyping(false);
-        return;
-      }
-      if (lastMsg.type === 'codex-session-closed') {
-        if (initTimerRef.current) { clearTimeout(initTimerRef.current); initTimerRef.current = null; }
-        setSessionId(null);
-        setClientSessionId(null);
-        addMessage({ type: 'system', text: 'Session closed' });
-        setIsSessionInitializing(false);
-        setIsTyping(false);
-        return;
-      }
-      if (lastMsg.type === 'codex-error' && isSessionInitializing) {
-        // Stop spinner if warmup failed
-        if (initTimerRef.current) { clearTimeout(initTimerRef.current); initTimerRef.current = null; }
-        setIsSessionInitializing(false);
-      }
-
-      // Meta/status passthrough (only show when real info available)
-      if (lastMsg.type === 'codex-meta' && lastMsg.data) {
-        try {
-          const d = lastMsg.data;
-          // Try to normalize common shapes
-          const rate = d.rate_limit || d.rate_limits || d.limits || null;
-          const remaining = rate?.remaining ?? rate?.daily_remaining ?? rate?.remaining_requests;
-          const reset = rate?.reset ?? rate?.reset_at ?? rate?.next_renewal_at;
-          if (remaining != null || reset != null) {
-            setCodexLimitStatus({ remaining, resetAt: reset, raw: d });
-            addMessage({ type: 'system', text: `Limits: ${remaining != null ? remaining : '?'} remaining${reset ? `, reset ${reset}` : ''}` });
-          } else if (d.stderr && /rate limit|quota|renewal/i.test(d.stderr)) {
-            addMessage({ type: 'system', text: d.stderr });
-          }
-        } catch {}
-        return;
-      }
-
-      // Normalize Codex events
-      const normalized = normalizeCodexEvent(lastMsg) || [];
-      if (normalized.length) {
-        setIsTyping(false);
-        setTypingStatus({ mode: 'idle', label: '' });
-        normalized.forEach((m) => addMessage({ type: m.type, text: m.text }));
-        return;
-      }
-      // Fallbacks for start/complete/tool notices
-      if (lastMsg.type === 'codex-start' || lastMsg.type === 'task_started') {
-        if (!isSessionInitializing) {
-          setIsTyping(true);
-          setTypingStatus({ mode: 'thinking', label: 'Thinking' });
-          setTypingStart(Date.now());
-          setElapsedSec(0);
-        }
-        return;
-      }
-      if (lastMsg.type === 'codex-complete') {
-        setIsTyping(false);
-        setTypingStatus({ mode: 'idle', label: '' });
-        setTypingStart(null);
-        setElapsedSec(0);
-        return;
-      }
-      if (lastMsg.type === 'codex-error') {
-        setIsTyping(false);
-        setTypingStatus({ mode: 'idle', label: '' });
-        setTypingStart(null);
-        setElapsedSec(0);
-        addMessage({ type: 'error', text: lastMsg.error });
-        return;
-      }
-      if (lastMsg.type === 'codex-tool') {
-        const toolData = lastMsg.data;
-        if (toolData && toolData.name && !['reasoning', 'thinking'].includes(toolData.name.toLowerCase())) {
-          setIsTyping(true);
-          setTypingStatus({ mode: 'tool', label: toolData.name });
-          addMessage({ type: 'system', text: `${getToolIcon(toolData.name)} ${toolData.name}` });
-          setTypingStart(Date.now());
-          setElapsedSec(0);
-        }
-        return;
-      }
-
-      // Streaming: exec begin/delta/end
-      if (lastMsg.type === 'codex-exec-begin') {
-        const { callId, command, cwd } = lastMsg;
-        const cmdString = Array.isArray(command) ? command.join(' ') : String(command || '');
-        const title = `🔧 bash\n\n\`${cmdString}\``;
-        const id = addMessageAndGetId({ type: 'system', text: title });
-        execStreamsRef.current.set(callId, { id, buffer: '', lastTs: Date.now() });
-        setIsTyping(true);
-        return;
-      }
-      if (lastMsg.type === 'codex-exec-delta') {
-        const { callId, text = '' } = lastMsg;
-        const stream = execStreamsRef.current.get(callId);
-        if (stream) {
-          stream.buffer += text;
-          const now = Date.now();
-          if (now - (stream.lastTs || 0) > 120) { // throttle updates ~8fps
-            stream.lastTs = now;
-            const fenced = '```bash\n' + stream.buffer.replace(/```/g, '\u0060\u0060\u0060') + '\n```';
-            updateMessageById(stream.id, (m) => ({ ...m, text: m.text.split('\n\n')[0] + '\n\n' + fenced }));
-          }
-        }
-        return;
-      }
-      if (lastMsg.type === 'codex-exec-end') {
-        const { callId, exit_code } = lastMsg;
-        const stream = execStreamsRef.current.get(callId);
-        if (stream) {
-          const fenced = '```bash\n' + stream.buffer.replace(/```/g, '\u0060\u0060\u0060') + '\n```';
-          updateMessageById(stream.id, (m) => ({ ...m, text: m.text.split('\n\n')[0] + '\n\n' + fenced + `\n\nExit code: ${exit_code}` }));
-          execStreamsRef.current.delete(callId);
-        }
-        setIsTyping(false);
-        return;
-      }
-      // Queue/busy state from server
-      if (lastMsg.type === 'codex-queued') {
-        const pos = (typeof lastMsg.position === 'number') ? lastMsg.position + 1 : null;
-        setIsTyping(true);
-        setTypingStatus({ mode: 'queued', label: pos ? `Queued #${pos}` : 'Queued' });
-        if (typeof lastMsg.queueLength === 'number') setQueueLength(lastMsg.queueLength);
-        if (pos && pos > 1) {
-          addMessage({ type: 'system', text: `Queued (position ${pos})` });
-        }
-        return;
-      }
-      if (lastMsg.type === 'codex-busy') {
-        const q = (typeof lastMsg.queueLength === 'number') ? lastMsg.queueLength : 0;
-        setIsTyping(true);
-        setTypingStatus({ mode: 'busy', label: q > 0 ? `Busy • queue ${q}` : 'Busy' });
-        setQueueLength(q);
-        return;
-      }
-      if (lastMsg.type === 'codex-idle') {
-        setIsTyping(false);
-        setTypingStatus({ mode: 'idle', label: '' });
-        setQueueLength(0);
-        return;
-      }
-      if (lastMsg.type === 'codex-aborted') {
-        setIsTyping(false);
-        setTypingStatus({ mode: 'idle', label: '' });
-        setQueueLength(0);
-        addMessage({ type: 'system', text: 'Aborted and cleared queue' });
-        return;
-      }
-      if (lastMsg.type === 'codex-connector' && lastMsg.mode) {
-        setConnectorMode(lastMsg.mode);
-        // refresh details
-        (async () => {
-          try {
-            const token = localStorage.getItem('auth-token');
-            if (!token) return;
-            const res = await fetch('/api/codex/connector', { headers: { 'Authorization': `Bearer ${token}` } });
-            if (res.ok) { const data = await res.json(); if (typeof data.hasKey === 'boolean') setConnectorHasKey(!!data.hasKey); }
-          } catch {}
-        })();
-        return;
-      }
-    }
-  }, [wsMessages, addMessage]);
-
   // Expose global function for element selection
   useEffect(() => {
     const fn = (html, elementData) => {
@@ -555,14 +327,14 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
       if (onBeforeOpen) onBeforeOpen();
       setOpen(true);
     };
-    window.pushToOverlayChat = fn;
+    window.pushToClaudeChat = fn;
     
     return () => {
-      if (window.pushToOverlayChat === fn) {
-        delete window.pushToOverlayChat;
+      if (window.pushToClaudeChat === fn) {
+        delete window.pushToClaudeChat;
       }
     };
-  }, [addMessage]);
+  }, [onBeforeOpen]);
 
   // Docked mode: open via the bottom tray input or quick actions
   
@@ -596,11 +368,26 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
   // Shared chat panel content (can render inline or into a portal)
   const renderPanelContent = () => (
     <div className={`${embedded ? 'w-full h-full flex flex-col bg-background' : themeCodex ? 'w-full max-h-[70vh] bg-zinc-900 dark:bg-black rounded-2xl flex flex-col overflow-hidden border border-zinc-700 dark:border-zinc-900' : 'w-full max-h-[70vh] chat-glass border border-border/40 rounded-2xl flex flex-col overflow-hidden shadow-2xl'}`}>
+      {/* Show Claude Code info in embedded mode */}
+      {embedded && (
+        <div className="px-3 py-2 border-b border-border/20 bg-muted/30">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold">Claude Code</span>
+              {sessionActive && sessionId && (
+                <span className="text-[10px] text-muted-foreground/60 font-mono">
+                  ({sessionId.slice(0, 8)})
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       {!embedded && (
       <div className={`${themeCodex ? 'px-3 py-2' : 'px-4 py-3'} border-b border-border/30 flex items-center justify-between ${themeCodex ? 'bg-zinc-900 dark:bg-black text-zinc-900 dark:text-white' : 'bg-muted/50 backdrop-blur-sm'}`}>
         <div className="flex items-center gap-2">
-          <div className={`text-sm tracking-widest font-extrabold ${themeCodex ? 'text-zinc-400' : ''}`}>CODEX</div>
-          <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-green-500' : 'bg-yellow-500'}`} />
+          <div className={`text-sm tracking-widest font-extrabold ${themeCodex ? 'text-zinc-400' : ''}`}>CLAUDE CODE</div>
+          <div className={`w-1.5 h-1.5 rounded-full ${claudeStreamConnected ? 'bg-green-500' : 'bg-yellow-500'}`} />
           {(sessionActive && sessionId) || clientSessionId ? (
             <span className="text-[10px] text-muted-foreground/60 font-mono" title={`Session: ${(sessionId || clientSessionId)}`}>
               {(sessionId || clientSessionId).slice(0, 8)}
@@ -623,27 +410,16 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
           </button>
           <button
             onClick={restartSession}
-            disabled={!isConnected}
+            disabled={!claudeStreamConnected}
             className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-white/10 disabled:opacity-50"
             title="Restart"
           >
             <svg className="w-4 h-4 text-zinc-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v8h8"/></svg>
           </button>
-          {/* Settings removed: functionality moved to bottom segmented controls */}
         </div>
       </div>
       )}
       <div ref={messagesScrollRef} className={`${embedded ? 'flex-1 overflow-y-auto px-3 py-2 space-y-2 pb-20' : 'overflow-y-auto px-4 py-3 space-y-2 bg-transparent max-h-[50vh] pb-20'} relative`} style={{ scrollBehavior: 'auto', overflowAnchor: 'none' }}>
-        {dangerousMode && (
-          <div className="mb-2 px-3 py-2 rounded-md border border-destructive/40 bg-destructive/10 text-[11px] text-destructive">
-            Dangerous mode ON: commands may modify your real project.
-          </div>
-        )}
-        {codexLimitStatus && (
-          <div className="mb-2 px-3 py-2 rounded-md border border-border/40 bg-muted/40 text-[11px] text-muted-foreground">
-            Limits: {codexLimitStatus.remaining != null ? codexLimitStatus.remaining : '?'} remaining{codexLimitStatus.resetAt ? `, reset ${codexLimitStatus.resetAt}` : ''}
-          </div>
-        )}
         {/* Floating session info and End button at top of chat */}
         {(messages.length > 0 || (!isSessionInitializing && hasSavedSession)) && (
             <div className="absolute top-2 right-2 z-50 flex items-center gap-1.5">
@@ -695,9 +471,9 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
             <button
               onClick={startSession}
               className={`px-4 py-2 rounded-full ${themeCodex ? 'bg-zinc-800 text-white hover:bg-zinc-700' : 'bg-primary text-primary-foreground hover:bg-primary/90'} transition-all text-sm font-medium disabled:opacity-50`}
-              disabled={isSessionInitializing || !isConnected}
+              disabled={isSessionInitializing || !claudeStreamConnected}
             >
-              {isSessionInitializing ? 'Starting...' : 'Start Codex AI Session'}
+              {isSessionInitializing ? 'Starting...' : 'Start Claude Code Session'}
             </button>
           </div>
         )}
@@ -809,15 +585,8 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
             <span className="text-[12px]">
               {typingStatus.mode === 'tool' && typingStatus.label
                 ? `${getToolIcon(typingStatus.label)} Using ${typingStatus.label} — ${elapsedSec}s`
-                : typingStatus.label ? `${typingStatus.label} — ${elapsedSec}s` : `Running… ${elapsedSec}s`}
+                : `Running… ${elapsedSec}s`}
             </span>
-            <button
-              onClick={() => sendMessage({ type: 'codex-abort' })}
-              className="text-[11px] px-2 py-1 rounded border border-border/50 hover:bg-white/5"
-              title="Abort current task and clear queue"
-            >
-              Abort
-            </button>
           </motion.div>
         )}
         <div ref={bottomRef} />
@@ -837,6 +606,15 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
       </div>
       <div className={`${embedded ? 'px-2 py-1.5' : 'p-3'} relative`}>
         
+        {/* Project path indicator - moved outside */}
+        <div className="flex items-center justify-between text-muted-foreground text-xs px-2 mb-2">
+          <div className="flex items-center gap-3">
+            <button className="flex items-center gap-1 hover:text-foreground transition-colors" title={projectPath || 'Current directory'}>
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+              <span className="max-w-[200px] truncate">{projectPath ? projectPath.split('/').pop() : 'Claude Code'}</span>
+            </button>
+          </div>
+        </div>
         {/* Image preview area */}
         {imageAttachments.length > 0 && (
           <div className="px-3 py-2 mb-2">
@@ -864,120 +642,46 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
             </div>
           </div>
         )}
-        
-        {/* Resume last session button - hidden in Codex theme for minimal look */}
-        {!themeCodex && hasLastSession(projectPath) && !sessionActive && messages.length === 0 && (
+        {/* Resume last session button */}
+        {hasLastSession(projectPath) && !sessionActive && messages.length === 0 && (
           <div className="pb-2">
-            <button
-              onClick={() => { 
-                primeResumeFromSaved(); 
-                startSession(); 
-                restoreLastChat(); 
-                addMessage({ type: 'system', text: 'Resuming previous session...' });
-              }}
-              className="w-full px-3 py-2 rounded-lg bg-muted/50 hover:bg-muted/70 transition-all text-left flex items-center gap-2 group"
-              title="Resume last session"
-            >
-              <svg className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-              </svg>
-              <div className="flex-1 min-w-0">
-                <div className="text-xs font-medium text-foreground">Resume session:</div>
-                <div className="text-xs text-muted-foreground truncate">
-                  {(() => {
-                    try {
-                      const history = loadChatHistory(projectPath);
-                      if (history?.messages?.length > 0) {
-                        // Get first user message for preview
-                        const firstUserMsg = history.messages.find(m => m.type === 'user');
-                        if (firstUserMsg?.text) {
-                          return firstUserMsg.text.slice(0, 50) + (firstUserMsg.text.length > 50 ? '...' : '');
+              <button
+                onClick={() => { 
+                  primeResumeFromSaved(); 
+                  startSession(); 
+                  restoreLastChat(); 
+                  addMessage({ type: 'system', text: 'Resuming previous session...' });
+                }}
+                className="w-full px-3 py-2 rounded-lg bg-muted/50 hover:bg-muted/70 transition-all text-left flex items-center gap-2 group"
+                title="Resume last session"
+              >
+                <svg className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                </svg>
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-medium text-foreground">Resume session:</div>
+                  <div className="text-xs text-muted-foreground truncate">
+                    {(() => {
+                      try {
+                        const history = loadChatHistory(projectPath);
+                        if (history?.messages?.length > 0) {
+                          // Get first user message for preview
+                          const firstUserMsg = history.messages.find(m => m.type === 'user');
+                          if (firstUserMsg?.text) {
+                            return firstUserMsg.text.slice(0, 50) + (firstUserMsg.text.length > 50 ? '...' : '');
+                          }
                         }
+                        const s = loadLastSession(projectPath);
+                        return s?.sessionId ? `Session ${s.sessionId.slice(0, 8)}` : 'Previous session';
+                      } catch { 
+                        return 'Previous session'; 
                       }
-                      const s = loadLastSession(projectPath);
-                      return s?.sessionId ? `Session ${s.sessionId.slice(0, 8)}` : 'Previous session';
-                    } catch { 
-                      return 'Previous session'; 
-                    }
-                  })()}
+                    })()}
+                  </div>
                 </div>
-              </div>
-            </button>
+              </button>
           </div>
         )}
-        
-        {/* Segmented controls row - moved above input */}
-        <div className="flex items-center justify-between text-muted-foreground text-xs px-2 mb-2">
-          <div className="flex items-center gap-3">
-            <button className="flex items-center gap-1 hover:text-foreground transition-colors" title={projectPath || 'Current directory'}>
-              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
-              <span className="max-w-[200px] truncate">{projectPath ? projectPath.split('/').pop() : 'Local'}</span>
-            </button>
-            <div className="relative">
-              <button onClick={() => { setShowModeMenu(v => !v); setShowModelMenu(false); }} className="flex items-center gap-1 hover:text-foreground transition-colors">
-                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 8a4 4 0 100 8 4 4 0 000-8z"/><path d="M12 2v6m0 8v6m10-10h-6m-8 0H2"/></svg>
-                <span>{plannerMode === 'Planer' ? 'Planner' : plannerMode}</span>
-              </button>
-              {showModeMenu && (
-                <div className="absolute z-50 bottom-full mb-1 left-0 w-24 rounded-lg border border-zinc-700 bg-zinc-900 shadow-xl overflow-hidden">
-                  {['Auto','Planer','Chat'].map(m => (
-                    <button key={m} onClick={() => { setPlannerMode(m); savePlannerMode(m); setShowModeMenu(false); }} className={`w-full text-left px-3 py-2 text-xs hover:bg-zinc-800 transition-colors ${m===plannerMode?'text-zinc-300 bg-zinc-800/50':'text-zinc-500'}`}>
-                      {m === 'Planer' ? 'Planner' : m}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-            <button className="flex items-center gap-1 hover:text-foreground transition-colors" title="Model">
-              <span>Model:</span>
-              <span className="font-medium">default</span>
-            </button>
-            {connectorMode && (
-              <div className="flex items-center gap-1" title={connectorMode && connectorMode.startsWith('api') ? (connectorMode === 'api-env' ? 'API via server env' : 'API via Codex CLI') : 'Subscription (Codex CLI)'}>
-                <span className="opacity-70">Connector:</span>
-                <span className="px-2 py-0.5 rounded-md border border-zinc-700 text-zinc-300 text-xs">
-                  {connectorMode && connectorMode.startsWith('api') ? (
-                    <>API<span className="ml-1 opacity-60">{connectorMode === 'api-env' ? 'env' : 'cli'}</span></>
-                  ) : 'Subscription'}
-                </span>
-              </div>
-            )}
-            {connectorMode && (
-              <div className="flex items-center gap-1">
-                <span className="opacity-70">Connector:</span>
-                <span className="px-2 py-0.5 rounded-md border border-zinc-700 text-zinc-300 text-xs">
-                  {connectorMode === 'api' ? 'API' : 'Subscription'}
-                </span>
-              </div>
-            )}
-          </div>
-          {dangerousMode && (
-            <button
-              onClick={() => setDangerousMode(false)}
-              className="flex items-center gap-1 text-yellow-500/80 hover:text-yellow-400 transition-colors"
-              title="Dangerous mode active - click to disable"
-            >
-              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-              </svg>
-              <span>Dangerous</span>
-            </button>
-          )}
-          {!dangerousMode && !themeCodex && (
-            <button
-              onClick={() => {
-                const ok = window.confirm('Enable Dangerous mode? Codex may modify files in your real project.');
-                if (ok) setDangerousMode(true);
-              }}
-              className="opacity-0 hover:opacity-100 transition-opacity"
-              title="Enable dangerous mode"
-            >
-              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-              </svg>
-            </button>
-          )}
-        </div>
         
         {/* Single unified input container with dark background */}
         <div className="space-y-4 rounded-2xl bg-muted border border-border py-8 px-6">
@@ -995,7 +699,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
               onKeyDown={handleKeyDown}
               placeholder=""
               className="flex-1 text-[15px] leading-relaxed bg-transparent outline-none text-foreground placeholder:text-[#999999] resize-none py-1"
-              disabled={!isConnected || (isSessionInitializing && !sessionActive)}
+              disabled={!claudeStreamConnected || (isSessionInitializing && !sessionActive)}
               rows={1}
               style={{ minHeight: '60px', maxHeight: '150px', height: 'auto', overflowY: input.split('\n').length > 4 ? 'auto' : 'hidden' }}
             />
@@ -1004,20 +708,15 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
               onClick={handleSend}
               title="Send"
               className="relative w-9 h-9 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-all disabled:opacity-40"
-              disabled={!isConnected || (isSessionInitializing && !sessionActive) || (!input.trim() && attachments.length === 0 && imageAttachments.length === 0)}
+              disabled={!claudeStreamConnected || (isSessionInitializing && !sessionActive) || (!input.trim() && attachments.length === 0 && imageAttachments.length === 0)}
             >
               <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M12 5l7 7-7 7"/></svg>
-              {queueLength > 0 && (
-                <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] leading-4 text-center">
-                  {queueLength}
-                </span>
-              )}
             </button>
           </div>
-
+          
           {/* Attachments preview */}
           {attachments.length > 0 && (
-            <div className={`flex flex-wrap items-center gap-2 ${themeCodex ? 'text-zinc-300' : ''}`}>
+            <div className="flex flex-wrap items-center gap-2">
               {attachments.map((att, idx) => (
                 <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-border/40 bg-background/40 text-xs">
                   <span className="opacity-70">{att.tag}</span>
@@ -1081,7 +780,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
     setImageAttachments(prev => prev.filter(img => img.id !== id));
   };
 
-  // Send message to backend (either Vibe Kanban or Node.js)
+  // Send message to Claude Stream
   const handleSend = async () => {
     const message = input.trim();
     if (!message && imageAttachments.length === 0) return;
@@ -1093,34 +792,39 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
       displayMessage = `${message}${message ? '\n\n' : ''}📎 Attached: ${imageNames}`;
     }
     
-    // Mirror CLI defaults: send exactly the user's message
-    const fullMessage = message;
+    // Build final content: attachments as code blocks + images + user text
+    let prefix = '';
+    if (attachments.length > 0) {
+      const blocks = attachments.map((att, idx) => `Selected ${att.tag} (${idx + 1}):\n\n\u0060\u0060\u0060html\n${att.html}\n\u0060\u0060\u0060`).join('\n\n');
+      prefix = blocks + '\n\n';
+    }
+    // Add image data to the message
+    if (imageAttachments.length > 0) {
+      const imageInfo = imageAttachments.map((img, idx) => 
+        `Image ${idx + 1}: ${img.name} (${Math.round(img.size / 1024)}KB)\n[Image data URL provided]`
+      ).join('\n');
+      prefix += `Attached images:\n${imageInfo}\n\n`;
+    }
+    
+    const fullMessage = prefix + message;
     
     // Show typing indicator
     setIsTyping(true);
     
-    // Display user message with timestamp for Codex
+    // Display user message with timestamp for Claude
     addMessage({ type: 'user', text: displayMessage, images: imageAttachments });
     
-    // Use WebSocket for Codex
-    if (!isConnected) {
+    // Use Claude streaming API
+    const success = await sendClaudeMessage(
+      fullMessage,
+      projectPath || process.cwd(),
+      imageAttachments.map(img => img.dataUrl)
+    );
+    
+    if (!success) {
       setIsTyping(false);
-      addMessage({ type: 'error', text: 'WebSocket not connected' });
-      return;
+      addMessage({ type: 'error', text: claudeStreamError || 'Failed to send message to Claude' });
     }
-    
-    const options = {
-      projectPath: projectPath || process.cwd(),
-      cwd: projectPath || process.cwd(),
-      dangerous: dangerousMode,
-      plannerMode,
-      modelLabel,
-      resumeRolloutPath: (!sessionActive && primedResumeRef.current) ? primedResumeRef.current : undefined
-    };
-    
-    sendMessage({ type: 'codex-command', command: fullMessage, options });
-    // Clear one-shot resume after use
-    primedResumeRef.current = null;
     
     setAttachments([]);
     setImageAttachments([]);
@@ -1144,36 +848,70 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
     } catch {}
   }, [projectPath, messages.length]);
 
-  // Reconnect when auth token appears via storage (component may mount before login)
+  // Process Claude Stream conversation updates
   useEffect(() => {
-    const onStorage = (e) => {
-      if (e.key === 'auth-token' && e.newValue) {
-        reconnect?.();
-      }
-    };
-    window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
-  }, [reconnect]);
-
-  // Load connector mode on mount when auth is ready
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const token = localStorage.getItem('auth-token');
-        if (!token) return;
-        const res = await fetch('/api/codex/connector', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.mode) setConnectorMode(data.mode);
-          if (typeof data.hasKey === 'boolean') setConnectorHasKey(!!data.hasKey);
+    if (!claudeConversation) return;
+    
+    // Convert conversation entries to messages
+    claudeConversation.entries.forEach((entry, index) => {
+      const existingMessageIndex = messages.findIndex(msg => 
+        msg.timestamp === entry.timestamp && msg.text === entry.content
+      );
+      
+      if (existingMessageIndex === -1) {
+        let messageType = 'assistant';
+        
+        switch (entry.type) {
+          case 'user_message':
+            messageType = 'user';
+            break;
+          case 'error':
+            messageType = 'error';
+            break;
+          case 'tool_use':
+            messageType = 'tool';
+            break;
+          case 'system_message':
+          case 'session_start':
+          case 'session_end':
+            messageType = 'system';
+            break;
+          default:
+            messageType = 'assistant';
         }
-      } catch {}
-    };
-    if (authReady) load();
-  }, [authReady]);
+        
+        // Add the message
+        const newMessage = {
+          type: messageType,
+          text: entry.content,
+          timestamp: entry.timestamp || new Date().toISOString(),
+          tool_name: entry.tool_name,
+          tool_use_id: entry.tool_use_id
+        };
+        
+        setMessages(prev => [...prev, newMessage]);
+      }
+    });
+    
+    // Update typing status based on loading state
+    setIsTyping(claudeStreamLoading);
+  }, [claudeConversation, claudeStreamLoading]);
+  
+  // Update Claude session ID when we receive the real one from Claude CLI
+  useEffect(() => {
+    if (streamClaudeSessionId && sessionId !== streamClaudeSessionId) {
+      console.log(`[Claude] Updating session ID from ${sessionId} to ${streamClaudeSessionId}`);
+      setSessionId(streamClaudeSessionId);
+    }
+  }, [streamClaudeSessionId, sessionId]);
 
+  // Establish Claude connection when session starts
+  useEffect(() => {
+    if (sessionId && !claudeStreamConnected) {
+      console.log(`[Claude Stream] Establishing connection for session ${sessionId}`);
+      establishClaudeConnection(projectPath || process.cwd());
+    }
+  }, [sessionId, claudeStreamConnected, establishClaudeConnection, projectPath]);
 
   // Auto-scroll: instant and responsive
   useEffect(() => {
@@ -1480,17 +1218,17 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
               setOpen(true);
             }}
             className="px-4 py-2 rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 transition-colors text-sm disabled:opacity-60"
-            title={`Start Codex session for ${getHost()}`}
-            disabled={isSessionInitializing || !isConnected}
+            title={`Start Claude Code session for ${getHost()}`}
+            disabled={isSessionInitializing || !claudeStreamConnected}
           >
-            {isSessionInitializing ? 'Starting…' : 'Start Codex Session'}
+            {isSessionInitializing ? 'Starting…' : 'Start Claude Code Session'}
           </button>
         ) : (
           <>
             <button
               onClick={endSession}
               className="px-3 py-2 rounded-full bg-destructive/80 text-destructive-foreground hover:bg-destructive transition-colors text-xs"
-              title="End Codex session"
+              title="End Claude session"
             >
               End Session
             </button>
@@ -1530,4 +1268,4 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
   );
 });
 
-export default OverlayChat;
+export default ClaudeChat;

@@ -16,6 +16,10 @@ function ToolsSettings({ isOpen, onClose }) {
   const [saveStatus, setSaveStatus] = useState(null);
   const [projectSortOrder, setProjectSortOrder] = useState('name');
   const [activeTab, setActiveTab] = useState('tools');
+  // Codex connector
+  const [codexMode, setCodexMode] = useState('subscription');
+  const [codexCanUseApi, setCodexCanUseApi] = useState(false);
+  const [codexSaving, setCodexSaving] = useState(false);
 
   // Common tool patterns
   const commonTools = [
@@ -38,6 +42,7 @@ function ToolsSettings({ isOpen, onClose }) {
   useEffect(() => {
     if (isOpen) {
       loadSettings();
+      loadCodexConnector();
     }
   }, [isOpen]);
 
@@ -116,6 +121,49 @@ function ToolsSettings({ isOpen, onClose }) {
       setSaveStatus('error');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const loadCodexConnector = async () => {
+    try {
+      const token = localStorage.getItem('auth-token');
+      const res = await fetch('/api/codex/connector', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (['subscription','api','api-cli','api-env'].includes(data.mode)) setCodexMode(data.mode);
+        setCodexCanUseApi(!!(data.hasKey ?? data.canUseApi));
+      }
+    } catch (e) {
+      console.error('Failed to load codex connector:', e);
+    }
+  };
+
+  const saveCodexConnector = async (mode) => {
+    try {
+      setCodexSaving(true);
+      const token = localStorage.getItem('auth-token');
+      const res = await fetch('/api/codex/connector', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ mode })
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to save connector');
+      }
+      setCodexMode(mode);
+      setSaveStatus('success');
+      setTimeout(() => setSaveStatus(null), 1800);
+    } catch (e) {
+      console.error(e);
+      setSaveStatus('error');
+    } finally {
+      setCodexSaving(false);
     }
   };
 
@@ -376,11 +424,18 @@ function ToolsSettings({ isOpen, onClose }) {
                     <option value="oldest">Oldest First</option>
                   </select>
                 </div>
+
+                {/* Codex Connector */}
+                <div>
+                  <h3 className="text-lg font-medium text-foreground mb-1">Codex Connector</h3>
+                  <p className="text-sm text-muted-foreground mb-3">Using Codex CLI authentication from this machine (mirrors your terminal).</p>
+                  <div className="text-xs text-muted-foreground">To change, use the Codex CLI login on your terminal. The app will follow automatically.</div>
+                </div>
               </div>
             )}
           </div>
 
-          <div className="border-t p-4 flex justify-end space-x-2">
+          <div className="border-t p-4 flex justify-end items-center space-x-2">
             <Button variant="outline" onClick={onClose}>
               Cancel
             </Button>
@@ -388,10 +443,10 @@ function ToolsSettings({ isOpen, onClose }) {
               {isSaving ? 'Saving...' : 'Save Settings'}
             </Button>
             {saveStatus === 'success' && (
-              <span className="text-sm text-green-500 self-center ml-2">Saved!</span>
+              <span className="text-sm text-green-500">Saved!</span>
             )}
             {saveStatus === 'error' && (
-              <span className="text-sm text-red-500 self-center ml-2">Error saving</span>
+              <span className="text-sm text-red-500">Error saving</span>
             )}
           </div>
         </div>

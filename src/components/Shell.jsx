@@ -1998,11 +1998,11 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   
   // Always use PanelGroup for consistent DOM structure
   return (
-    <PanelGroup direction="horizontal" className="h-full w-full flex gap-1">
+    <PanelGroup direction="horizontal" className="h-full w-full flex">
       {/* Terminal Panel - Always present */}
       <Panel 
         ref={terminalPanelHandleRef}
-        defaultSize={showPreview && !isMobile && !activeSidePanel ? 30 : 100} 
+        defaultSize={showPreview && !isMobile ? 30 : 100} 
         minSize={30} 
         className="h-full"
         style={lockedTerminalWidth ? { flex: `0 0 ${lockedTerminalWidth}px` } : undefined}

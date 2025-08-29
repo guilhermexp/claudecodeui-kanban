@@ -8,17 +8,21 @@ import { useWebSocket } from '../utils/websocket';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { normalizeCodexEvent } from '../utils/codex-normalizer';
-import { loadPlannerMode, savePlannerMode, loadModelLabel, saveModelLabel } from '../utils/chat-prefs';
+import { normalizeClaudeEvent } from '../utils/claude-normalizer';
+import { loadPlannerMode, savePlannerMode, loadModelLabel, saveModelLabel, loadCliProvider, saveCliProvider } from '../utils/chat-prefs';
 import { hasChatHistory, loadChatHistory, saveChatHistory } from '../utils/chat-history';
 import { hasLastSession, loadLastSession, saveLastSession, clearLastSession } from '../utils/chat-session';
+// Claude now uses WebSocket - no need for SSE stream hook
+// import useClaudeStream from '../hooks/useClaudeStream';
 
 // Overlay Chat com formatação bonita usando ReactMarkdown
 // Usa NOSSO backend interno (porta 7347) - sem servidores externos!
-const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, embedded = false, disableInlinePanel = false, useSidebarWhenOpen = false, sidebarContainerRef = null, onBeforeOpen, onPanelClosed, chatId = 'default' }) {
+const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, embedded = false, disableInlinePanel = false, useSidebarWhenOpen = false, sidebarContainerRef = null, onBeforeOpen, onPanelClosed, cliProviderFixed = null, chatId = 'default' }) {
   // Debug props - only in development
   if (process.env.NODE_ENV === 'development') {
     console.log(`🎯 [${chatId}] OverlayChat mounted with:`, { 
       chatId,
+      cliProviderFixed,
       projectPath, 
       embedded,
       disableInlinePanel,
@@ -28,10 +32,23 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
   
-  // Codex-only states
-  const [messages, setMessages] = useState([]);
-  const [sessionId, setSessionId] = useState(null);
-  const [sessionActive, setSessionActive] = useState(false);
+  // CLI Provider state - fixed if passed via props, otherwise from localStorage
+  const [cliProvider, setCliProvider] = useState(() => cliProviderFixed || loadCliProvider());
+  
+  // Separate states for each CLI provider
+  const [codexMessages, setCodexMessages] = useState([]);
+  const [claudeMessages, setClaudeMessages] = useState([]);
+  const [codexSessionId, setCodexSessionId] = useState(null);
+  const [claudeSessionId, setClaudeSessionId] = useState(null);
+  const [codexSessionActive, setCodexSessionActive] = useState(false);
+  const [claudeSessionActive, setClaudeSessionActive] = useState(false);
+  
+  // Current active states based on selected provider
+  const messages = cliProvider === 'codex' ? codexMessages : claudeMessages;
+  const setMessages = cliProvider === 'codex' ? setCodexMessages : setClaudeMessages;
+  const sessionId = cliProvider === 'codex' ? codexSessionId : claudeSessionId;
+  const setSessionId = cliProvider === 'codex' ? setCodexSessionId : setClaudeSessionId;
+  const sessionActive = cliProvider === 'codex' ? codexSessionActive : claudeSessionActive;
   
   const [isTyping, setIsTyping] = useState(false);
   const [typingStatus, setTypingStatus] = useState({ mode: 'idle', label: '' });
@@ -68,6 +85,11 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
   const [clientSessionId, setClientSessionId] = useState(null); // synthetic id when real id is not yet available
   const [resumeRolloutPath, setResumeRolloutPath] = useState(null);
   
+  // Claude now uses WebSocket like Codex - no need for SSE stream
+  // Keeping these variables for compatibility but they're unused
+  const claudeStreamConnected = isConnected; // Use WebSocket connection status
+  const claudeStreamLoading = false;
+  const claudeStreamError = null;
   
   // Debug sessionId changes
   useEffect(() => {
@@ -99,17 +121,31 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
   const [modelLabel, setModelLabel] = useState(() => loadModelLabel());
   const [showModeMenu, setShowModeMenu] = useState(false);
   const [showModelMenu, setShowModelMenu] = useState(false);
+  const [showProviderMenu, setShowProviderMenu] = useState(false);
   
+  // Reset chat when provider changes
+  useEffect(() => {
+    // Clear input and attachments when switching providers
+    setInput('');
+    setAttachments([]);
+    setImageAttachments([]);
+    setIsTyping(false);
+    setTypingStatus({ mode: 'idle', label: '' });
+    setIsSessionInitializing(false);
+    setSessionStarted(false);
+    
+    // Don't call endSession directly to avoid circular dependency
+    // Just reset the states - the session will be ended when starting a new one
+  }, [cliProvider]);
   const [hasSavedSession, setHasSavedSession] = useState(false);
   const primedResumeRef = useRef(null);
   const [codexLimitStatus, setCodexLimitStatus] = useState(null); // { remaining, resetAt, raw }
   const [queueLength, setQueueLength] = useState(0);
-  const [connectorMode, setConnectorMode] = useState(null); // 'subscription' | 'api' | null
-  const [connectorHasKey, setConnectorHasKey] = useState(null); // boolean | null
+  const [selectedModel, setSelectedModel] = useState('default');
   const { theme } = useTheme();
   const themeCodex = theme === 'dark'; // Use Codex theme only in dark mode
 
-  // Do not force any model; keep CLI defaults
+  // Keep CLI defaults for model; do not force any specific model here
 
   // Detect saved history for this project
   useEffect(() => {
@@ -167,15 +203,56 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
 
   // Session helpers
   const startSession = useCallback(() => {
+    // Prevent duplicate session starts
+    if (isSessionInitializing) {
+      console.log('[Session] Already initializing, skipping duplicate start');
+      return;
+    }
+    
     const options = { projectPath: projectPath || process.cwd(), cwd: projectPath || process.cwd() };
     
-    if (isConnected) {
+    if (cliProvider === 'claude') {
+      // For Claude, use WebSocket just like Codex
+      if (!isConnected) {
+        console.error('WebSocket not connected for Claude session');
+        return;
+      }
+      
+      // Don't create a session ID - Claude CLI will create it
+      // Session ID will be received from the backend when the first message is sent
+      // Only clear session if we're starting fresh (not resuming)
+      if (!primedResumeRef.current) {
+        setClaudeSessionId(null); // Clear any existing session
+        setClaudeSessionActive(false); // Will be set to true when session is created
+      }
+      setIsSessionInitializing(true);
+      setSessionStarted(true);
+      
+      // Send initial message to start Claude session
+      console.log(`[Claude] Starting new session`);
+      
+      // Send initialization message to start session
+      sendMessage({ 
+        type: 'claude-command', 
+        command: 'Iniciar sessão',  // Initial command to start session
+        options: {
+          projectPath: projectPath || process.cwd(),
+          cwd: projectPath || process.cwd(),
+          sessionId: null,
+          resume: false,
+          model: null
+        }
+      });
+      
+      // Session will be created and ID will be received via WebSocket
+      
+    } else if (isConnected) {
       // For Codex, use WebSocket
       const messageType = 'codex-start-session';
       sendMessage({ type: messageType, options });
       setIsSessionInitializing(true);
       setSessionStarted(true);
-      setSessionActive(true);
+      setCodexSessionActive(true);
       
       // Fallback timeout
       if (initTimerRef.current) clearTimeout(initTimerRef.current);
@@ -184,20 +261,29 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
         addMessage({ type: 'system', text: 'Session start timeout. You can retry or continue without session.' });
       }, 8000);
     }
-  }, [isConnected, sendMessage, projectPath]); // Remove addMessage from deps - it's defined after
+  }, [isConnected, sendMessage, projectPath, cliProvider, claudeStreamConnected]); // Remove addMessage from deps - it's defined after
 
   const endSession = useCallback(() => {
-    if (isConnected) {
+    if (cliProvider === 'claude') {
+      // For Claude, clear session state
+      setClaudeSessionId(null);
+      setClaudeSessionActive(false);
+      setClaudeMessages([]);
+      // Could send an abort message if needed:
+      // if (isConnected && claudeSessionId) {
+      //   sendMessage({ type: 'claude-abort', sessionId: claudeSessionId });
+      // }
+    } else if (isConnected) {
       // For Codex, use WebSocket
       const messageType = 'codex-end-session';
       sendMessage({ type: messageType });
       
       // Clear session for Codex
-      setSessionActive(false);
-      setSessionId(null);
-      setMessages([]);
+      setCodexSessionActive(false);
+      setCodexSessionId(null);
+      setCodexMessages([]);
     }
-  }, [isConnected, sendMessage]);
+  }, [isConnected, sendMessage, cliProvider, isSessionInitializing, projectPath]);
 
   const restartSession = useCallback(() => {
     endSession();
@@ -335,11 +421,18 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
     if (!projectPath) return;
     try {
       const s = loadLastSession(projectPath);
-      if (s && (s.rolloutPath || s.sessionId)) {
+      if (s && s.sessionId) {
+        // For Claude, set the session ID to resume
+        if (cliProvider === 'claude') {
+          setClaudeSessionId(s.sessionId);
+          setClaudeSessionActive(true);
+          console.log(`[Claude] Primed to resume session: ${s.sessionId}`);
+        }
+        // For Codex, set the rollout path
         primedResumeRef.current = s.rolloutPath || null;
       }
     } catch {}
-  }, [projectPath]);
+  }, [projectPath, cliProvider]);
 
   const execStreamsRef = useRef(new Map()); // callId -> { id, buffer, lastTs }
   
@@ -347,6 +440,169 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
   useEffect(() => {
     if (wsMessages && wsMessages.length > 0) {
       const lastMsg = wsMessages[wsMessages.length - 1];
+      
+      // Handle Claude-specific events
+      if (lastMsg.type === 'session-created' && cliProvider === 'claude') {
+        console.log('🚀 Received claude session-created event:', lastMsg);
+        if (initTimerRef.current) { clearTimeout(initTimerRef.current); initTimerRef.current = null; }
+        if (lastMsg.sessionId) {
+          setClaudeSessionId(lastMsg.sessionId);
+          if (clientSessionId) setClientSessionId(null);
+          addMessage({ type: 'system', text: `Claude session started (${lastMsg.sessionId.slice(0, 8)}…)` });
+          setIsSessionInitializing(false);
+          setClaudeSessionActive(true);
+        }
+        setIsTyping(false);
+        return;
+      }
+      if (lastMsg.type === 'session-not-found' && cliProvider === 'claude') {
+        // Session expired or not found - clear it and prepare for new session
+        console.log('⚠️ Claude session not found:', lastMsg.sessionId);
+        setClaudeSessionId(null); // Clear the invalid session
+        setClaudeSessionActive(false);
+        clearLastSession(projectPath); // Clear from localStorage
+        addMessage({ type: 'system', text: 'Previous session expired. A new session will be created.' });
+        setIsSessionInitializing(false);
+        setIsTyping(false);
+        return;
+      }
+      if (lastMsg.type === 'claude-session-closed') {
+        if (initTimerRef.current) { clearTimeout(initTimerRef.current); initTimerRef.current = null; }
+        setSessionId(null);
+        setClientSessionId(null);
+        addMessage({ type: 'system', text: 'Claude session closed' });
+        setIsSessionInitializing(false);
+        setIsTyping(false);
+        return;
+      }
+      if (lastMsg.type === 'claude-response') {
+        // Process Claude streaming response
+        console.log('[Claude] Received response:', lastMsg);
+        console.log('[Claude] Response data:', JSON.stringify(lastMsg.data));
+        if (lastMsg.data) {
+          const data = lastMsg.data;
+          
+          // Handle different event types from Claude CLI
+          if (data.type === 'system' && data.session_id) {
+            // System event with session ID - just update state, don't add message
+            // The message was already added by session-created event
+            if (!claudeSessionId) {
+              setClaudeSessionId(data.session_id);
+              setClaudeSessionActive(true);
+              // Don't add duplicate message here
+            }
+          } else if (data.type === 'text' && data.text) {
+            // Text output from Claude
+            addMessage({ type: 'assistant', text: data.text });
+            setIsTyping(false);
+            setTypingStatus({ mode: 'idle', label: '' });
+          } else if (data.type === 'assistant' && data.message) {
+            // Assistant message from Claude CLI (new format)
+            const msg = data.message;
+            if (msg.content) {
+              if (typeof msg.content === 'string') {
+                addMessage({ type: 'assistant', text: msg.content });
+                setIsTyping(false);
+                setTypingStatus({ mode: 'idle', label: '' });
+              } else if (Array.isArray(msg.content)) {
+                // Handle content blocks
+                let hasTextContent = false;
+                let textContent = '';
+                
+                msg.content.forEach(block => {
+                  if (block.type === 'text' && block.text) {
+                    // Accumulate all text blocks
+                    textContent += (textContent ? '\n' : '') + block.text;
+                    hasTextContent = true;
+                  } else if (block.type === 'tool_use') {
+                    // Handle tool use - show as system message
+                    const toolName = block.name || 'Tool';
+                    addMessage({ type: 'system', text: `🔧 Using ${toolName}...` });
+                    setIsTyping(true);
+                    setTypingStatus({ mode: 'tool', label: toolName });
+                  }
+                });
+                
+                // Add accumulated text content as a single message
+                if (hasTextContent && textContent) {
+                  addMessage({ type: 'assistant', text: textContent });
+                  setIsTyping(false);
+                  setTypingStatus({ mode: 'idle', label: '' });
+                }
+              }
+            }
+          } else if (data.type === 'message' && data.content) {
+            // Message with content (old format)
+            if (typeof data.content === 'string') {
+              addMessage({ type: 'assistant', text: data.content });
+              setIsTyping(false);
+              setTypingStatus({ mode: 'idle', label: '' });
+            } else if (Array.isArray(data.content)) {
+              // Handle content blocks
+              data.content.forEach(block => {
+                if (block.type === 'text' && block.text) {
+                  addMessage({ type: 'assistant', text: block.text });
+                }
+              });
+              setIsTyping(false);
+              setTypingStatus({ mode: 'idle', label: '' });
+            }
+          } else if (data.type === 'tool_use') {
+            // Tool usage notification
+            const toolName = data.name || 'Tool';
+            addMessage({ type: 'system', text: `🔧 Using ${toolName}...` });
+          } else if (data.type === 'result' && data.result) {
+            // Result from Claude CLI - contains the final response
+            if (!data.is_error) {
+              // Don't add the result as a new message if we already processed the assistant message
+              // Just mark typing as complete
+              setIsTyping(false);
+              setTypingStatus({ mode: 'idle', label: '' });
+            }
+          } else if (data.type === 'user' && data.message) {
+            // User message with tool results - don't display, just update typing status
+            const msg = data.message;
+            if (msg.content && Array.isArray(msg.content)) {
+              msg.content.forEach(block => {
+                if (block.type === 'tool_result') {
+                  // Tool completed - stop showing the tool status
+                  setIsTyping(false);
+                  setTypingStatus({ mode: 'idle', label: '' });
+                }
+              });
+            }
+          } else if (data.type === 'completion') {
+            // Completion event - stop typing
+            setIsTyping(false);
+            setTypingStatus({ mode: 'idle', label: '' });
+          }
+        }
+        return;
+      }
+      if (lastMsg.type === 'claude-output') {
+        // Raw output from Claude (non-JSON)
+        if (lastMsg.data && lastMsg.data.trim()) {
+          addMessage({ type: 'assistant', text: lastMsg.data });
+          setIsTyping(false);
+          setTypingStatus({ mode: 'idle', label: '' });
+        }
+        return;
+      }
+      if (lastMsg.type === 'claude-error') {
+        setIsTyping(false);
+        setTypingStatus({ mode: 'idle', label: '' });
+        addMessage({ type: 'error', text: lastMsg.error });
+        return;
+      }
+      if (lastMsg.type === 'claude-complete') {
+        setIsTyping(false);
+        setTypingStatus({ mode: 'idle', label: '' });
+        // Optionally add a completion indicator
+        if (cliProvider === 'claude') {
+          console.log('[Claude] Response completed');
+        }
+        return;
+      }
       
       // Normalize Codex events (ported from Vibe Kanban patterns)
       if (lastMsg.type === 'codex-session-started') {
@@ -417,8 +673,10 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
         return;
       }
 
-      // Normalize Codex events
-      const normalized = normalizeCodexEvent(lastMsg) || [];
+      // Normalize based on provider
+      const normalized = cliProvider === 'claude' 
+        ? normalizeClaudeEvent(lastMsg) || []
+        : normalizeCodexEvent(lastMsg) || [];
       if (normalized.length) {
         setIsTyping(false);
         setTypingStatus({ mode: 'idle', label: '' });
@@ -528,21 +786,8 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
         addMessage({ type: 'system', text: 'Aborted and cleared queue' });
         return;
       }
-      if (lastMsg.type === 'codex-connector' && lastMsg.mode) {
-        setConnectorMode(lastMsg.mode);
-        // refresh details
-        (async () => {
-          try {
-            const token = localStorage.getItem('auth-token');
-            if (!token) return;
-            const res = await fetch('/api/codex/connector', { headers: { 'Authorization': `Bearer ${token}` } });
-            if (res.ok) { const data = await res.json(); if (typeof data.hasKey === 'boolean') setConnectorHasKey(!!data.hasKey); }
-          } catch {}
-        })();
-        return;
-      }
     }
-  }, [wsMessages, addMessage]);
+  }, [wsMessages, addMessage, cliProvider, projectPath, claudeSessionId, clientSessionId]);
 
   // Expose global function for element selection
   useEffect(() => {
@@ -596,10 +841,72 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
   // Shared chat panel content (can render inline or into a portal)
   const renderPanelContent = () => (
     <div className={`${embedded ? 'w-full h-full flex flex-col bg-background' : themeCodex ? 'w-full max-h-[70vh] bg-zinc-900 dark:bg-black rounded-2xl flex flex-col overflow-hidden border border-zinc-700 dark:border-zinc-900' : 'w-full max-h-[70vh] chat-glass border border-border/40 rounded-2xl flex flex-col overflow-hidden shadow-2xl'}`}>
+      {/* Show provider selector and session info in embedded mode */}
+      {embedded && (
+        <>
+          {/* Only show dropdown if provider is not fixed */}
+          {!cliProviderFixed && (
+            <div className="absolute top-3 right-3 z-10">
+                <button
+                  onClick={() => setShowProviderMenu(!showProviderMenu)}
+                  className="px-2 py-1 rounded text-xs bg-background/50 hover:bg-accent/20 transition-colors flex items-center gap-1"
+                  title="Switch AI Provider"
+                >
+                  {cliProvider === 'claude' ? (
+                    <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="10"/>
+                      <path d="M12 8v8M8 12h8"/>
+                    </svg>
+                  ) : (
+                    <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="6" y="6" width="12" height="12" rx="2"/>
+                      <path d="M12 9v6M9 12h6"/>
+                    </svg>
+                  )}
+                  <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M6 9l6 6 6-6"/>
+                  </svg>
+                </button>
+                {showProviderMenu && (
+                  <div className="absolute top-full mt-1 right-0 bg-background border border-border rounded-lg shadow-xl overflow-hidden z-50">
+                    <button
+                      onClick={() => {
+                        setCliProvider('codex');
+                        saveCliProvider('codex');
+                        setShowProviderMenu(false);
+                      }}
+                      className={`flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-accent/20 transition-colors w-full text-left ${cliProvider === 'codex' ? 'bg-accent/10 text-accent-foreground' : ''}`}
+                    >
+                      <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <rect x="6" y="6" width="12" height="12" rx="2"/>
+                        <path d="M12 9v6M9 12h6"/>
+                      </svg>
+                      Codex AI
+                    </button>
+                    <button
+                      onClick={() => {
+                        setCliProvider('claude');
+                        saveCliProvider('claude');
+                        setShowProviderMenu(false);
+                      }}
+                      className={`flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-accent/20 transition-colors w-full text-left ${cliProvider === 'claude' ? 'bg-accent/10 text-accent-foreground' : ''}`}
+                    >
+                      <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M12 8v8M8 12h8"/>
+                      </svg>
+                      Claude Code
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+        </>
+      )}
       {!embedded && (
       <div className={`${themeCodex ? 'px-3 py-2' : 'px-4 py-3'} border-b border-border/30 flex items-center justify-between ${themeCodex ? 'bg-zinc-900 dark:bg-black text-zinc-900 dark:text-white' : 'bg-muted/50 backdrop-blur-sm'}`}>
         <div className="flex items-center gap-2">
-          <div className={`text-sm tracking-widest font-extrabold ${themeCodex ? 'text-zinc-400' : ''}`}>CODEX</div>
+          <div className={`text-sm tracking-widest font-extrabold ${themeCodex ? 'text-zinc-400' : ''}`}>{cliProvider === 'claude' ? 'CLAUDE' : 'CODEX'}</div>
           <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-green-500' : 'bg-yellow-500'}`} />
           {(sessionActive && sessionId) || clientSessionId ? (
             <span className="text-[10px] text-muted-foreground/60 font-mono" title={`Session: ${(sessionId || clientSessionId)}`}>
@@ -697,7 +1004,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
               className={`px-4 py-2 rounded-full ${themeCodex ? 'bg-zinc-800 text-white hover:bg-zinc-700' : 'bg-primary text-primary-foreground hover:bg-primary/90'} transition-all text-sm font-medium disabled:opacity-50`}
               disabled={isSessionInitializing || !isConnected}
             >
-              {isSessionInitializing ? 'Starting...' : 'Start Codex AI Session'}
+              {isSessionInitializing ? 'Starting...' : `Start ${cliProvider === 'claude' ? 'Claude Code' : 'Codex AI'} Session`}
             </button>
           </div>
         )}
@@ -811,13 +1118,15 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
                 ? `${getToolIcon(typingStatus.label)} Using ${typingStatus.label} — ${elapsedSec}s`
                 : typingStatus.label ? `${typingStatus.label} — ${elapsedSec}s` : `Running… ${elapsedSec}s`}
             </span>
-            <button
-              onClick={() => sendMessage({ type: 'codex-abort' })}
-              className="text-[11px] px-2 py-1 rounded border border-border/50 hover:bg-white/5"
-              title="Abort current task and clear queue"
-            >
-              Abort
-            </button>
+            {cliProvider === 'codex' && (
+              <button
+                onClick={() => sendMessage({ type: 'codex-abort' })}
+                className="text-[11px] px-2 py-1 rounded border border-border/50 hover:bg-white/5"
+                title="Abort current task and clear queue"
+              >
+                Abort
+              </button>
+            )}
           </motion.div>
         )}
         <div ref={bottomRef} />
@@ -837,194 +1146,194 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
       </div>
       <div className={`${embedded ? 'px-2 py-1.5' : 'p-3'} relative`}>
         
-        {/* Image preview area */}
-        {imageAttachments.length > 0 && (
-          <div className="px-3 py-2 mb-2">
-            <div className="flex gap-2 flex-wrap">
-              {imageAttachments.map(img => (
-                <div key={img.id} className="relative group">
-                  <img 
-                    src={img.dataUrl} 
-                    alt={img.name}
-                    className="w-16 h-16 object-cover rounded-md border border-border"
-                  />
-                  <button
-                    onClick={() => removeImageAttachment(img.id)}
-                    className="absolute -top-2 -right-2 w-5 h-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                  <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[9px] px-1 rounded-b-md truncate">
-                    {img.name}
+        <div 
+          className={`${themeCodex ? 'relative' : `rounded-2xl border ${isDragging ? 'border-primary border-2' : 'border-border/50 bg-muted/40 backdrop-blur-sm'} shadow-sm transition-all duration-200 focus-within:border-primary/50 relative`}`}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
+          {/* Drag overlay */}
+          {isDragging && (
+            <div className="absolute inset-0 bg-primary/10 backdrop-blur-sm rounded-xl z-10 flex items-center justify-center">
+              <div className="text-primary font-medium">Drop images here</div>
+            </div>
+          )}
+          {/* Image preview area */}
+          {imageAttachments.length > 0 && (
+            <div className="px-3 py-2 border-b border-border/40">
+              <div className="flex gap-2 flex-wrap">
+                {imageAttachments.map(img => (
+                  <div key={img.id} className="relative group">
+                    <img 
+                      src={img.dataUrl} 
+                      alt={img.name}
+                      className="w-16 h-16 object-cover rounded-md border border-border"
+                    />
+                    <button
+                      onClick={() => removeImageAttachment(img.id)}
+                      className="absolute -top-2 -right-2 w-5 h-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                    <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[9px] px-1 rounded-b-md truncate">
+                      {img.name}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {/* Resume last session button - hidden in Codex theme for minimal look */}
+          {!themeCodex && hasLastSession(projectPath) && !sessionActive && messages.length === 0 && (
+            <div className="px-4 pb-2">
+              <button
+                onClick={() => { 
+                  primeResumeFromSaved(); 
+                  startSession(); 
+                  restoreLastChat(); 
+                  addMessage({ type: 'system', text: 'Resuming previous session...' });
+                }}
+                className="w-full px-3 py-2 rounded-lg bg-muted/50 hover:bg-muted/70 transition-all text-left flex items-center gap-2 group"
+                title="Resume last session"
+              >
+                <svg className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                </svg>
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-medium text-foreground">Resume session:</div>
+                  <div className="text-xs text-muted-foreground truncate">
+                    {(() => {
+                      try {
+                        const history = loadChatHistory(projectPath);
+                        if (history?.messages?.length > 0) {
+                          // Get first user message for preview
+                          const firstUserMsg = history.messages.find(m => m.type === 'user');
+                          if (firstUserMsg?.text) {
+                            return firstUserMsg.text.slice(0, 50) + (firstUserMsg.text.length > 50 ? '...' : '');
+                          }
+                        }
+                        const s = loadLastSession(projectPath);
+                        return s?.sessionId ? `Session ${s.sessionId.slice(0, 8)}` : 'Previous session';
+                      } catch { 
+                        return 'Previous session'; 
+                      }
+                    })()}
                   </div>
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
-        
-        {/* Resume last session button - hidden in Codex theme for minimal look */}
-        {!themeCodex && hasLastSession(projectPath) && !sessionActive && messages.length === 0 && (
-          <div className="pb-2">
-            <button
-              onClick={() => { 
-                primeResumeFromSaved(); 
-                startSession(); 
-                restoreLastChat(); 
-                addMessage({ type: 'system', text: 'Resuming previous session...' });
-              }}
-              className="w-full px-3 py-2 rounded-lg bg-muted/50 hover:bg-muted/70 transition-all text-left flex items-center gap-2 group"
-              title="Resume last session"
-            >
-              <svg className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-              </svg>
-              <div className="flex-1 min-w-0">
-                <div className="text-xs font-medium text-foreground">Resume session:</div>
-                <div className="text-xs text-muted-foreground truncate">
-                  {(() => {
-                    try {
-                      const history = loadChatHistory(projectPath);
-                      if (history?.messages?.length > 0) {
-                        // Get first user message for preview
-                        const firstUserMsg = history.messages.find(m => m.type === 'user');
-                        if (firstUserMsg?.text) {
-                          return firstUserMsg.text.slice(0, 50) + (firstUserMsg.text.length > 50 ? '...' : '');
-                        }
-                      }
-                      const s = loadLastSession(projectPath);
-                      return s?.sessionId ? `Session ${s.sessionId.slice(0, 8)}` : 'Previous session';
-                    } catch { 
-                      return 'Previous session'; 
-                    }
-                  })()}
-                </div>
-              </div>
-            </button>
-          </div>
-        )}
-        
-        {/* Segmented controls row - moved above input */}
-        <div className="flex items-center justify-between text-muted-foreground text-xs px-2 mb-2">
-          <div className="flex items-center gap-3">
-            <button className="flex items-center gap-1 hover:text-foreground transition-colors" title={projectPath || 'Current directory'}>
-              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
-              <span className="max-w-[200px] truncate">{projectPath ? projectPath.split('/').pop() : 'Local'}</span>
-            </button>
-            <div className="relative">
-              <button onClick={() => { setShowModeMenu(v => !v); setShowModelMenu(false); }} className="flex items-center gap-1 hover:text-foreground transition-colors">
-                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 8a4 4 0 100 8 4 4 0 000-8z"/><path d="M12 2v6m0 8v6m10-10h-6m-8 0H2"/></svg>
-                <span>{plannerMode === 'Planer' ? 'Planner' : plannerMode}</span>
               </button>
-              {showModeMenu && (
-                <div className="absolute z-50 bottom-full mb-1 left-0 w-24 rounded-lg border border-zinc-700 bg-zinc-900 shadow-xl overflow-hidden">
-                  {['Auto','Planer','Chat'].map(m => (
-                    <button key={m} onClick={() => { setPlannerMode(m); savePlannerMode(m); setShowModeMenu(false); }} className={`w-full text-left px-3 py-2 text-xs hover:bg-zinc-800 transition-colors ${m===plannerMode?'text-zinc-300 bg-zinc-800/50':'text-zinc-500'}`}>
-                      {m === 'Planer' ? 'Planner' : m}
-                    </button>
-                  ))}
+            </div>
+          )}
+          {/* Segmented controls row - moved above input */}
+          <div className="flex items-center justify-between text-muted-foreground text-xs px-2 mb-2">
+            <div className="flex items-center gap-3">
+              <button className="flex items-center gap-1 hover:text-foreground transition-colors" title={projectPath || 'Current directory'}>
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+                <span className="max-w-[200px] truncate">{projectPath ? projectPath.split('/').pop() : 'Local'}</span>
+              </button>
+              {cliProvider === 'claude' && (
+                <div className="relative">
+                  <button 
+                    onClick={() => setShowModelMenu(v => !v)} 
+                    className="flex items-center gap-1 hover:text-foreground transition-colors"
+                  >
+                    <span>Model:</span>
+                    <span className="font-medium">
+                      {selectedModel === 'default' ? 'Default' : 
+                       selectedModel === 'opus' ? 'Opus' :
+                       selectedModel === 'sonnet' ? 'Sonnet' :
+                       selectedModel === 'opus-plan' ? 'Opus Plan Mode' : 'Default'}
+                    </span>
+                    <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M6 9l6 6 6-6"/>
+                    </svg>
+                  </button>
+                  {showModelMenu && (
+                    <div className="absolute z-50 bottom-full mb-1 left-0 w-48 rounded-lg border border-border bg-popover shadow-xl overflow-hidden">
+                      <button 
+                        onClick={() => { setSelectedModel('default'); setShowModelMenu(false); }}
+                        className={`w-full text-left px-3 py-2 text-xs hover:bg-muted transition-colors ${selectedModel === 'default' ? 'text-foreground bg-muted/50' : 'text-muted-foreground'}`}
+                      >
+                        <div className="font-medium">Default (recommended)</div>
+                        <div className="text-[10px] opacity-70">Opus 4.1 for up to 50% of usage limits, then Sonnet 4</div>
+                      </button>
+                      <button 
+                        onClick={() => { setSelectedModel('opus'); setShowModelMenu(false); }}
+                        className={`w-full text-left px-3 py-2 text-xs hover:bg-muted transition-colors ${selectedModel === 'opus' ? 'text-foreground bg-muted/50' : 'text-muted-foreground'}`}
+                      >
+                        <div className="font-medium">Opus</div>
+                        <div className="text-[10px] opacity-70">Most capable model for complex tasks, consumes usage limits faster</div>
+                      </button>
+                      <button 
+                        onClick={() => { setSelectedModel('sonnet'); setShowModelMenu(false); }}
+                        className={`w-full text-left px-3 py-2 text-xs hover:bg-muted transition-colors ${selectedModel === 'sonnet' ? 'text-foreground bg-muted/50' : 'text-muted-foreground'}`}
+                      >
+                        <div className="font-medium">Sonnet</div>
+                        <div className="text-[10px] opacity-70">Sonnet 4 for daily use</div>
+                      </button>
+                      <button 
+                        onClick={() => { setSelectedModel('opus-plan'); setShowModelMenu(false); }}
+                        className={`w-full text-left px-3 py-2 text-xs hover:bg-muted transition-colors ${selectedModel === 'opus-plan' ? 'text-foreground bg-muted/50' : 'text-muted-foreground'}`}
+                      >
+                        <div className="font-medium">Opus Plan Mode</div>
+                        <div className="text-[10px] opacity-70">Use Opus 4.1 in plan mode. Sonnet 4 otherwise</div>
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
-            </div>
-            <button className="flex items-center gap-1 hover:text-foreground transition-colors" title="Model">
-              <span>Model:</span>
-              <span className="font-medium">default</span>
-            </button>
-            {connectorMode && (
-              <div className="flex items-center gap-1" title={connectorMode && connectorMode.startsWith('api') ? (connectorMode === 'api-env' ? 'API via server env' : 'API via Codex CLI') : 'Subscription (Codex CLI)'}>
-                <span className="opacity-70">Connector:</span>
-                <span className="px-2 py-0.5 rounded-md border border-zinc-700 text-zinc-300 text-xs">
-                  {connectorMode && connectorMode.startsWith('api') ? (
-                    <>API<span className="ml-1 opacity-60">{connectorMode === 'api-env' ? 'env' : 'cli'}</span></>
-                  ) : 'Subscription'}
-                </span>
-              </div>
-            )}
-            {connectorMode && (
-              <div className="flex items-center gap-1">
-                <span className="opacity-70">Connector:</span>
-                <span className="px-2 py-0.5 rounded-md border border-zinc-700 text-zinc-300 text-xs">
-                  {connectorMode === 'api' ? 'API' : 'Subscription'}
-                </span>
-              </div>
-            )}
-          </div>
-          {dangerousMode && (
-            <button
-              onClick={() => setDangerousMode(false)}
-              className="flex items-center gap-1 text-yellow-500/80 hover:text-yellow-400 transition-colors"
-              title="Dangerous mode active - click to disable"
-            >
-              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-              </svg>
-              <span>Dangerous</span>
-            </button>
-          )}
-          {!dangerousMode && !themeCodex && (
-            <button
-              onClick={() => {
-                const ok = window.confirm('Enable Dangerous mode? Codex may modify files in your real project.');
-                if (ok) setDangerousMode(true);
-              }}
-              className="opacity-0 hover:opacity-100 transition-opacity"
-              title="Enable dangerous mode"
-            >
-              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-              </svg>
-            </button>
-          )}
-        </div>
-        
-        {/* Single unified input container with dark background */}
-        <div className="space-y-4 rounded-2xl bg-muted border border-border py-8 px-6">
-          {/* Input area */}
-          <div className="flex items-center gap-3">
-            {/* plus */}
-            <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => handleImageSelect(e.target.files)} />
-            <button onClick={() => fileInputRef.current?.click()} className="w-9 h-9 rounded-full text-muted-foreground hover:text-foreground hover:bg-accent flex items-center justify-center transition-all" title="Attach">
-              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
-            </button>
-            {/* textarea */}
-            <textarea
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder=""
-              className="flex-1 text-[15px] leading-relaxed bg-transparent outline-none text-foreground placeholder:text-[#999999] resize-none py-1"
-              disabled={!isConnected || (isSessionInitializing && !sessionActive)}
-              rows={1}
-              style={{ minHeight: '60px', maxHeight: '150px', height: 'auto', overflowY: input.split('\n').length > 4 ? 'auto' : 'hidden' }}
-            />
-            {/* send */}
-            <button
-              onClick={handleSend}
-              title="Send"
-              className="relative w-9 h-9 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-all disabled:opacity-40"
-              disabled={!isConnected || (isSessionInitializing && !sessionActive) || (!input.trim() && attachments.length === 0 && imageAttachments.length === 0)}
-            >
-              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M12 5l7 7-7 7"/></svg>
-              {queueLength > 0 && (
-                <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] leading-4 text-center">
-                  {queueLength}
-                </span>
+              {cliProvider === 'codex' && (
+                <>
+                  <button className="flex items-center gap-1 hover:text-foreground transition-colors">
+                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 8a4 4 0 100 8 4 4 0 000-8z"/><path d="M12 2v6m0 8v6m10-10h-6m-8 0H2"/></svg>
+                    <span>Agent</span>
+                  </button>
+                  <button className="flex items-center gap-1 hover:text-foreground transition-colors">
+                    <span>Model:</span>
+                    <span className="font-medium">gpt-5</span>
+                  </button>
+                </>
               )}
-            </button>
-          </div>
-
-          {/* Attachments preview */}
-          {attachments.length > 0 && (
-            <div className={`flex flex-wrap items-center gap-2 ${themeCodex ? 'text-zinc-300' : ''}`}>
-              {attachments.map((att, idx) => (
-                <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-border/40 bg-background/40 text-xs">
-                  <span className="opacity-70">{att.tag}</span>
-                </span>
-              ))}
             </div>
-          )}
+          </div>
+          
+          {/* Single unified input container with dark background */}
+          <div className="space-y-4 rounded-2xl bg-muted border border-border py-8 px-6">
+            {/* Input area */}
+            <div className="flex items-center gap-3">
+              {/* plus */}
+              <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => handleImageSelect(e.target.files)} />
+              <button onClick={() => fileInputRef.current?.click()} className="w-9 h-9 rounded-full text-muted-foreground hover:text-foreground hover:bg-accent flex items-center justify-center transition-all" title="Attach">
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
+              </button>
+              {/* textarea */}
+              <textarea
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder=""
+                className="flex-1 text-[15px] leading-relaxed bg-transparent outline-none text-foreground placeholder:text-[#999999] resize-none py-1"
+                disabled={!isConnected || (isSessionInitializing && !sessionActive)}
+                rows={1}
+                style={{ minHeight: '60px', maxHeight: '150px', height: 'auto', overflowY: input.split('\n').length > 4 ? 'auto' : 'hidden' }}
+              />
+              {/* send */}
+              <button
+                onClick={handleSend}
+                title="Send"
+                className="relative w-9 h-9 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-all disabled:opacity-40"
+                disabled={!isConnected || (isSessionInitializing && !sessionActive) || (!input.trim() && attachments.length === 0 && imageAttachments.length === 0)}
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M12 5l7 7-7 7"/></svg>
+                {queueLength > 0 && cliProvider === 'codex' && (
+                  <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] leading-4 text-center">
+                    {queueLength}
+                  </span>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -1093,34 +1402,100 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
       displayMessage = `${message}${message ? '\n\n' : ''}📎 Attached: ${imageNames}`;
     }
     
-    // Mirror CLI defaults: send exactly the user's message
-    const fullMessage = message;
+    // Build final content: attachments as code blocks + images + user text
+    let prefix = '';
+    if (attachments.length > 0) {
+      const blocks = attachments.map((att, idx) => `Selected ${att.tag} (${idx + 1}):\n\n\u0060\u0060\u0060html\n${att.html}\n\u0060\u0060\u0060`).join('\n\n');
+      prefix = blocks + '\n\n';
+    }
+    // Add image data to the message
+    if (imageAttachments.length > 0) {
+      const imageInfo = imageAttachments.map((img, idx) => 
+        `Image ${idx + 1}: ${img.name} (${Math.round(img.size / 1024)}KB)\n[Image data URL provided]`
+      ).join('\n');
+      prefix += `Attached images:\n${imageInfo}\n\n`;
+    }
+    // Apply planner/model hints ONLY for Codex, not for Claude
+    let controlPrefix = '';
+    let modelHint = '';
+    
+    if (cliProvider === 'codex') {
+      // Only add planner mode for Codex
+      if (plannerMode === 'Planer') {
+        controlPrefix = 'You are in Planner mode. First, outline a short plan (bulleted), then execute only what is necessary. Keep outputs concise.\n\n';
+      } else if (plannerMode === 'Auto') {
+        controlPrefix = 'You may decide between planning or direct answer depending on user input.\n\n';
+      }
+      // Only add model hint for Codex
+      modelHint = modelLabel ? `(model: ${modelLabel})\n\n` : '';
+    }
+    
+    const fullMessage = controlPrefix + modelHint + prefix + message;
     
     // Show typing indicator
     setIsTyping(true);
     
-    // Display user message with timestamp for Codex
-    addMessage({ type: 'user', text: displayMessage, images: imageAttachments });
-    
-    // Use WebSocket for Codex
-    if (!isConnected) {
-      setIsTyping(false);
-      addMessage({ type: 'error', text: 'WebSocket not connected' });
-      return;
+    // Use WebSocket for both Claude and Codex
+    if (cliProvider === 'claude') {
+      // Display user message with timestamp for Claude
+      addMessage({ type: 'user', text: displayMessage, images: imageAttachments });
+      
+      // Map selected model to Claude model names
+      const modelMap = {
+        'default': null, // Let Claude use default
+        'opus': 'opus',
+        'sonnet': 'sonnet', 
+        'opus-plan': 'opus' // Opus with plan mode
+      };
+      
+      // Check WebSocket connection
+      if (!isConnected) {
+        setIsTyping(false);
+        addMessage({ type: 'error', text: 'No WebSocket connection. Please refresh the page.' });
+        return;
+      }
+      
+      // Build options for Claude command
+      const options = {
+        projectPath: projectPath || process.cwd(),
+        cwd: projectPath || process.cwd(),
+        sessionId: claudeSessionId,
+        resume: !!claudeSessionId && claudeSessionActive,
+        model: modelMap[selectedModel],
+        images: imageAttachments.map(img => img.dataUrl)
+      };
+      
+      // Send via WebSocket using the same format as the backend expects
+      sendMessage({ 
+        type: 'claude-command', 
+        command: fullMessage,
+        options 
+      });
+      
+    } else {
+      // Display user message with timestamp for Codex
+      addMessage({ type: 'user', text: displayMessage, images: imageAttachments });
+      
+      // Use WebSocket for Codex
+      if (!isConnected) {
+        setIsTyping(false);
+        addMessage({ type: 'error', text: 'WebSocket not connected' });
+        return;
+      }
+      
+      const options = {
+        projectPath: projectPath || process.cwd(),
+        cwd: projectPath || process.cwd(),
+        dangerous: dangerousMode,
+        plannerMode,
+        modelLabel,
+        resumeRolloutPath: (!sessionActive && primedResumeRef.current) ? primedResumeRef.current : undefined
+      };
+      
+      sendMessage({ type: 'codex-command', command: fullMessage, options });
+      // Clear one-shot resume after use
+      primedResumeRef.current = null;
     }
-    
-    const options = {
-      projectPath: projectPath || process.cwd(),
-      cwd: projectPath || process.cwd(),
-      dangerous: dangerousMode,
-      plannerMode,
-      modelLabel,
-      resumeRolloutPath: (!sessionActive && primedResumeRef.current) ? primedResumeRef.current : undefined
-    };
-    
-    sendMessage({ type: 'codex-command', command: fullMessage, options });
-    // Clear one-shot resume after use
-    primedResumeRef.current = null;
     
     setAttachments([]);
     setImageAttachments([]);
@@ -1155,25 +1530,10 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
     return () => window.removeEventListener('storage', onStorage);
   }, [reconnect]);
 
-  // Load connector mode on mount when auth is ready
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const token = localStorage.getItem('auth-token');
-        if (!token) return;
-        const res = await fetch('/api/codex/connector', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.mode) setConnectorMode(data.mode);
-          if (typeof data.hasKey === 'boolean') setConnectorHasKey(!!data.hasKey);
-        }
-      } catch {}
-    };
-    if (authReady) load();
-  }, [authReady]);
+  // Claude messages now come via WebSocket, not SSE stream
+  // Process them in the wsMessages effect above
 
+  // Claude now uses WebSocket - no need to establish separate SSE connection
 
   // Auto-scroll: instant and responsive
   useEffect(() => {
@@ -1469,22 +1829,81 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
       )}
       
 
-      {/* Persistent Open Button */}
+      {/* Persistent Open Button with Provider Dropdown */}
       <div className="absolute right-4 bottom-4 z-40 flex items-center gap-2">
         {!sessionActive ? (
-          <button
-            onClick={() => {
-              // Start session before opening the panel
-              startSession();
-              if (onBeforeOpen) onBeforeOpen();
-              setOpen(true);
-            }}
-            className="px-4 py-2 rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 transition-colors text-sm disabled:opacity-60"
-            title={`Start Codex session for ${getHost()}`}
-            disabled={isSessionInitializing || !isConnected}
-          >
-            {isSessionInitializing ? 'Starting…' : 'Start Codex Session'}
-          </button>
+          <div className="flex items-center gap-1">
+            <div className="relative">
+              <button
+                onClick={() => setShowProviderMenu(!showProviderMenu)}
+                className="px-3 py-2 rounded-l-full bg-primary/90 text-primary-foreground hover:bg-primary transition-colors text-sm flex items-center gap-1 border-r border-primary-foreground/20"
+                title="Select AI Provider"
+              >
+                {cliProvider === 'claude' ? (
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M12 8v8M8 12h8"/>
+                  </svg>
+                ) : (
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="6" y="6" width="12" height="12" rx="2"/>
+                    <path d="M12 9v6M9 12h6"/>
+                  </svg>
+                )}
+                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M6 9l6 6 6-6"/>
+                </svg>
+              </button>
+              {showProviderMenu && (
+                <div className="absolute bottom-full mb-2 bg-background border border-border rounded-lg shadow-xl overflow-hidden">
+                  <button
+                    onClick={() => {
+                      setCliProvider('codex');
+                      saveCliProvider('codex');
+                      setShowProviderMenu(false);
+                    }}
+                    className={`flex items-center gap-2 px-4 py-2 text-sm hover:bg-accent/20 transition-colors ${cliProvider === 'codex' ? 'bg-accent/10 text-accent-foreground' : ''}`}
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="6" y="6" width="12" height="12" rx="2"/>
+                      <path d="M12 9v6M9 12h6"/>
+                    </svg>
+                    Codex AI
+                  </button>
+                  <button
+                    onClick={() => {
+                      setCliProvider('claude');
+                      saveCliProvider('claude');
+                      setShowProviderMenu(false);
+                    }}
+                    className={`flex items-center gap-2 px-4 py-2 text-sm hover:bg-accent/20 transition-colors ${cliProvider === 'claude' ? 'bg-accent/10 text-accent-foreground' : ''}`}
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="10"/>
+                      <path d="M12 8v8M8 12h8"/>
+                    </svg>
+                    Claude Code
+                  </button>
+                </div>
+              )}
+            </div>
+            <button
+              onClick={() => {
+                // Prevent double-clicking by checking if already initializing
+                if (isSessionInitializing) return;
+                
+                // Start session before opening the panel
+                startSession();
+                if (onBeforeOpen) onBeforeOpen();
+                setOpen(true);
+              }}
+              className="px-4 py-2 rounded-r-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 transition-colors text-sm disabled:opacity-60"
+              title={`Start ${cliProvider === 'claude' ? 'Claude Code' : 'Codex'} session for ${getHost()}`}
+              disabled={isSessionInitializing || !isConnected}
+            >
+              {isSessionInitializing ? 'Starting…' : `Start ${cliProvider === 'claude' ? 'Claude Code' : 'Codex'} Session`}
+            </button>
+          </div>
         ) : (
           <>
             <button
