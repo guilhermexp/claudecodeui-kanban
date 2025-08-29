@@ -525,7 +525,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
 
   // Shared chat panel content (can render inline or into a portal)
   const renderPanelContent = () => (
-    <div className={`${embedded ? 'w-full h-full flex flex-col bg-background' : themeCodex ? 'w-full max-h-[70vh] bg-black rounded-2xl flex flex-col overflow-hidden border border-zinc-900' : 'w-full max-h-[70vh] chat-glass border border-border/40 rounded-2xl flex flex-col overflow-hidden shadow-2xl'}`}>
+    <div className={`${embedded ? 'w-full h-full flex flex-col bg-background' : themeCodex ? 'w-full max-h-[70vh] bg-white dark:bg-black rounded-2xl flex flex-col overflow-hidden border border-zinc-300 dark:border-zinc-900' : 'w-full max-h-[70vh] chat-glass border border-border/40 rounded-2xl flex flex-col overflow-hidden shadow-2xl'}`}>
       {/* Show minimal session info even in embedded mode */}
       {embedded && sessionActive && sessionId && (
         <div className="px-3 py-1 border-b border-border/20 bg-muted/30">
@@ -537,9 +537,9 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
         </div>
       )}
       {!embedded && (
-      <div className={`${themeCodex ? 'px-3 py-2' : 'px-4 py-3'} border-b border-border/30 flex items-center justify-between ${themeCodex ? 'bg-black text-white' : 'bg-muted/50 backdrop-blur-sm'}`}>
+      <div className={`${themeCodex ? 'px-3 py-2' : 'px-4 py-3'} border-b border-border/30 flex items-center justify-between ${themeCodex ? 'bg-white dark:bg-black text-zinc-900 dark:text-white' : 'bg-muted/50 backdrop-blur-sm'}`}>
         <div className="flex items-center gap-2">
-          <div className={`text-sm tracking-widest font-extrabold ${themeCodex ? 'text-zinc-400' : ''}`}>CODEX</div>
+          <div className={`text-sm tracking-widest font-extrabold ${themeCodex ? 'text-zinc-600 dark:text-zinc-400' : ''}`}>CODEX</div>
           <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-green-500' : 'bg-yellow-500'}`} />
           {(sessionActive && sessionId) || clientSessionId ? (
             <span className="text-[10px] text-muted-foreground/60 font-mono" title={`Session: ${(sessionId || clientSessionId)}`}>
@@ -626,9 +626,9 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
           </div>
         )}
         {messages.length === 0 && !isTyping && !sessionStarted && (
-          <div className={`flex items-center justify-center ${themeCodex ? 'h-[50vh] bg-black' : 'h-full min-h-[200px]'} `}>
+          <div className={`flex items-center justify-center ${themeCodex ? 'h-[50vh] bg-white dark:bg-black' : 'h-full min-h-[200px]'} `}>
             <div className="opacity-30">
-              <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" className={`${themeCodex ? 'text-zinc-600' : 'text-foreground'}`}>
+              <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" className={`${themeCodex ? 'text-zinc-400 dark:text-zinc-600' : 'text-foreground'}`}>
                 <path strokeWidth="1.5" d="M12 3a9 9 0 100 18 9 9 0 000-18Zm0 4a5 5 0 100 10 5 5 0 000-10Z"/>
               </svg>
             </div>
