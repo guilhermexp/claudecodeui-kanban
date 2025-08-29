@@ -53,6 +53,7 @@ import usageRoutes from './routes/usage.js';
 import systemRoutes from './routes/system.js';
 import filesRoutes from './routes/files.js';
 import claudeHooksRoutes from './routes/claude-hooks.js';
+import claudeStreamRoutes from './routes/claude-stream.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 import cleanupService from './cleanupService.js';
@@ -72,6 +73,42 @@ let projectsWatcher = null;
 // Simple in-memory caches
 const projectAnalysisCache = new Map(); // key: projectDir, value: { data, ts }
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+
+// System-level settings: Codex auth mode override (module-scope)
+let serverCodexAuthMode = null; // 'subscription' | 'api' | null (fallback to env)
+const systemSettingsPath = path.join(__dirname, 'database', 'system-settings.json');
+
+function loadSystemSettings() {
+  try {
+    const raw = fs.readFileSync(systemSettingsPath, 'utf8');
+    const data = JSON.parse(raw);
+    if (data && (data.codexAuthMode === 'subscription' || data.codexAuthMode === 'api')) {
+      serverCodexAuthMode = data.codexAuthMode;
+    }
+  } catch {}
+}
+
+function saveSystemSettings() {
+  try {
+    const current = fs.existsSync(systemSettingsPath)
+      ? JSON.parse(fs.readFileSync(systemSettingsPath, 'utf8'))
+      : {};
+    const next = { ...current, codexAuthMode: serverCodexAuthMode };
+    fs.mkdirSync(path.dirname(systemSettingsPath), { recursive: true });
+    fs.writeFileSync(systemSettingsPath, JSON.stringify(next, null, 2));
+    return true;
+  } catch (e) {
+    console.error('Failed to save system settings:', e.message);
+    return false;
+  }
+}
+
+// Load persisted settings at startup
+loadSystemSettings();
+
+
+// System-level settings: Codex auth mode override (moved earlier for scope)
 
 function getCached(map, key) {
   const item = map.get(key);
@@ -362,6 +399,34 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
+// Codex connector mode (protected)
+app.get('/api/codex/connector', authenticateToken, (req, res) => {
+  try {
+    const canUseApi = true;
+    const mode = serverCodexAuthMode || (process.env.CODEX_AUTH_MODE || 'api-cli');
+    res.json({ mode, canUseApi, hasKey: !!process.env.OPENAI_API_KEY });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/codex/connector', authenticateToken, (req, res) => {
+  try {
+    const { mode } = req.body || {};
+    if (!mode || !['subscription', 'api', 'api-cli', 'api-env'].includes(mode)) {
+      return res.status(400).json({ error: 'mode must be "subscription", "api-cli" or "api-env"' });
+    }
+    serverCodexAuthMode = (mode === 'api') ? 'api-env' : mode;
+    const ok = saveSystemSettings();
+    if (!ok) return res.status(500).json({ error: 'Failed to persist connector mode' });
+    // Broadcast to all websocket clients for real-time updates
+    try { broadcastToAll({ type: 'codex-connector', mode }); } catch {}
+    res.json({ success: true, mode });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 
 // Git API Routes (protected)
 app.use('/api/git', authenticateToken, gitRoutes);
@@ -374,6 +439,7 @@ app.use('/api/usage', usageRoutes);
 app.use('/api/system', authenticateToken, systemRoutes);
 app.use('/api/files', filesRoutes);
 app.use('/api/claude-hooks', authenticateToken, claudeHooksRoutes);
+app.use('/api/claude-stream', claudeStreamRoutes);
 
 // Sound files API route for Vibe Kanban sound notifications
 app.get('/api/sounds/:soundFile', (req, res) => {
@@ -1102,6 +1168,33 @@ function handleChatConnection(ws, request) {
   
   // Track Codex session per connection
   let codexSession = null; // { sessionId, rolloutPath }
+  // Queue of Codex commands per connection
+  const codexQueue = [];
+  let codexProcessing = false;
+  let codexCurrentProcess = null; // CLI only
+
+  const processNextCodex = async () => {
+    if (codexProcessing) return;
+    const task = codexQueue.shift();
+    if (!task) {
+      try { ws.send(JSON.stringify({ type: 'codex-idle' })); } catch {}
+      return;
+    }
+    codexProcessing = true;
+    try {
+      // Notify busy state and current queue length
+      try { ws.send(JSON.stringify({ type: 'codex-busy', queueLength: codexQueue.length })); } catch {}
+      codexCurrentProcess = null;
+      await spawnCodex(task.command, { ...task.options, onProcess: (p) => { codexCurrentProcess = p; } }, ws);
+    } catch (e) {
+      // Errors are already forwarded by spawnCodex via ws events
+    } finally {
+      codexProcessing = false;
+      codexCurrentProcess = null;
+      // Proceed to next queued task
+      setTimeout(processNextCodex, 0);
+    }
+  };
   
   ws.on('message', async (message) => {
     try {
@@ -1173,6 +1266,7 @@ function handleChatConnection(ws, request) {
       }
       
       if (data.type === 'claude-command') {
+        console.log('Received claude-command:', { command: data.command?.substring(0, 50), options: data.options });
         
         // Register user's active project for smart broadcasting
         if (data.options?.projectPath) {
@@ -1182,7 +1276,6 @@ function handleChatConnection(ws, request) {
         
         await spawnClaude(data.command, data.options, ws);
       } else if (data.type === 'codex-command') {
-        
         // Register user's active project for smart broadcasting
         if (data.options?.projectPath) {
           const projectName = data.options.projectPath.split('/').pop();
@@ -1192,12 +1285,43 @@ function handleChatConnection(ws, request) {
         const opts = {
           ...(data.options || {}),
           dangerous: !!(data.options && data.options.dangerous),
+          authMode: 'api-cli',
           resumeRolloutPath: codexSession?.rolloutPath || null,
           onSession: (sessionId, rolloutPath) => {
             codexSession = { sessionId, rolloutPath };
           }
         };
-        await spawnCodex(data.command, opts, ws);
+        // Enqueue and process sequentially
+        const enqueued = { command: data.command, options: opts };
+        codexQueue.push(enqueued);
+        const position = codexQueue.length - 1; // 0 means next
+        try { ws.send(JSON.stringify({ type: 'codex-queued', position, queueLength: codexQueue.length })); } catch {}
+        processNextCodex();
+      } else if (data.type === 'codex-abort') {
+        // Clear all queued tasks
+        codexQueue.length = 0;
+        // Try to terminate the running process gracefully
+        let aborted = false;
+        try {
+          if (codexCurrentProcess && typeof codexCurrentProcess.kill === 'function') {
+            aborted = codexCurrentProcess.kill('SIGINT');
+            setTimeout(() => {
+              if (codexCurrentProcess) {
+                try { codexCurrentProcess.kill('SIGKILL'); } catch {}
+              }
+            }, 1000);
+          }
+        } catch {}
+        codexProcessing = false;
+        try { ws.send(JSON.stringify({ type: 'codex-aborted', success: aborted })); } catch {}
+        // Inform idle state
+        try { ws.send(JSON.stringify({ type: 'codex-idle' })); } catch {}
+      } else if (data.type === 'claude-start-session') {
+        // Start a new Claude session
+        ws.send(JSON.stringify({ type: 'claude-session-started' }));
+      } else if (data.type === 'claude-end-session') {
+        // End Claude session
+        ws.send(JSON.stringify({ type: 'claude-session-closed' }));
       } else if (data.type === 'codex-start-session') {
         // Acknowledgement-only: do NOT spawn Codex here to avoid autonomous actions
         // The first real user message will start Codex and capture the session/rollout
@@ -2425,6 +2549,7 @@ async function gracefulShutdown(signal) {
   
   // Close database connections
   if (global.db) {
+// System-level settings: Codex auth mode override
     try {
       global.db.close();
     } catch (error) {

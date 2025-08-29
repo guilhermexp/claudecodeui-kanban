@@ -17,6 +17,7 @@ import CodeEditor from './CodeEditor';
 import Shell from './Shell';
 import GitPanel from './GitPanel';
 import OverlayChat from './OverlayChat';
+import OverlayChatClaude from './OverlayChatClaude';
 import ResourceMonitor from './ResourceMonitor';
 import ErrorBoundary from './ErrorBoundary';
 import { TextShimmer } from './ui/text-shimmer';
@@ -24,7 +25,7 @@ import { ConfigProvider } from './vibe-kanban/config-provider';
 import ProjectsModal from './ProjectsModal';
 import KanbanModal from './KanbanModal';
 import DarkModeToggle from './DarkModeToggle';
-import { Folder, Kanban } from 'lucide-react';
+import { Folder, Kanban, Settings as SettingsIcon } from 'lucide-react';
 
 function MainContent({ 
   selectedProject, 
@@ -334,9 +335,15 @@ function MainContent({
             </div>
           )}
           
-          {/* Modern Tab Navigation - Right Side */}
-          {/* Modern Tab Navigation - Right Side */}
-          <div className="flex-shrink-0 hidden sm:block order-3">
+          {/* Right-side controls (desktop): Settings + tabs */}
+          <div className="flex-shrink-0 hidden sm:flex order-3 items-center gap-2">
+            <button
+              onClick={onShowSettings}
+              className="p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent transition-colors flex items-center gap-2"
+              title="Tools Settings"
+            >
+              <SettingsIcon className="w-5 h-5" />
+            </button>
             <div className="relative flex items-center bg-muted rounded-lg p-1 gap-1">
               
               <button
@@ -392,16 +399,19 @@ function MainContent({
                   <span className="hidden sm:inline">Source Control</span>
                 </span>
               </button>
-              {/* Assistant (Codex) button - opens side chat panel */}
+              {/* Codex AI button - opens Codex chat panel */}
               <button
                 onClick={() => {
-                  if (activeSidePanel === 'chat') {
+                  if (activeSidePanel === 'codex-chat') {
                     setActiveSidePanel(null);
                   } else {
-                    if (hasPreviewOpen && window.closePreview) {
-                      window.closePreview();
+                    // Don't close preview - allow both to be open
+                    // Close Claude chat if open
+                    if (activeSidePanel === 'claude-chat') {
+                      setActiveSidePanel('codex-chat');
+                    } else {
+                      setActiveSidePanel('codex-chat');
                     }
-                    setActiveSidePanel('chat');
                     if (sidebarOpen && onSidebarOpen) {
                       onSidebarOpen();
                     }
@@ -409,17 +419,51 @@ function MainContent({
                   setTimeout(() => setShellResizeTrigger(prev => prev + 1), 350);
                 }}
                 className={`relative inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
-                  activeSidePanel === 'chat'
+                  activeSidePanel === 'codex-chat'
                     ? 'bg-background text-foreground shadow-sm'
                     : 'text-muted-foreground hover:text-foreground hover:bg-accent'
                 }`}
-                title="Open Assistant"
+                title="Open Codex AI Assistant"
               >
                 <span className="flex items-center gap-1 sm:gap-1.5 leading-none">
                   <svg className="w-3 sm:w-3.5 h-3 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h6m-7 7l-2 2V5a2 2 0 012-2h14a2 2 0 012 2v12a2 2 0 01-2 2H7z" />
                   </svg>
-                  <span className="hidden sm:inline">Assistant</span>
+                  <span className="hidden sm:inline">Codex</span>
+                </span>
+              </button>
+              
+              {/* Claude Code button - opens Claude chat panel */}
+              <button
+                onClick={() => {
+                  if (activeSidePanel === 'claude-chat') {
+                    setActiveSidePanel(null);
+                  } else {
+                    // Don't close preview - allow both to be open
+                    // Close Codex chat if open
+                    if (activeSidePanel === 'codex-chat') {
+                      setActiveSidePanel('claude-chat');
+                    } else {
+                      setActiveSidePanel('claude-chat');
+                    }
+                    if (sidebarOpen && onSidebarOpen) {
+                      onSidebarOpen();
+                    }
+                  }
+                  setTimeout(() => setShellResizeTrigger(prev => prev + 1), 350);
+                }}
+                className={`relative inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
+                  activeSidePanel === 'claude-chat'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                }`}
+                title="Open Claude Code Assistant"
+              >
+                <span className="flex items-center gap-1 sm:gap-1.5 leading-none">
+                  <svg className="w-3 sm:w-3.5 h-3 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                  <span className="hidden sm:inline">Claude</span>
                 </span>
               </button>
 
@@ -443,7 +487,7 @@ function MainContent({
       {/* Main content wrapper with side panels */}
       <div className="flex-1 min-h-0 flex relative">
         {/* Shell Area - main content flexes; assistant panel occupies width when open */}
-        <div className={`min-h-0 flex flex-col transition-all duration-300 ${activeSidePanel === 'chat' ? 'px-0' : 'px-2 md:px-4'} flex-1`}>
+        <div className={`min-h-0 flex flex-col transition-all duration-300 flex-1`}>
           <div className="h-full overflow-hidden">
             <ConfigProvider>
               <Shell 
@@ -468,20 +512,41 @@ function MainContent({
           </div>
         </div>
 
-        {/* Assistant panel integrated (not overlay) */}
+        {/* Codex Chat panel integrated */}
         {!isMobile && (
           <div className={`transition-all duration-300 ease-in-out overflow-hidden ${
-            activeSidePanel === 'chat' ? 'w-[320px] sm:w-[380px] md:w-[420px] border-l border-border' : 'w-0'
+            activeSidePanel === 'codex-chat' ? 'w-[320px] sm:w-[380px] md:w-[420px] border-l border-border' : 'w-0'
           }`}>
-            {activeSidePanel === 'chat' && (
+            {activeSidePanel === 'codex-chat' && (
               <OverlayChat 
                 embedded={true}
                 disableInlinePanel={true}
                 projectPath={selectedProject?.path}
                 previewUrl={null}
                 onPanelClosed={() => setActiveSidePanel(null)}
+                cliProviderFixed="codex"
+                chatId="codex-instance"
               />
             )}
+          </div>
+        )}
+        
+        {/* Claude Chat panel integrated */}
+        {!isMobile && (
+          <div className={`transition-all duration-300 ease-in-out overflow-hidden ${
+            activeSidePanel === 'claude-chat' ? 'w-[320px] sm:w-[380px] md:w-[420px] border-l border-border' : 'w-0'
+          }`}>
+            <div style={{ display: activeSidePanel === 'claude-chat' ? 'block' : 'none', height: '100%' }}>
+              <OverlayChatClaude 
+                embedded={true}
+                disableInlinePanel={true}
+                cliProviderFixed="claude"
+                chatId="claude-instance"
+                projectPath={selectedProject?.path}
+                previewUrl={null}
+                onPanelClosed={() => setActiveSidePanel(null)}
+              />
+            </div>
           </div>
         )}
 

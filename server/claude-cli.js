@@ -6,6 +6,7 @@ import os from 'os';
 let activeClaudeProcesses = new Map(); // Track active processes by session ID
 
 async function spawnClaude(command, options = {}, ws) {
+  console.log('spawnClaude called with:', { command: command?.substring(0, 50), options });
   return new Promise(async (resolve, reject) => {
     const { sessionId, projectPath, cwd, resume, toolsSettings, permissionMode, images, model } = options;
     let capturedSessionId = sessionId; // Track session ID throughout the process
@@ -19,43 +20,30 @@ async function spawnClaude(command, options = {}, ws) {
       skipPermissions: false
     };
     
-    // Build Claude CLI command - start with print/resume flags first
+    // Build Claude CLI command - use --print mode
     const args = [];
-    
-    // Add print flag with command if we have a command
-    if (command && command.trim()) {
-      args.push('--print', command);
-    }
-    
-    // Use cwd (actual project directory) instead of projectPath (Claude's metadata directory)
-    const workingDir = cwd || process.cwd();
-    
-    // Handle images - Claude Code CLI doesn't support direct image input
-    // We'll include a note about the images in the command text
-    let tempImagePaths = [];
-    let tempDir = null;
-    
-    if (images && images.length > 0) {
-      
-      // Add image URLs to the command
-      if (command && command.trim()) {
-        const imageUrls = images.map((img, index) => `![Image ${index + 1}](${img})`).join('\n');
-        const modifiedCommand = command + '\n\n' + imageUrls;
-        
-        // Update the command in args
-        const printIndex = args.indexOf('--print');
-        if (printIndex !== -1 && args[printIndex + 1] === command) {
-          args[printIndex + 1] = modifiedCommand;
-        }
-      }
-    }
     
     // Add resume flag if resuming
     if (resume && sessionId) {
       args.push('--resume', sessionId);
     }
     
-    // Add basic flags
+    // Add print flag with command
+    let finalCommand = command;
+    if (command && command.trim()) {
+      // Handle images - add them to the command text
+      if (images && images.length > 0) {
+        const imageUrls = images.map((img, index) => `![Image ${index + 1}](${img})`).join('\n');
+        finalCommand = command + '\n\n' + imageUrls;
+      }
+      args.push('--print', finalCommand);
+    }
+    
+    // Use cwd (actual project directory) instead of projectPath (Claude's metadata directory)
+    // If cwd is 'STANDALONE_MODE', use process.cwd() instead
+    const workingDir = (cwd && cwd !== 'STANDALONE_MODE') ? cwd : process.cwd();
+    
+    // Add basic flags - Claude Code uses stream-json format
     args.push('--output-format', 'stream-json', '--verbose');
     
     // Add MCP config flag only if MCP servers are configured
@@ -124,10 +112,16 @@ async function spawnClaude(command, options = {}, ws) {
     }
     
     // Add model for new sessions
-    if (!resume) {
-      // Get model from options or default to 'default'
-      const selectedModel = model || 'default';
-      args.push('--model', selectedModel);
+    if (!resume && model) {
+      // Only add model if explicitly provided and it's a valid Claude model
+      // Claude accepts aliases like 'sonnet', 'opus', 'haiku' or full model names
+      const validClaudeModels = ['sonnet', 'opus', 'haiku', 'claude-3-opus', 'claude-3-sonnet', 'claude-3-haiku'];
+      const isValidModel = validClaudeModels.some(m => model.toLowerCase().includes(m));
+      
+      if (isValidModel) {
+        args.push('--model', model);
+      }
+      // If no valid model, let Claude use its default
     }
     
     // Add permission mode if specified (works for both new and resumed sessions)
@@ -176,14 +170,28 @@ async function spawnClaude(command, options = {}, ws) {
       }
     }
     
-    const claudeProcess = spawn('claude', args, {
+    // Use node directly with the CLI script
+    // The claude wrapper seems to have issues with --print mode
+    const nodeCommand = '/opt/homebrew/bin/node';
+    const claudeScript = '/opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js';
+    
+    console.log('Spawning Claude with command:', nodeCommand, claudeScript, args.join(' '));
+    console.log('Working directory:', workingDir);
+    
+    const claudeProcess = spawn(nodeCommand, [claudeScript, ...args], {
       cwd: workingDir,
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env } // Inherit all environment variables
+      env: { 
+        ...process.env,
+        PATH: `/opt/homebrew/bin:/usr/local/bin:${process.env.PATH}` // Add homebrew to PATH
+      }
     });
     
+    console.log(`[SERVER] Claude process spawned with PID: ${claudeProcess.pid}`);
+    console.log(`[SERVER] Waiting for Claude CLI output...`);
     
-    // No temp files to attach anymore since we don't save images
+    // Close stdin immediately since we're using --print mode
+    claudeProcess.stdin.end();
     
     // Store process reference for potential abort
     const processKey = capturedSessionId || sessionId || Date.now().toString();
@@ -194,10 +202,13 @@ async function spawnClaude(command, options = {}, ws) {
     claudeProcess.stdout.on('data', (data) => {
       if (isFirstOutput) {
         isFirstOutput = false;
+        console.log('[SERVER] First stdout output received from Claude CLI');
       }
       const rawOutput = data.toString();
+      console.log('[SERVER] Claude stdout raw:', rawOutput.substring(0, 200)); // Log first 200 chars
       
       const lines = rawOutput.split('\n').filter(line => line.trim());
+      console.log(`[SERVER] Processing ${lines.length} lines from Claude output`);
       
       for (const line of lines) {
         try {
@@ -256,13 +267,13 @@ async function spawnClaude(command, options = {}, ws) {
       
       // Check for "No conversation found" error when trying to resume
       if (errorStr.includes('No conversation found with session ID') && resume && sessionId) {
-        console.log(`Session ${sessionId} not found in Claude CLI, creating new session instead`);
+        console.log(`Session ${sessionId} not found in Claude CLI, will create new session on next message`);
         
-        // Send a special message indicating we need to start a new session
+        // Send a special message indicating session needs to be recreated
         ws.send(JSON.stringify({
           type: 'session-not-found',
           sessionId: sessionId,
-          message: 'Session not found in Claude CLI history. Starting a new session.',
+          message: 'Previous session expired. A new session will be created.',
           shouldCreateNew: true
         }));
         
@@ -278,6 +289,9 @@ async function spawnClaude(command, options = {}, ws) {
     
     // Handle process completion
     claudeProcess.on('close', async (code) => {
+      console.log(`[SERVER] Claude process closed with code: ${code}`);
+      console.log(`[SERVER] Session ID captured: ${capturedSessionId || 'none'}`);
+      console.log(`[SERVER] Output received: ${!isFirstOutput}`);
       
       // Clean up process reference
       const finalSessionId = capturedSessionId || sessionId || processKey;
@@ -315,8 +329,11 @@ async function spawnClaude(command, options = {}, ws) {
     });
     
     // Handle stdin for interactive mode
-    if (command) {
+    if (command && command.trim() !== '') {
       // For --print mode with arguments, we don't need to write to stdin
+      claudeProcess.stdin.end();
+    } else if (command === '') {
+      // Empty command - just close stdin to let Claude initialize
       claudeProcess.stdin.end();
     } else {
       // For interactive mode, we need to write the command to stdin if provided later

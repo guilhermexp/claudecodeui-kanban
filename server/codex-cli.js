@@ -76,6 +76,9 @@ function copyDirSafe(src, dest, maxBytes = 1024 * 1024) {
 export async function spawnCodex(prompt, options = {}, ws) {
   return new Promise((resolve, reject) => {
     const { projectPath, cwd, onSession, resumeRolloutPath, suppressOutput, dangerous, plannerMode, modelLabel } = options;
+    let authMode = (options?.authMode || process.env.CODEX_AUTH_MODE || 'subscription').toLowerCase();
+    // Back-compat mapping
+    if (authMode === 'api') authMode = 'api-env';
 
     // Determine working directory. Avoid invalid placeholders like STANDALONE_MODE
     let workingDir = cwd || projectPath;
@@ -114,6 +117,7 @@ export async function spawnCodex(prompt, options = {}, ws) {
     if (dangerous) {
       commonArgs.splice(2, 0, '--dangerously-bypass-approvals-and-sandbox');
     }
+    // Propagate model when provided (prefer CLI flag if supported; fall back to config)
     if (workingDir) {
       commonArgs.push('-C', workingDir);
     }
@@ -142,6 +146,27 @@ export async function spawnCodex(prompt, options = {}, ws) {
       NODE_NO_WARNINGS: '1',
       PATH: `/opt/homebrew/bin:/usr/local/bin:${process.env.PATH || ''}`
     };
+    // Configure auth mode for Codex CLI
+    if (authMode === 'api-env') {
+      // Ensure API key is present for API mode; otherwise fallback silently
+      if (process.env.OPENAI_API_KEY) {
+        envVars.OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+      }
+      if (process.env.OPENAI_BASE_URL) envVars.OPENAI_BASE_URL = process.env.OPENAI_BASE_URL;
+      if (process.env.OPENAI_ORG_ID) envVars.OPENAI_ORG_ID = process.env.OPENAI_ORG_ID;
+    } else if (authMode === 'api-cli') {
+      delete envVars.OPENAI_API_KEY; // force CLI-managed API auth
+      delete envVars.OPENAI_BASE_URL;
+      delete envVars.OPENAI_ORG_ID;
+    } else {
+      // Subscription mode: avoid leaking API key into CLI process
+      delete envVars.OPENAI_API_KEY;
+    }
+    console.log('[Codex Spawn] authMode:', authMode);
+    const apiSource = authMode === 'api' ? (envVars.OPENAI_API_KEY ? 'env' : 'cli') : '-';
+    if (authMode === 'api-env') {
+      console.log('[Codex Spawn] apiSource:', apiSource, '(env OPENAI_API_KEY', envVars.OPENAI_API_KEY ? 'present' : 'absent', ')');
+    }
 
     const trySpawnViaNode = () => {
       if (codexScriptCandidates.length === 0) return null;
@@ -194,8 +219,23 @@ export async function spawnCodex(prompt, options = {}, ws) {
 
     // Fallback: use shell + npx (works when PATH is correct)
     const trySpawnViaShell = () => {
-      const dirFlag = workingDir ? ` -C "${workingDir}"` : '';
-      const codexCommand = `npx @openai/codex exec --json --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check${dirFlag} "${escapedPrompt}"`;
+      const parts = ['npx', '@openai/codex', 'exec', '--json', '--skip-git-repo-check'];
+      if (dangerous) {
+        parts.splice(3, 0, '--dangerously-bypass-approvals-and-sandbox');
+      }
+      // Allow extra args injection from env for future flags
+      if (process.env.CODEX_EXTRA_ARGS) {
+        const extra = process.env.CODEX_EXTRA_ARGS.split(/\s+/).filter(Boolean);
+        parts.push(...extra);
+      }
+      if (workingDir) {
+        parts.push('-C', `"${workingDir}"`);
+      }
+      if (resumeRolloutPath) {
+        parts.push('-c', `experimental_resume=${resumeRolloutPath}`);
+      }
+      parts.push(`"${escapedPrompt}"`);
+      const codexCommand = parts.join(' ');
 
       // Choose a robust shell available in most environments
       const shellCandidates = ['/bin/bash', '/bin/sh', '/usr/bin/bash', '/usr/bin/sh'];
@@ -221,8 +261,20 @@ export async function spawnCodex(prompt, options = {}, ws) {
       }
     };
 
-    // Prefer explicit bin, then node execPath strategy; fall back to shell+npx
+    // Prefer explicit bin, then default 'codex' binary, then node execPath; fall back to shell+npx
     let codexProcess = trySpawnViaBin();
+    if (!codexProcess) {
+      try {
+        console.log('[Codex Spawn] Strategy=bin(default)');
+        codexProcess = spawn('codex', commonArgs, {
+          stdio: ['pipe', 'pipe', 'pipe'],
+          env: envVars,
+          cwd: workingDir
+        });
+      } catch (e) {
+        // ignore
+      }
+    }
     if (!codexProcess) {
       codexProcess = trySpawnViaNode();
     }
@@ -235,23 +287,52 @@ export async function spawnCodex(prompt, options = {}, ws) {
       return reject(err);
     }
 
+    // Expose process handle for external cancellation
+    try { if (typeof options.onProcess === 'function') options.onProcess(codexProcess); } catch {}
+
     // Planner enforcement state
     let planApproved = plannerMode !== 'Planer';
 
     // Notify frontend that task started
     ws?.send?.(JSON.stringify({ type: 'codex-start' }));
 
-    // Handle stdout (JSON responses) - using exec mode format
+    // Handle stdout (JSON responses) - using exec mode format with robust line buffering
+    let stdoutBuffer = '';
+    let sessionAnnounced = false;
     codexProcess.stdout.on('data', (data) => {
       const output = data.toString();
-      console.log('Codex output:', output);
-      
-      // Parse JSON lines
-      const lines = output.split('\n').filter(line => line.trim());
-      
+      stdoutBuffer += output;
+      // Attempt to split into complete lines; keep last partial in buffer
+      const rawLines = stdoutBuffer.split('\n');
+      stdoutBuffer = rawLines.pop() || '';
+      const lines = rawLines.map(l => l).filter(line => line.trim());
+
       for (const line of lines) {
         try {
           const json = JSON.parse(line);
+          // Detect session id presence in stdout JSON (best effort)
+          if (!sessionAnnounced) {
+            let sid = null;
+            const uuidRe = /[0-9a-fA-F-]{36}/;
+            if (json && typeof json.session_id === 'string' && uuidRe.test(json.session_id)) {
+              sid = json.session_id;
+            } else if (json && json.session && typeof json.session.id === 'string' && uuidRe.test(json.session.id)) {
+              sid = json.session.id;
+            } else if (json && json.msg && typeof json.msg.session_id === 'string' && uuidRe.test(json.msg.session_id)) {
+              sid = json.msg.session_id;
+            } else if (json && json.msg && typeof json.msg.message === 'string') {
+              const m = /session_id:\s*([0-9a-fA-F-]{36})/.exec(json.msg.message);
+              if (m) sid = m[1];
+            }
+            if (sid) {
+              const rollout = findRolloutFilePath(sid);
+              sessionAnnounced = true;
+              if (typeof onSession === 'function') {
+                try { onSession(sid, rollout || null); } catch {}
+              }
+              ws?.send?.(JSON.stringify({ type: 'codex-session-started', sessionId: sid, rolloutPath: rollout || null }));
+            }
+          }
           
           // Skip metadata messages
           if (json.prompt || json.reasoning_summaries || json.id === undefined) {
@@ -347,10 +428,15 @@ export async function spawnCodex(prompt, options = {}, ws) {
           }
         } catch (parseError) {
           // If not JSON, could be debug output - ignore for now
-          // Reduce noise: only forward raw lines if not a suppressed warmup
+          // Reduce noise: only forward raw lines if not a suppressed warmup and short
           if (!suppressOutput) {
-            console.log('Non-JSON output from Codex:', line);
-            ws?.send?.(JSON.stringify({ type: 'codex-output', data: line }));
+            const trimmed = line.trim();
+            if (trimmed) {
+              console.log('Non-JSON output from Codex:', trimmed);
+              if (trimmed.length < 400) {
+                ws?.send?.(JSON.stringify({ type: 'codex-output', data: trimmed }));
+              }
+            }
           }
         }
       }
@@ -368,6 +454,7 @@ export async function spawnCodex(prompt, options = {}, ws) {
         if (sid) {
           const rollout = findRolloutFilePath(sid);
           sessionFound = true;
+          sessionAnnounced = true;
           if (typeof onSession === 'function') {
             try { onSession(sid, rollout || null); } catch {}
           }
