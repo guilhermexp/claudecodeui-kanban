@@ -762,7 +762,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
       <div className={`${embedded ? 'px-2 py-1.5' : 'p-3'} relative`}>
         
         <div 
-          className={`rounded-2xl border ${isDragging ? 'border-primary border-2' : themeCodex ? 'border-zinc-800 bg-zinc-900/90' : 'border-border/50 bg-muted/40 backdrop-blur-sm'} shadow-sm transition-all duration-200 focus-within:border-primary/50 relative`}
+          className={`rounded-2xl border ${isDragging ? 'border-primary border-2' : themeCodex ? 'border-zinc-700 bg-zinc-800 dark:bg-zinc-900/90' : 'border-border/50 bg-muted/40 backdrop-blur-sm'} shadow-sm transition-all duration-200 focus-within:border-primary/50 relative`}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
@@ -857,10 +857,10 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
           )}
           <div className="p-4">
             {/* Composer bubble */}
-            <div className={`flex items-center gap-2 px-3 ${themeCodex ? 'py-2.5' : 'py-2 bg-background/60 border border-border/50'} rounded-2xl`}>
+            <div className={`flex items-center gap-2 px-3 ${themeCodex ? 'py-2.5 dark:bg-transparent bg-background/80' : 'py-2 bg-background/60 border border-border/50'} rounded-2xl`}>
               {/* plus */}
               <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => handleImageSelect(e.target.files)} />
-              <button onClick={() => fileInputRef.current?.click()} className={`${themeCodex ? 'text-zinc-400 hover:text-white' : 'text-muted-foreground hover:text-foreground'} w-8 h-8 rounded-full flex items-center justify-center hover:bg-white/5`} title="Attach">
+              <button onClick={() => fileInputRef.current?.click()} className={`${themeCodex ? 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white' : 'text-muted-foreground hover:text-foreground'} w-8 h-8 rounded-full flex items-center justify-center hover:bg-zinc-200/50 dark:hover:bg-white/5`} title="Attach">
                 <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
               </button>
               {/* textarea */}
@@ -869,7 +869,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder={embedded ? 'Ask anything...' : 'Ask Codex to do anything'}
-                className={`flex-1 text-[15px] leading-relaxed bg-transparent outline-none ${themeCodex ? 'text-zinc-200 placeholder:text-zinc-500' : 'text-foreground placeholder:text-muted-foreground'} resize-none`}
+                className={`flex-1 text-[15px] leading-relaxed bg-transparent outline-none ${themeCodex ? 'text-zinc-900 dark:text-zinc-200 placeholder:text-zinc-500 dark:placeholder:text-zinc-500' : 'text-foreground placeholder:text-muted-foreground'} resize-none`}
                 disabled={!isConnected || (isSessionInitializing && !sessionActive)}
                 rows={1}
                 style={{ minHeight: '32px', maxHeight: '150px', height: 'auto', overflowY: input.split('\n').length > 5 ? 'auto' : 'hidden' }}
@@ -878,40 +878,40 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
               <button
                 onClick={handleSend}
                 title="Send"
-                className={`w-9 h-9 rounded-full flex items-center justify-center ${themeCodex ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-white' : 'bg-accent text-foreground hover:bg-primary/20 hover:text-primary'} transition-all disabled:opacity-40`}
+                className={`w-9 h-9 rounded-full flex items-center justify-center ${themeCodex ? 'bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-300 dark:hover:bg-zinc-700 hover:text-zinc-900 dark:hover:text-white' : 'bg-accent text-foreground hover:bg-primary/20 hover:text-primary'} transition-all disabled:opacity-40`}
                 disabled={!isConnected || (isSessionInitializing && !sessionActive) || (!input.trim() && attachments.length === 0 && imageAttachments.length === 0)}
               >
                 <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M13 5l7 7-7 7"/></svg>
               </button>
             </div>
             {/* Segmented controls row */}
-            <div className={`mt-2 flex items-center gap-6 ${themeCodex ? 'text-zinc-400' : 'text-muted-foreground'}`}>
+            <div className={`mt-2 flex items-center gap-6 ${themeCodex ? 'text-zinc-600 dark:text-zinc-400' : 'text-muted-foreground'}`}>
               <div className="flex items-center gap-1 text-sm cursor-pointer select-none">
                 <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 5h18v14H3z"/><path d="M8 21h8"/></svg>
                 <span>Local</span>
               </div>
               <div className="relative">
-                <button onClick={() => { setShowModeMenu(v => !v); setShowModelMenu(false); }} className="flex items-center gap-1 text-sm hover:text-white/90">
+                <button onClick={() => { setShowModeMenu(v => !v); setShowModelMenu(false); }} className="flex items-center gap-1 text-sm hover:text-zinc-900 dark:hover:text-white/90">
                   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 12a5 5 0 1 0-5-5"/><path d="M2 22a8 8 0 0 1 20 0"/></svg>
                   <span>Agent</span>
                 </button>
                 {showModeMenu && (
-                  <div className="absolute z-50 bottom-full mb-1 w-28 rounded-md border border-zinc-700 bg-zinc-900 shadow-xl">
+                  <div className="absolute z-50 bottom-full mb-1 w-28 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-xl">
                     {['Auto','Planer','Chat'].map(m => (
-                      <button key={m} onClick={() => { setPlannerMode(m); savePlannerMode(m); setShowModeMenu(false); }} className={`w-full text-left px-2 py-1.5 text-[12px] hover:bg-zinc-800 ${m===plannerMode?'text-white':'text-zinc-400'}`}>{m}</button>
+                      <button key={m} onClick={() => { setPlannerMode(m); savePlannerMode(m); setShowModeMenu(false); }} className={`w-full text-left px-2 py-1.5 text-[12px] hover:bg-zinc-100 dark:hover:bg-zinc-800 ${m===plannerMode?'text-zinc-900 dark:text-white font-semibold':'text-zinc-600 dark:text-zinc-400'}`}>{m}</button>
                     ))}
                   </div>
                 )}
               </div>
               <div className="relative">
-                <button onClick={() => { setShowModelMenu(v => !v); setShowModeMenu(false); }} className="flex items-center gap-1 text-sm hover:text-white/90">
+                <button onClick={() => { setShowModelMenu(v => !v); setShowModeMenu(false); }} className="flex items-center gap-1 text-sm hover:text-zinc-900 dark:hover:text-white/90">
                   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2v20M2 12h20"/></svg>
                   <span>Medium</span>
                 </button>
                 {showModelMenu && (
-                  <div className="absolute z-50 bottom-full mb-1 w-32 rounded-md border border-zinc-700 bg-zinc-900 shadow-xl">
+                  <div className="absolute z-50 bottom-full mb-1 w-32 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 shadow-xl">
                     {['gpt-5','gpt-4o','gpt-4o-mini'].map(m => (
-                      <button key={m} onClick={() => { setModelLabel(m); saveModelLabel(m); setShowModelMenu(false); }} className={`w-full text-left px-2 py-1.5 text-[12px] hover:bg-zinc-800 ${m===modelLabel?'text-white':'text-zinc-400'}`}>{m}</button>
+                      <button key={m} onClick={() => { setModelLabel(m); saveModelLabel(m); setShowModelMenu(false); }} className={`w-full text-left px-2 py-1.5 text-[12px] hover:bg-zinc-100 dark:hover:bg-zinc-800 ${m===modelLabel?'text-zinc-900 dark:text-white font-semibold':'text-zinc-600 dark:text-zinc-400'}`}>{m}</button>
                     ))}
                   </div>
                 )}
