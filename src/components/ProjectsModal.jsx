@@ -48,17 +48,9 @@ function ProjectsModal({
 
 
   const handleProjectClick = async (project) => {
-    // Select the project and navigate to it
+    // Select the project and prepare for a NEW session (no auto-resume)
     onProjectSelect(project);
-    
-    // Auto-select most recent session if available
-    if (project.sessions && project.sessions.length > 0) {
-      const mostRecentSession = project.sessions[0];
-      onSessionSelect(mostRecentSession);
-    } else {
-      onSessionSelect(null);
-    }
-
+    onSessionSelect(null);
     // Close modal after selection
     onClose();
   };
@@ -114,7 +106,7 @@ function ProjectsModal({
   return (
     <>
       <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-5xl max-h-[85vh] p-0 bg-card border border-border" onOpenChange={onClose}>
+      <DialogContent className="w-full max-w-5xl max-h-[85vh] p-0 bg-card border border-border mx-2 sm:mx-auto" onOpenChange={onClose}>
         <DialogHeader className="px-5 pr-10 pt-4 pb-3 border-b border-border bg-card">
           <div className="flex items-center justify-between">
             <div>
@@ -157,7 +149,7 @@ function ProjectsModal({
                 : 'No projects yet. Click "New Project" to create one.'}
             </div>
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
               {sortedProjects.map((project, index) => {
                 const projectSessions = project.sessions || [];
                 const latestSession = projectSessions[0]; // Pega apenas a última sessão
@@ -167,37 +159,76 @@ function ProjectsModal({
                   <div 
                     key={project.name || `project-${index}`} 
                     className={cn(
-                      "relative group rounded-lg border border-border bg-muted/20 hover:bg-muted/30 transition-colors flex flex-col",
+                      "relative group rounded-lg border border-border bg-muted/20 hover:bg-muted/30 transition-colors flex flex-col min-h-[120px]",
                       selectedProject?.name === project.name && "ring-1 ring-border"
                     )}
                   >
                     {/* Card Content */}
                     <div
-                      className="p-4 cursor-pointer flex-1"
+                      className="p-3 sm:p-4 cursor-pointer flex-1 overflow-hidden"
                       onClick={() => handleProjectClick(project)}
                     >
                       <div className="flex items-start gap-2 mb-2">
                         <ProjectIcon project={project} className="w-4 h-4 flex-shrink-0 text-foreground/70 mt-0.5" />
                         <div className="flex-1 min-w-0">
-                          <h3 className="text-sm font-semibold text-foreground leading-tight">
+                          <h3 className="text-xs sm:text-sm font-semibold text-foreground leading-tight truncate">
                             {(() => {
                               const pathSegments = project.path.split('/').filter(seg => seg);
                               const lastTwo = pathSegments.slice(-2).join('/');
                               return lastTwo || project.name;
                             })()}
                           </h3>
-                          <div className="text-[10px] text-muted-foreground mt-1 truncate" title={project.path}>{project.path}</div>
+                          <div className="text-[9px] sm:text-[10px] text-muted-foreground mt-1 overflow-x-auto whitespace-nowrap custom-scrollbar" title={project.path}>
+                            {project.path}
+                          </div>
                         </div>
                       </div>
 
-                      {/* Minimal meta: last activity only */}
-                      <div className="text-[11px] text-muted-foreground mt-1">
-                        {latestSession ? `Updated ${formatTimeAgo(latestSession.updated_at, currentTime)}` : 'No sessions yet'}
+                      {/* Minimal meta + explicit actions: New, Resume, View all */}
+                      <div className="mt-2 space-y-2">
+                        <div className="text-[11px] text-muted-foreground">
+                          {latestSession ? `Updated ${formatTimeAgo(latestSession.updated_at, currentTime)}` : 'No sessions yet'}
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          <button
+                            className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] rounded border border-border/60 bg-background/40 hover:bg-accent/20 text-foreground"
+                            onClick={(e) => { e.stopPropagation(); onNewSession?.(project); onClose(); }}
+                            title="New session"
+                          >
+                            <Plus className="w-3 h-3" />
+                            <span className="hidden sm:inline">New session</span>
+                            <span className="sm:hidden">New</span>
+                          </button>
+                          {latestSession && (
+                            <button
+                              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] rounded border border-border/60 bg-background/40 hover:bg-accent/20 text-foreground"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onProjectSelect(project);
+                                onSessionSelect(latestSession);
+                                onClose();
+                              }}
+                              title="Resume last session"
+                            >
+                              <Clock className="w-3 h-3" />
+                              Resume
+                            </button>
+                          )}
+                          <button
+                            className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] rounded border border-border/60 bg-background/40 hover:bg-accent/20 text-foreground"
+                            onClick={(e) => { e.stopPropagation(); navigate(`/project/${encodeURIComponent(project.name)}/sessions`); onClose(); }}
+                            title={`View all ${totalSessions} sessions`}
+                          >
+                            <Eye className="w-3 h-3" />
+                            <span className="hidden sm:inline">View all</span>
+                            <span className="sm:hidden">All</span>
+                          </button>
+                        </div>
                       </div>
                     </div>
 
-                    {/* Bottom action icons - show on hover only */}
-                    <div className="flex items-center justify-end gap-1 p-2 pt-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {/* Bottom action icons - show on hover only on larger screens */}
+                    <div className="hidden sm:flex items-center justify-end gap-1 p-2 pt-0 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
                         className="p-1 rounded hover:bg-accent transition-colors"
                         onClick={(e) => {
