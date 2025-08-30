@@ -114,24 +114,16 @@ function ProjectsModal({
   return (
     <>
       <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-6xl max-h-[85vh] p-0 bg-black/95 border-[#1a1a1a]" onOpenChange={onClose}>
-        <DialogHeader className="px-6 pr-12 pt-5 pb-4 border-b border-[#1a1a1a] bg-black/90">
+      <DialogContent className="max-w-5xl max-h-[85vh] p-0 bg-card border border-border" onOpenChange={onClose}>
+        <DialogHeader className="px-5 pr-10 pt-4 pb-3 border-b border-border bg-card">
           <div className="flex items-center justify-between">
             <div>
-              <DialogTitle className="text-xl font-semibold text-white">
-                Select Project
-              </DialogTitle>
-              <p className="text-sm text-[#888] mt-1">Choose a project to view its task board</p>
+              <DialogTitle className="text-lg font-semibold text-foreground">Select Project</DialogTitle>
+              <p className="text-xs text-muted-foreground mt-1">Choose from your recent projects</p>
             </div>
             <div className="flex items-center gap-2 mr-4">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowFolderPicker(true)}
-                className="h-8 text-[#888] hover:text-white hover:bg-[#1a1a1a]"
-              >
-                <FolderPlus className="w-4 h-4 mr-1" />
-                Browse
+              <Button variant="ghost" size="sm" onClick={() => setShowFolderPicker(true)} className="h-8 text-muted-foreground hover:text-foreground hover:bg-accent">
+                <FolderPlus className="w-4 h-4 mr-1" /> Browse
               </Button>
             </div>
           </div>
@@ -151,8 +143,8 @@ function ProjectsModal({
           </div>
         </DialogHeader>
 
-        <ScrollArea className="h-[70vh] bg-black/95">
-          <div className="p-6">
+        <ScrollArea className="h-[70vh] bg-card">
+          <div className="p-5">
           {/* Projects List */}
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
@@ -175,9 +167,8 @@ function ProjectsModal({
                   <div 
                     key={project.name || `project-${index}`} 
                     className={cn(
-                      "relative group rounded-xl border border-[#1a1a1a] bg-black/40 hover:bg-black/60 transition-all duration-200 flex flex-col",
-                      "hover:border-[#2a2a2a]",
-                      selectedProject?.name === project.name && "bg-black/70 border-[#3a3a3a]"
+                      "relative group rounded-lg border border-border bg-muted/20 hover:bg-muted/30 transition-colors flex flex-col",
+                      selectedProject?.name === project.name && "ring-1 ring-border"
                     )}
                   >
                     {/* Card Content */}
@@ -185,48 +176,30 @@ function ProjectsModal({
                       className="p-4 cursor-pointer flex-1"
                       onClick={() => handleProjectClick(project)}
                     >
-                      <div className="flex items-start gap-2 mb-3">
-                        <ProjectIcon project={project} className="w-4 h-4 flex-shrink-0 text-primary/70 mt-0.5" />
+                      <div className="flex items-start gap-2 mb-2">
+                        <ProjectIcon project={project} className="w-4 h-4 flex-shrink-0 text-foreground/70 mt-0.5" />
                         <div className="flex-1 min-w-0">
-                          {/* Show last 2 path segments as title */}
-                          <h3 className="text-sm font-medium text-white leading-tight">
+                          <h3 className="text-sm font-semibold text-foreground leading-tight">
                             {(() => {
                               const pathSegments = project.path.split('/').filter(seg => seg);
                               const lastTwo = pathSegments.slice(-2).join('/');
                               return lastTwo || project.name;
                             })()}
                           </h3>
-                          {/* Show full path below in smaller text */}
-                          <div className="text-[10px] text-[#4a4a4a] mt-1 truncate" title={project.path}>
-                            {project.path}
-                          </div>
+                          <div className="text-[10px] text-muted-foreground mt-1 truncate" title={project.path}>{project.path}</div>
                         </div>
                       </div>
 
-                      {/* Latest Session Preview - more compact */}
-                      {latestSession ? (
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-1.5">
-                            <MessageSquare className="w-3 h-3 text-[#555] flex-shrink-0" />
-                            <span className="flex-1 truncate text-xs text-[#888]">
-                              {latestSession.summary || 'Untitled session'}
-                            </span>
-                          </div>
-                          <span className="text-[10px] text-[#555] pl-4 block">
-                            {formatTimeAgo(latestSession.updated_at, currentTime)}
-                          </span>
-                        </div>
-                      ) : (
-                        <div className="text-xs text-[#555]">
-                          No sessions yet
-                        </div>
-                      )}
+                      {/* Minimal meta: last activity only */}
+                      <div className="text-[11px] text-muted-foreground mt-1">
+                        {latestSession ? `Updated ${formatTimeAgo(latestSession.updated_at, currentTime)}` : 'No sessions yet'}
+                      </div>
                     </div>
 
-                    {/* Bottom action icons - always visible */}
-                    <div className="flex items-center justify-end gap-1 p-2 pt-0">
+                    {/* Bottom action icons - show on hover only */}
+                    <div className="flex items-center justify-end gap-1 p-2 pt-0 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
-                        className="p-1 rounded hover:bg-[#2a2a2a] transition-colors"
+                        className="p-1 rounded hover:bg-accent transition-colors"
                         onClick={(e) => {
                           e.stopPropagation();
                           onNewSession?.(project);
@@ -234,10 +207,10 @@ function ProjectsModal({
                         }}
                         title="New session"
                       >
-                        <Plus className="w-3.5 h-3.5 text-[#666] hover:text-white" />
+                        <Plus className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground" />
                       </button>
                       <button
-                        className="p-1 rounded hover:bg-[#2a2a2a] transition-colors"
+                        className="p-1 rounded hover:bg-accent transition-colors"
                         onClick={(e) => {
                           e.stopPropagation();
                           navigate(`/project/${encodeURIComponent(project.name)}/sessions`);
@@ -245,7 +218,7 @@ function ProjectsModal({
                         }}
                         title={`View all ${totalSessions} sessions`}
                       >
-                        <Eye className="w-3.5 h-3.5 text-[#666] hover:text-white" />
+                        <Eye className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground" />
                       </button>
                     </div>
                   </div>

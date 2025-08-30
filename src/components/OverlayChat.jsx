@@ -665,7 +665,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
           </div>
         )}
         {messages.length === 0 && !isTyping && !sessionActive && (
-          <div className={`flex flex-col items-center justify-center gap-4 ${themeCodex ? 'h-[50vh] bg-background dark:bg-black' : 'h-full min-h-[200px]'} `}>
+          <div className={`flex flex-col items-center justify-center gap-4 h-full min-h-[240px]`}>
             <CtaButton onClick={startSession} disabled={isSessionInitializing || !isConnected} icon={false}>Start Codex AI Session</CtaButton>
           </div>
         )}
@@ -900,24 +900,6 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
               <span>Model:</span>
               <span className="font-medium">default</span>
             </button>
-            {connectorMode && (
-              <div className="flex items-center gap-1" title={connectorMode && connectorMode.startsWith('api') ? (connectorMode === 'api-env' ? 'API via server env' : 'API via Codex CLI') : 'Subscription (Codex CLI)'}>
-                <span className="opacity-70">Connector:</span>
-                <span className="px-2 py-0.5 rounded-md border border-zinc-700 text-zinc-300 text-xs">
-                  {connectorMode && connectorMode.startsWith('api') ? (
-                    <>API<span className="ml-1 opacity-60">{connectorMode === 'api-env' ? 'env' : 'cli'}</span></>
-                  ) : 'Subscription'}
-                </span>
-              </div>
-            )}
-            {connectorMode && (
-              <div className="flex items-center gap-1">
-                <span className="opacity-70">Connector:</span>
-                <span className="px-2 py-0.5 rounded-md border border-zinc-700 text-zinc-300 text-xs">
-                  {connectorMode === 'api' ? 'API' : 'Subscription'}
-                </span>
-              </div>
-            )}
           </div>
           {dangerousMode && (
             <button

@@ -219,16 +219,16 @@ function MainContent({
                     Start vibeclaude Session
                   </TextShimmer>
                 </CtaButton>
-                <p className="text-sm text-white/80">
+                <p className="text-sm text-muted-foreground">
                   Launch vibeclaude without any project constraints
                 </p>
               </div>
 
               {/* Divider */}
               <div className="flex items-center gap-4">
-                <div className="flex-1 h-px bg-white/10"></div>
-                <span className="text-xs text-white/70 font-semibold uppercase tracking-wide">OR</span>
-                <div className="flex-1 h-px bg-white/10"></div>
+                <div className="flex-1 h-px bg-border"></div>
+                <span className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">OR</span>
+                <div className="flex-1 h-px bg-border"></div>
               </div>
 
               {/* Secondary Action */}
@@ -239,7 +239,7 @@ function MainContent({
                 >
                   Browse Projects
                 </CtaButton>
-                <p className="text-sm text-white/80">
+                <p className="text-sm text-muted-foreground">
                   Select from your existing projects
                 </p>
               </div>
@@ -270,7 +270,7 @@ function MainContent({
   return (
     <div className="h-full min-h-0 flex flex-col relative overflow-hidden">
       {/* Header with tabs */}
-      <div className="h-12 md:h-14 px-3 md:px-4 flex items-center flex-shrink-0 relative z-50">
+      <div className="h-12 md:h-14 px-3 md:px-4 flex items-center flex-shrink-0 relative z-50 bg-background">
         <div className="flex items-center justify-between gap-4 md:gap-6 w-full">
           <div className="flex items-center space-x-2 sm:space-x-3 flex-1 order-1">
             {isMobile && (
@@ -315,18 +315,6 @@ function MainContent({
               Context: {contextWindowPercentage}%
             </div>
           )}
-          
-          {/* Right-side controls (desktop): Settings only. Tabs are centered separately */}
-          <div className="hidden sm:flex order-3 items-center gap-2">
-            <button
-              onClick={onShowSettings}
-              className="p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent transition-colors flex items-center gap-2"
-              title="Tools Settings"
-            >
-              <SettingsIcon className="w-5 h-5" />
-            </button>
-            {/* Old tabs container removed from here */}
-          </div>
         </div>
 
         {/* Centered tabs container across the header */}
@@ -468,20 +456,30 @@ function MainContent({
             </div>
           </div>
           
-          {/* Dark Mode Toggle */}
-          <div className="flex-shrink-0 order-4">
-            <DarkModeToggle />
-          </div>
-          
-          {/* System Monitor - Right Side */}
-          <div className="flex-shrink-0 order-5">
-            <ResourceMonitor />
+          {/* Right-side controls group - Settings, Dark Mode, System */}
+          <div className="flex absolute right-4 top-1/2 -translate-y-1/2 z-40">
+            <div className="flex items-center bg-muted rounded-lg p-1 gap-1 shadow-sm">
+              {/* Settings */}
+              <button
+                onClick={onShowSettings}
+                className="p-1.5 text-muted-foreground hover:text-foreground rounded-md hover:bg-accent transition-colors"
+                title="Tools Settings"
+              >
+                <SettingsIcon className="w-4 h-4" />
+              </button>
+              
+              {/* Dark Mode Toggle */}
+              <DarkModeToggle />
+              
+              {/* System Monitor */}
+              <ResourceMonitor />
+            </div>
           </div>
         </div>
 
-      <div className="flex-1 min-h-0 flex relative">
+      <div className="flex-1 min-h-0 flex relative bg-background">
         {/* Shell Area - main content flexes; assistant panel occupies width when open */}
-        <div className={`min-h-0 flex flex-col transition-all duration-300 flex-1`}>
+        <div className={`min-h-0 flex flex-col transition-all duration-300 flex-1 bg-background`}>
           <div className="h-full overflow-hidden">
             <ConfigProvider>
               <Shell 
@@ -527,10 +525,10 @@ function MainContent({
         
         {/* Claude Chat panel integrated */}
         {!isMobile && (
-          <div className={`transition-all duration-300 ease-in-out overflow-hidden ${
+          <div className={`transition-all duration-300 ease-in-out overflow-hidden bg-black ${
             activeSidePanel === 'claude-chat' ? 'w-[320px] sm:w-[380px] md:w-[420px] border-l border-border' : 'w-0'
           }`}>
-            <div style={{ display: activeSidePanel === 'claude-chat' ? 'block' : 'none', height: '100%' }}>
+            <div style={{ display: activeSidePanel === 'claude-chat' ? 'block' : 'none', height: '100%', backgroundColor: 'black' }}>
               <OverlayChatClaude 
                 embedded={true}
                 disableInlinePanel={true}
