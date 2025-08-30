@@ -360,7 +360,7 @@ const ClaudeChat = React.memo(function ClaudeChat({ projectPath, previewUrl, emb
 
   // Shared chat panel content (can render inline or into a portal)
   const renderPanelContent = () => (
-    <div className={`${embedded ? 'w-full h-full flex flex-col bg-background' : themeCodex ? 'w-full max-h-[70vh] bg-zinc-900 dark:bg-black rounded-2xl flex flex-col overflow-hidden border border-zinc-700 dark:border-zinc-900' : 'w-full max-h-[70vh] chat-glass border border-border/40 rounded-2xl flex flex-col overflow-hidden shadow-2xl'}`}>
+    <div className={`${embedded ? 'w-full h-full flex flex-col bg-background' : 'w-full max-h-[70vh] bg-background rounded-2xl flex flex-col overflow-hidden border border-border shadow-2xl'}`}>
       {/* Show Claude Code info in embedded mode */}
       {embedded && (
         <div className="px-3 py-2 border-b border-border/20 bg-muted/30">
@@ -377,7 +377,7 @@ const ClaudeChat = React.memo(function ClaudeChat({ projectPath, previewUrl, emb
         </div>
       )}
       {!embedded && (
-      <div className={`${themeCodex ? 'px-3 py-2' : 'px-4 py-3'} border-b border-border/30 flex items-center justify-between ${themeCodex ? 'bg-zinc-900 dark:bg-black text-zinc-900 dark:text-white' : 'bg-muted/50 backdrop-blur-sm'}`}>
+      <div className={`px-4 py-3 border-b border-border/30 flex items-center justify-between bg-muted/50 backdrop-blur-sm`}>
         <div className="flex items-center gap-2">
           <div className={`text-sm tracking-widest font-extrabold ${themeCodex ? 'text-zinc-400' : ''}`}>CLAUDE CODE</div>
           <div className={`w-1.5 h-1.5 rounded-full ${claudeStreamConnected ? 'bg-green-500' : 'bg-yellow-500'}`} />
@@ -455,12 +455,7 @@ const ClaudeChat = React.memo(function ClaudeChat({ projectPath, previewUrl, emb
           </div>
         )}
         {messages.length === 0 && !isTyping && !sessionActive && (
-          <div className={`flex flex-col items-center justify-center gap-4 ${themeCodex ? 'h-[50vh] bg-background dark:bg-black' : 'h-full min-h-[200px]'} `}>
-            <div className="opacity-30">
-              <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" className={`${themeCodex ? 'text-zinc-600' : 'text-foreground'}`}>
-                <path strokeWidth="1.5" d="M12 3a9 9 0 100 18 9 9 0 000-18Zm0 4a5 5 0 100 10 5 5 0 000-10Z"/>
-              </svg>
-            </div>
+          <div className={`flex flex-col items-center justify-center gap-4 h-full min-h-[200px]`}>
             <CtaButton onClick={startSession} disabled={isSessionInitializing || !claudeStreamConnected} icon={false} variant="default">
               {isSessionInitializing ? 'Starting...' : 'Start Claude Code Session'}
             </CtaButton>
