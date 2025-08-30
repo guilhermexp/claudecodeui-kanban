@@ -2,6 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Preview framework loader animations */
+@keyframes widthPulse {
+  0% { width: 10%; }
+  50% { width: 65%; }
+  100% { width: 95%; }
+}
+
+@keyframes floatPulse {
+  0% { transform: translateY(0); opacity: 0.9; }
+  50% { transform: translateY(-3px); opacity: 1; }
+  100% { transform: translateY(0); opacity: 0.9; }
+}
+
 /* iOS PWA Safe Area Support */
 html {
   height: 100%;
@@ -944,20 +957,7 @@ body {
     animation: spin 1s linear infinite;
   }
   
-  /* Slower spin animation for gear icon */
-  .animate-spin-slow {
-    animation: spin 3s linear infinite;
-  }
   
-  /* Force hardware acceleration for smoother animation on mobile */
-  .loading-spinner {
-    animation: spin 1s linear infinite;
-    will-change: transform;
-    transform: translateZ(0);
-    -webkit-transform: translateZ(0);
-    backface-visibility: hidden;
-    -webkit-backface-visibility: hidden;
-  }
   
   /* Improved textarea styling */
   .chat-input-placeholder {
@@ -1138,10 +1138,6 @@ body {
     pointer-events: auto;
   }
   
-  /* Ensure drag overlay doesn't interfere with input */
-  .drag-overlay {
-    pointer-events: none;
-  }
   
   /* Stabilize layout during drag operations */
   textarea:focus,

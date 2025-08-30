@@ -136,8 +136,8 @@ export const resourceMonitor = (req, res, next) => {
       });
     }
 
-    // Log high memory usage (increased threshold to reduce noise)
-    if (memoryDiff.heapUsed > 200 * 1024 * 1024) { // 200MB (was 50MB)
+    // Log high memory usage (threshold tuned to reduce noise)
+    if (memoryDiff.heapUsed > 300 * 1024 * 1024) { // 300MB
       rateLimitLogger.warn('High memory usage request', {
         event: 'high_memory_usage',
         path: req.path,

@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import OverlayChat from './OverlayChat';
+import FileManagerSimple from './FileManagerSimple';
+import CtaButton from './ui/CtaButton';
 
-function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, isMobile, initialPaused = false }) {
+function PreviewPanel({ url, projectPath, projectName = null, onClose, onRefresh, onOpenExternal, isMobile, initialPaused = false }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [currentUrl, setCurrentUrl] = useState(url || '');
@@ -15,16 +16,143 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
   const [showPermissionInfo, setShowPermissionInfo] = useState(false);
   const [elementSelectionMode, setElementSelectionMode] = useState(false); // Direct element selection
   const [selectedElement, setSelectedElement] = useState(null); // Captured element data
+  const [deviceMode, setDeviceMode] = useState('desktop'); // 'desktop' | 'mobile'
+  const [showFileTree, setShowFileTree] = useState(true);
+  const [fileTree, setFileTree] = useState([]);
   
   // Debug state changes
   useEffect(() => {
-    console.log('🔍 Element selection mode changed to:', elementSelectionMode);
+    // Debug: Element selection mode changed
   }, [elementSelectionMode]);
   const iframeRef = useRef(null);
   const logsRef = useRef(null);
+  const startTimerRef = useRef(null);
 
   // Track if user has manually edited the URL
   const [userEditedUrl, setUserEditedUrl] = useState(false);
+  const [uiUrl, setUiUrl] = useState(''); // Friendly URL shown in input
+  
+  // Backend-driven preview lifecycle
+  const [previewRunning, setPreviewRunning] = useState(false);
+  const [starting, setStarting] = useState(false);
+  const [stopping, setStopping] = useState(false);
+  const pingTimerRef = useRef(null);
+  const pingAttemptsRef = useRef(0);
+
+  const refreshPreviewStatus = async () => {
+    if (!projectName) return;
+    try {
+      const token = localStorage.getItem('auth-token');
+      const r = await fetch(`/api/projects/${encodeURIComponent(projectName)}/preview/status`, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      });
+      if (r.ok) {
+        const d = await r.json();
+        const running = !!d.running;
+        setPreviewRunning(running);
+        if (running && !userEditedUrl && !isPaused) {
+          setCurrentUrl(`/preview/${encodeURIComponent(projectName)}/`);
+          if (d.url) setUiUrl(d.url);
+        }
+      }
+    } catch {}
+  };
+
+  useEffect(() => { refreshPreviewStatus(); }, [projectName]);
+
+  const startBackendPreview = async () => {
+    if (!projectName || starting) return;
+    setStarting(true);
+    setShowFileTree(false);
+    try {
+      const token = localStorage.getItem('auth-token');
+      const r = await fetch(`/api/projects/${encodeURIComponent(projectName)}/preview/start`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) }, body: JSON.stringify({}) });
+      if (r.ok) {
+        const d = await r.json();
+        setPreviewRunning(true);
+        if (d.url) {
+          // Use same-origin proxy path for element selection & console capture
+          setCurrentUrl(`/preview/${encodeURIComponent(projectName)}/`);
+          setUiUrl(d.url);
+          setUserEditedUrl(false);
+          // Proactively ping the URL until it responds
+          waitForServer(d.url);
+        }
+      }
+    } catch {}
+    // Keep loader until iframe load or timeout
+    if (startTimerRef.current) clearTimeout(startTimerRef.current);
+    startTimerRef.current = setTimeout(() => setStarting(false), 15000);
+  };
+
+  const waitForServer = (url) => {
+    try { if (pingTimerRef.current) clearTimeout(pingTimerRef.current); } catch {}
+    pingAttemptsRef.current = 0;
+    const attempt = async () => {
+      pingAttemptsRef.current += 1;
+      try {
+        const controller = new AbortController();
+        const t = setTimeout(() => controller.abort(), 800);
+        // Use no-cors to avoid CORS errors; success if fetch resolves
+        await fetch(url, { mode: 'no-cors', cache: 'no-cache', signal: controller.signal });
+        clearTimeout(t);
+        setStarting(false);
+        setPreviewRunning(true);
+        handleRefresh();
+        return;
+      } catch (e) {
+        // keep trying
+      }
+      if (pingAttemptsRef.current < 30) { // ~24s total
+        pingTimerRef.current = setTimeout(attempt, 800);
+      } else {
+        setStarting(false);
+      }
+    };
+    pingTimerRef.current = setTimeout(attempt, 300);
+  };
+
+  const stopBackendPreview = async () => {
+    if (!projectName || stopping) return;
+    setStopping(true);
+    try {
+      const token = localStorage.getItem('auth-token');
+      await fetch(`/api/projects/${encodeURIComponent(projectName)}/preview/stop`, { method: 'POST', headers: token ? { 'Authorization': `Bearer ${token}` } : {} });
+    } catch {}
+    setStopping(false);
+    setPreviewRunning(false);
+    setStarting(false);
+    setIsLoading(false);
+    setCurrentUrl('');
+    try { if (startTimerRef.current) clearTimeout(startTimerRef.current); } catch {}
+    try { if (pingTimerRef.current) clearTimeout(pingTimerRef.current); } catch {}
+  };
+
+  // Friendly screen when preview is not running
+  const [framework, setFramework] = useState(null);
+  useEffect(() => {
+    // Try to detect framework from package.json
+    (async () => {
+      try {
+        if (!projectPath) return;
+        const token = localStorage.getItem('auth-token');
+        const pkgPath = `${projectPath}/package.json`;
+        const r = await fetch(`/api/files/read?path=${encodeURIComponent(pkgPath)}`, { headers: token ? { 'Authorization': `Bearer ${token}` } : {} });
+        if (!r.ok) return;
+        const text = await r.text();
+        const pkg = JSON.parse(text);
+        const deps = { ...(pkg.dependencies||{}), ...(pkg.devDependencies||{}) };
+        if (deps.next) setFramework('Next.js');
+        else if (deps.vite) setFramework('Vite');
+        else if (deps['react-scripts']) setFramework('Create React App');
+        else if (deps.remix) setFramework('Remix');
+        else if (deps.astro) setFramework('Astro');
+        else if (deps['@sveltejs/kit']) setFramework('SvelteKit');
+        else if (deps.nuxt || deps['nuxt3']) setFramework('Nuxt');
+        else setFramework(null);
+      } catch {}
+    })();
+  }, [projectPath]);
   
   useEffect(() => {
     // Only update from props if user hasn't edited the URL
@@ -35,6 +163,27 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
       setLogs([]);
     }
   }, [url]);
+
+  // Load project file tree when toggled open
+  useEffect(() => {
+    if (!showFileTree || !projectName) return;
+    let aborted = false;
+    (async () => {
+      try {
+        const token = localStorage.getItem('auth-token');
+        const r = await fetch(`/api/projects/${encodeURIComponent(projectName)}/files`, {
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+        });
+        if (r.ok) {
+          const data = await r.json();
+          if (!aborted) setFileTree(Array.isArray(data) ? data : []);
+        }
+      } catch {}
+    })();
+    return () => { aborted = true; };
+  }, [showFileTree, projectName]);
+
+  // File content preview removed here; FileManagerSimple cuida da visualização/edição
 
   // Check microphone permission status
   const checkMicrophonePermission = async () => {
@@ -48,7 +197,7 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
       });
     } catch (e) {
       // Permissions API might not be available or microphone not supported
-      console.log('Could not check microphone permission:', e);
+      // Could not check microphone permission
     }
   };
 
@@ -83,7 +232,7 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
     const handleMessage = (event) => {
       // Debug all messages
       if (event.data) {
-        console.log('📨 PreviewPanel got message:', event.data);
+        // Debug: PreviewPanel got message
         if (event.data.type === 'test-message') {
           alert('📨 TEST MESSAGE RECEIVED FROM: ' + event.data.from);
         }
@@ -145,7 +294,7 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
       
       // Handle console capture ready notification
       if (event.data && event.data.type === 'console-capture-ready') {
-        console.log('Console capture initialized for preview');
+        // Console capture initialized for preview
         setCaptureReady(true);
         if (captureReadyTimer.current) {
           clearTimeout(captureReadyTimer.current);
@@ -433,7 +582,7 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
                   head.appendChild(script);
                 }
                 
-                console.log('Console capture injected successfully');
+                // Console capture injected successfully
               }
             } catch (e) {
               // Cross-origin restriction, can't inject script - this is expected for external URLs
@@ -521,7 +670,7 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
       
       // Format URL if needed
       let urlToLoad = currentUrl;
-      if (currentUrl && !currentUrl.startsWith('http')) {
+      if (currentUrl && !currentUrl.startsWith('http') && !currentUrl.startsWith('/')) {
         urlToLoad = 'http://' + currentUrl;
       }
       
@@ -535,6 +684,7 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
     window.refreshPreview = handleRefresh;
     return () => {
       delete window.refreshPreview;
+      if (startTimerRef.current) clearTimeout(startTimerRef.current);
     };
   }, [currentUrl, isPaused]);
 
@@ -549,7 +699,7 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
         urlToLoad = 'http://' + urlToLoad;
       }
       
-      console.log('🎯 Resuming with URL:', urlToLoad, 'pausedUrl:', pausedUrl, 'currentUrl:', currentUrl);
+      // Debug: Resuming with URL
       setCurrentUrl(urlToLoad);
       setPausedUrl(null);
       setUserEditedUrl(false); // Reset the flag after using the edited URL
@@ -628,26 +778,17 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
     }
   }, [showLogs]);
   
-  // Handle element selection mode
+  // Handle element selection mode (no reload)
   useEffect(() => {
-    console.log('🔄 Element selection useEffect triggered. Mode:', elementSelectionMode, 'IFrame exists:', !!iframeRef.current);
-    
-    // Reload iframe when selection mode changes to apply/remove sandbox
-    if (iframeRef.current && !isPaused && currentUrl) {
-      const iframe = iframeRef.current;
-      // Force reload to apply new sandbox settings
-      console.log('🔄 Reloading iframe to apply sandbox changes...');
-      iframe.src = iframe.src;
-    }
     
     if (!elementSelectionMode || !iframeRef.current) {
-      console.log('⏹️ Element selection disabled or no iframe');
+      // Debug: Element selection disabled or no iframe
       return;
     }
     
     const handleElementSelected = (event) => {
       if (event.data?.type === 'element-selected') {
-        console.log('✅ Element selected:', event.data.data);
+        // Debug: Element selected
         setSelectedElement(event.data.data);
         setElementSelectionMode(false);
         
@@ -664,14 +805,11 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
     
     // Inject selection script after a delay
     const timer = setTimeout(() => {
-      console.log('🎯 Element selection activation attempt:');
-      console.log('  - elementSelectionMode:', elementSelectionMode);
-      console.log('  - iframeRef.current exists:', !!iframeRef.current);
-      console.log('  - iframe src:', iframeRef.current?.src);
+      // Debug: Element selection activation attempt
       
       if (iframeRef.current && elementSelectionMode) {
         const iframe = iframeRef.current;
-        console.log('🎯 Injecting element selector script...');
+        // Debug: Injecting element selector script
         
         // SIMPLES: Sempre tenta injetar no iframe principal (que agora sempre é a aplicação)
         try {
@@ -680,7 +818,7 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
           if (iframeDoc) {
             // Check if script already injected
             if (iframeDoc.querySelector('#element-selector-script')) {
-              console.log('Element selector already injected');
+              // Debug: Element selector already injected
               return;
             }
             
@@ -805,16 +943,16 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
               })();
             `;
             iframeDoc.body.appendChild(script);
-            console.log('✅ Element selector script injected successfully! Click any element in the preview to select it.');
+            // Debug: Element selector script injected successfully
           } else {
-            console.error('❌ Cannot access iframe document - iframeDoc is null');
+            // Error: Cannot access iframe document
           }
         } catch (error) {
-          console.error('❌ Failed to inject element selector:', error.message);
+          // Error: Failed to inject element selector
           // Try alternative approach with postMessage
           const iframe = iframeRef.current;
           if (iframe && iframe.contentWindow) {
-            console.log('Trying postMessage approach');
+            // Debug: Trying postMessage approach
             iframe.contentWindow.postMessage({ 
               type: 'enable-element-selection',
               enabled: true 
@@ -850,7 +988,7 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
             }, '*');
           }
         } catch (e) {
-          console.log('Cleanup error (expected for cross-origin):', e);
+          // Debug: Cleanup error (expected for cross-origin)
         }
       }
     };
@@ -862,6 +1000,11 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
 
   const handleIframeLoad = () => {
     setIsLoading(false);
+    setStarting(false);
+    if (startTimerRef.current) {
+      clearTimeout(startTimerRef.current);
+      startTimerRef.current = null;
+    }
   };
 
   const handleIframeError = (event) => {
@@ -878,6 +1021,9 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
   const isValidPreviewUrl = (url) => {
     // Empty URL is valid (for paused state)
     if (!url || url.trim() === '') return true;
+    // Allow same-origin proxy paths
+    if (url.startsWith('/preview/')) return true;
+    if (url.startsWith('/')) return true;
     
     try {
       // Add http:// if missing
@@ -948,35 +1094,59 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
   }
 
   return (
-    <div className="h-full flex flex-col bg-card rounded-xl border border-border relative">
+    <div className="h-full flex flex-col bg-background rounded-xl border border-border relative">
       {/* Preview Toolbar */}
       <div className="flex items-center justify-between px-2 py-2 border-b border-border">
         <div className="flex items-center gap-1.5 flex-1 min-w-0">
           {/* URL Display */}
           <div className="flex items-center gap-2 flex-1 min-w-0">
             <div 
-              className={`w-2 h-2 rounded-full ${isPaused ? 'bg-yellow-500' : 'bg-green-500 animate-pulse'}`} 
-              title={isPaused ? "Paused" : "Connected"} 
+              className={`w-2 h-2 rounded-full ${previewRunning ? 'bg-green-500 animate-pulse' : 'bg-gray-500'}`} 
+              title={previewRunning ? 'Running' : 'Stopped'} 
             />
             <input
               type="text"
-              value={isPaused && pausedUrl ? pausedUrl : currentUrl}
+              value={uiUrl || currentUrl}
               onChange={(e) => {
-                setUserEditedUrl(true); // Mark that user has edited
-                if (isPaused) {
-                  // Quando pausado, atualiza a URL que será usada ao despausar
-                  setPausedUrl(e.target.value);
-                } else {
-                  setCurrentUrl(e.target.value);
-                }
+                setUserEditedUrl(true);
+                setUiUrl(e.target.value);
               }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
-                  if (!isPaused) {
+                  // Map typed URL to proxy path for same-origin features
+                  try {
+                    let newUi = (uiUrl || '').trim();
+                    if (!newUi) return;
+                    if (newUi.startsWith('/preview/')) {
+                      setCurrentUrl(newUi);
+                      setUserEditedUrl(false);
+                      handleRefresh();
+                      return;
+                    }
+                    if (newUi.startsWith('http')) {
+                      const u = new URL(newUi);
+                      const proxy = `/preview/${encodeURIComponent(projectName)}${u.pathname}${u.search}${u.hash}`;
+                      setCurrentUrl(proxy);
+                      setUiUrl(newUi);
+                      setUserEditedUrl(false);
+                      handleRefresh();
+                      return;
+                    }
+                    // Relative path -> mount under proxy root
+                    if (newUi.startsWith('/')) {
+                      const proxy = `/preview/${encodeURIComponent(projectName)}${newUi}`;
+                      setCurrentUrl(proxy);
+                      setUserEditedUrl(false);
+                      handleRefresh();
+                      return;
+                    }
+                    // Fallback: treat as host without protocol
+                    const proxy = `/preview/${encodeURIComponent(projectName)}/`;
+                    setCurrentUrl(proxy);
+                    setUserEditedUrl(false);
                     handleRefresh();
-                  } else {
-                    // Se estiver pausado e apertar Enter, despausar e ir para a URL
-                    handleTogglePause();
+                  } catch {
+                    handleRefresh();
                   }
                 }
               }}
@@ -987,11 +1157,77 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
 
           {/* Action Buttons */}
           <div className="flex items-center gap-1">
+            {/* File tree toggle */}
+            {projectName && (
+              <button
+                onClick={() => setShowFileTree(v => !v)}
+                className={`p-1.5 rounded-md hover:bg-accent transition-colors ${showFileTree ? 'opacity-100' : 'opacity-80'}`}
+                title={showFileTree ? 'Hide project files' : 'Show project files'}
+              >
+                {/* Folder icon */}
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M3 7h5l2 2h11v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/>
+                </svg>
+              </button>
+            )}
+            {/* Device mode */}
+            <div className="hidden md:flex items-center gap-1">
+              <button
+                onClick={() => setDeviceMode('desktop')}
+                className={`p-1.5 rounded-md hover:bg-accent transition-colors ${deviceMode==='desktop' ? 'opacity-100' : 'opacity-70'}`}
+                title="Desktop preview"
+              >
+                {/* Monitor icon */}
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="5" width="18" height="12" rx="2"/>
+                  <path d="M8 21h8M12 17v4"/>
+                </svg>
+              </button>
+              <button
+                onClick={() => setDeviceMode('mobile')}
+                className={`p-1.5 rounded-md hover:bg-accent transition-colors ${deviceMode==='mobile' ? 'opacity-100' : 'opacity-70'}`}
+                title="Mobile preview"
+              >
+                {/* Mobile icon */}
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="7" y="3" width="10" height="18" rx="2"/>
+                  <circle cx="12" cy="17" r="1"/>
+                </svg>
+              </button>
+            </div>
+            {/* Backend preview lifecycle */}
+            {projectName && (
+              previewRunning ? (
+                <button
+                  onClick={stopBackendPreview}
+                  disabled={stopping}
+                  className={`p-1.5 rounded-md hover:bg-accent transition-colors ${stopping ? 'opacity-50' : ''}`}
+                  title="Stop preview"
+                >
+                  {/* Stop icon */}
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="8" y="8" width="8" height="8"/>
+                  </svg>
+                </button>
+              ) : (
+                <button
+                  onClick={startBackendPreview}
+                  disabled={starting}
+                  className={`p-1.5 rounded-md hover:bg-accent transition-colors ${starting ? 'opacity-50' : ''}`}
+                  title="Start preview"
+                >
+                  {/* Play icon */}
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M8 5v14l11-7z"/>
+                  </svg>
+                </button>
+              )
+            )}
             
             {/* Element Selection Toggle */}
             <button
               onClick={() => {
-                console.log('🎯 Element selection button clicked! Current state:', elementSelectionMode);
+                // Debug: Element selection button clicked
                 setElementSelectionMode(!elementSelectionMode);
               }}
               className={`p-1.5 rounded-md transition-colors ${
@@ -1000,7 +1236,7 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
                   : 'hover:bg-accent'
               }`}
               title={elementSelectionMode ? "Element selection active - Click any element" : "Click to select elements"}
-              disabled={isPaused}
+              
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2z" />
@@ -1020,27 +1256,12 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
               aria-hidden="true"
             />
 
-            <button
-              onClick={handleTogglePause}
-              className={`p-1.5 rounded-md transition-colors ${isPaused ? 'bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-600 dark:text-yellow-400' : 'hover:bg-accent'}`}
-              title={isPaused ? "Resume preview" : "Pause preview (disconnect)"}
-            >
-              {isPaused ? (
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              ) : (
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              )}
-            </button>
+            {/* Pause/Play toggle removed */}
             <button
               onClick={handleRefresh}
               className="p-1.5 hover:bg-accent rounded-md transition-colors"
               title="Refresh preview"
-              disabled={isPaused}
+              
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -1247,7 +1468,7 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
           </div>
         )}
 
-        {isPaused && (
+        {isPaused && false && (
           <div className="absolute inset-0 flex items-center justify-center bg-background z-10">
             <div className="text-center">
               <div className="w-16 h-16 mx-auto mb-4 bg-yellow-500/10 rounded-full flex items-center justify-center">
@@ -1271,8 +1492,8 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
           </div>
         )}
 
-        {isLoading && !isPaused && (
-          <div className="absolute inset-0 flex items-center justify-center bg-background/50 backdrop-blur-sm z-10">
+        {isLoading && !starting && currentUrl && previewRunning && (
+          <div className="absolute inset-0 flex items-center justify-center bg-background/50 z-10">
             <div className="text-center">
               <div className="w-8 h-8 mx-auto mb-2">
                 <div 
@@ -1306,25 +1527,43 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
         )}
 
         {/* Iframe principal - sempre mostra a aplicação */}
-        <iframe
-          ref={iframeRef}
-          src={
-            isPaused 
-              ? 'about:blank' 
-              : (currentUrl && !currentUrl.startsWith('http') ? 'http://' + currentUrl : currentUrl)
-          }
-          className="w-full h-full border-0"
-          onLoad={handleIframeLoad}
-          onError={handleIframeError}
-          title="Preview"
-          loading="lazy"
-          data-preview-frame="true"
-          // Remove sandbox when element selection is active to allow script injection
-          {...(!elementSelectionMode && {
-            sandbox: "allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads allow-storage-access-by-user-activation allow-top-navigation-by-user-activation"
-          })}
-          allow="microphone *; camera *; geolocation *; accelerometer *; gyroscope *; magnetometer *; midi *; encrypted-media *"
-        />
+        {/* Optional side file panel */}
+        {showFileTree && projectName && projectPath && (
+          <div className="absolute inset-0 z-30">
+            <FileManagerSimple 
+              selectedProject={{ name: projectName, path: projectPath }} 
+              onClose={() => setShowFileTree(false)}
+            />
+          </div>
+        )}
+
+        <div className={`w-full h-full flex items-center justify-center bg-background`}>
+          {(starting || !previewRunning || !currentUrl) ? (
+            <div className="text-center text-foreground/90">
+              <ClaudableLoader starting={starting} onStart={startBackendPreview} />
+            </div>
+          ) : (
+            <div className={`${deviceMode==='mobile' ? 'w-[375px] h-[667px] rounded-[20px] border-8 border-neutral-800 shadow-2xl overflow-hidden' : 'w-full h-full'} bg-background`}>
+              <iframe
+                ref={iframeRef}
+                src={(currentUrl && (!currentUrl.startsWith('http') && !currentUrl.startsWith('/')) ? 'http://' + currentUrl : currentUrl) || 'about:blank'}
+                className="w-full h-full border-0"
+                style={{ backgroundColor: 'transparent' }}
+                onLoad={handleIframeLoad}
+                onError={handleIframeError}
+                title="Preview"
+                loading="lazy"
+                data-preview-frame="true"
+                {...(!elementSelectionMode && {
+                  sandbox: "allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads allow-storage-access-by-user-activation allow-top-navigation-by-user-activation"
+                })}
+                allow="microphone *; camera *; geolocation *; accelerometer *; gyroscope *; magnetometer *; midi *; encrypted-media *"
+              />
+            </div>
+          )}
+        </div>
+
+        {/* File viewer duplicado removido: FileManagerSimple assume a visualização/edição */}
         
       </div>
       
@@ -1380,10 +1619,104 @@ function PreviewPanel({ url, projectPath, onClose, onRefresh, onOpenExternal, is
         </div>
       )}
       
-      {/* OverlayChat - floating button/tray inside Preview */}
-      <OverlayChat projectPath={projectPath} />
+      {/* OverlayChat removed from preview to keep panel clean */}
     </div>
   );
 }
 
 export default React.memo(PreviewPanel);
+
+function ClaudableLoader({ starting, onStart }) {
+  return (
+    <div className="text-center">
+      <RingLogo spinning={starting} />
+      <div className="mt-6">{!starting && (<CtaButton onClick={onStart}>Start Preview</CtaButton>)}</div>
+      <h2 className="text-3xl font-semibold mt-6">{starting ? 'Starting Preview…' : 'Preview Not Running'}</h2>
+      <p className="text-sm text-white/60 mt-2">Start your development server to see live changes</p>
+    </div>
+  );
+}
+
+function RingLogo({ spinning }) {
+  return (
+    <svg width="220" height="220" viewBox="0 0 100 100" className="mx-auto" style={spinning ? { animation: 'spin 1.8s linear infinite' } : undefined}>
+      <g fill="#b56a52">
+        <path d="M46 5a45 45 0 0 1 8 0v18a27 27 0 0 0-8 0z"/>
+        <path d="M74 12a45 45 0 0 1 6 6l-13 13a27 27 0 0 0-4-4z"/>
+        <path d="M95 46a45 45 0 0 1 0 8h-18a27 27 0 0 0 0-8z"/>
+        <path d="M82 74a45 45 0 0 1-6 6l-13-13a27 27 0 0 0 4-4z"/>
+        <path d="M54 95a45 45 0 0 1-8 0V77a27 27 0 0 0 8 0z"/>
+        <path d="M26 88a45 45 0 0 1-6-6l13-13a27 27 0 0 0 4 4z"/>
+        <path d="M5 54a45 45 0 0 1 0-8h18a27 27 0 0 0 0 8z"/>
+        <path d="M18 26a45 45 0 0 1 6-6l13 13a27 27 0 0 0-4 4z"/>
+      </g>
+      <circle cx="50" cy="50" r="34" fill="none" stroke="#000" strokeOpacity="0.3" strokeWidth="2"/>
+    </svg>
+  );
+}
+
+function FrameworkIcon({ name }) {
+  const color = '#ffbe55';
+  const common = { width: 24, height: 24 };
+  if (/next/i.test(name)) {
+    return (
+      <svg {...common} viewBox="0 0 48 48">
+        <circle cx="24" cy="24" r="22" fill="none" stroke={color} strokeWidth="2" />
+        <path d="M14 30l8-12 12 18" stroke={color} strokeWidth="3" fill="none" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (/vite/i.test(name)) {
+    return (
+      <svg {...common} viewBox="0 0 48 48">
+        <path d="M24 4l8 10-8 28-8-28 8-10z" fill="none" stroke={color} strokeWidth="2" />
+        <path d="M24 12l4 5-4 16-4-16 4-5z" fill={color} />
+      </svg>
+    );
+  }
+  if (/react|cra/i.test(name)) {
+    return (
+      <svg {...common} viewBox="0 0 48 48">
+        <circle cx="24" cy="24" r="3" fill={color} />
+        <ellipse cx="24" cy="24" rx="18" ry="8" stroke={color} strokeWidth="2" fill="none" />
+        <ellipse cx="24" cy="24" rx="18" ry="8" stroke={color} strokeWidth="2" fill="none" transform="rotate(60 24 24)" />
+        <ellipse cx="24" cy="24" rx="18" ry="8" stroke={color} strokeWidth="2" fill="none" transform="rotate(-60 24 24)" />
+      </svg>
+    );
+  }
+  if (/astro/i.test(name)) {
+    return (
+      <svg {...common} viewBox="0 0 48 48">
+        <path d="M24 8l14 30H10L24 8z" fill="none" stroke={color} strokeWidth="2" />
+      </svg>
+    );
+  }
+  if (/svelte|sveltekit/i.test(name)) {
+    return (
+      <svg {...common} viewBox="0 0 48 48">
+        <path d="M30 12c-4-3-10-2-13 2l-4 6c-3 4-2 10 2 13s10 2 13-2l4-6c3-4 2-10-2-13z" fill="none" stroke={color} strokeWidth="2" />
+      </svg>
+    );
+  }
+  if (/nuxt/i.test(name)) {
+    return (
+      <svg {...common} viewBox="0 0 48 48">
+        <path d="M8 36l10-18 10 18H8z" fill="none" stroke={color} strokeWidth="2" />
+        <path d="M36 36L24 14" stroke={color} strokeWidth="2" />
+      </svg>
+    );
+  }
+  if (/remix/i.test(name)) {
+    return (
+      <svg {...common} viewBox="0 0 48 48">
+        <rect x="10" y="10" width="28" height="10" rx="2" stroke={color} strokeWidth="2" fill="none" />
+        <rect x="10" y="26" width="20" height="12" rx="2" stroke={color} strokeWidth="2" fill="none" />
+      </svg>
+    );
+  }
+  return (
+    <svg {...common} viewBox="0 0 48 48">
+      <circle cx="24" cy="24" r="20" fill="none" stroke={color} strokeWidth="2" />
+    </svg>
+  );
+}

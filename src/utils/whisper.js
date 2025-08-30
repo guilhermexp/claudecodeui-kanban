@@ -16,12 +16,7 @@ export async function transcribeWithWhisper(audioBlob, onStatusChange) {
         onStatusChange('transcribing');
       }
   
-      console.log('Starting transcription with mode:', whisperMode);
-      console.log('Audio blob type:', audioBlob.type, 'size:', audioBlob.size);
-  
       const response = await api.transcribe(formData);
-  
-      console.log('Transcription response status:', response.status);
   
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -33,7 +28,6 @@ export async function transcribeWithWhisper(audioBlob, onStatusChange) {
       }
   
       const data = await response.json();
-      console.log('Transcription result:', data);
       return data.text || '';
     } catch (error) {
       console.error('Transcription failed:', error);

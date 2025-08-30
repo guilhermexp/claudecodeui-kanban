@@ -72,7 +72,6 @@ router.get('/stream/:sessionId', authenticateToken, async (req, res) => {
 
     // Handle client disconnect
     req.on('close', () => {
-        console.log(`[Claude Stream] Client disconnected from session ${sessionId}`);
         const session = activeSessions.get(sessionId);
         if (session) {
             session.abortController.abort();
@@ -111,7 +110,6 @@ router.post('/message/:sessionId', authenticateToken, async (req, res) => {
                 // Update the session key to the new sessionId
                 activeSessions.delete(key);
                 activeSessions.set(sessionId, session);
-                console.log(`[Claude Stream] Migrated session from ${key} to ${sessionId}`);
                 break;
             }
         }
@@ -148,7 +146,6 @@ router.post('/message/:sessionId', authenticateToken, async (req, res) => {
         });
 
         // Spawn Claude process using the direct CLI with proper execution
-        console.log(`[Claude Stream] Starting Claude CLI for session ${sessionId}`);
         
         // Use full path to npx to avoid PATH issues
         let spawnCommand = '/opt/homebrew/bin/npx';
@@ -171,8 +168,6 @@ router.post('/message/:sessionId', authenticateToken, async (req, res) => {
             spawnArgs.push('-i', img);
         });
         
-        console.log(`[Claude Stream] Command: ${spawnCommand}`);
-        console.log(`[Claude Stream] Args:`, spawnArgs);
         
         // Use spawn with proper configuration
         const claudeProcess = spawn(spawnCommand, spawnArgs, {
@@ -213,7 +208,6 @@ router.post('/message/:sessionId', authenticateToken, async (req, res) => {
                         
                         // Update the session mapping with the REAL session ID
                         if (sessionId !== capturedSessionId) {
-                            console.log(`[Claude Stream] Real session ID captured: ${capturedSessionId} (was using temporary: ${sessionId})`);
                             // Move the session to the real ID
                             activeSessions.delete(sessionId);
                             activeSessions.set(capturedSessionId, session);

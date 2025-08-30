@@ -454,7 +454,37 @@ class VibeKanbanCleanupService {
         });
       }
       
-      // TODO: Adicionar verificações de integridade quando tiver acesso ao banco
+      // Check database integrity using SQLite PRAGMA commands
+      try {
+        const db = await import('better-sqlite3').then(m => m.default);
+        const database = new db(dbPath);
+        
+        // Run integrity check
+        const integrityCheck = database.prepare('PRAGMA integrity_check').get();
+        if (integrityCheck && integrityCheck.integrity_check !== 'ok') {
+          this.logger.error('Database integrity check failed', {
+            event: 'database_integrity_failure',
+            result: integrityCheck
+          });
+        }
+        
+        // Check foreign key integrity
+        const foreignKeyCheck = database.prepare('PRAGMA foreign_key_check').all();
+        if (foreignKeyCheck && foreignKeyCheck.length > 0) {
+          this.logger.warn('Foreign key violations found', {
+            event: 'foreign_key_violations',
+            violations: foreignKeyCheck.length
+          });
+        }
+        
+        database.close();
+      } catch (integrityError) {
+        // SQLite module may not be available, skip integrity checks
+        this.logger.debug('Database integrity check skipped', {
+          event: 'integrity_check_skipped',
+          reason: integrityError.message
+        });
+      }
       
     } catch (error) {
       this.logger.warn('Database health check failed', {
