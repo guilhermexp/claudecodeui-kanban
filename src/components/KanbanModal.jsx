@@ -47,9 +47,9 @@ function KanbanModal({
       
       // Load Vibe Kanban projects only
       try {
-        console.log('[KanbanModal] Loading Vibe projects...');
+        // Debug: Loading Vibe projects
         const vibeProjectsData = await projectsApi.getAll();
-        console.log('[KanbanModal] Vibe projects loaded:', vibeProjectsData);
+        // Debug: Vibe projects loaded
         setVibeProjects(vibeProjectsData || []);
         
         // Load task counts for each project
@@ -146,8 +146,7 @@ function KanbanModal({
                 <div className="ml-4 relative">
                 <button
                   onClick={() => {
-                    console.log('[KanbanModal] Dropdown clicked. Current projects:', vibeProjects);
-                    console.log('[KanbanModal] Loading state:', loadingProjects);
+                    // Debug: Dropdown clicked
                     setDropdownOpen(!dropdownOpen);
                   }}
                   className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg bg-accent/50 hover:bg-accent transition-colors"

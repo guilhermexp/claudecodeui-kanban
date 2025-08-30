@@ -26,6 +26,7 @@ import ProjectsModal from './ProjectsModal';
 import KanbanModal from './KanbanModal';
 import DarkModeToggle from './DarkModeToggle';
 import { Folder, Kanban, Settings as SettingsIcon } from 'lucide-react';
+import CtaButton from './ui/CtaButton';
 
 function MainContent({ 
   selectedProject, 
@@ -203,52 +204,42 @@ function MainContent({
             <div className="space-y-8">
               {/* Primary Action */}
               <div className="space-y-4">
-                <button
+                <CtaButton
                   onClick={() => {
                     if (onStartStandaloneSession) {
                       onStartStandaloneSession();
                     }
                   }}
-                  className="group inline-flex items-center gap-3 px-8 py-4 bg-neutral-900 text-white rounded-xl font-semibold hover:bg-neutral-800 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-[1.02]"
+                  className="group inline-flex items-center gap-3"
                 >
-                  <div className="w-6 h-6 rounded-lg bg-white/20 flex items-center justify-center">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3" />
-                    </svg>
-                  </div>
                   <TextShimmer 
                     duration={6}
                     className="text-lg font-semibold"
                   >
                     Start vibeclaude Session
                   </TextShimmer>
-                </button>
-                <p className="text-sm text-muted-foreground">
+                </CtaButton>
+                <p className="text-sm text-white/80">
                   Launch vibeclaude without any project constraints
                 </p>
               </div>
 
               {/* Divider */}
               <div className="flex items-center gap-4">
-                <div className="flex-1 h-px bg-border"></div>
-                <span className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Or</span>
-                <div className="flex-1 h-px bg-border"></div>
+                <div className="flex-1 h-px bg-white/10"></div>
+                <span className="text-xs text-white/70 font-semibold uppercase tracking-wide">OR</span>
+                <div className="flex-1 h-px bg-white/10"></div>
               </div>
 
               {/* Secondary Action */}
               <div className="space-y-4">
-                <button
+                <CtaButton
                   onClick={() => setShowProjectsModal(true)}
-                  className="inline-flex items-center gap-3 px-6 py-3 bg-secondary text-secondary-foreground rounded-xl font-medium hover:bg-secondary/90 transition-all duration-200 border border-border/50 shadow-md hover:shadow-lg transform hover:scale-[1.02]"
+                  icon={false}
                 >
-                  <div className="w-5 h-5 rounded-md bg-primary/10 flex items-center justify-center">
-                    <svg className="w-3 h-3 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-5l-2-2H5a2 2 0 00-2 2z" />
-                    </svg>
-                  </div>
                   Browse Projects
-                </button>
-                <p className="text-sm text-muted-foreground">
+                </CtaButton>
+                <p className="text-sm text-white/80">
                   Select from your existing projects
                 </p>
               </div>
@@ -295,17 +286,7 @@ function MainContent({
                 <span className="text-xs font-medium">Projects</span>
               </button>
             )}
-            {/* Projects button for desktop */}
-            {!isMobile && (
-              <button
-                onClick={() => setShowProjectsModal(true)}
-                className="p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent transition-colors flex items-center gap-2"
-                title="Open Projects"
-              >
-                <Folder className="w-5 h-5" />
-                <span className="text-sm font-medium">Projects</span>
-              </button>
-            )}
+            {/* Projects button (desktop) moved into centered tabs */}
             <div className="flex items-center gap-3 flex-1">
               <div className="min-w-0 flex-1">
                 {
@@ -335,8 +316,8 @@ function MainContent({
             </div>
           )}
           
-          {/* Right-side controls (desktop): Settings + tabs */}
-          <div className="flex-shrink-0 hidden sm:flex order-3 items-center gap-2">
+          {/* Right-side controls (desktop): Settings only. Tabs are centered separately */}
+          <div className="hidden sm:flex order-3 items-center gap-2">
             <button
               onClick={onShowSettings}
               className="p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent transition-colors flex items-center gap-2"
@@ -344,7 +325,24 @@ function MainContent({
             >
               <SettingsIcon className="w-5 h-5" />
             </button>
-            <div className="relative flex items-center bg-muted rounded-lg p-1 gap-1">
+            {/* Old tabs container removed from here */}
+          </div>
+        </div>
+
+        {/* Centered tabs container across the header */}
+        <div className="pointer-events-auto hidden sm:flex absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 z-40">
+          <div className="flex items-center bg-muted rounded-lg p-1 gap-1 shadow-sm">
+              {/* Projects */}
+              <button
+                onClick={() => setShowProjectsModal(true)}
+                className="relative inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 text-muted-foreground hover:text-foreground hover:bg-accent"
+                title="Open Projects"
+              >
+                <span className="flex items-center gap-1 sm:gap-1.5 leading-none">
+                  <Folder className="w-3 sm:w-3.5 h-3 sm:h-3.5" />
+                  <span className="hidden sm:inline">Projects</span>
+                </span>
+              </button>
               
               <button
                 onClick={() => {
@@ -480,11 +478,7 @@ function MainContent({
             <ResourceMonitor />
           </div>
         </div>
-        
-        {/* Shell Terminal Tabs removed - single terminal mode only */}
-      </div>
 
-      {/* Main content wrapper with side panels */}
       <div className="flex-1 min-h-0 flex relative">
         {/* Shell Area - main content flexes; assistant panel occupies width when open */}
         <div className={`min-h-0 flex flex-col transition-all duration-300 flex-1`}>
@@ -550,23 +544,13 @@ function MainContent({
           </div>
         )}
 
-        {/* Side Panels - Only one visible at a time on desktop (overlay style for others) */}
-        {!isMobile && activeSidePanel && (
-          <>
-            {/* Files Panel */}
-            {activeSidePanel === 'files' && (
-              <div className="absolute top-0 left-0 h-full bg-background shadow-2xl z-20 w-96 sm:w-[440px] md:w-[520px] animate-in slide-in-from-left duration-200">
-                <div className="h-full flex flex-col">
-                  <div className="flex-1 overflow-hidden">
-                    <FileManagerSimple selectedProject={selectedProject} onClose={() => setActiveSidePanel(null)} />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* (Git panel uses modal, not side panel) */}
-            {/* (Assistant panel removed from overlay section; now integrated) */}
-          </>
+        {/* Files Panel as full overlay on desktop */}
+        {!isMobile && activeSidePanel === 'files' && (
+          <div className="absolute inset-0 z-30 p-3 md:p-5 lg:p-6 pointer-events-auto">
+            <div className="w-full h-full rounded-xl border border-border/60 overflow-hidden bg-background shadow-xl">
+              <FileManagerSimple selectedProject={selectedProject} onClose={() => setActiveSidePanel(null)} />
+            </div>
+          </div>
         )}
 
         {/* Mobile support - keeping existing tabs behavior */}

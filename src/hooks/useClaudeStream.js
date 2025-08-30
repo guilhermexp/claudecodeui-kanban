@@ -27,7 +27,7 @@ const useClaudeStream = (sessionId, authToken) => {
         
         const url = `/api/claude-stream/stream/${sessionId}${workingDir ? `?workingDir=${encodeURIComponent(workingDir)}` : ''}`;
         
-        console.log(`[Claude Stream] Establishing connection for session ${sessionId}`);
+        // Establishing connection for session
         
         fetchEventSource(url, {
             method: 'GET',
@@ -40,7 +40,6 @@ const useClaudeStream = (sessionId, authToken) => {
             
             onopen(response) {
                 if (response.ok && response.status === 200) {
-                    console.log('[Claude Stream] Connection established');
                     setIsConnected(true);
                     setError(null);
                     reconnectAttemptsRef.current = 0;
@@ -55,7 +54,7 @@ const useClaudeStream = (sessionId, authToken) => {
                     const eventType = event.event || 'message';
                     const data = JSON.parse(event.data);
                     
-                    console.log(`[Claude Stream] Event: ${eventType}`, data);
+                    // Processing event
                     
                     switch (eventType) {
                         case 'connected':
@@ -66,7 +65,6 @@ const useClaudeStream = (sessionId, authToken) => {
                         case 'session':
                             // Update to the REAL session ID from Claude CLI
                             if (data.realSessionId) {
-                                console.log(`[Claude Stream] Updating session ID from ${data.tempSessionId} to ${data.realSessionId}`);
                                 setClaudeSessionId(data.realSessionId);
                             }
                             break;
@@ -109,13 +107,11 @@ const useClaudeStream = (sessionId, authToken) => {
                             break;
                             
                         case 'complete':
-                            console.log('[Claude Stream] Session complete');
                             setIsLoading(false);
                             break;
                             
                         case 'raw':
-                            // Raw Claude event for debugging
-                            console.debug('[Claude Stream] Raw event:', data);
+                            // Raw Claude event
                             break;
                     }
                 } catch (err) {
@@ -133,7 +129,7 @@ const useClaudeStream = (sessionId, authToken) => {
                     const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 30000);
                     reconnectAttemptsRef.current++;
                     
-                    console.log(`[Claude Stream] Reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current})`);
+                    // Reconnecting with exponential backoff
                     
                     reconnectTimeoutRef.current = setTimeout(() => {
                         establishConnection(workingDir);
@@ -188,7 +184,6 @@ const useClaudeStream = (sessionId, authToken) => {
                 throw new Error(result.error || 'Failed to send message');
             }
             
-            console.log('[Claude Stream] Message sent successfully');
             return true;
             
         } catch (err) {
@@ -225,7 +220,6 @@ const useClaudeStream = (sessionId, authToken) => {
             });
             
             if (response.ok) {
-                console.log('[Claude Stream] Session aborted');
                 setIsConnected(false);
                 setIsLoading(false);
                 setClaudeSessionId(null);

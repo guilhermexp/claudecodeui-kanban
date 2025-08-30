@@ -8,23 +8,15 @@ import { useWebSocket } from '../utils/websocket';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { normalizeCodexEvent } from '../utils/codex-normalizer';
-import { loadPlannerMode, savePlannerMode, loadModelLabel, saveModelLabel } from '../utils/chat-prefs';
+import { loadPlannerMode, savePlannerMode, loadModelLabel } from '../utils/chat-prefs';
 import { hasChatHistory, loadChatHistory, saveChatHistory } from '../utils/chat-history';
 import { hasLastSession, loadLastSession, saveLastSession, clearLastSession } from '../utils/chat-session';
+import CtaButton from './ui/CtaButton';
 
 // Overlay Chat com formatação bonita usando ReactMarkdown
 // Usa NOSSO backend interno (porta 7347) - sem servidores externos!
 const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, embedded = false, disableInlinePanel = false, useSidebarWhenOpen = false, sidebarContainerRef = null, onBeforeOpen, onPanelClosed, chatId = 'default' }) {
-  // Debug props - only in development
-  if (process.env.NODE_ENV === 'development') {
-    console.log(`🎯 [${chatId}] OverlayChat mounted with:`, { 
-      chatId,
-      projectPath, 
-      embedded,
-      disableInlinePanel,
-      useSidebarWhenOpen 
-    });
-  }
+  // Debug props removed - use React DevTools for debugging
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
   
@@ -69,11 +61,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
   const [resumeRolloutPath, setResumeRolloutPath] = useState(null);
   
   
-  // Debug sessionId changes
-  useEffect(() => {
-    console.log('🔍 Session ID changed:', sessionId);
-    console.log('🔍 Session Active:', sessionActive);
-  }, [sessionId, sessionActive]);
+  // Session state tracking
   const [isSessionInitializing, setIsSessionInitializing] = useState(false);
   const [sessionStarted, setSessionStarted] = useState(false); // Track if user started a session
   const initTimerRef = useRef(null);
@@ -118,17 +106,13 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
         const hasHistory = hasChatHistory(projectPath);
         const hasSession = hasLastSession(projectPath);
         
-        // Debug logging
-        console.log('🔍 Checking saved data for project:', projectPath);
-        console.log('  - Has chat history:', hasHistory);
-        console.log('  - Has last session:', hasSession);
+        // Check saved data for project
         
-        // Check overlayChatSessions directly for debugging
+        // Check overlayChatSessions in localStorage
         const overlaySessions = localStorage.getItem('overlayChatSessions');
         if (overlaySessions) {
           try {
             const data = JSON.parse(overlaySessions);
-            console.log('  - overlayChatSessions data:', data[projectPath]);
           } catch (e) {
             console.error('  - Error parsing overlayChatSessions:', e);
           }
@@ -156,7 +140,6 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
   useEffect(() => {
     try {
       if (projectPath && sessionId) {
-        console.log('💾 Saving session for project:', projectPath, { sessionId, rolloutPath: resumeRolloutPath });
         saveLastSession(projectPath, { sessionId, rolloutPath: resumeRolloutPath });
         setHasSavedSession(true);
       }
@@ -350,11 +333,9 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
       
       // Normalize Codex events (ported from Vibe Kanban patterns)
       if (lastMsg.type === 'codex-session-started') {
-        console.log('🚀 Received codex-session-started event:', lastMsg);
         if (initTimerRef.current) { clearTimeout(initTimerRef.current); initTimerRef.current = null; }
         if (lastMsg.sessionId) {
           // Real session start with ID
-          console.log('📍 Setting session ID:', lastMsg.sessionId);
           setSessionId(lastMsg.sessionId);
           // Replace synthetic id if any
           if (clientSessionId) setClientSessionId(null);
@@ -364,7 +345,6 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
           setIsSessionInitializing(false);
         } else {
           // Just an acknowledgment, keep waiting for real session
-          console.log('⏳ Received acknowledgment, waiting for real session ID...');
           // Generate a synthetic client session id for display
           if (!clientSessionId) {
             try {
@@ -378,7 +358,6 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
           // Set a timeout to enable input after 2 seconds even without full session ID
           setTimeout(() => {
             setIsSessionInitializing(false);
-            console.log('⌛ Timeout reached, enabling input anyway');
           }, 2000);
         }
         setIsTyping(false);
@@ -687,18 +666,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
         )}
         {messages.length === 0 && !isTyping && !sessionActive && (
           <div className={`flex flex-col items-center justify-center gap-4 ${themeCodex ? 'h-[50vh] bg-background dark:bg-black' : 'h-full min-h-[200px]'} `}>
-            <div className="opacity-30">
-              <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" className={`${themeCodex ? 'text-zinc-600' : 'text-foreground'}`}>
-                <path strokeWidth="1.5" d="M12 3a9 9 0 100 18 9 9 0 000-18Zm0 4a5 5 0 100 10 5 5 0 000-10Z"/>
-              </svg>
-            </div>
-            <button
-              onClick={startSession}
-              className={`px-4 py-2 rounded-full ${themeCodex ? 'bg-zinc-800 text-white hover:bg-zinc-700' : 'bg-primary text-primary-foreground hover:bg-primary/90'} transition-all text-sm font-medium disabled:opacity-50`}
-              disabled={isSessionInitializing || !isConnected}
-            >
-              {isSessionInitializing ? 'Starting...' : 'Start Codex AI Session'}
-            </button>
+            <CtaButton onClick={startSession} disabled={isSessionInitializing || !isConnected} icon={false}>Start Codex AI Session</CtaButton>
           </div>
         )}
         <AnimatePresence initial={false}>
@@ -1472,19 +1440,18 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
       {/* Persistent Open Button */}
       <div className="absolute right-4 bottom-4 z-40 flex items-center gap-2">
         {!sessionActive ? (
-          <button
+          <CtaButton
             onClick={() => {
               // Start session before opening the panel
               startSession();
               if (onBeforeOpen) onBeforeOpen();
               setOpen(true);
             }}
-            className="px-4 py-2 rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 transition-colors text-sm disabled:opacity-60"
             title={`Start Codex session for ${getHost()}`}
             disabled={isSessionInitializing || !isConnected}
           >
             {isSessionInitializing ? 'Starting…' : 'Start Codex Session'}
-          </button>
+          </CtaButton>
         ) : (
           <>
             <button

@@ -1228,17 +1228,17 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
           {/* Segmented controls row - moved above input */}
           <div className="flex items-center justify-between text-muted-foreground text-xs px-2 mb-2">
             <div className="flex items-center gap-3">
-              <button className="flex items-center gap-1 hover:text-foreground transition-colors" title={projectPath || 'Current directory'}>
+              <button className="flex items-center gap-1.5 hover:text-foreground transition-colors" title={projectPath || 'Current directory'}>
                 <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
-                <span className="max-w-[200px] truncate">{projectPath ? projectPath.split('/').pop() : 'Local'}</span>
+                <span className="max-w-[200px] truncate font-medium">{projectPath ? projectPath.split('/').pop() : 'STANDALONE_MODE'}</span>
               </button>
               {cliProvider === 'claude' && (
                 <div className="relative">
                   <button 
                     onClick={() => setShowModelMenu(v => !v)} 
-                    className="flex items-center gap-1 hover:text-foreground transition-colors"
+                    className="flex items-center gap-1.5 hover:text-foreground transition-colors"
                   >
-                    <span>Model:</span>
+                    <span className="text-muted-foreground">Model:</span>
                     <span className="font-medium">
                       {selectedModel === 'default' ? 'Default' : 
                        selectedModel === 'opus' ? 'Opus' :

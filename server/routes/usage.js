@@ -14,9 +14,8 @@ const router = express.Router();
 const usageTracker = new UsageTracker();
 
 // Get usage statistics
-router.get('/stats', async (req, res) => {
-  // Temporary: Allow unauthenticated access in development for Dashboard
-  // TODO: Re-enable authentication when auth system is properly set up
+// Authentication enabled - uses JWT token
+router.get('/stats', authenticateToken, async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
     const stats = await usageTracker.getUsageStats(startDate, endDate);
@@ -28,8 +27,7 @@ router.get('/stats', async (req, res) => {
 });
 
 // Get session statistics
-router.get('/sessions', async (req, res) => {
-  // Temporary: Allow unauthenticated access in development
+router.get('/sessions', authenticateToken, async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
     const sessions = await usageTracker.getSessionStats(startDate, endDate);
@@ -41,8 +39,7 @@ router.get('/sessions', async (req, res) => {
 });
 
 // Get usage time statistics
-router.get('/time', async (req, res) => {
-  // Temporary: Allow unauthenticated access in development
+router.get('/time', authenticateToken, async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
     const timeStats = await usageTracker.getUsageTime(startDate, endDate);

@@ -10,19 +10,14 @@ import { normalizeClaudeEvent } from '../utils/claude-normalizer';
 import { hasChatHistory, loadChatHistory, saveChatHistory } from '../utils/chat-history';
 import { hasLastSession, loadLastSession, saveLastSession, clearLastSession } from '../utils/chat-session';
 import useClaudeStream from '../hooks/useClaudeStream';
+import CtaButton from './ui/CtaButton';
 
 // Claude Chat Component - Optimized ONLY for Claude Code CLI
 // Removed all Codex-specific code for cleaner architecture
 const ClaudeChat = React.memo(function ClaudeChat({ projectPath, previewUrl, embedded = false, disableInlinePanel = false, useSidebarWhenOpen = false, sidebarContainerRef = null, onBeforeOpen, onPanelClosed, chatId = 'claude-default' }) {
   // Debug props - only in development
   if (process.env.NODE_ENV === 'development') {
-    console.log(`🎯 [${chatId}] ClaudeChat mounted with:`, { 
-      chatId,
-      projectPath, 
-      embedded,
-      disableInlinePanel,
-      useSidebarWhenOpen 
-    });
+    // Debug: ClaudeChat mounted
   }
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
@@ -73,8 +68,8 @@ const ClaudeChat = React.memo(function ClaudeChat({ projectPath, previewUrl, emb
   
   // Debug sessionId changes
   useEffect(() => {
-    console.log('🔍 Claude Session ID changed:', sessionId);
-    console.log('🔍 Claude Session Active:', sessionActive);
+    // Debug: Claude Session ID changed
+    // Debug: Claude Session Active
   }, [sessionId, sessionActive]);
   const [isSessionInitializing, setIsSessionInitializing] = useState(false);
   const [sessionStarted, setSessionStarted] = useState(false); // Track if user started a session
@@ -96,18 +91,16 @@ const ClaudeChat = React.memo(function ClaudeChat({ projectPath, previewUrl, emb
         const hasSession = hasLastSession(projectPath);
         
         // Debug logging
-        console.log('🔍 Checking saved data for project:', projectPath);
-        console.log('  - Has chat history:', hasHistory);
-        console.log('  - Has last session:', hasSession);
+        // Debug: Checking saved data for project
         
         // Check overlayChatSessions directly for debugging
         const overlaySessions = localStorage.getItem('overlayChatSessions');
         if (overlaySessions) {
           try {
             const data = JSON.parse(overlaySessions);
-            console.log('  - overlayChatSessions data:', data[projectPath]);
+            // Debug: overlayChatSessions data loaded
           } catch (e) {
-            console.error('  - Error parsing overlayChatSessions:', e);
+            // Error: parsing overlayChatSessions
           }
         }
         
@@ -133,7 +126,7 @@ const ClaudeChat = React.memo(function ClaudeChat({ projectPath, previewUrl, emb
   useEffect(() => {
     try {
       if (projectPath && sessionId) {
-        console.log('💾 Saving session for project:', projectPath, { sessionId, rolloutPath: resumeRolloutPath });
+        // Debug: Saving session for project
         saveLastSession(projectPath, { sessionId, rolloutPath: resumeRolloutPath });
         setHasSavedSession(true);
       }
@@ -154,7 +147,7 @@ const ClaudeChat = React.memo(function ClaudeChat({ projectPath, previewUrl, emb
     setSessionStarted(true);
     
     // The connection will be established via useEffect when sessionId changes
-    console.log(`[Claude Stream] Starting new session: ${newSessionId}`);
+    // Debug: Claude Stream starting new session
     
     // Fallback timeout
     if (initTimerRef.current) clearTimeout(initTimerRef.current);
@@ -468,13 +461,9 @@ const ClaudeChat = React.memo(function ClaudeChat({ projectPath, previewUrl, emb
                 <path strokeWidth="1.5" d="M12 3a9 9 0 100 18 9 9 0 000-18Zm0 4a5 5 0 100 10 5 5 0 000-10Z"/>
               </svg>
             </div>
-            <button
-              onClick={startSession}
-              className={`px-4 py-2 rounded-full ${themeCodex ? 'bg-zinc-800 text-white hover:bg-zinc-700' : 'bg-primary text-primary-foreground hover:bg-primary/90'} transition-all text-sm font-medium disabled:opacity-50`}
-              disabled={isSessionInitializing || !claudeStreamConnected}
-            >
+            <CtaButton onClick={startSession} disabled={isSessionInitializing || !claudeStreamConnected} icon={false} variant="default">
               {isSessionInitializing ? 'Starting...' : 'Start Claude Code Session'}
-            </button>
+            </CtaButton>
           </div>
         )}
         <AnimatePresence initial={false}>
@@ -900,7 +889,7 @@ const ClaudeChat = React.memo(function ClaudeChat({ projectPath, previewUrl, emb
   // Update Claude session ID when we receive the real one from Claude CLI
   useEffect(() => {
     if (streamClaudeSessionId && sessionId !== streamClaudeSessionId) {
-      console.log(`[Claude] Updating session ID from ${sessionId} to ${streamClaudeSessionId}`);
+      // Debug: Updating session ID from Claude CLI
       setSessionId(streamClaudeSessionId);
     }
   }, [streamClaudeSessionId, sessionId]);
@@ -908,7 +897,7 @@ const ClaudeChat = React.memo(function ClaudeChat({ projectPath, previewUrl, emb
   // Establish Claude connection when session starts
   useEffect(() => {
     if (sessionId && !claudeStreamConnected) {
-      console.log(`[Claude Stream] Establishing connection for session ${sessionId}`);
+      // Debug: Establishing connection for session
       establishClaudeConnection(projectPath || process.cwd());
     }
   }, [sessionId, claudeStreamConnected, establishClaudeConnection, projectPath]);
@@ -1210,19 +1199,18 @@ const ClaudeChat = React.memo(function ClaudeChat({ projectPath, previewUrl, emb
       {/* Persistent Open Button */}
       <div className="absolute right-4 bottom-4 z-40 flex items-center gap-2">
         {!sessionActive ? (
-          <button
+          <CtaButton
             onClick={() => {
-              // Start session before opening the panel
               startSession();
               if (onBeforeOpen) onBeforeOpen();
               setOpen(true);
             }}
-            className="px-4 py-2 rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 transition-colors text-sm disabled:opacity-60"
+            icon={false}
             title={`Start Claude Code session for ${getHost()}`}
             disabled={isSessionInitializing || !claudeStreamConnected}
           >
             {isSessionInitializing ? 'Starting…' : 'Start Claude Code Session'}
-          </button>
+          </CtaButton>
         ) : (
           <>
             <button

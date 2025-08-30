@@ -47,6 +47,9 @@ import { getProjects, getSessions, getSessionMessages, renameProject, deleteSess
 import { spawnClaude, abortClaudeSession } from './claude-cli.js';
 import { spawnCodex } from './codex-cli.js';
 import gitRoutes from './routes/git.js';
+import previewRoutes, { setPreviewBroadcasterFn } from './routes/preview.js';
+import { getStatus as getPreviewStatus } from './lib/previewManager.js';
+import { createProxyMiddleware } from 'http-proxy-middleware';
 import authRoutes from './routes/auth.js';
 // import mcpRoutes from './routes/mcp.js'; // MCP removed - managed directly by Claude CLI
 import usageRoutes from './routes/usage.js';
@@ -483,6 +486,38 @@ app.post('/api/cleanup/restart', authenticateToken, (req, res) => {
     res.json({ success: true, message: 'Cleanup service restarted' });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Wire preview WS broadcaster before mounting routes
+try { setPreviewBroadcasterFn(broadcastToAll); } catch {}
+
+// Preview lifecycle routes (protected)
+app.use('/api', authenticateToken, previewRoutes);
+
+// Same-origin preview proxy: /preview/:projectName/* -> http://localhost:<port>/*
+app.use('/preview/:projectName', authenticateToken, (req, res, next) => {
+  try {
+    const projectName = req.params.projectName;
+    const st = getPreviewStatus(projectName);
+    if (!st.running || !st.port) {
+      return res.status(502).send('Preview not running');
+    }
+    const target = `http://localhost:${st.port}`;
+    // Create one-off proxy middleware to forward this request
+    return createProxyMiddleware({
+      target,
+      changeOrigin: true,
+      ws: true,
+      logLevel: 'silent',
+      pathRewrite: (path) => path.replace(new RegExp(`^/preview/${projectName}`), '/'),
+      onProxyReq: (proxyReq) => {
+        // Disable caching to avoid stale assets during dev
+        proxyReq.setHeader('Cache-Control', 'no-store');
+      }
+    })(req, res, next);
+  } catch (e) {
+    return res.status(500).send('Proxy error');
   }
 });
 
@@ -1128,7 +1163,7 @@ app.get('/api/projects/:projectName/files', authenticateToken, async (req, res) 
       return res.status(404).json({ error: `Project path not found: ${actualPath}` });
     }
     
-    const files = await getFileTree(actualPath, 3, 0, true);
+    const files = await getFileTree(actualPath, 6, 0, true);
     const hiddenFiles = files.filter(f => f.name.startsWith('.'));
     res.json(files);
   } catch (error) {
@@ -2387,9 +2422,22 @@ function permToRwx(perm) {
 async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden = true) {
   // Using fsPromises from import
   const items = [];
+  const MAX_PER_DIR = 200; // cap entries per directory to control memory
   
   try {
-    const entries = await fsPromises.readdir(dirPath, { withFileTypes: true });
+    let entries = await fsPromises.readdir(dirPath, { withFileTypes: true });
+    
+    // Optionally hide dotfiles
+    if (!showHidden) {
+      entries = entries.filter(e => !e.name.startsWith('.'));
+    }
+    
+    // Prioritize directories then files, and cap per directory
+    entries.sort((a, b) => {
+      if (a.isDirectory() !== b.isDirectory()) return a.isDirectory() ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+    if (entries.length > MAX_PER_DIR) entries = entries.slice(0, MAX_PER_DIR);
     
     for (const entry of entries) {
       // Debug: log all entries including hidden files
