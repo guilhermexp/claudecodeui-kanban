@@ -617,6 +617,46 @@ body {
   }
 }
 
+/* Custom scrollbar for project paths */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(156, 163, 175, 0.3) transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  height: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(156, 163, 175, 0.3);
+  border-radius: 2px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(156, 163, 175, 0.5);
+}
+
+/* Hide scrollbar initially, show on hover */
+.custom-scrollbar {
+  scrollbar-width: none;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.custom-scrollbar:hover {
+  scrollbar-width: thin;
+}
+
+.custom-scrollbar:hover::-webkit-scrollbar {
+  display: block;
+}
+
 /* Mobile optimizations and components */
 @layer components {
   /* Mobile touch optimization and safe areas */
