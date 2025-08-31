@@ -3,6 +3,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
 import { createLogger } from './utils/logger.js';
+import { getProcessManager } from './lib/ProcessManager.js';
 
 const log = createLogger('CLAUDE-CLI');
 
@@ -49,7 +50,14 @@ function logClaudeEvent(ev) {
   } catch {}
 }
 
-let activeClaudeProcesses = new Map(); // Track active processes by session ID
+// Process manager replaces the simple Map for robust lifecycle management
+const processManager = getProcessManager({
+  maxProcesses: 50,
+  gracefulTimeout: 5000,
+  forceTimeout: 3000,
+  healthCheckInterval: 30000,
+  staleProcessTimeout: 300000
+});
 
 async function spawnClaude(command, options = {}, ws) {
   log.debug(`spawnClaude called`);
@@ -215,7 +223,6 @@ async function spawnClaude(command, options = {}, ws) {
       
       // Log when skip permissions is disabled due to plan mode
       if (settings.skipPermissions && permissionMode === 'plan') {
-        console.log('Skip permissions disabled in plan mode');
       }
     }
     
@@ -258,9 +265,16 @@ async function spawnClaude(command, options = {}, ws) {
       claudeProcess.stdin.end();
     }
     
-    // Store process reference for potential abort
+    // Register process with ProcessManager for robust lifecycle management
     const processKey = capturedSessionId || sessionId || Date.now().toString();
-    activeClaudeProcesses.set(processKey, claudeProcess);
+    processManager.register(processKey, claudeProcess, {
+      command: finalCommand?.substring(0, 100) || 'claude-cli',
+      cwd: workingDir,
+      type: 'claude-oneshot',
+      resume: !!resume,
+      model: model,
+      permissionMode: permissionMode
+    });
     
     // Handle stdout (streaming JSON responses)
     let isFirstOutput = true;
@@ -291,8 +305,16 @@ async function spawnClaude(command, options = {}, ws) {
             
             // Update process key with captured session ID
             if (processKey !== capturedSessionId) {
-              activeClaudeProcesses.delete(processKey);
-              activeClaudeProcesses.set(capturedSessionId, claudeProcess);
+              processManager.unregister(processKey);
+              processManager.register(capturedSessionId, claudeProcess, {
+                command: finalCommand?.substring(0, 100) || 'claude-cli',
+                cwd: workingDir,
+                type: 'claude-oneshot',
+                resume: !!resume,
+                model: model,
+                permissionMode: permissionMode,
+                sessionIdUpdated: true
+              });
             }
             
             // Send session-created event for all new sessions (even when resume fails)
@@ -363,19 +385,17 @@ async function spawnClaude(command, options = {}, ws) {
     claudeProcess.on('close', async (code) => {
       log.info(`🏁 Claude process closed with code=${code} session=${capturedSessionId || 'none'} hadOutput=${!isFirstOutput}`);
       
-      // Clean up process reference
+      // Clean up process reference using ProcessManager
       const finalSessionId = capturedSessionId || sessionId || processKey;
-      activeClaudeProcesses.delete(finalSessionId);
+      processManager.unregister(finalSessionId);
       
       // For initOnly runs, ensure the frontend leaves the "Starting..." state
       if (initOnly && code === 0) {
         try {
           if (capturedSessionId) {
             ws.send(JSON.stringify({ type: 'claude-session-started', sessionId: capturedSessionId, temporary: false }));
-          } else {
-            const tempId = `temp-${Date.now().toString(36)}`;
-            ws.send(JSON.stringify({ type: 'claude-session-started', sessionId: tempId, temporary: true }));
           }
+          // Don't send a temp session if we don't have a real session ID
         } catch {}
       }
 
@@ -400,9 +420,9 @@ async function spawnClaude(command, options = {}, ws) {
     claudeProcess.on('error', (error) => {
       log.error(`process error: ${error?.message || error}`);
       
-      // Clean up process reference on error
+      // Clean up process reference on error using ProcessManager
       const finalSessionId = capturedSessionId || sessionId || processKey;
-      activeClaudeProcesses.delete(finalSessionId);
+      processManager.unregister(finalSessionId);
       
       ws.send(JSON.stringify({
         type: 'claude-error',
@@ -419,14 +439,22 @@ async function spawnClaude(command, options = {}, ws) {
   });
 }
 
-function abortClaudeSession(sessionId) {
-  const process = activeClaudeProcesses.get(sessionId);
-  if (process) {
-    process.kill('SIGTERM');
-    activeClaudeProcesses.delete(sessionId);
-    return true;
+async function abortClaudeSession(sessionId) {
+  log.info(`Aborting Claude session: ${sessionId}`);
+  
+  try {
+    const success = await processManager.terminate(sessionId, 'user-abort');
+    if (success) {
+      log.info(`Successfully aborted Claude session: ${sessionId}`);
+      return true;
+    } else {
+      log.warn(`No process found for Claude session: ${sessionId}`);
+      return false;
+    }
+  } catch (error) {
+    log.error(`Error aborting Claude session ${sessionId}: ${error.message}`);
+    return false;
   }
-  return false;
 }
 
 export {
@@ -454,6 +482,7 @@ function spawnClaudeStream(options = {}, ws, onSession) {
     model,
     permissionMode,
     toolsSettings,
+    images,
   } = options;
 
   const workingDir = (cwd && cwd !== 'STANDALONE_MODE') ? cwd : process.cwd();
@@ -470,6 +499,14 @@ function spawnClaudeStream(options = {}, ws, onSession) {
   }
   if (model) {
     args.push('--model', model);
+  }
+  // Add images as CLI flags when provided
+  if (Array.isArray(images) && images.length) {
+    for (const imgPath of images) {
+      if (typeof imgPath === 'string' && imgPath.length) {
+        args.push('-i', imgPath);
+      }
+    }
   }
   // Permissions/tools flags similar to spawnClaude
   // Avoid redundant or conflicting flags: don't send --permission-mode when skipping permissions
@@ -503,33 +540,253 @@ function spawnClaudeStream(options = {}, ws, onSession) {
   });
 
   let capturedId = sessionId || null;
+  // Register streaming process with ProcessManager early
+  const streamProcessKey = capturedId || `stream-${Date.now()}`;
+  
+  // Stream buffer for handling partial JSON messages
+  let streamBuffer = '';
+  
   const onData = (chunk) => {
     const chunkStr = chunk.toString();
     log.info(`📥 Received from Claude (${chunkStr.length} chars): ${chunkStr.substring(0, 200)}...`);
-    const lines = chunkStr.split('\n').filter(Boolean);
-    log.info(`📦 Processing ${lines.length} lines`);
-    for (const line of lines) {
+    
+    // Append to buffer
+    streamBuffer += chunkStr;
+    
+    // Log the full response if it's an init message for debugging
+    if (chunkStr.includes('"type":"system"') && chunkStr.includes('"subtype":"init"')) {
+      log.warn(`🔍 FULL INIT RESPONSE: ${chunkStr.substring(0, 500)}`);
+    }
+    
+    // Process complete messages from buffer
+    let processedMessages = 0;
+    while (streamBuffer.length > 0) {
+      // Find the end of a complete JSON message
+      const messageEnd = findCompleteMessage(streamBuffer);
+      
+      if (messageEnd === -1) {
+        // No complete message found, wait for more data
+        log.debug(`📦 Buffer contains ${streamBuffer.length} chars, waiting for complete message`);
+        break;
+      }
+      
+      // Extract complete message
+      const messageStr = streamBuffer.substring(0, messageEnd).trim();
+      streamBuffer = streamBuffer.substring(messageEnd);
+      
+      if (messageStr.length === 0) continue;
+      
       try {
-        const data = JSON.parse(line);
-        log.info(`🎯 Parsed event type: ${data.type || data.event_type || 'unknown'}`);
+        const data = JSON.parse(messageStr);
+        processedMessages++;
+        log.info(`🎯 Parsed event type: ${data.type || data.event_type || 'unknown'} (${processedMessages})`);
+        
         if (data.session_id && !capturedId) {
           capturedId = data.session_id;
           log.info(`🆔 Captured session ID: ${capturedId}`);
-          try { ws.send(JSON.stringify({ type: 'session-created', sessionId: capturedId })); } catch {}
+          // Let the onSession callback handle session communication to avoid duplicates
           try { if (typeof onSession === 'function') onSession(capturedId); } catch {}
         }
-        try { ws.send(JSON.stringify({ type: 'claude-response', data })); } catch {}
+        
+        // Validate and send message with error recovery
+        try { 
+          const response = { type: 'claude-response', data };
+          
+          // Validate the response structure
+          if (!validateClaudeResponse(data)) {
+            log.warn(`⚠️ Invalid Claude response structure, attempting to sanitize`);
+            // Attempt to sanitize the response
+            const sanitized = sanitizeClaudeResponse(data);
+            if (sanitized) {
+              ws.send(JSON.stringify({ type: 'claude-response', data: sanitized }));
+            } else {
+              ws.send(JSON.stringify({ 
+                type: 'claude-error', 
+                error: 'Received malformed response from Claude CLI',
+                raw_data: typeof data === 'object' ? JSON.stringify(data).substring(0, 500) : String(data).substring(0, 500)
+              }));
+            }
+          } else {
+            ws.send(JSON.stringify(response));
+          }
+        } catch (sendError) {
+          log.error(`❌ Failed to send message to WebSocket: ${sendError.message}`);
+          // Try to send a simplified error message
+          try {
+            ws.send(JSON.stringify({ 
+              type: 'claude-error', 
+              error: 'Failed to forward Claude response',
+              details: sendError.message
+            }));
+          } catch (fallbackError) {
+            log.error(`❌ Critical: Cannot send any messages to WebSocket: ${fallbackError.message}`);
+          }
+        }
+        
         // Live, compact logging
         logClaudeEvent(data);
       } catch (e) {
-        log.warn(`⚠️ Failed to parse line: ${line.substring(0, 100)}`);
+        log.warn(`⚠️ Failed to parse message: ${messageStr.substring(0, 100)}... Error: ${e.message}`);
+        // Skip malformed message and continue processing
       }
     }
+    
+    // Prevent buffer from growing too large (safety mechanism)
+    if (streamBuffer.length > 1024 * 1024) { // 1MB limit
+      log.error(`🚨 Stream buffer exceeded 1MB, clearing to prevent memory issues`);
+      streamBuffer = '';
+    }
   };
+  
+  /**
+   * Finds the end position of a complete JSON message in the buffer
+   * Claude CLI outputs newline-delimited JSON, so we need to find complete JSON objects
+   * @param {string} buffer - The buffer containing potentially partial JSON messages
+   * @returns {number} - Position after the complete message, or -1 if no complete message
+   */
+  function findCompleteMessage(buffer) {
+    let braceCount = 0;
+    let inString = false;
+    let escaped = false;
+    
+    for (let i = 0; i < buffer.length; i++) {
+      const char = buffer[i];
+      
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      
+      if (char === '\\' && inString) {
+        escaped = true;
+        continue;
+      }
+      
+      if (char === '"') {
+        inString = !inString;
+        continue;
+      }
+      
+      if (!inString) {
+        if (char === '{') {
+          braceCount++;
+        } else if (char === '}') {
+          braceCount--;
+          
+          // Complete JSON object found
+          if (braceCount === 0) {
+            // Look for end of line or end of buffer
+            let endPos = i + 1;
+            while (endPos < buffer.length && (buffer[endPos] === '\n' || buffer[endPos] === '\r')) {
+              endPos++;
+            }
+            return endPos;
+          }
+        }
+      }
+    }
+    
+    // No complete message found
+    return -1;
+  }
+  
+  /**
+   * Validates Claude response structure to prevent malformed data from causing issues
+   * @param {any} data - The parsed JSON data from Claude
+   * @returns {boolean} - True if valid, false if invalid
+   */
+  function validateClaudeResponse(data) {
+    try {
+      // Basic structure check
+      if (!data || typeof data !== 'object') {
+        return false;
+      }
+      
+      // Check for required fields based on common Claude response types
+      if (data.type) {
+        switch (data.type) {
+          case 'system':
+            return true; // System messages are generally valid
+          case 'stream':
+            return data.content !== undefined; // Stream messages should have content
+          case 'tool_use':
+            return data.name && data.input; // Tool use needs name and input
+          case 'tool_result':
+            return data.tool_use_id !== undefined; // Tool results need tool_use_id
+          default:
+            return true; // Unknown types are allowed for forward compatibility
+        }
+      }
+      
+      // If no type field, check for other common fields
+      if (data.event_type || data.session_id || data.message) {
+        return true;
+      }
+      
+      // Empty object or other structures might be valid
+      return true;
+    } catch (error) {
+      log.warn(`Validation error: ${error.message}`);
+      return false;
+    }
+  }
+  
+  /**
+   * Attempts to sanitize malformed Claude responses
+   * @param {any} data - The potentially malformed data
+   * @returns {object|null} - Sanitized data or null if unable to sanitize
+   */
+  function sanitizeClaudeResponse(data) {
+    try {
+      // If data is string, try to parse it
+      if (typeof data === 'string') {
+        try {
+          data = JSON.parse(data);
+        } catch {
+          // If can't parse, wrap in a generic structure
+          return {
+            type: 'stream',
+            content: data,
+            timestamp: Date.now(),
+            sanitized: true
+          };
+        }
+      }
+      
+      // If it's an object, ensure it has basic structure
+      if (data && typeof data === 'object') {
+        const sanitized = { ...data };
+        
+        // Ensure it has a type
+        if (!sanitized.type) {
+          sanitized.type = 'stream';
+        }
+        
+        // Mark as sanitized
+        sanitized.sanitized = true;
+        sanitized.timestamp = Date.now();
+        
+        return sanitized;
+      }
+      
+      // For other types, wrap in generic structure
+      return {
+        type: 'stream',
+        content: String(data),
+        timestamp: Date.now(),
+        sanitized: true,
+        original_type: typeof data
+      };
+    } catch (error) {
+      log.error(`Sanitization failed: ${error.message}`);
+      return null;
+    }
+  }
+  
   proc.stdout.on('data', onData);
   proc.stderr.on('data', (e) => {
-    log.warn(`stderr: ${e.toString()}`);
     const errStr = e.toString();
+    log.error(`🚨 STDERR: ${errStr}`);
     try { ws.send(JSON.stringify({ type: 'claude-error', error: errStr })); } catch {}
     // Detect resume failures and notify client so it can clear stale session
     if (errStr.includes('No conversation found with session ID')) {
@@ -538,12 +795,60 @@ function spawnClaudeStream(options = {}, ws, onSession) {
       try { ws.send(JSON.stringify({ type: 'session-not-found', sessionId: sid, message: 'Previous session expired. A new session will be created.', shouldCreateNew: true })); } catch {}
     }
   });
-  proc.on('close', (code) => {
-    log.debug(`stream closed code=${code}`);
-    try { ws.send(JSON.stringify({ type: 'claude-session-closed', exitCode: code })); } catch {}
+  proc.on('close', (code, signal) => {
+    log.warn(`🔴 Claude process closed - code: ${code}, signal: ${signal}`);
+    
+    // Process any remaining messages in buffer before closing
+    if (streamBuffer.length > 0) {
+      log.info(`📦 Processing remaining ${streamBuffer.length} chars in buffer before close`);
+      
+      // Try to find and process any complete messages still in buffer
+      let remainingProcessed = 0;
+      while (streamBuffer.length > 0) {
+        const messageEnd = findCompleteMessage(streamBuffer);
+        if (messageEnd === -1) break;
+        
+        const messageStr = streamBuffer.substring(0, messageEnd).trim();
+        streamBuffer = streamBuffer.substring(messageEnd);
+        
+        if (messageStr.length === 0) continue;
+        
+        try {
+          const data = JSON.parse(messageStr);
+          remainingProcessed++;
+          log.info(`🎯 Final message processed: ${data.type || data.event_type || 'unknown'}`);
+          
+          try { 
+            ws.send(JSON.stringify({ type: 'claude-response', data })); 
+            logClaudeEvent(data);
+          } catch {}
+        } catch (e) {
+          log.warn(`⚠️ Failed to parse final message: ${messageStr.substring(0, 100)}...`);
+        }
+      }
+      
+      if (remainingProcessed > 0) {
+        log.info(`✅ Processed ${remainingProcessed} final messages from buffer`);
+      }
+    }
+    
+    // Clear buffer to prevent memory leaks
+    streamBuffer = '';
+    
+    // Clean up from ProcessManager
+    processManager.unregister(streamProcessKey);
+    
+    try { ws.send(JSON.stringify({ type: 'claude-session-closed', exitCode: code, signal })); } catch {}
   });
   proc.on('error', (error) => {
     log.error(`stream error: ${error?.message || error}`);
+    
+    // Clear buffer on error to prevent memory leaks
+    streamBuffer = '';
+    
+    // Clean up from ProcessManager on error
+    processManager.unregister(streamProcessKey);
+    
     try { ws.send(JSON.stringify({ type: 'claude-error', error: error.message })); } catch {}
   });
 
@@ -553,6 +858,10 @@ function spawnClaudeStream(options = {}, ws, onSession) {
       log.error('❌ stdin not writable!');
       return false;
     }
+    
+    // Update activity tracking
+    processManager.updateActivity(streamProcessKey);
+    
     const msg = {
       type: 'user',
       message: { role: 'user', content: String(text) },
@@ -571,7 +880,23 @@ function spawnClaudeStream(options = {}, ws, onSession) {
     }
   };
 
-  const stop = () => { try { proc.kill('SIGTERM'); } catch {} };
+  // Register with ProcessManager (streamProcessKey already defined above)
+  processManager.register(streamProcessKey, proc, {
+    command: 'claude-stream',
+    cwd: workingDir,
+    type: 'claude-stream',
+    model: model,
+    permissionMode: permissionMode
+  });
+
+  const stop = async () => { 
+    try {
+      await processManager.terminate(streamProcessKey, 'stream-stop');
+    } catch (error) {
+      log.error(`Error stopping stream process: ${error.message}`);
+      try { proc.kill('SIGTERM'); } catch {}
+    }
+  };
   return { proc, writeMessage, getSessionId: () => capturedId, stop };
 }
 

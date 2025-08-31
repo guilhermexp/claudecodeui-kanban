@@ -1,5 +1,6 @@
-// Lightweight, pretty, and safe logger for server-side modules
+// Enhanced Visual Logger with Beautiful Formatting
 // - Colorized output with timestamps and service tags
+// - Box drawing characters for visual appeal
 // - Supports levels: debug, info, success, warn, error
 // - Respects LOG_LEVEL (debug|info|warn|error); default 'info'
 // - Redacts sensitive paths/flags and user home directory
@@ -8,14 +9,53 @@ import os from 'os';
 
 const COLORS = {
   reset: '\x1b[0m',
-  gray: '\x1b[90m',
+  bold: '\x1b[1m',
+  dim: '\x1b[2m',
+  
+  // Foreground colors
+  black: '\x1b[30m',
   red: '\x1b[31m',
   green: '\x1b[32m',
   yellow: '\x1b[33m',
   blue: '\x1b[34m',
   magenta: '\x1b[35m',
   cyan: '\x1b[36m',
-  white: '\x1b[37m'
+  white: '\x1b[37m',
+  gray: '\x1b[90m',
+  
+  // Bright colors
+  brightRed: '\x1b[91m',
+  brightGreen: '\x1b[92m',
+  brightYellow: '\x1b[93m',
+  brightBlue: '\x1b[94m',
+  brightMagenta: '\x1b[95m',
+  brightCyan: '\x1b[96m',
+  brightWhite: '\x1b[97m',
+  
+  // Background colors
+  bgBlack: '\x1b[40m',
+  bgRed: '\x1b[41m',
+  bgGreen: '\x1b[42m',
+  bgYellow: '\x1b[43m',
+  bgBlue: '\x1b[44m',
+  bgMagenta: '\x1b[45m',
+  bgCyan: '\x1b[46m',
+  bgWhite: '\x1b[47m'
+};
+
+// Box drawing characters for beautiful borders
+const BOX = {
+  topLeft: '╭',
+  topRight: '╮',
+  bottomLeft: '╰',
+  bottomRight: '╯',
+  horizontal: '─',
+  vertical: '│',
+  cross: '┼',
+  teeLeft: '├',
+  teeRight: '┤',
+  teeTop: '┬',
+  teeBottom: '┴'
 };
 
 const LEVELS = ['debug', 'info', 'warn', 'error'];
@@ -45,18 +85,57 @@ function redactSensitive(input) {
 }
 
 function ts() {
-  return new Date().toLocaleTimeString();
+  const now = new Date();
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  const seconds = String(now.getSeconds()).padStart(2, '0');
+  return `${hours}:${minutes}:${seconds}`;
+}
+
+function getLevelColor(level) {
+  switch(level) {
+    case 'debug': return COLORS.gray;
+    case 'info': return COLORS.brightCyan;
+    case 'success': return COLORS.brightGreen;
+    case 'warn': return COLORS.brightYellow;
+    case 'error': return COLORS.brightRed;
+    default: return COLORS.white;
+  }
 }
 
 function format(service, level, msg) {
-  const lvl = level.toUpperCase().padEnd(5);
-  const tag = service ? `[${service}]` : '';
-  let color = COLORS.white;
-  if (level === 'debug') color = COLORS.gray;
-  else if (level === 'info') color = COLORS.cyan;
-  else if (level === 'warn') color = COLORS.yellow;
-  else if (level === 'error') color = COLORS.red;
-  return `${color}[${ts()}] ${tag} ${lvl} ${COLORS.reset}${redactSensitive(msg)}`;
+  const timeStr = ts();
+  const levelColor = getLevelColor(level);
+  const timeColor = COLORS.gray;
+  
+  // Format: [HH:MM:SS] [SERVICE] Message
+  let output = `${timeColor}[${timeStr}]${COLORS.reset} `;
+  
+  if (service) {
+    // Service tag with color based on level
+    output += `${levelColor}[${service}]${COLORS.reset} `;
+  }
+  
+  // Add the message
+  output += redactSensitive(msg);
+  
+  return output;
+}
+
+function formatSuccess(service, msg) {
+  const timeStr = ts();
+  const timeColor = COLORS.gray;
+  
+  // Special formatting for success messages
+  let output = `${timeColor}[${timeStr}]${COLORS.reset} `;
+  
+  if (service) {
+    output += `${COLORS.green}[${service}]${COLORS.reset} `;
+  }
+  
+  output += `${COLORS.green}${COLORS.bold}SUCCESS${COLORS.reset} ${redactSensitive(msg)}`;
+  
+  return output;
 }
 
 function shouldLog(level) {
@@ -67,11 +146,21 @@ function shouldLog(level) {
 
 function base(service) {
   return {
-    debug: (msg) => { if (shouldLog('debug')) console.log(format(service, 'debug', msg)); },
-    info: (msg) => { if (shouldLog('info')) console.log(format(service, 'info', msg)); },
-    success: (msg) => { if (shouldLog('info')) console.log(`${COLORS.green}[${ts()}] ${service ? '['+service+'] ' : ''}SUCCESS ${COLORS.reset}${redactSensitive(msg)}`); },
-    warn: (msg) => { if (shouldLog('warn')) console.warn(format(service, 'warn', msg)); },
-    error: (msg) => { if (shouldLog('error')) console.error(format(service, 'error', msg)); }
+    debug: (msg) => { 
+      if (shouldLog('debug')) console.log(format(service, 'debug', msg)); 
+    },
+    info: (msg) => { 
+      if (shouldLog('info')) console.log(format(service, 'info', msg)); 
+    },
+    success: (msg) => { 
+      if (shouldLog('info')) console.log(formatSuccess(service, msg)); 
+    },
+    warn: (msg) => { 
+      if (shouldLog('warn')) console.warn(format(service, 'warn', msg)); 
+    },
+    error: (msg) => { 
+      if (shouldLog('error')) console.error(format(service, 'error', msg)); 
+    }
   };
 }
 
@@ -82,17 +171,36 @@ export function createLogger(service) {
 export const logger = base();
 
 export function printStartupBanner(ports = {}) {
-  // Minimal banner inspired by the reference, but generic
-  const { CLIENT, SERVER, VIBE } = ports;
-  const lines = [
-    ' ╭──────────────────────────── Services ────────────────────────────╮',
-    ' │                                                                  │',
-    ` │  Web:       http://localhost:${CLIENT ?? '9000'}                               │`,
-    ` │  API:       http://localhost:${SERVER ?? '8080'}                               │`,
-    ` │  Vibe:      http://localhost:${VIBE ?? '6734'}                                │`,
-    ' │                                                                  │',
-    ' ╰──────────────────────────────────────────────────────────────────╯'
-  ];
-  for (const l of lines) console.log(l);
+  const { CLIENT = 5892, SERVER = 7347, VIBE = 6734 } = ports;
+  
+  // Clear line and print beautiful startup banner
+  console.log('');
+  console.log(`${COLORS.brightCyan}╭──────────────────────────────────────────────────────────────────────╮${COLORS.reset}`);
+  console.log(`${COLORS.brightCyan}│                                                                      │${COLORS.reset}`);
+  console.log(`${COLORS.brightCyan}│${COLORS.reset}  ${COLORS.bold}${COLORS.brightWhite}🚀 CLAUDE CODE UI${COLORS.reset}                                                 ${COLORS.brightCyan}│${COLORS.reset}`);
+  console.log(`${COLORS.brightCyan}│${COLORS.reset}                                                                      ${COLORS.brightCyan}│${COLORS.reset}`);
+  console.log(`${COLORS.brightCyan}├──────────────────────────────────────────────────────────────────────┤${COLORS.reset}`);
+  console.log(`${COLORS.brightCyan}│${COLORS.reset}                          ${COLORS.bold}Services${COLORS.reset}                                   ${COLORS.brightCyan}│${COLORS.reset}`);
+  console.log(`${COLORS.brightCyan}│${COLORS.reset}                                                                      ${COLORS.brightCyan}│${COLORS.reset}`);
+  console.log(`${COLORS.brightCyan}│${COLORS.reset}    ${COLORS.green}Web:${COLORS.reset}       ${COLORS.brightGreen}http://localhost:${CLIENT}${COLORS.reset}                              ${COLORS.brightCyan}│${COLORS.reset}`);
+  console.log(`${COLORS.brightCyan}│${COLORS.reset}    ${COLORS.blue}API:${COLORS.reset}       ${COLORS.brightBlue}http://localhost:${SERVER}${COLORS.reset}                              ${COLORS.brightCyan}│${COLORS.reset}`);
+  console.log(`${COLORS.brightCyan}│${COLORS.reset}    ${COLORS.magenta}Vibe:${COLORS.reset}      ${COLORS.brightMagenta}http://localhost:${VIBE}${COLORS.reset}                              ${COLORS.brightCyan}│${COLORS.reset}`);
+  console.log(`${COLORS.brightCyan}│${COLORS.reset}                                                                      ${COLORS.brightCyan}│${COLORS.reset}`);
+  console.log(`${COLORS.brightCyan}╰──────────────────────────────────────────────────────────────────────╯${COLORS.reset}`);
+  console.log('');
 }
 
+// Special formatted messages for important events
+export function logStartup(service, message) {
+  const timeStr = ts();
+  console.log(`${COLORS.gray}[${timeStr}]${COLORS.reset} ${COLORS.brightGreen}[${service}]${COLORS.reset} ${COLORS.green}Starting...${COLORS.reset}`);
+}
+
+export function logReady(service, port) {
+  const timeStr = ts();
+  const url = `http://localhost:${port}`;
+  console.log(`${COLORS.gray}[${timeStr}]${COLORS.reset} ${COLORS.brightGreen}[${service}]${COLORS.reset} ${COLORS.green}${COLORS.bold}SUCCESS${COLORS.reset} API server ready on ${COLORS.brightCyan}${url}${COLORS.reset}`);
+}
+
+// Export box drawing characters for other uses
+export { BOX, COLORS };

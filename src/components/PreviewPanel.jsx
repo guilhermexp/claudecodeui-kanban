@@ -22,7 +22,6 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, onRefresh
   
   // Debug state changes
   useEffect(() => {
-    // Debug: Element selection mode changed
   }, [elementSelectionMode]);
   const iframeRef = useRef(null);
   const logsRef = useRef(null);
@@ -218,7 +217,6 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, onRefresh
         iframeRef.current.src = currentUrl;
       }
     } catch (e) {
-      console.error('Microphone permission denied:', e);
       setMicrophoneStatus('denied');
     }
   };
@@ -232,7 +230,6 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, onRefresh
     const handleMessage = (event) => {
       // Debug all messages
       if (event.data) {
-        // Debug: PreviewPanel got message
         if (event.data.type === 'test-message') {
           alert('📨 TEST MESSAGE RECEIVED FROM: ' + event.data.from);
         }
@@ -588,7 +585,6 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, onRefresh
               // Cross-origin restriction, can't inject script - this is expected for external URLs
               // Only log if not a cross-origin error
               if (!e.message.includes('cross-origin')) {
-                console.warn('Cannot inject console capture script:', e.message);
               }
             }
           };
@@ -603,7 +599,6 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, onRefresh
           setTimeout(performInjection, 500);
           
         } catch (e) {
-          console.warn('Failed to setup console capture:', e);
         }
       }
     };
@@ -699,7 +694,6 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, onRefresh
         urlToLoad = 'http://' + urlToLoad;
       }
       
-      // Debug: Resuming with URL
       setCurrentUrl(urlToLoad);
       setPausedUrl(null);
       setUserEditedUrl(false); // Reset the flag after using the edited URL
@@ -782,13 +776,11 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, onRefresh
   useEffect(() => {
     
     if (!elementSelectionMode || !iframeRef.current) {
-      // Debug: Element selection disabled or no iframe
       return;
     }
     
     const handleElementSelected = (event) => {
       if (event.data?.type === 'element-selected') {
-        // Debug: Element selected
         setSelectedElement(event.data.data);
         setElementSelectionMode(false);
         
@@ -805,11 +797,9 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, onRefresh
     
     // Inject selection script after a delay
     const timer = setTimeout(() => {
-      // Debug: Element selection activation attempt
       
       if (iframeRef.current && elementSelectionMode) {
         const iframe = iframeRef.current;
-        // Debug: Injecting element selector script
         
         // SIMPLES: Sempre tenta injetar no iframe principal (que agora sempre é a aplicação)
         try {
@@ -818,7 +808,6 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, onRefresh
           if (iframeDoc) {
             // Check if script already injected
             if (iframeDoc.querySelector('#element-selector-script')) {
-              // Debug: Element selector already injected
               return;
             }
             
@@ -943,7 +932,6 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, onRefresh
               })();
             `;
             iframeDoc.body.appendChild(script);
-            // Debug: Element selector script injected successfully
           } else {
             // Error: Cannot access iframe document
           }
@@ -952,7 +940,6 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, onRefresh
           // Try alternative approach with postMessage
           const iframe = iframeRef.current;
           if (iframe && iframe.contentWindow) {
-            // Debug: Trying postMessage approach
             iframe.contentWindow.postMessage({ 
               type: 'enable-element-selection',
               enabled: true 
@@ -988,7 +975,6 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, onRefresh
             }, '*');
           }
         } catch (e) {
-          // Debug: Cleanup error (expected for cross-origin)
         }
       }
     };
@@ -1227,7 +1213,6 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, onRefresh
             {/* Element Selection Toggle */}
             <button
               onClick={() => {
-                // Debug: Element selection button clicked
                 setElementSelectionMode(!elementSelectionMode);
               }}
               className={`p-1.5 rounded-md transition-colors ${

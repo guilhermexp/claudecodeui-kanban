@@ -9,11 +9,11 @@
 
 import http from 'http';
 import https from 'https';
-import { logger as baseLogger } from './logger.js';
+import { createLogger } from '../utils/logger.js';
 import { ServiceUnavailableError, GatewayTimeoutError, AppError } from './errors.js';
 import { caches } from './cache.js';
 
-const logger = baseLogger.child('vibe-proxy');
+const logger = createLogger('VIBE-PROXY');
 
 class VibeKanbanProxy {
   constructor(options = {}) {

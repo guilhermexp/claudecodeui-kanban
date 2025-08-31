@@ -20,21 +20,43 @@ const PORTS = {
   VIBE_BACKEND: 6734
 };
 
-// Colors for output
+// Enhanced colors for beautiful output
 const colors = {
   reset: '\x1b[0m',
+  bold: '\x1b[1m',
+  dim: '\x1b[90m',
   red: '\x1b[31m',
   green: '\x1b[32m',
   yellow: '\x1b[33m',
   blue: '\x1b[34m',
   magenta: '\x1b[35m',
   cyan: '\x1b[36m',
-  dim: '\x1b[90m'
+  white: '\x1b[37m',
+  brightRed: '\x1b[91m',
+  brightGreen: '\x1b[92m',
+  brightYellow: '\x1b[93m',
+  brightBlue: '\x1b[94m',
+  brightMagenta: '\x1b[95m',
+  brightCyan: '\x1b[96m',
+  brightWhite: '\x1b[97m'
 };
 
 function log(service, message, color = colors.reset) {
-  const timestamp = new Date().toLocaleTimeString();
+  const now = new Date();
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  const seconds = String(now.getSeconds()).padStart(2, '0');
+  const timestamp = `${hours}:${minutes}:${seconds}`;
   console.log(`${colors.dim}[${timestamp}]${colors.reset} ${color}[${service}]${colors.reset} ${message}`);
+}
+
+function logSuccess(service, message) {
+  const now = new Date();
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  const seconds = String(now.getSeconds()).padStart(2, '0');
+  const timestamp = `${hours}:${minutes}:${seconds}`;
+  console.log(`${colors.dim}[${timestamp}]${colors.reset} ${colors.brightGreen}[${service}]${colors.reset} ${colors.green}${colors.bold}SUCCESS${colors.reset} ${message}`);
 }
 
 function banner() {
@@ -44,8 +66,7 @@ function banner() {
     if (existsSync(customPath)) {
       const text = readFileSync(customPath, 'utf8');
       for (const line of text.split('\n')) {
-        if (line.trim().length === 0) { console.log(''); continue; }
-        console.log(colors.cyan + line + colors.reset);
+        console.log(line);
       }
       return;
     }
@@ -117,8 +138,9 @@ function banner() {
       const g = glyphs[ch] || glyphs['I'];
       line += (g[r] || '        ') + '  ';
     }
-    console.log(colors.cyan + line + colors.reset);
+    console.log(line);
   }
+  console.log();
 }
 
 // Kill processes on specific ports
@@ -250,7 +272,6 @@ function spawnService(name, command, args, options = {}) {
 // Main execution
 async function main() {
   // Simple startup message
-  console.log(`${colors.cyan}🚀 Starting ClaudeUI...${colors.reset}`);
   banner();
   
   // Initialize Port Protection Service (but don't start monitoring yet)
@@ -272,7 +293,7 @@ async function main() {
       'node',
       ['--expose-gc', '--max-old-space-size=2048', 'server/index.js'],
       {
-        color: colors.green,
+        color: colors.brightGreen,
         env: { PORT: PORTS.SERVER, VITE_PORT: PORTS.CLIENT, VIBE_PORT: PORTS.VIBE_BACKEND },
         registerCallback: (pid) => {} // portProtector.registerAllowedProcess('SERVER', pid)
       }
@@ -329,7 +350,7 @@ async function main() {
     'npx',
     ['vite', '--host', '--port', PORTS.CLIENT.toString()],
     {
-      color: colors.blue,
+      color: colors.brightCyan,
       env: { VITE_PORT: PORTS.CLIENT },
       registerCallback: (pid) => {} // portProtector.registerAllowedProcess('CLIENT', pid)
     }
@@ -350,7 +371,7 @@ async function main() {
       'cargo',
       ['run', '--release'],
       {
-        color: colors.magenta,
+        color: colors.brightMagenta,
         cwd: join(rootDir, 'vibe-kanban/backend'),
         env: { 
           PORT: PORTS.VIBE_BACKEND,
@@ -407,8 +428,12 @@ async function main() {
   
   // Simple ready message
   setTimeout(() => {
-    console.log(`${colors.green}✅ Ready at http://localhost:${PORTS.CLIENT}${colors.reset}`);
     // Custom banner already includes an endpoints panel when provided
+    log('READY', `Development server running at http://localhost:${PORTS.CLIENT}`, colors.green);
+    log('READY', `Backend API available at http://localhost:${PORTS.SERVER}`, colors.green);
+    if (checkVibeKanban()) {
+      log('READY', `Vibe Kanban backend at http://localhost:${PORTS.VIBE_BACKEND}`, colors.green);
+    }
   }, 2000);
 }
 

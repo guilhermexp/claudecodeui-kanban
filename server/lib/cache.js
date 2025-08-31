@@ -2,8 +2,8 @@
  * Simple in-memory cache with TTL support
  */
 
-import { logger as baseLogger } from './logger.js';
-const logger = baseLogger.child('cache');
+import { createLogger } from '../utils/logger.js';
+const logger = createLogger('CACHE');
 
 class Cache {
   constructor(options = {}) {

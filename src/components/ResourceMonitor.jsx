@@ -17,11 +17,9 @@ function ResourceMonitor() {
   const fetchSystemInfo = async () => {
     // Double check to prevent race conditions
     if (!isMountedRef.current || !isOpen) {
-      console.log('[ResourceMonitor] Skipping fetch - not mounted or closed');
       return;
     }
     
-    console.log('[ResourceMonitor] Fetching system info...');
     setIsLoading(true);
     try {
       const response = await authenticatedFetch('/api/system/info');
@@ -36,11 +34,9 @@ function ResourceMonitor() {
       
       // Check again after async operation
       if (!isMountedRef.current || !isOpen) {
-        console.log('[ResourceMonitor] Discarding data - component unmounted or closed');
         return;
       }
       
-      console.log('[ResourceMonitor] Received data:', data);
       const clamp = v => Math.max(0, Math.min(100, Math.round(v)));
       const newSystemInfo = {
         activePorts: data?.activePorts || [],
@@ -48,7 +44,6 @@ function ResourceMonitor() {
         cpuUsage: clamp(data?.cpuUsage || 0),
         ...data
       };
-      console.log('[ResourceMonitor] Setting system info:', newSystemInfo);
       setSystemInfo(newSystemInfo);
       setError(null);
     } catch (error) {
@@ -86,27 +81,22 @@ function ResourceMonitor() {
   useEffect(() => {
     // Always clear any existing interval first
     if (intervalRef.current) {
-      console.log('[ResourceMonitor] Clearing existing interval');
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
 
     if (isOpen) {
-      console.log('[ResourceMonitor] Panel opened - starting monitoring...');
       // Fetch immediately
       fetchSystemInfo();
       
       // Poll every 30s to reduce server load (cleared on close)
       intervalRef.current = setInterval(fetchSystemInfo, 30000);
-      console.log('[ResourceMonitor] Interval created with ID:', intervalRef.current);
     } else {
-      console.log('[ResourceMonitor] Panel closed - stopping monitoring');
     }
 
     // Cleanup function - ALWAYS runs when component unmounts or isOpen changes
     return () => {
       if (intervalRef.current) {
-        console.log('[ResourceMonitor] useEffect cleanup - clearing interval:', intervalRef.current);
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
@@ -145,7 +135,6 @@ function ResourceMonitor() {
       <button
         onClick={() => {
           const newState = !isOpen;
-          console.log('[ResourceMonitor] Button clicked, setting isOpen to:', newState);
           setIsOpen(newState);
         }}
         className={`
@@ -175,7 +164,6 @@ function ResourceMonitor() {
             <h3 className="font-semibold text-sm">System Monitor</h3>
             <button
               onClick={() => {
-                console.log('[ResourceMonitor] Close button clicked');
                 setIsOpen(false);
               }}
               className="w-6 h-6 flex items-center justify-center text-muted-foreground hover:text-foreground rounded-md hover:bg-accent transition-colors"

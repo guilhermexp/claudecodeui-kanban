@@ -33,12 +33,10 @@ export function useWebSocket(authReady = false, wsPath = '/ws') {
   const connect = async () => {
     // Prevent multiple simultaneous connections
     if (wsRef.current && wsRef.current.readyState === WebSocket.CONNECTING) {
-      console.log('WebSocket already connecting, skipping duplicate connection');
       return;
     }
     
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      console.log('WebSocket already connected, skipping duplicate connection');
       return;
     }
     
@@ -72,13 +70,24 @@ export function useWebSocket(authReady = false, wsPath = '/ws') {
         wsBaseUrl = `${protocol}//${window.location.host}`;
       }
       
-      // Include token in WebSocket URL as query parameter
+      // Create WebSocket URL without token in query parameters
       const normalizedPath = wsPath.startsWith('/') ? wsPath : `/${wsPath}`;
-      const wsUrl = `${wsBaseUrl}${normalizedPath}?token=${encodeURIComponent(token)}`;
+      const wsUrl = `${wsBaseUrl}${normalizedPath}`;
+      console.log('[WebSocket] Connecting to:', wsUrl, 'Path:', normalizedPath);
+      
+      // Browser WebSocket API doesn't support custom headers
+      // For browser security, we need to send the token after connection
       const websocket = new WebSocket(wsUrl);
+      
       wsRef.current = websocket;
 
+      // Send authentication token immediately after connection opens
       websocket.onopen = () => {
+        // Send authentication message first
+        websocket.send(JSON.stringify({
+          type: 'auth',
+          token: token
+        }));
         setIsConnected(true);
         setWs(websocket);
       };

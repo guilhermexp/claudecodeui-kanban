@@ -31,36 +31,23 @@ keys.forEach(key => {
   }
 });
 
-console.log('=== CODEX SAVED SESSIONS ===');
-console.log('
 Projects with saved sessions:');
 Object.entries(codexSessions).forEach(([project, data]) => {
-  console.log(`  • ${project}`);
-  console.log(`    - Session ID: ${data.sessionId ? data.sessionId.slice(0, 8) : 'N/A'}`);
-  console.log(`    - Rollout Path: ${data.rolloutPath || 'N/A'}`);
 });
 
-console.log('
 
 Projects with chat history:');
 Object.entries(chatHistories).forEach(([project, data]) => {
-  console.log(`  • ${project}`);
-  console.log(`    - Messages: ${data.messageCount}`);
-  console.log(`    - Last Update: ${data.lastUpdate}`);
 });
 
-console.log('
 
 Total projects with sessions:', Object.keys(codexSessions).length);
-console.log('Total projects with chat history:', Object.keys(chatHistories).length);
 
 // Also check for other Codex-related data
 const allCodexKeys = keys.filter(k => k.includes('codex') || k.includes('claude'));
-console.log('
 
 All Codex/Claude related localStorage keys:', allCodexKeys.length);
 allCodexKeys.forEach(key => {
   if (!key.startsWith('codex-last-session-') && !key.startsWith('codex-chat-history-')) {
-    console.log(`  • ${key}`);
   }
 });

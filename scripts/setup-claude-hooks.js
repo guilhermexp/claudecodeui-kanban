@@ -319,7 +319,6 @@ async function setupDefaultHooks() {
   const manager = new ClaudeHooksManager();
   
   try {
-    console.log('🔊 Configurando hooks de notificação sonora do Claude Code...');
     
     const result = await manager.setupSoundHooks({
       soundType: 'system',
@@ -330,12 +329,6 @@ async function setupDefaultHooks() {
     });
 
     if (result.success) {
-      console.log('✅ Hooks configurados com sucesso!');
-      console.log(`📁 Configuração salva em: ${result.configPath}`);
-      console.log(`🎵 Comando de som: ${result.soundCommand}`);
-      console.log(`\n🎯 Sons disponíveis:`);
-      console.log(`   Sistema: ${result.availableSounds.system.map(s => s.name).join(', ')}`);
-      console.log(`   Customizados: ${result.availableSounds.custom.map(s => s.name).join(', ')}`);
     } else {
       console.error('❌ Erro ao configurar hooks');
     }

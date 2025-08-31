@@ -5,9 +5,9 @@
 
 import rateLimit from 'express-rate-limit';
 import slowDown from 'express-slow-down';
-import { logger } from '../lib/logger.js';
+import { createLogger } from '../utils/logger.js';
 
-const rateLimitLogger = logger.child('rate-limit');
+const rateLimitLogger = createLogger('RATE-LIMIT');
 
 // General API rate limiting
 export const apiRateLimit = rateLimit({

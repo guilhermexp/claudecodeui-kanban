@@ -139,7 +139,6 @@ class UsageTracker {
     try {
       this.db.exec('DELETE FROM usage_logs');
       this.db.exec('DELETE FROM session_durations');
-      console.log('All usage data cleared');
       return { success: true, message: 'All data cleared' };
     } catch (error) {
       console.error('Error clearing data:', error);
@@ -152,13 +151,11 @@ class UsageTracker {
       // Check if Claude projects directory exists
       const exists = await fs.access(this.claudeProjectsPath).then(() => true).catch(() => false);
       if (!exists) {
-        console.log('Claude projects directory not found at:', this.claudeProjectsPath);
         return { imported: 0, errors: 0, message: 'Claude projects directory not found' };
       }
 
       // Clear existing data before importing
       this.db.exec('DELETE FROM usage_logs');
-      console.log('Cleared existing usage data');
 
       // Read all project directories
       const projects = await fs.readdir(this.claudeProjectsPath);
@@ -170,7 +167,6 @@ class UsageTracker {
       const sessionTimestamps = {}; // sessionId -> { first: timestamp, last: timestamp }
       const messageCountBySession = {}; // Track message count to filter out noise
 
-      console.log(`Found ${projects.length} project directories`);
 
       for (const projectDir of projects) {
         const projectPath = path.join(this.claudeProjectsPath, projectDir);
@@ -190,7 +186,6 @@ class UsageTracker {
         const files = await fs.readdir(projectPath);
         const jsonlFiles = files.filter(f => f.endsWith('.jsonl') && !f.includes('.backup'));
 
-        console.log(`Processing ${jsonlFiles.length} JSONL files in ${decodedProjectPath}`);
 
         for (const jsonlFile of jsonlFiles) {
           totalFiles++;
@@ -287,7 +282,6 @@ class UsageTracker {
       // Store session durations with message count for better estimation
       this.storeSessionDurations(sessionTimestamps, messageCountBySession);
 
-      console.log(`Import complete: ${totalImported} records imported from ${totalFiles} files (${totalErrors} errors)`);
       return { 
         imported: totalImported, 
         errors: totalErrors, 

@@ -17,14 +17,12 @@ const claude = new ClaudeCodeSDK({
  */
 async function simpleQuery() {
   try {
-    console.log('📤 Sending simple query to Claude...');
     
     const response = await claude.query({
       prompt: "What is 2 + 2?",
       maxTurns: 1
     });
     
-    console.log('📥 Response:', response);
   } catch (error) {
     console.error('❌ Error:', error);
   }
@@ -35,7 +33,6 @@ async function simpleQuery() {
  */
 async function queryWithTools() {
   try {
-    console.log('🔧 Querying Claude with tool permissions...');
     
     const response = await claude.query({
       prompt: "List the files in the current directory",
@@ -44,7 +41,6 @@ async function queryWithTools() {
       maxTurns: 1
     });
     
-    console.log('📥 Response:', response);
   } catch (error) {
     console.error('❌ Error:', error);
   }
@@ -55,7 +51,6 @@ async function queryWithTools() {
  */
 async function interactiveSession() {
   try {
-    console.log('💬 Starting interactive session...');
     
     const session = claude.createSession({
       systemPrompt: "You are a helpful coding assistant",
@@ -65,15 +60,12 @@ async function interactiveSession() {
     
     // Send a message
     const response1 = await session.send("Create a simple hello.py file");
-    console.log('Response 1:', response1);
     
     // Send follow-up
     const response2 = await session.send("Now run the hello.py file");
-    console.log('Response 2:', response2);
     
     // Close session
     await session.close();
-    console.log('✅ Session closed');
     
   } catch (error) {
     console.error('❌ Error:', error);
@@ -85,7 +77,6 @@ async function interactiveSession() {
  */
 async function streamingExample() {
   try {
-    console.log('🌊 Streaming response from Claude...');
     
     const stream = await claude.stream({
       prompt: "Write a function to calculate factorial in JavaScript",
@@ -96,7 +87,6 @@ async function streamingExample() {
       process.stdout.write(chunk);
     }
     
-    console.log('\n✅ Streaming complete');
     
   } catch (error) {
     console.error('❌ Error:', error);
@@ -108,7 +98,6 @@ async function streamingExample() {
  */
 async function codeGeneration() {
   try {
-    console.log('🚀 Generating code with Claude...');
     
     const response = await claude.query({
       prompt: `Create a simple React component called Button.jsx that:
@@ -121,7 +110,6 @@ async function codeGeneration() {
       maxTurns: 1
     });
     
-    console.log('✅ Code generated:', response);
     
   } catch (error) {
     console.error('❌ Error:', error);
@@ -132,8 +120,6 @@ async function codeGeneration() {
  * Main function to run examples
  */
 async function main() {
-  console.log('🎯 Claude Code SDK Demo\n');
-  console.log('========================\n');
   
   // Choose which example to run
   const example = process.argv[2] || 'simple';
@@ -155,7 +141,6 @@ async function main() {
       await codeGeneration();
       break;
     default:
-      console.log('Usage: node claude-code-sdk-demo.js [simple|tools|interactive|stream|codegen]');
   }
 }
 

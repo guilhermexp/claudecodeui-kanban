@@ -52,7 +52,6 @@ export const ClaudeWebSocketProvider = ({ children }) => {
       ws.current.send(JSON.stringify(message));
       return true;
     }
-    console.warn('WebSocket not connected, message not sent:', message);
     return false;
   }, []);
 
@@ -122,7 +121,6 @@ export const ClaudeWebSocketProvider = ({ children }) => {
       ws.current = new WebSocket(wsUrl);
       
       ws.current.onopen = () => {
-        console.log('Claude WebSocket connected');
         setIsConnected(true);
         setIsConnecting(false);
         reconnectAttempts.current = 0;
@@ -158,7 +156,6 @@ export const ClaudeWebSocketProvider = ({ children }) => {
       };
       
       ws.current.onclose = () => {
-        console.log('Claude WebSocket disconnected');
         setIsConnected(false);
         setIsConnecting(false);
         ws.current = null;
@@ -178,7 +175,6 @@ export const ClaudeWebSocketProvider = ({ children }) => {
         if (token && reconnectAttempts.current < 5) {
           reconnectAttempts.current++;
           const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 10000);
-          console.log(`Reconnecting in ${delay}ms (attempt ${reconnectAttempts.current})...`);
           
           reconnectTimeout.current = setTimeout(() => {
             connect();

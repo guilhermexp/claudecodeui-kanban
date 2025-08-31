@@ -1,9 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import ReactDOM from 'react-dom';
-import ReactMarkdown from 'react-markdown';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { motion, AnimatePresence } from 'framer-motion';
+// ReactMarkdown is used inside extracted components
+import { motion } from 'framer-motion';
 import { useWebSocket } from '../utils/websocket';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -12,6 +10,15 @@ import { loadPlannerMode, savePlannerMode, loadModelLabel } from '../utils/chat-
 import { hasChatHistory, loadChatHistory, saveChatHistory } from '../utils/chat-history';
 import { hasLastSession, loadLastSession, saveLastSession, clearLastSession } from '../utils/chat-session';
 import CtaButton from './ui/CtaButton';
+import EmptyStateCodex from './overlay-codex/EmptyStateCodex';
+import ImagePreviewList from './overlay-codex/ImagePreviewList';
+import AttachmentsChips from './overlay-codex/AttachmentsChips';
+import StatusStrip from './overlay-codex/StatusStrip';
+import useImageUploads from './overlay-codex/useImageUploads';
+import createMarkdownComponents from './overlay-codex/MarkdownConfig';
+import MessageList from './overlay-codex/MessageList';
+
+// OverlayChat (Codex) — refatorado em componentes menores
 
 // Overlay Chat com formatação bonita usando ReactMarkdown
 // Usa NOSSO backend interno (porta 7347) - sem servidores externos!
@@ -29,10 +36,21 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
   const [typingStatus, setTypingStatus] = useState({ mode: 'idle', label: '' });
   const [typingStart, setTypingStart] = useState(null);
   const [elapsedSec, setElapsedSec] = useState(0);
+  // Minimal activity lock to keep the input indicator visible during work
+  const [activityLock, setActivityLock] = useState(false);
+  const activityStartRef = useRef(null);
   const [selectedElement, setSelectedElement] = useState(null);
   const [attachments, setAttachments] = useState([]); // chips like "div", "span" etc
-  const [imageAttachments, setImageAttachments] = useState([]); // Array of image data URLs
-  const [isDragging, setIsDragging] = useState(false);
+  const {
+    imageAttachments,
+    isDragging,
+    onFileInputChange,
+    onDragOver,
+    onDragLeave,
+    onDrop,
+    removeImageAttachment,
+    clearImages,
+  } = useImageUploads();
   const trayInputRef = useRef(null);
   const bottomRef = useRef(null);
   const messagesScrollRef = useRef(null);
@@ -56,7 +74,8 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
   // Auth-aware WebSocket (connect only once token is available)
   const { isLoading: authLoading, token } = useAuth();
   const authReady = !!token && !authLoading;
-  const { ws, sendMessage, messages: wsMessages, isConnected, reconnect } = useWebSocket(authReady);
+  // Use unified Claude endpoint for all chat operations
+  const { ws, sendMessage, messages: wsMessages, isConnected, reconnect } = useWebSocket(authReady, '/claude');
   const [clientSessionId, setClientSessionId] = useState(null); // synthetic id when real id is not yet available
   const [resumeRolloutPath, setResumeRolloutPath] = useState(null);
   
@@ -192,6 +211,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
       setSessionActive(false);
       setSessionId(null);
       setMessages([]);
+      setActivityLock(false);
     }
   }, [isConnected, sendMessage]);
 
@@ -212,19 +232,22 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
 
   // Elapsed time while thinking/using a tool
   useEffect(() => {
-    if (isTyping && (typingStatus.mode === 'thinking' || typingStatus.mode === 'tool')) {
-      const start = Date.now();
-      setTypingStart(start);
-      setElapsedSec(0);
+    // Keep a simple timer running while there is activity
+    const active = activityLock || isSessionInitializing || isTyping || ['queued','busy','thinking','tool'].includes(typingStatus.mode);
+    if (active) {
+      if (!activityStartRef.current) {
+        activityStartRef.current = Date.now();
+      }
+      const start = activityStartRef.current || Date.now();
+      setElapsedSec(Math.max(0, Math.floor((Date.now() - start) / 1000)));
       const id = setInterval(() => {
         setElapsedSec(Math.max(0, Math.floor((Date.now() - start) / 1000)));
       }, 1000);
       return () => clearInterval(id);
-    } else {
-      setTypingStart(null);
-      setElapsedSec(0);
     }
-  }, [isTyping, typingStatus.mode]);
+    activityStartRef.current = null;
+    setElapsedSec(0);
+  }, [activityLock, isSessionInitializing, isTyping, typingStatus.mode]);
 
   // Smart message merging logic inspired by Claudable
   const addMessage = useCallback((newMessage) => {
@@ -412,6 +435,8 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
       // Normalize Codex events
       const normalized = normalizeCodexEvent(lastMsg) || [];
       if (normalized.length) {
+        // Receiving assistant/system chunks shouldn't hide the activity bar;
+        // keep it locked until we get an explicit completion/idle/error.
         setIsTyping(false);
         setTypingStatus({ mode: 'idle', label: '' });
         normalized.forEach((m) => addMessage({ type: m.type, text: m.text }));
@@ -425,6 +450,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
           setTypingStart(Date.now());
           setElapsedSec(0);
         }
+        setActivityLock(true);
         return;
       }
       if (lastMsg.type === 'codex-complete') {
@@ -432,6 +458,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
         setTypingStatus({ mode: 'idle', label: '' });
         setTypingStart(null);
         setElapsedSec(0);
+        setActivityLock(false);
         return;
       }
       if (lastMsg.type === 'codex-error') {
@@ -440,6 +467,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
         setTypingStart(null);
         setElapsedSec(0);
         addMessage({ type: 'error', text: lastMsg.error });
+        setActivityLock(false);
         return;
       }
       if (lastMsg.type === 'codex-tool') {
@@ -450,6 +478,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
           addMessage({ type: 'system', text: `${getToolIcon(toolData.name)} ${toolData.name}` });
           setTypingStart(Date.now());
           setElapsedSec(0);
+          setActivityLock(true);
         }
         return;
       }
@@ -462,6 +491,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
         const id = addMessageAndGetId({ type: 'system', text: title });
         execStreamsRef.current.set(callId, { id, buffer: '', lastTs: Date.now() });
         setIsTyping(true);
+        setActivityLock(true);
         return;
       }
       if (lastMsg.type === 'codex-exec-delta') {
@@ -487,6 +517,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
           execStreamsRef.current.delete(callId);
         }
         setIsTyping(false);
+        setActivityLock(false);
         return;
       }
       // Queue/busy state from server
@@ -498,6 +529,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
         if (pos && pos > 1) {
           addMessage({ type: 'system', text: `Queued (position ${pos})` });
         }
+        setActivityLock(true);
         return;
       }
       if (lastMsg.type === 'codex-busy') {
@@ -505,12 +537,14 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
         setIsTyping(true);
         setTypingStatus({ mode: 'busy', label: q > 0 ? `Busy • queue ${q}` : 'Busy' });
         setQueueLength(q);
+        setActivityLock(true);
         return;
       }
       if (lastMsg.type === 'codex-idle') {
         setIsTyping(false);
         setTypingStatus({ mode: 'idle', label: '' });
         setQueueLength(0);
+        setActivityLock(false);
         return;
       }
       if (lastMsg.type === 'codex-aborted') {
@@ -518,6 +552,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
         setTypingStatus({ mode: 'idle', label: '' });
         setQueueLength(0);
         addMessage({ type: 'system', text: 'Aborted and cleared queue' });
+        setActivityLock(false);
         return;
       }
       if (lastMsg.type === 'codex-connector' && lastMsg.mode) {
@@ -626,11 +661,6 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
       </div>
       )}
       <div ref={messagesScrollRef} className={`${embedded ? 'flex-1 overflow-y-auto px-3 py-2 space-y-2 pb-20' : 'overflow-y-auto px-4 py-3 space-y-2 bg-transparent max-h-[50vh] pb-20'} relative`} style={{ scrollBehavior: 'auto', overflowAnchor: 'none' }}>
-        {dangerousMode && (
-          <div className="mb-2 px-3 py-2 rounded-md border border-destructive/40 bg-destructive/10 text-[11px] text-destructive">
-            Dangerous mode ON: commands may modify your real project.
-          </div>
-        )}
         {codexLimitStatus && (
           <div className="mb-2 px-3 py-2 rounded-md border border-border/40 bg-muted/40 text-[11px] text-muted-foreground">
             Limits: {codexLimitStatus.remaining != null ? codexLimitStatus.remaining : '?'} remaining{codexLimitStatus.resetAt ? `, reset ${codexLimitStatus.resetAt}` : ''}
@@ -677,113 +707,15 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
             </button>
           </div>
         )}
-        {messages.length === 0 && !isTyping && !sessionActive && (
-          <div className={`flex flex-col items-center justify-center gap-4 h-full min-h-[240px]`}>
-            <CtaButton onClick={startSession} disabled={isSessionInitializing || !isConnected} icon={false}>Start Codex AI Session</CtaButton>
-          </div>
+        {/* Minimal empty state when no messages */}
+        {messages.length === 0 && !isTyping && !sessionActive && !isSessionInitializing && (
+          <EmptyStateCodex
+            isStarting={isSessionInitializing}
+            isConnected={isConnected}
+            onStart={() => { setDangerousMode(true); startSession(); }}
+          />
         )}
-        <AnimatePresence initial={false}>
-          {messages.map((m) => {
-            const isUser = m.type === 'user';
-            const isError = m.type === 'error';
-            const isSystem = m.type === 'system';
-            const containerClass = isUser
-              ? 'text-foreground/80 text-right'
-              : isError
-              ? 'px-4 py-3 rounded-2xl shadow-sm bg-destructive/10 text-destructive border border-destructive/20'
-              : isSystem
-              ? 'text-muted-foreground italic'
-              : 'text-foreground'; // assistant: no background/padding, plain text
-            
-            // Detect tool messages and extract inline command for copy
-            const isToolMessage = !isError && isSystem && typeof m.text === 'string' && m.text.startsWith('🔧 ');
-            const extractCommand = (txt) => {
-              const match = /`([^`]+)`/.exec(txt || '');
-              return match ? match[1] : '';
-            };
-            
-            // Spec Card heuristic (Plan/Observations/Spec)
-            // Ensure m.text is always a string
-            const textContent = typeof m.text === 'string' ? m.text : (m.text?.toString() || '');
-            const rawText = textContent.trim();
-            const firstLine = rawText.split('\n')[0] || '';
-            const looksLikeSpec = !isUser && !isError && !isSystem && /^(plan|observations|spec|plano|observa|especifica)/i.test(firstLine);
-            const specTitle = looksLikeSpec ? (firstLine.length > 2 ? firstLine : 'Plan Specification') : null;
-
-            const SpecWrapper = ({ children }) => {
-              if (!looksLikeSpec) return <>{children}</>;
-              return (
-                <div className="rounded-2xl border border-border/60 bg-muted/10 px-3 py-2 shadow-sm">
-                  <div className="mb-2 flex items-center gap-2 text-sm font-medium">
-                    <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-green-600/80 text-white">✓</span>
-                    <span>{specTitle}</span>
-                  </div>
-                  {children}
-                </div>
-              );
-            };
-
-            // ExpandableMessage removed – always show full content
-            return (
-              <motion.div key={m.id} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }} transition={{ duration: 0.25 }} className={`w-full ${isUser ? 'flex justify-end' : ''}`}>
-                <div className={`${containerClass} ${isUser ? 'max-w-[85%]' : 'w-full max-w-none pr-2'}`}>
-                  {/^(Updated Todo List|Lista de tarefas atualizada|TODO List:|Todo List:)/i.test(textContent) ? (
-                    <div>
-                      <div className="text-sm font-semibold mb-1">{(textContent.split('\n')[0] || '').trim()}</div>
-                      <ul className="space-y-1 ml-1">
-                        {textContent.split('\n').slice(1).filter(line => line.trim()).slice(0, 30).map((line, idx) => {
-                          const checked = /(^|\s)(\[x\]|✔)/i.test(line);
-                          const content = line.replace(/^[-*\d\.\)\s]+/, '');
-                          return (
-                            <li key={idx} className="flex items-start gap-2 text-sm">
-                              <input type="checkbox" disabled checked={checked} className="mt-1 rounded" />
-                              <span>{content}</span>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    </div>
-                  ) : (
-                    (isUser || isError)
-                      ? (
-                        <SpecWrapper>
-                        <div className="prose prose-sm dark:prose-invert max-w-none leading-relaxed prose-p:my-1 prose-li:my-1">
-                          <ReactMarkdown components={markdownComponents}>{textContent}</ReactMarkdown>
-                        </div>
-                        </SpecWrapper>
-                      ) : isSystem ? (
-                        <div className="relative">
-                          {isToolMessage && (
-                            <button
-                              className="absolute -top-1 -right-1 text-[10px] px-2 py-0.5 rounded bg-background/80 border border-border/50 opacity-60 hover:opacity-100 transition-opacity"
-                              title="Copy command"
-                              onClick={async () => {
-                                try { await navigator.clipboard.writeText(extractCommand(m.text)); } catch {}
-                              }}
-                            >
-                              Copy
-                            </button>
-                          )}
-                          <SpecWrapper>
-                            <div className={`prose prose-sm dark:prose-invert max-w-none leading-relaxed prose-p:my-1 prose-li:my-1 ${isSystem ? 'opacity-80' : ''}`}>
-                              <ReactMarkdown components={markdownComponents}>{textContent}</ReactMarkdown>
-                            </div>
-                          </SpecWrapper>
-                        </div>
-                      ) : (
-                        <SpecWrapper>
-                          <div className="prose prose-sm dark:prose-invert max-w-none leading-relaxed prose-p:my-1 prose-li:my-1">
-                            <ReactMarkdown components={markdownComponents}>{textContent}</ReactMarkdown>
-                          </div>
-                        </SpecWrapper>
-                      )
-                  )}
-                  {/* timestamps hidden */}
-                </div>
-              </motion.div>
-            );
-          })}
-        </AnimatePresence>
+        <MessageList messages={messages} markdownComponents={markdownComponents} />
         {isTyping && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-2 text-muted-foreground">
             <span className="w-4 h-4 border-2 border-muted-foreground/40 border-t-muted-foreground rounded-full animate-spin inline-block" />
@@ -819,32 +751,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
       <div className={`${embedded ? 'px-2 py-1.5' : 'p-3'} relative`}>
         
         {/* Image preview area */}
-        {imageAttachments.length > 0 && (
-          <div className="px-3 py-2 mb-2">
-            <div className="flex gap-2 flex-wrap">
-              {imageAttachments.map(img => (
-                <div key={img.id} className="relative group">
-                  <img 
-                    src={img.dataUrl} 
-                    alt={img.name}
-                    className="w-16 h-16 object-cover rounded-md border border-border"
-                  />
-                  <button
-                    onClick={() => removeImageAttachment(img.id)}
-                    className="absolute -top-2 -right-2 w-5 h-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                  <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[9px] px-1 rounded-b-md truncate">
-                    {img.name}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        <ImagePreviewList images={imageAttachments} onRemove={removeImageAttachment} />
         
         {/* Resume last session button - hidden in Codex theme for minimal look */}
         {!themeCodex && hasLastSession(projectPath) && !sessionActive && messages.length === 0 && (
@@ -887,53 +794,41 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
           </div>
         )}
         
-        {/* Segmented controls row - moved above input */}
-        <div className="flex items-center justify-between text-muted-foreground text-xs px-2 mb-2">
-          <div className="flex items-center gap-3">
-            <button className="flex items-center gap-1 hover:text-foreground transition-colors" title={projectPath || 'Current directory'}>
-              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
-              <span className="max-w-[200px] truncate">{projectPath ? projectPath.split('/').pop() : 'Local'}</span>
-            </button>
-            <div className="relative">
-              <button onClick={() => { setShowModeMenu(v => !v); setShowModelMenu(false); }} className="flex items-center gap-1 hover:text-foreground transition-colors">
-                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 8a4 4 0 100 8 4 4 0 000-8z"/><path d="M12 2v6m0 8v6m10-10h-6m-8 0H2"/></svg>
-                <span>{plannerMode === 'Planer' ? 'Planner' : plannerMode}</span>
-              </button>
-              {showModeMenu && (
-                <div className="absolute z-50 bottom-full mb-1 left-0 w-24 rounded-lg border border-zinc-700 bg-zinc-900 shadow-xl overflow-hidden">
-                  {['Auto','Planer','Chat'].map(m => (
-                    <button key={m} onClick={() => { setPlannerMode(m); savePlannerMode(m); setShowModeMenu(false); }} className={`w-full text-left px-3 py-2 text-xs hover:bg-zinc-800 transition-colors ${m===plannerMode?'text-zinc-300 bg-zinc-800/50':'text-zinc-500'}`}>
-                      {m === 'Planer' ? 'Planner' : m}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="relative">
-              <button onClick={() => { setShowModelMenu(v => !v); setShowModeMenu(false); }} className="flex items-center gap-1 hover:text-foreground transition-colors" title="Model">
-                <span>Model:</span>
-                <span className="font-medium">{modelLabel}</span>
-              </button>
-              {showModelMenu && (
-                <div className="absolute z-50 bottom-full mb-1 left-0 w-36 rounded-lg border border-zinc-700 bg-zinc-900 shadow-xl overflow-hidden">
-                  {['Full Access','Standard','Lite'].map(m => (
-                    <button key={m} onClick={() => { setModelLabel(m); saveModelLabel(m); setShowModelMenu(false); }} className={`w-full text-left px-3 py-2 text-xs hover:bg-zinc-800 transition-colors ${m===modelLabel?'text-zinc-300 bg-zinc-800/50':'text-zinc-500'}`}>
-                      {m}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-          {/* Dangerous toggle hidden – Codex stays in bypass by default */}
-        </div>
+        {/* Status strip extracted component */}
+        <StatusStrip
+          projectPath={projectPath}
+          plannerMode={plannerMode}
+          onPlannerChange={(m) => { setPlannerMode(m); savePlannerMode(m); }}
+          modelLabel={modelLabel}
+          onModelChange={(m) => { setModelLabel(m); saveModelLabel(m); }}
+          working={{
+            active: (activityLock || isSessionInitializing || isTyping || ['queued','busy','thinking','tool'].includes(typingStatus.mode)),
+            label: (
+              isSessionInitializing ? 'Starting…' :
+              (typingStatus.mode === 'tool' && typingStatus.label) ? `Using ${typingStatus.label}…` :
+              typingStatus.mode === 'queued' ? (typingStatus.label || 'Queued…') :
+              typingStatus.mode === 'busy' ? (typingStatus.label || 'Busy…') :
+              'Working…'
+            ),
+            elapsedSec
+          }}
+        />
         
         {/* Single unified input container with dark background */}
-        <div className="space-y-4 rounded-2xl bg-muted border border-border py-8 px-6">
+        <div className="space-y-4 rounded-2xl bg-muted border border-border py-8 px-6 relative"
+             onDragOver={onDragOver}
+             onDragLeave={onDragLeave}
+             onDrop={onDrop}>
+          {/* Activity indicator moved inline to the row above */}
+          {isDragging && (
+            <div className="absolute inset-0 bg-primary/10 backdrop-blur-sm rounded-xl z-10 flex items-center justify-center">
+              <div className="text-primary font-medium">Drop images here</div>
+            </div>
+          )}
           {/* Input area */}
           <div className="flex items-center gap-3">
             {/* plus */}
-            <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => handleImageSelect(e.target.files)} />
+            <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={onFileInputChange} />
             <button onClick={() => fileInputRef.current?.click()} className="w-9 h-9 rounded-full text-muted-foreground hover:text-foreground hover:bg-accent flex items-center justify-center transition-all" title="Attach">
               <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
             </button>
@@ -966,12 +861,8 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
 
           {/* Attachments preview */}
           {attachments.length > 0 && (
-            <div className={`flex flex-wrap items-center gap-2 ${themeCodex ? 'text-zinc-300' : ''}`}>
-              {attachments.map((att, idx) => (
-                <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-border/40 bg-background/40 text-xs">
-                  <span className="opacity-70">{att.tag}</span>
-                </span>
-              ))}
+            <div className={`${themeCodex ? 'text-zinc-300' : ''}`}>
+              <AttachmentsChips attachments={attachments} />
             </div>
           )}
         </div>
@@ -979,56 +870,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
     </div>
   );
 
-  // Handle image file selection
-  const handleImageSelect = (files) => {
-    const validImages = Array.from(files).filter(file => 
-      file.type.startsWith('image/')
-    ).slice(0, 5); // Limit to 5 images
-    
-    validImages.forEach(file => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setImageAttachments(prev => [...prev, {
-          id: `img-${Date.now()}-${Math.random()}`,
-          dataUrl: e.target.result,
-          name: file.name,
-          size: file.size
-        }]);
-      };
-      reader.readAsDataURL(file);
-    });
-  };
-
-  // Handle drag events
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!e.currentTarget.contains(e.relatedTarget)) {
-      setIsDragging(false);
-    }
-  };
-
-  const handleDrop = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-    
-    const files = e.dataTransfer.files;
-    if (files.length > 0) {
-      handleImageSelect(files);
-    }
-  };
-
-  // Remove image attachment
-  const removeImageAttachment = (id) => {
-    setImageAttachments(prev => prev.filter(img => img.id !== id));
-  };
+  // Image uploads handled by useImageUploads hook
 
   // Send message to backend (either Vibe Kanban or Node.js)
   const handleSend = async () => {
@@ -1058,21 +900,42 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
       return;
     }
     
+    // Upload images to backend to obtain file paths
+    let uploadedPaths = [];
+    if (imageAttachments.length > 0 && ws && ws.readyState === WebSocket.OPEN) {
+      const uploadOne = (img) => new Promise((resolve) => {
+        const timeout = setTimeout(() => { try { ws.removeEventListener('message', onMsg); } catch {}; resolve(null); }, 8000);
+        const onMsg = (ev) => { try { const payload = JSON.parse(ev.data); if (payload.type === 'image-uploaded' && payload.fileName === img.name) { clearTimeout(timeout); ws.removeEventListener('message', onMsg); resolve(payload.path); } else if (payload.type === 'image-upload-error') { clearTimeout(timeout); ws.removeEventListener('message', onMsg); resolve(null); } } catch {} };
+        try { ws.addEventListener('message', onMsg); } catch {}
+        sendMessage({ type: 'upload-image', imageData: img.dataUrl, fileName: img.name });
+      });
+      for (const img of imageAttachments) {
+        const p = await uploadOne(img);
+        if (p) uploadedPaths.push(p);
+      }
+    }
+
     const options = {
       projectPath: projectPath || process.cwd(),
       cwd: projectPath || process.cwd(),
       dangerous: dangerousMode,
       plannerMode,
       modelLabel,
+      images: uploadedPaths,
       resumeRolloutPath: (!sessionActive && primedResumeRef.current) ? primedResumeRef.current : undefined
     };
     
-    sendMessage({ type: 'codex-command', command: fullMessage, options });
+    // For Codex, include image paths in the message for visibility
+    const withPaths = (uploadedPaths && uploadedPaths.length)
+      ? `${fullMessage}\n\nAttached images (paths):\n${uploadedPaths.join('\n')}`
+      : fullMessage;
+    setActivityLock(true);
+    sendMessage({ type: 'codex-command', command: withPaths, options });
     // Clear one-shot resume after use
     primedResumeRef.current = null;
     
     setAttachments([]);
-    setImageAttachments([]);
+    clearImages();
     setInput('');
   };
 
@@ -1170,225 +1033,8 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
     };
   }, []);
 
-  // Custom components for ReactMarkdown
-  const markdownComponents = {
-    code({ node, inline, className, children, ...props }) {
-      const match = /language-(\w+)/.exec(className || '');
-      const language = match ? match[1] : '';
-      
-      if (!inline && language) {
-        const CodeWithCopy = ({ text }) => {
-          const [copied, setCopied] = useState(false);
-          const [collapsed, setCollapsed] = useState(true); // Start collapsed
-          const handleCopy = async () => {
-            try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1200); } catch {}
-          };
-          
-          // Count lines for preview
-          const lines = String(text).split('\n');
-          const lineCount = lines.length;
-          const preview = lines.slice(0, 3).join('\n');
-          
-          return (
-            <div className="relative group w-full">
-              <div className="flex items-center justify-between mb-2 px-3 py-2 bg-muted/30 rounded-t-lg border border-border/50">
-                <button
-                  onClick={() => setCollapsed(!collapsed)}
-                  className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  <svg 
-                    className={`w-4 h-4 transition-transform ${collapsed ? '' : 'rotate-90'}`} 
-                    fill="none" 
-                    stroke="currentColor" 
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                  <span className="font-mono text-xs">
-                    {language} • {lineCount} lines {collapsed ? '(click to expand)' : ''}
-                  </span>
-                </button>
-                <button 
-                  onClick={handleCopy} 
-                  className="px-2 py-1 text-[11px] rounded-md bg-background/80 border border-border hover:bg-accent"
-                >
-                  {copied ? 'Copied' : 'Copy'}
-                </button>
-              </div>
-              
-              {collapsed ? (
-                <div className="px-3 py-2 bg-muted/10 rounded-b-lg border-x border-b border-border/50">
-                  <pre className="text-xs font-mono text-muted-foreground overflow-hidden">
-                    <code>{preview}{lineCount > 3 ? '\n...' : ''}</code>
-                  </pre>
-                </div>
-              ) : (
-                <SyntaxHighlighter
-                  style={vscDarkPlus}
-                  language={language}
-                  PreTag="div"
-                  customStyle={{ 
-                    margin: '0', 
-                    borderRadius: '0 0 0.5rem 0.5rem',
-                    fontSize: '0.875rem',
-                    width: '100%',
-                    overflowX: 'auto'
-                  }}
-                  {...props}
-                >
-                  {String(text).replace(/\n$/, '')}
-                </SyntaxHighlighter>
-              )}
-            </div>
-          );
-        };
-        return <CodeWithCopy text={String(children)} />;
-      }
-      
-      return (
-        <code className="chat-inline-code" {...props}>
-          {children}
-        </code>
-      );
-    },
-    a({ children, href, ...props }) {
-      return (
-        <a 
-          href={href} 
-          target="_blank" 
-          rel="noopener noreferrer"
-          className="text-primary hover:underline"
-          {...props}
-        >
-          {children}
-        </a>
-      );
-    },
-    ul({ children, ...props }) {
-      return (
-        <ul className="list-disc list-outside pl-4 ml-0 my-2" {...props}>
-          {children}
-        </ul>
-      );
-    },
-    ol({ children, ...props }) {
-      return (
-        <ol className="list-decimal list-outside pl-4 ml-0 my-2" {...props}>
-          {children}
-        </ol>
-      );
-    },
-    blockquote({ children, ...props }) {
-      return (
-        <blockquote className="border-l-4 border-border pl-4 italic my-2 text-muted-foreground" {...props}>
-          {children}
-        </blockquote>
-      );
-    },
-    h1({ children, ...props }) {
-      return <h1 className="text-xl font-bold mt-3 mb-2" {...props}>{children}</h1>;
-    },
-    h2({ children, ...props }) {
-      return <h2 className="text-lg font-semibold mt-2 mb-1" {...props}>{children}</h2>;
-    },
-    h3({ children, ...props }) {
-      return <h3 className="text-base font-semibold mt-2 mb-1" {...props}>{children}</h3>;
-    },
-    p({ children, ...props }) {
-      const renderBadges = (content) => {
-        try {
-          const text = String(content || '');
-          const pieces = [];
-          let rest = text;
-          const badge = (cls, label) => <span className={`badge ${cls}`}>{label}</span>;
-          // Leading language/file-kind badges
-          if (/^(JS|TS|MD|JSON)\s+/.test(rest)) {
-            const m = /^(JS|TS|MD|JSON)\s+/.exec(rest);
-            const kind = m[1];
-            pieces.push(badge(`badge-${kind.toLowerCase()}`, kind));
-            rest = rest.slice(m[0].length);
-          }
-          // Trailing MODIFY badge
-          if (/\sMODIFY\b/.test(rest)) {
-            const idx = rest.lastIndexOf(' MODIFY');
-            const before = rest.slice(0, idx);
-            const after = rest.slice(idx + 1); // 'MODIFY' plus maybe punctuation
-            pieces.push(<span key="before"> {before} </span>);
-            pieces.push(badge('badge-modify', 'MODIFY'));
-            const tail = after.replace(/^MODIFY\b\s*/, '');
-            if (tail) pieces.push(<span key="tail"> {tail} </span>);
-            return pieces;
-          }
-          // References standalone
-          if (/^References\b/.test(rest)) {
-            pieces.push(badge('badge-ref', 'References'));
-            const tail = rest.replace(/^References\b\s*/, '');
-            if (tail) pieces.push(<span key="tail"> {tail} </span>);
-            return pieces;
-          }
-          return text;
-        } catch { return children; }
-      };
-      // Only transform simple text paragraphs
-      if (typeof children === 'string') {
-        return <p className="my-1" {...props}>{renderBadges(children)}</p>;
-      }
-      if (Array.isArray(children) && children.length === 1 && typeof children[0] === 'string') {
-        return <p className="my-1" {...props}>{renderBadges(children[0])}</p>;
-      }
-      return <p className="my-1" {...props}>{children}</p>;
-    },
-    // Basic task list support: - [ ] / - [x]
-    li({ children, ...props }) {
-      const raw = String(children && children[0] ? (children[0].props ? children[0].props.children : children[0]) : '');
-      const renderBadges = (text) => {
-        const parts = [];
-        const badge = (cls, label) => <span className={`badge ${cls}`}>{label}</span>;
-        let rest = text;
-        if (/^(JS|TS|MD|JSON)\s+/.test(rest)) {
-          const m = /^(JS|TS|MD|JSON)\s+/.exec(rest);
-          const kind = m[1];
-          parts.push(badge(`badge-${kind.toLowerCase()}`, kind));
-          rest = rest.slice(m[0].length);
-        }
-        if (/^References\b/.test(rest)) {
-          parts.push(badge('badge-ref', 'References'));
-          rest = rest.replace(/^References\b\s*/, '');
-        }
-        if (/\sMODIFY\b/.test(rest)) {
-          const idx = rest.lastIndexOf(' MODIFY');
-          const before = rest.slice(0, idx);
-          parts.push(<span key="before"> {before} </span>);
-          parts.push(badge('badge-modify', 'MODIFY'));
-          const tail = rest.slice(idx + ' MODIFY'.length);
-          if (tail) parts.push(<span key="tail">{tail}</span>);
-          return parts;
-        }
-        parts.push(rest);
-        return parts;
-      };
-      const unchecked = raw.startsWith('[ ] ') || raw.startsWith('[  ] ');
-      const checked = raw.startsWith('[x] ') || raw.startsWith('[X] ');
-      if (unchecked || checked) {
-        const label = raw.replace(/^\[[xX\s]\]\s+/, '');
-        return (
-          <li className="list-none my-1">
-            <label className="inline-flex items-start gap-2">
-              <input type="checkbox" disabled checked={checked} className="mt-1 rounded" />
-              <span>{renderBadges(label)}</span>
-            </label>
-          </li>
-        );
-      }
-      if (typeof children === 'string') {
-        return <li className="my-1" {...props}>{renderBadges(children)}</li>;
-      }
-      if (Array.isArray(children) && children.length === 1 && typeof children[0] === 'string') {
-        return <li className="my-1" {...props}>{renderBadges(children[0])}</li>;
-      }
-      return <li className="my-1" {...props}>{children}</li>;
-    }
-  };
+  // Custom components for ReactMarkdown (extracted)
+  const markdownComponents = createMarkdownComponents();
 
   // Docked panel positioning handled via absolute CSS classes
 

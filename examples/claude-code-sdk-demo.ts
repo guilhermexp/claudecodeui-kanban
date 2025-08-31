@@ -120,38 +120,28 @@ async function main() {
   
   try {
     // Example 1: Simple query
-    console.log('📝 Example 1: Simple Query');
     const simpleResponse = await claude.query('What is TypeScript?');
-    console.log('Response:', simpleResponse);
     
     // Example 2: Analyze existing code
-    console.log('\n🔍 Example 2: Code Analysis');
     const analysis = await claude.analyzeCode('./src/App.jsx');
-    console.log('Analysis:', analysis);
     
     // Example 3: Generate tests
-    console.log('\n🧪 Example 3: Test Generation');
     const tests = await claude.generateTests('./src/utils/helpers.js', 'vitest');
-    console.log('Tests generated:', tests);
     
     // Example 4: Refactor code
-    console.log('\n♻️ Example 4: Code Refactoring');
     const refactored = await claude.refactorCode('./src/components/OldComponent.jsx', [
       'Convert to TypeScript',
       'Add proper error handling',
       'Improve performance with memoization',
       'Add JSDoc comments'
     ]);
-    console.log('Refactoring complete:', refactored);
     
     // Example 5: Create new feature
-    console.log('\n🚀 Example 5: Feature Creation');
     const feature = await claude.createFeature(
       'UserAuthentication',
       'Complete user authentication system with login, signup, and password reset',
       ['React', 'TypeScript', 'JWT', 'Express']
     );
-    console.log('Feature created:', feature);
     
   } catch (error) {
     console.error('❌ Error:', error);
@@ -182,7 +172,6 @@ async function advancedExample() {
   );
   
   if (result) {
-    console.log('✅ Success:', result);
   }
 }
 

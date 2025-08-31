@@ -60,9 +60,7 @@ export function FloatingMicMenu({ onTranscript }) {
         throw new Error('Microphone access not available. Please use HTTPS or a supported browser.');
       }
 
-      console.log('Requesting microphone permission...');
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      console.log('Microphone permission granted');
       streamRef.current = stream;
 
       const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4';
@@ -100,9 +98,7 @@ export function FloatingMicMenu({ onTranscript }) {
         }
         
         try {
-          console.log('Starting transcription, blob size:', blob.size);
           const text = await transcribeWithWhisper(blob);
-          console.log('Transcription completed, text:', text);
           if (text) {
             setTranscribedText(text);
             if (onTranscript) {

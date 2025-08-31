@@ -11,7 +11,8 @@ import { cn } from '../lib/utils';
 import { api } from '../utils/api';
 import CodeEditor from './CodeEditor';
 import ImageViewer from './ImageViewer';
-import { formatFileSize, formatRelativeTime } from '../utils/formatters';
+import { formatFileSize } from '../utils/formatters';
+import { formatTimeAgo } from '../utils/time';
 
 // Simple File Manager - Updates only on manual refresh or project change
 function FileManagerSimple({ selectedProject, onClose }) {
