@@ -32,6 +32,7 @@ import SessionsView from './components/SessionsView';
 import { useWebSocket } from './utils/websocket';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { ClaudeWebSocketProvider } from './contexts/ClaudeWebSocketContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import { api } from './utils/api';
 import { authPersistence } from './utils/auth-persistence';
@@ -704,19 +705,21 @@ function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <ProtectedRoute>
-          <Router future={{ 
-            v7_startTransition: true,
-            v7_relativeSplatPath: true
-          }}>
-            <Routes>
-              <Route path="/" element={<AppContent />} />
-              <Route path="/session/:sessionId" element={<AppContent />} />
-              <Route path="/project/:projectName/sessions" element={<AppContent />} />
-              <Route path="/vibe-kanban/*" element={<VibeKanbanApp />} />
-            </Routes>
-          </Router>
-        </ProtectedRoute>
+        <ClaudeWebSocketProvider>
+          <ProtectedRoute>
+            <Router future={{ 
+              v7_startTransition: true,
+              v7_relativeSplatPath: true
+            }}>
+              <Routes>
+                <Route path="/" element={<AppContent />} />
+                <Route path="/session/:sessionId" element={<AppContent />} />
+                <Route path="/project/:projectName/sessions" element={<AppContent />} />
+                <Route path="/vibe-kanban/*" element={<VibeKanbanApp />} />
+              </Routes>
+            </Router>
+          </ProtectedRoute>
+        </ClaudeWebSocketProvider>
       </AuthProvider>
     </ThemeProvider>
   );

@@ -44,7 +44,7 @@ import mime from 'mime-types';
 import v8 from 'v8';
 
 import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, deleteProjectCompletely, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } from './projects.js';
-import { spawnClaude, abortClaudeSession } from './claude-cli.js';
+import { spawnClaude, abortClaudeSession, spawnClaudeStream } from './claude-cli.js';
 import { spawnCodex } from './codex-cli.js';
 import gitRoutes from './routes/git.js';
 import previewRoutes, { setPreviewBroadcasterFn } from './routes/preview.js';
@@ -1184,10 +1184,419 @@ wss.on('connection', (ws, request) => {
     handleShellConnection(ws, request);
   } else if (pathname === '/ws') {
     handleChatConnection(ws, request);
+  } else if (pathname === '/claude') {
+    // New unified Claude WebSocket endpoint
+    handleUnifiedClaudeConnection(ws, request);
   } else {
     ws.close();
   }
 });
+
+// Unified Claude WebSocket handler - combines Shell and Chat functionality
+function handleUnifiedClaudeConnection(ws, request) {
+  const user = request.user || { userId: 'anonymous', username: 'anonymous' };
+  
+  // Track different session types
+  const sessions = {
+    shell: null,  // Shell process and state
+    claude: null, // Claude CLI session
+    codex: null   // Codex session
+  };
+  
+  // Shell-specific state
+  let shellProcess = null;
+  let bypassPermissions = false;
+  
+  // Claude/Codex-specific state
+  let claudeSession = null;
+  let codexSession = null;
+  const codexQueue = [];
+  let codexProcessing = false;
+  let codexCurrentProcess = null;
+  
+  // Store client info
+  connectedClients.set(ws, {
+    userId: user.userId,
+    username: user.username,
+    activeProject: null,
+    lastActivity: Date.now(),
+    sessions: sessions
+  });
+  
+  // Process Codex queue (from chat implementation)
+  const processNextCodex = async () => {
+    if (codexProcessing) return;
+    const task = codexQueue.shift();
+    if (!task) {
+      try { ws.send(JSON.stringify({ type: 'codex-idle' })); } catch {}
+      return;
+    }
+    codexProcessing = true;
+    try {
+      try { ws.send(JSON.stringify({ type: 'codex-busy', queueLength: codexQueue.length })); } catch {}
+      codexCurrentProcess = null;
+      await spawnCodex(task.command, { ...task.options, onProcess: (p) => { codexCurrentProcess = p; } }, ws);
+    } catch (e) {
+      // Errors are already forwarded by spawnCodex
+    } finally {
+      codexProcessing = false;
+      processNextCodex();
+    }
+  };
+  
+  ws.on('message', async (message) => {
+    try {
+      const data = JSON.parse(message);
+      const clientInfo = connectedClients.get(ws);
+      if (clientInfo) {
+        clientInfo.lastActivity = Date.now();
+      }
+      
+      // Route messages based on type
+      switch(data.type) {
+        // Shell-specific messages
+        case 'init':
+          await handleShellInit(ws, data, sessions);
+          break;
+        case 'input':
+          if (sessions.shell?.process) {
+            sessions.shell.process.stdin.write(data.data);
+          }
+          break;
+        case 'resize':
+          if (sessions.shell?.process) {
+            sessions.shell.process.resize(data.cols, data.rows);
+          }
+          break;
+        case 'exit':
+          if (sessions.shell?.process) {
+            sessions.shell.process.kill();
+            sessions.shell = null;
+          }
+          break;
+          
+        // Claude-specific messages  
+        case 'claude-start-session': {
+          // Start persistent streaming process for Claude with requested mode (normal/bypass/resume)
+          const options = data.options || {};
+          let projectPath = options.projectPath || process.cwd();
+          let workingDir = options.cwd || projectPath;
+          if (projectPath === 'STANDALONE_MODE') {
+            const home = os.homedir ? os.homedir() : process.env.HOME || process.cwd();
+            projectPath = home; workingDir = home;
+          }
+          // Determine bypass from options (permissionMode, bypass flag, or force)
+          const bypass = options.bypass === true || options.forceBypassPermissions === true || options.permissionMode === 'bypassPermissions';
+          const stream = spawnClaudeStream({ 
+            ...options, 
+            projectPath, 
+            cwd: workingDir, 
+            forceBypassPermissions: bypass
+          }, ws, (sid) => {
+            try { sessions.claude.sessionId = sid; } catch {}
+          });
+          sessions.claude = { projectPath, sessionId: options.sessionId || null, stream, hasSentMessage: false };
+          try { ws.send(JSON.stringify({ type: 'claude-session-started', sessionId: `temp-${Date.now().toString(36)}`, temporary: true })); } catch {}
+          break;
+        }
+        case 'claude-message':
+          await handleClaudeMessage(ws, data, sessions);
+          break;
+        case 'claude-command': // alias for backwards compatibility
+          await handleClaudeMessage(ws, { message: data.command, options: data.options, sessionId: data.sessionId }, sessions);
+          break;
+        case 'claude-set-options': {
+          // Update model/permission mode at runtime by restarting stream and resuming session
+          const opts = data.options || {};
+          if (!sessions.claude) {
+            // No active session yet; ignore to avoid spawning implicitly on mount
+            try { ws.send(JSON.stringify({ type: 'claude-options-queued', options: opts })); } catch {}
+            break;
+          }
+          const projectPath = sessions.claude.projectPath;
+          const workingDir = projectPath;
+          const currentSid = sessions.claude.sessionId || null;
+          // Only bypass when not in plan mode; otherwise allow permission-mode to control
+          const forceBypass = (opts.permissionMode !== 'plan') && (
+            opts.permissionMode === 'bypassPermissions' || (opts.forceBypassPermissions !== false)
+          );
+
+          // Normalize and compare options to avoid redundant restarts
+          const norm = {
+            model: opts.model || null,
+            permissionMode: forceBypass ? null : (opts.permissionMode || null),
+            allowedTools: Array.isArray(opts.allowedTools) ? [...opts.allowedTools].sort() : [],
+            disallowedTools: Array.isArray(opts.disallowedTools) ? [...opts.disallowedTools].sort() : [],
+            bypass: !!forceBypass,
+          };
+          const sig = JSON.stringify(norm);
+          if (sessions.claude.lastOptionsSig === sig) {
+            try { ws.send(JSON.stringify({ type: 'claude-options-updated', options: opts, sessionId: currentSid, unchanged: true })); } catch {}
+            break;
+          }
+
+          // If session hasn't materialized (no user message yet), queue options to apply later
+          if (!sessions.claude.hasSentMessage) {
+            sessions.claude.pendingOptions = opts;
+            sessions.claude.pendingOptionsSig = sig;
+            sessions.claude.lastOptionsSig = sig; // Claim early to dedupe
+            try { ws.send(JSON.stringify({ type: 'claude-options-queued', options: opts, sessionId: currentSid })); } catch {}
+            break;
+          }
+
+          // Claim desired options to prevent concurrent duplicates, then stop and respawn
+          sessions.claude.lastOptionsSig = sig;
+          // Stop existing stream and apply new options
+          try { sessions.claude.stream?.stop(); } catch {}
+          // Start a fresh session on option changes (no resume)
+          const resumeSid = null;
+          const stream = spawnClaudeStream({ 
+            ...opts, 
+            projectPath, 
+            cwd: workingDir, 
+            sessionId: resumeSid,
+            forceBypassPermissions: forceBypass
+          }, ws, (sid) => { try { sessions.claude.sessionId = sid; } catch {} });
+          sessions.claude.stream = stream;
+          try { ws.send(JSON.stringify({ type: 'claude-options-updated', options: opts, sessionId: currentSid })); } catch {}
+          break;
+        }
+        case 'claude-end-session':
+          if (sessions.claude) {
+            try {
+              if (sessions.claude.stream) {
+                sessions.claude.stream.stop();
+              } else if (sessions.claude.sessionId) {
+                await abortClaudeSession(sessions.claude.sessionId);
+              }
+            } catch {}
+            sessions.claude = null;
+            try { ws.send(JSON.stringify({ type: 'claude-session-closed' })); } catch {}
+          }
+          break;
+          
+        // Codex-specific messages
+        case 'codex-start-session':
+          codexSession = null;
+          ws.send(JSON.stringify({ type: 'codex-session-started' }));
+          break;
+        case 'codex-message':
+          await handleCodexMessage(ws, data, codexSession, codexQueue, processNextCodex);
+          break;
+        case 'codex-end-session':
+          codexSession = null;
+          ws.send(JSON.stringify({ type: 'codex-session-closed' }));
+          break;
+          
+        // Common messages
+        case 'ping':
+          ws.send(JSON.stringify({ type: 'pong' }));
+          break;
+          
+        default:
+          console.log('Unknown message type:', data.type);
+      }
+      
+    } catch (error) {
+      console.error('Error handling unified Claude message:', error);
+      ws.send(JSON.stringify({ 
+        type: 'error', 
+        message: error.message 
+      }));
+    }
+  });
+  
+  ws.on('close', () => {
+    // Cleanup all sessions
+    if (sessions.shell?.process) {
+      sessions.shell.process.kill();
+    }
+    if (sessions.claude?.sessionId) {
+      abortClaudeSession(sessions.claude.sessionId);
+    }
+    if (codexCurrentProcess) {
+      codexCurrentProcess.kill();
+    }
+    connectedClients.delete(ws);
+  });
+}
+
+// Helper function to handle Shell initialization
+async function handleShellInit(ws, data, sessions) {
+  let projectPath = data.projectPath || process.cwd();
+  let sessionId = data.sessionId;
+  
+  if (projectPath === 'STANDALONE_MODE') {
+    projectPath = process.env.HOME || process.env.USERPROFILE || process.cwd();
+    sessionId = null;
+  }
+  
+  const bypassPermissions = data.bypassPermissions || false;
+  
+  // Create new shell process
+  const shellProcess = await createClaudeShellSession(
+    projectPath, 
+    sessionId, 
+    data.hasSession,
+    bypassPermissions
+  );
+  
+  if (shellProcess) {
+    sessions.shell = {
+      process: shellProcess,
+      projectPath: projectPath,
+      sessionId: sessionId
+    };
+    
+    // Set up shell output handlers
+    shellProcess.stdout.on('data', (data) => {
+      ws.send(JSON.stringify({ type: 'output', data: data.toString() }));
+    });
+    
+    shellProcess.stderr.on('data', (data) => {
+      ws.send(JSON.stringify({ type: 'error', data: data.toString() }));
+    });
+    
+    shellProcess.on('exit', (code, signal) => {
+      ws.send(JSON.stringify({ type: 'exit', code, signal }));
+      sessions.shell = null;
+    });
+    
+    // Resize if dimensions provided
+    if (data.cols && data.rows) {
+      shellProcess.resize(data.cols, data.rows);
+    }
+    
+    ws.send(JSON.stringify({ 
+      type: 'session-created', 
+      sessionId: shellProcess.sessionId 
+    }));
+  }
+}
+
+// Helper function to handle Claude start
+async function handleClaudeStart(ws, data, sessions) {
+  const options = data.options || {};
+  
+  console.log('[SERVER] [CLAUDE] Starting new Claude session:', {
+    projectPath: options.projectPath,
+    cwd: options.cwd,
+    sessionId: options.sessionId,
+    resume: options.resume
+  });
+  
+  // Normalize STANDALONE_MODE to user's home directory (same behavior as Shell)
+  let projectPath = options.projectPath || process.cwd();
+  let workingDir = options.cwd || projectPath;
+  if (projectPath === 'STANDALONE_MODE' || workingDir === 'STANDALONE_MODE') {
+    const home = os.homedir ? os.homedir() : process.env.HOME || process.cwd();
+    projectPath = home;
+    workingDir = home;
+  }
+
+  // Start Claude CLI immediately, just like Shell does
+  // For chat overlay, trigger a minimal init to obtain session_id without emitting a visible reply
+  await spawnClaude(' ', {  // Minimal prompt; suppressed via initOnly
+    projectPath,
+    cwd: workingDir,
+    sessionId: options.sessionId || null,
+    resume: options.resume || false,
+    model: options.model || null,
+    toolsSettings: options.toolsSettings,
+    permissionMode: options.permissionMode,
+    images: [],
+    initOnly: true
+  }, ws);
+  
+  // Store session info (the real session ID will come from Claude CLI)
+  sessions.claude = {
+    projectPath,
+    sessionId: null  // Will be updated when Claude responds with real session ID
+  };
+}
+
+// Helper function to handle Claude messages
+async function handleClaudeMessage(ws, data, sessions) {
+  // Ensure stream exists; if not, create streaming process now
+  if (!sessions.claude || !sessions.claude.stream) {
+    console.log('[SERVER] [CLAUDE] No active stream, starting persistent process');
+    const options = data.options || {};
+    const projectPath = (options.projectPath && options.projectPath !== 'STANDALONE_MODE') ? options.projectPath : (os.homedir?.() || process.env.HOME || process.cwd());
+    const workingDir = projectPath;
+    const stream = spawnClaudeStream({ ...options, projectPath, cwd: workingDir, forceBypassPermissions: true }, ws, (sid) => {
+      try { if (!sessions.claude) sessions.claude = { projectPath, sessionId: sid }; else sessions.claude.sessionId = sid; } catch {}
+    });
+    sessions.claude = { projectPath, sessionId: null, stream };
+  }
+
+  console.log('[SERVER] [CLAUDE] Sending message:', {
+    message: data.message?.substring(0, 50),
+    sessionId: data.sessionId,
+    hasStoredSession: !!sessions.claude?.sessionId
+  });
+
+  // Write into streaming stdin (fast path)
+  try {
+    const sid = data.sessionId || sessions.claude.sessionId || null;
+    const ok = sessions.claude.stream.writeMessage(data.message, sid);
+    if (!ok) {
+      // Fallback: re-spawn stream
+      const options = data.options || {};
+      const stream = spawnClaudeStream({ ...options, projectPath: sessions.claude.projectPath, cwd: sessions.claude.projectPath, sessionId: sid }, ws);
+      sessions.claude.stream = stream;
+      stream.writeMessage(data.message, sid);
+    }
+    // Mark session as materialized after first successful write
+    if (!sessions.claude.hasSentMessage) {
+      sessions.claude.hasSentMessage = true;
+      // If there are queued options, apply them now with resume
+      if (sessions.claude.pendingOptions && sessions.claude.pendingOptionsSig) {
+        try { sessions.claude.stream?.stop(); } catch {}
+        const opts = sessions.claude.pendingOptions;
+        const projectPath = sessions.claude.projectPath;
+        const workingDir = projectPath;
+        const currentSid = sessions.claude.sessionId || sid || null;
+        const forceBypass = (opts.permissionMode !== 'plan') && (
+          opts.permissionMode === 'bypassPermissions' || (opts.forceBypassPermissions !== false)
+        );
+        const stream = spawnClaudeStream({
+          ...opts,
+          projectPath,
+          cwd: workingDir,
+          sessionId: currentSid,
+          forceBypassPermissions: forceBypass
+        }, ws, (newSid) => { try { sessions.claude.sessionId = newSid; } catch {} });
+        sessions.claude.stream = stream;
+        try { ws.send(JSON.stringify({ type: 'claude-options-updated', options: opts, sessionId: currentSid })); } catch {}
+        // Clear queued options
+        sessions.claude.pendingOptions = null;
+        sessions.claude.pendingOptionsSig = null;
+      }
+    }
+  } catch (e) {
+    console.error('Stream write error:', e);
+  }
+}
+
+// Helper function to handle Codex messages
+async function handleCodexMessage(ws, data, codexSession, codexQueue, processNext) {
+  const options = data.options || {};
+  const task = {
+    command: data.message,
+    options: {
+      projectPath: options.projectPath || process.cwd(),
+      ...options
+    }
+  };
+  
+  codexQueue.push(task);
+  ws.send(JSON.stringify({ 
+    type: 'codex-queued', 
+    queueLength: codexQueue.length 
+  }));
+  
+  processNext();
+}
 
 // Handle chat WebSocket connections
 function handleChatConnection(ws, request) {
@@ -1201,6 +1610,8 @@ function handleChatConnection(ws, request) {
     lastActivity: Date.now()
   });
   
+  // Track per-connection sessions
+  const sessions = { shell: null, claude: null };
   // Track Codex session per connection
   let codexSession = null; // { sessionId, rolloutPath }
   // Queue of Codex commands per connection
@@ -1352,10 +1763,17 @@ function handleChatConnection(ws, request) {
         // Inform idle state
         try { ws.send(JSON.stringify({ type: 'codex-idle' })); } catch {}
       } else if (data.type === 'claude-start-session') {
-        // Start a new Claude session
-        ws.send(JSON.stringify({ type: 'claude-session-started' }));
+        // Start Claude session just like the unified handler
+        // Aligns overlay start with Shell behaviour (spawn with no command)
+        await handleClaudeStart(ws, data, sessions);
       } else if (data.type === 'claude-end-session') {
         // End Claude session
+        try {
+          if (sessions.claude?.sessionId) {
+            abortClaudeSession(sessions.claude.sessionId);
+          }
+        } catch {}
+        sessions.claude = null;
         ws.send(JSON.stringify({ type: 'claude-session-closed' }));
       } else if (data.type === 'codex-start-session') {
         // Acknowledgement-only: do NOT spawn Codex here to avoid autonomous actions
@@ -1385,6 +1803,14 @@ function handleChatConnection(ws, request) {
   ws.on('close', () => {
     // Remove from connected clients
     connectedClients.delete(ws);
+    // Cleanup any Claude process for this connection
+    try {
+    if (sessions.claude?.stream) {
+      try { sessions.claude.stream.stop(); } catch {}
+    } else if (sessions.claude?.sessionId) {
+      abortClaudeSession(sessions.claude.sessionId);
+    }
+    } catch {}
   });
 }
 
@@ -1400,6 +1826,26 @@ function handleShellConnection(ws, request) {
   ws.on('message', async (message) => {
     try {
       const data = JSON.parse(message);
+      
+      // Log all Shell messages like we do for Chat
+      console.log(`[SERVER] [SHELL] Received ${data.type}:`, {
+        type: data.type,
+        ...(data.type === 'init' ? {
+          projectPath: data.projectPath,
+          sessionId: data.sessionId,
+          hasSession: data.hasSession,
+          bypassPermissions: data.bypassPermissions,
+          cols: data.cols,
+          rows: data.rows
+        } : {}),
+        ...(data.type === 'input' ? {
+          data: data.data?.substring(0, 50) + (data.data?.length > 50 ? '...' : '')
+        } : {}),
+        ...(data.type === 'resize' ? {
+          cols: data.cols,
+          rows: data.rows
+        } : {})
+      });
       
       if (data.type === 'init') {
         // Handle standalone mode - use home directory, never resume sessions
@@ -1459,6 +1905,15 @@ function handleShellConnection(ws, request) {
             // Build the full shell command
             const shellCommand = `cd "${projectPath}" && ${claudeCommand}`;
             
+            // Log the Shell command being executed
+            console.log(`[SERVER] [SHELL] Spawning Claude with command:`, {
+              shell: userShell,
+              command: shellCommand,
+              cwd: projectPath,
+              cols: data.cols || 80,
+              rows: data.rows || 24
+            });
+            
             // Start shell with the command directly
             shellProcess = pty.spawn(userShell, ['-lc', shellCommand], {
               name: 'xterm-256color',
@@ -1509,6 +1964,11 @@ function handleShellConnection(ws, request) {
             
             // Handle process exit
             shellProcess.onExit((exitCode) => {
+              console.log(`[SERVER] [SHELL] Process exited:`, {
+                exitCode: exitCode.exitCode,
+                signal: exitCode.signal
+              });
+              
               if (ws.readyState === ws.OPEN) {
                 ws.send(JSON.stringify({
                   type: 'output',
@@ -1529,6 +1989,12 @@ function handleShellConnection(ws, request) {
           }
         
       } else if (data.type === 'input') {
+        // Log Shell input for debugging
+        console.log(`[SERVER] [SHELL] Processing input:`, {
+          length: data.data?.length,
+          preview: data.data?.substring(0, 100) + (data.data?.length > 100 ? '...' : '')
+        });
+        
         // Send input to shell process
         if (shellProcess && shellProcess.write) {
           // Use async processing for image URL handling
@@ -1646,6 +2112,12 @@ function handleShellConnection(ws, request) {
         } else {
         }
       } else if (data.type === 'resize') {
+        // Log Shell resize
+        console.log(`[SERVER] [SHELL] Resizing terminal:`, {
+          cols: data.cols,
+          rows: data.rows
+        });
+        
         // Handle terminal resize
         if (shellProcess && shellProcess.resize) {
           shellProcess.resize(data.cols, data.rows);
@@ -1731,12 +2203,18 @@ function handleShellConnection(ws, request) {
   });
   
   ws.on('close', () => {
+    console.log(`[SERVER] [SHELL] WebSocket closed`);
     
-    // Process cleanup is now handled by client-side session management
+    // Clean up shell process if still running
+    if (shellProcess && shellProcess.kill) {
+      console.log(`[SERVER] [SHELL] Killing shell process on disconnect`);
+      shellProcess.kill();
+      shellProcess = null;
+    }
   });
   
   ws.on('error', (error) => {
-    console.error('❌ Shell WebSocket error:', error);
+    console.error('❌ [SERVER] [SHELL] WebSocket error:', error);
   });
 }
 
