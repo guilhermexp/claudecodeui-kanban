@@ -79,6 +79,8 @@ function MainContent({
   const [showProjectsModal, setShowProjectsModal] = useState(false);
   const [showKanbanModal, setShowKanbanModal] = useState(false);
   const [showGitModal, setShowGitModal] = useState(false);
+  const [claudeOverlaySessionId, setClaudeOverlaySessionId] = useState(null);
+  const [endClaudeOverlaySession, setEndClaudeOverlaySession] = useState(null);
 
   // Notify parent component about active side panel changes
   useEffect(() => {
@@ -215,6 +217,7 @@ function MainContent({
                   <TextShimmer 
                     duration={6}
                     className="text-lg font-semibold"
+                    variant="on-light"
                   >
                     Start vibeclaude Session
                   </TextShimmer>
@@ -459,6 +462,18 @@ function MainContent({
           {/* Right-side controls group - Settings, Dark Mode, System */}
           <div className="flex absolute right-4 top-1/2 -translate-y-1/2 z-40">
             <div className="flex items-center bg-muted rounded-lg p-1 gap-1 shadow-sm">
+              {claudeOverlaySessionId && !String(claudeOverlaySessionId).startsWith('temp-') && (
+                <span className="hidden sm:inline-flex items-center h-7 px-2 rounded-md bg-background/80 text-[11px] text-muted-foreground border border-border/40 mr-1" title="Claude session active">
+                  Active
+                </span>
+              )}
+              {endClaudeOverlaySession && (
+                <button
+                  onClick={() => { try { endClaudeOverlaySession(); } catch {} }}
+                  className="px-2 h-7 rounded-md text-[11px] bg-background/80 border border-border/40 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                  title="End Claude session"
+                >End</button>
+              )}
               {/* Settings */}
               <button
                 onClick={onShowSettings}
@@ -525,20 +540,25 @@ function MainContent({
         
         {/* Claude Chat panel integrated */}
         {!isMobile && (
-          <div className={`transition-all duration-300 ease-in-out overflow-hidden bg-black ${
+          <div className={`transition-all duration-300 ease-in-out overflow-hidden ${
             activeSidePanel === 'claude-chat' ? 'w-[320px] sm:w-[380px] md:w-[420px] border-l border-border' : 'w-0'
           }`}>
-            <div style={{ display: activeSidePanel === 'claude-chat' ? 'block' : 'none', height: '100%', backgroundColor: 'black' }}>
-              <OverlayChatClaude 
-                embedded={true}
-                disableInlinePanel={true}
-                cliProviderFixed="claude"
-                chatId="claude-instance"
-                projectPath={selectedProject?.path}
-                previewUrl={null}
-                onPanelClosed={() => setActiveSidePanel(null)}
-              />
-            </div>
+            {activeSidePanel === 'claude-chat' && (
+              <div style={{ height: '100%' }}>
+                <OverlayChatClaude 
+                  key="claude-chat-panel"
+                  embedded={true}
+                  disableInlinePanel={true}
+                  cliProviderFixed="claude"
+                  chatId="claude-instance"
+                  projectPath={selectedProject?.path}
+                  previewUrl={null}
+                  onSessionIdChange={setClaudeOverlaySessionId}
+                  onBindControls={setEndClaudeOverlaySession}
+                  onPanelClosed={() => setActiveSidePanel(null)}
+                />
+              </div>
+            )}
           </div>
         )}
 

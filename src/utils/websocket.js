@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 
-export function useWebSocket(authReady = false) {
+export function useWebSocket(authReady = false, wsPath = '/ws') {
   const [ws, setWs] = useState(null);
   const [messages, setMessages] = useState([]);
   const [isConnected, setIsConnected] = useState(false);
@@ -22,13 +22,26 @@ export function useWebSocket(authReady = false) {
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }
-      if (ws) {
-        ws.close();
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
       }
+      hasConnectedRef.current = false;
     };
   }, [authReady]);
 
   const connect = async () => {
+    // Prevent multiple simultaneous connections
+    if (wsRef.current && wsRef.current.readyState === WebSocket.CONNECTING) {
+      console.log('WebSocket already connecting, skipping duplicate connection');
+      return;
+    }
+    
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      console.log('WebSocket already connected, skipping duplicate connection');
+      return;
+    }
+    
     try {
       // Get authentication token
       const token = localStorage.getItem('auth-token');
@@ -60,7 +73,8 @@ export function useWebSocket(authReady = false) {
       }
       
       // Include token in WebSocket URL as query parameter
-      const wsUrl = `${wsBaseUrl}/ws?token=${encodeURIComponent(token)}`;
+      const normalizedPath = wsPath.startsWith('/') ? wsPath : `/${wsPath}`;
+      const wsUrl = `${wsBaseUrl}${normalizedPath}?token=${encodeURIComponent(token)}`;
       const websocket = new WebSocket(wsUrl);
       wsRef.current = websocket;
 
@@ -81,12 +95,14 @@ export function useWebSocket(authReady = false) {
       websocket.onclose = () => {
         setIsConnected(false);
         setWs(null);
+        wsRef.current = null;
         
         // Only attempt to reconnect if we still have a token
         const token = localStorage.getItem('auth-token');
-        if (token) {
+        if (token && !reconnectTimeoutRef.current) {
           // Attempt to reconnect after 3 seconds
           reconnectTimeoutRef.current = setTimeout(() => {
+            reconnectTimeoutRef.current = null;
             connect();
           }, 3000);
         }

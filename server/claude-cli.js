@@ -8,7 +8,7 @@ let activeClaudeProcesses = new Map(); // Track active processes by session ID
 async function spawnClaude(command, options = {}, ws) {
   console.log('spawnClaude called with:', { command: command?.substring(0, 50), options });
   return new Promise(async (resolve, reject) => {
-    const { sessionId, projectPath, cwd, resume, toolsSettings, permissionMode, images, model } = options;
+    const { sessionId, projectPath, cwd, resume, toolsSettings, permissionMode, images, model, initOnly } = options;
     let capturedSessionId = sessionId; // Track session ID throughout the process
     let sessionCreatedSent = false; // Track if we've already sent session-created event
     
@@ -36,7 +36,12 @@ async function spawnClaude(command, options = {}, ws) {
         const imageUrls = images.map((img, index) => `![Image ${index + 1}](${img})`).join('\n');
         finalCommand = command + '\n\n' + imageUrls;
       }
-      args.push('--print', finalCommand);
+      // Match SDK behavior: use "--" separator after --print to avoid flag parsing in prompt
+      args.push('--print', '--', finalCommand);
+    } else if (initOnly) {
+      // For init-only session creation, send a benign prompt to trigger session_id
+      // Use same separator pattern as SDK
+      args.push('--print', '--', 'ready');
     }
     
     // Use cwd (actual project directory) instead of projectPath (Claude's metadata directory)
@@ -239,17 +244,21 @@ async function spawnClaude(command, options = {}, ws) {
             }
           }
           
-          // Send parsed response to WebSocket
-          ws.send(JSON.stringify({
-            type: 'claude-response',
-            data: response
-          }));
+          // Send parsed response to WebSocket unless this is an init-only run
+          if (!initOnly) {
+            ws.send(JSON.stringify({
+              type: 'claude-response',
+              data: response
+            }));
+          }
         } catch (parseError) {
           // If not JSON, send as raw text
-          ws.send(JSON.stringify({
-            type: 'claude-output',
-            data: line
-          }));
+          if (!initOnly) {
+            ws.send(JSON.stringify({
+              type: 'claude-output',
+              data: line
+            }));
+          }
         }
       }
     });
@@ -297,11 +306,25 @@ async function spawnClaude(command, options = {}, ws) {
       const finalSessionId = capturedSessionId || sessionId || processKey;
       activeClaudeProcesses.delete(finalSessionId);
       
-      ws.send(JSON.stringify({
-        type: 'claude-complete',
-        exitCode: code,
-        isNewSession: !sessionId && !!command // Flag to indicate this was a new session
-      }));
+      // For initOnly runs, ensure the frontend leaves the "Starting..." state
+      if (initOnly && code === 0) {
+        try {
+          if (capturedSessionId) {
+            ws.send(JSON.stringify({ type: 'claude-session-started', sessionId: capturedSessionId, temporary: false }));
+          } else {
+            const tempId = `temp-${Date.now().toString(36)}`;
+            ws.send(JSON.stringify({ type: 'claude-session-started', sessionId: tempId, temporary: true }));
+          }
+        } catch {}
+      }
+
+      if (!initOnly) {
+        ws.send(JSON.stringify({
+          type: 'claude-complete',
+          exitCode: code,
+          isNewSession: !sessionId && !!command // Flag to indicate this was a new session
+        }));
+      }
       
       // No cleanup needed for images anymore
       
@@ -329,21 +352,9 @@ async function spawnClaude(command, options = {}, ws) {
     });
     
     // Handle stdin for interactive mode
-    if (command && command.trim() !== '') {
-      // For --print mode with arguments, we don't need to write to stdin
-      claudeProcess.stdin.end();
-    } else if (command === '') {
-      // Empty command - just close stdin to let Claude initialize
-      claudeProcess.stdin.end();
-    } else {
-      // For interactive mode, we need to write the command to stdin if provided later
-      // Keep stdin open for interactive session
-      if (command !== undefined) {
-        claudeProcess.stdin.write(command + '\n');
-        claudeProcess.stdin.end();
-      }
-      // If no command provided, stdin stays open for interactive use
-    }
+    // We operate in --print mode or init-only; stdin should already be closed.
+    // Avoid any writes to stdin to prevent ERR_STREAM_WRITE_AFTER_END.
+    try { claudeProcess.stdin.end(); } catch {}
   });
 }
 
@@ -361,3 +372,129 @@ export {
   spawnClaude,
   abortClaudeSession
 };
+
+// Streaming-mode (persistent) Claude process for overlay
+import { spawn as spawnProc } from 'child_process';
+import * as fsSync from 'fs';
+
+function buildMcpConfigArg() {
+  try {
+    const cfgPath = path.join(os.homedir(), '.claude.json');
+    if (fsSync.existsSync(cfgPath)) return ['--mcp-config', cfgPath];
+  } catch {}
+  return [];
+}
+
+function spawnClaudeStream(options = {}, ws, onSession) {
+  const {
+    projectPath,
+    cwd,
+    sessionId,
+    model,
+    permissionMode,
+    toolsSettings,
+  } = options;
+
+  const workingDir = (cwd && cwd !== 'STANDALONE_MODE') ? cwd : process.cwd();
+  // Persistent stream mode (no --print). Input and output via stream-json
+  const args = ['--output-format','stream-json','--input-format','stream-json','--verbose'];
+  // Default for overlay sessions: bypass permissions so tools podem executar sem prompts
+  const skippingPermissions = options.forceBypassPermissions !== false;
+  if (skippingPermissions) {
+    args.push('--dangerously-skip-permissions');
+  }
+
+  if (sessionId) {
+    args.push('--resume', sessionId);
+  }
+  if (model) {
+    args.push('--model', model);
+  }
+  // Permissions/tools flags similar to spawnClaude
+  // Avoid redundant or conflicting flags: don't send --permission-mode when skipping permissions
+  if (!skippingPermissions && permissionMode && permissionMode !== 'default') {
+    args.push('--permission-mode', permissionMode);
+  }
+  if (toolsSettings && Array.isArray(toolsSettings.allowedTools) && toolsSettings.allowedTools.length) {
+    for (const t of toolsSettings.allowedTools) args.push('--allowedTools', t);
+  }
+  if (toolsSettings && Array.isArray(toolsSettings.disallowedTools) && toolsSettings.disallowedTools.length) {
+    for (const t of toolsSettings.disallowedTools) args.push('--disallowedTools', t);
+  }
+  args.push(...buildMcpConfigArg());
+
+  const nodeCommand = '/opt/homebrew/bin/node';
+  const claudeScript = '/opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js';
+
+  console.log('[CLAUDE-CLI] Starting stream with args:', args);
+  console.log('[CLAUDE-CLI] Working dir:', workingDir);
+  console.log('[CLAUDE-CLI] Command:', nodeCommand, claudeScript);
+
+  const proc = spawnProc(nodeCommand, [claudeScript, ...args], {
+    cwd: workingDir,
+    stdio: ['pipe','pipe','pipe'],
+    env: {
+      ...process.env,
+      PATH: `/opt/homebrew/bin:/usr/local/bin:${process.env.PATH}`
+    }
+  });
+
+  let capturedId = sessionId || null;
+  const onData = (chunk) => {
+    const lines = chunk.toString().split('\n').filter(Boolean);
+    for (const line of lines) {
+      try {
+        const data = JSON.parse(line);
+        if (data.session_id && !capturedId) {
+          capturedId = data.session_id;
+          try { ws.send(JSON.stringify({ type: 'session-created', sessionId: capturedId })); } catch {}
+          try { if (typeof onSession === 'function') onSession(capturedId); } catch {}
+        }
+        try { ws.send(JSON.stringify({ type: 'claude-response', data })); } catch {}
+      } catch {
+        // Non-JSON lines are ignored in stream mode
+      }
+    }
+  };
+  proc.stdout.on('data', onData);
+  proc.stderr.on('data', (e) => {
+    console.error('[CLAUDE-CLI] stderr:', e.toString());
+    const errStr = e.toString();
+    try { ws.send(JSON.stringify({ type: 'claude-error', error: errStr })); } catch {}
+    // Detect resume failures and notify client so it can clear stale session
+    if (errStr.includes('No conversation found with session ID')) {
+      const m = errStr.match(/session ID[:\s]+([0-9a-fA-F-]{8,})/);
+      const sid = m ? m[1] : undefined;
+      try { ws.send(JSON.stringify({ type: 'session-not-found', sessionId: sid, message: 'Previous session expired. A new session will be created.', shouldCreateNew: true })); } catch {}
+    }
+  });
+  proc.on('close', (code) => {
+    console.error(`[CLAUDE-CLI] Process closed with code: ${code}`);
+    try { ws.send(JSON.stringify({ type: 'claude-session-closed', exitCode: code })); } catch {}
+  });
+  proc.on('error', (error) => {
+    console.error('[CLAUDE-CLI] Process error:', error);
+    try { ws.send(JSON.stringify({ type: 'claude-error', error: error.message })); } catch {}
+  });
+
+  const writeMessage = (text, sid = capturedId) => {
+    if (!proc.stdin.writable) return false;
+    const msg = {
+      type: 'user',
+      message: { role: 'user', content: String(text) },
+      parent_tool_use_id: null,
+      session_id: sid || 'default'
+    };
+    try {
+      proc.stdin.write(JSON.stringify(msg) + '\n');
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const stop = () => { try { proc.kill('SIGTERM'); } catch {} };
+  return { proc, writeMessage, getSessionId: () => capturedId, stop };
+}
+
+export { spawnClaudeStream };
