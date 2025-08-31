@@ -4,8 +4,8 @@ const PROVIDER_KEY = 'chat-cli-provider';
 
 export function loadPlannerMode() {
   try {
-    return localStorage.getItem(MODE_KEY) || 'Planer';
-  } catch { return 'Planer'; }
+    return localStorage.getItem(MODE_KEY) || 'Auto';
+  } catch { return 'Auto'; }
 }
 
 export function savePlannerMode(mode) {
@@ -14,8 +14,8 @@ export function savePlannerMode(mode) {
 
 export function loadModelLabel() {
   try {
-    return localStorage.getItem(MODEL_KEY) || 'gpt-5';
-  } catch { return 'gpt-5'; }
+    return localStorage.getItem(MODEL_KEY) || 'Full Access';
+  } catch { return 'Full Access'; }
 }
 
 export function saveModelLabel(label) {
@@ -31,4 +31,3 @@ export function loadCliProvider() {
 export function saveCliProvider(provider) {
   try { localStorage.setItem(PROVIDER_KEY, provider); } catch {}
 }
-

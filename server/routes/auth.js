@@ -1,9 +1,11 @@
 import express from 'express';
 import bcrypt from 'bcrypt';
 import { userDb, db } from '../database/db.js';
+import { createLogger } from '../utils/logger.js';
 import { generateToken, authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
+const log = createLogger('AUTH');
 
 // Simple test route
 router.get('/test', (req, res) => {
@@ -19,7 +21,7 @@ router.get('/status', async (req, res) => {
       isAuthenticated: false // Will be overridden by frontend if token exists
     });
   } catch (error) {
-    console.error('Auth status error:', error);
+    log.error(`Status error: ${error.message}`);
     // Ensure we always return valid JSON
     res.status(500).json({ 
       error: error.message || 'Internal server error',
@@ -79,7 +81,7 @@ router.post('/register', async (req, res) => {
     }
     
   } catch (error) {
-    console.error('Registration error:', error);
+    log.error(`Registration error: ${error.message}`);
     if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
       res.status(409).json({ error: 'Username already exists' });
     } else {
@@ -123,7 +125,7 @@ router.post('/login', async (req, res) => {
     });
     
   } catch (error) {
-    console.error('Login error:', error);
+    log.error(`Login error: ${error.message}`);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

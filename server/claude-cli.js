@@ -2,11 +2,57 @@ import { spawn } from 'child_process';
 import { promises as fs } from 'fs';
 import path from 'path';
 import os from 'os';
+import { createLogger } from './utils/logger.js';
+
+const log = createLogger('CLAUDE-CLI');
+
+const STREAM_MODE = (process.env.LOG_CLAUDE_STREAM || 'compact').toLowerCase();
+
+function logClaudeEvent(ev) {
+  if (STREAM_MODE === 'off') return;
+  try {
+    const type = ev?.type || ev?.event_type || 'unknown';
+    if (type === 'system' && ev.subtype === 'init') {
+      log.info('▶ init');
+      return;
+    }
+    if (type === 'assistant') {
+      const txt = ev.message?.text || ev.message?.content || ev.text || '';
+      if (!txt) return;
+      const snippet = String(txt).replace(/\s+/g, ' ').slice(0, 140);
+      if (STREAM_MODE === 'full') log.info(`assistant: ${snippet}`);
+      else if (STREAM_MODE === 'compact') log.info(`▸ assistant: ${snippet}`);
+      return;
+    }
+    if (type === 'tool_use') {
+      const name = ev.tool_name || ev.name || 'tool';
+      const id = ev.tool_use_id ? `#${ev.tool_use_id.slice(0, 6)}` : '';
+      log.info(`⚙︎ tool_use ${name}${id}`);
+      return;
+    }
+    if (type === 'tool_result') {
+      const txt = ev.text || ev.message?.text || '';
+      const snippet = txt ? `: ${String(txt).replace(/\s+/g, ' ').slice(0, 120)}` : '';
+      log.info(`✓ tool_result${snippet}`);
+      return;
+    }
+    if (type === 'error') {
+      log.warn(`error: ${ev.error || ev.message || 'unknown'}`);
+      return;
+    }
+    if (type === 'result') {
+      log.success('done');
+      return;
+    }
+    // Default fallback for unrecognized events (debug only)
+    log.debug(`event: ${type}`);
+  } catch {}
+}
 
 let activeClaudeProcesses = new Map(); // Track active processes by session ID
 
 async function spawnClaude(command, options = {}, ws) {
-  console.log('spawnClaude called with:', { command: command?.substring(0, 50), options });
+  log.debug(`spawnClaude called`);
   return new Promise(async (resolve, reject) => {
     const { sessionId, projectPath, cwd, resume, toolsSettings, permissionMode, images, model, initOnly } = options;
     let capturedSessionId = sessionId; // Track session ID throughout the process
@@ -28,7 +74,7 @@ async function spawnClaude(command, options = {}, ws) {
       args.push('--resume', sessionId);
     }
     
-    // Add print flag with command
+    // Store command to send after process starts
     let finalCommand = command;
     if (command && command.trim()) {
       // Handle images - add them to the command text
@@ -36,12 +82,9 @@ async function spawnClaude(command, options = {}, ws) {
         const imageUrls = images.map((img, index) => `![Image ${index + 1}](${img})`).join('\n');
         finalCommand = command + '\n\n' + imageUrls;
       }
-      // Match SDK behavior: use "--" separator after --print to avoid flag parsing in prompt
-      args.push('--print', '--', finalCommand);
     } else if (initOnly) {
-      // For init-only session creation, send a benign prompt to trigger session_id
-      // Use same separator pattern as SDK
-      args.push('--print', '--', 'ready');
+      // For init-only session creation, send a benign prompt
+      finalCommand = 'ready';
     }
     
     // Use cwd (actual project directory) instead of projectPath (Claude's metadata directory)
@@ -49,6 +92,7 @@ async function spawnClaude(command, options = {}, ws) {
     const workingDir = (cwd && cwd !== 'STANDALONE_MODE') ? cwd : process.cwd();
     
     // Add basic flags - Claude Code uses stream-json format
+    // IMPORTANT: When using --print, --output-format=stream-json requires --verbose
     args.push('--output-format', 'stream-json', '--verbose');
     
     // Add MCP config flag only if MCP servers are configured
@@ -180,8 +224,13 @@ async function spawnClaude(command, options = {}, ws) {
     const nodeCommand = '/opt/homebrew/bin/node';
     const claudeScript = '/opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js';
     
-    console.log('Spawning Claude with command:', nodeCommand, claudeScript, args.join(' '));
-    console.log('Working directory:', workingDir);
+    log.info(`Starting Claude interactive mode`);
+    log.info(`Command: ${finalCommand || 'No command provided'}`);
+    log.info(`cmd: ${nodeCommand} ${claudeScript}`);
+    log.info(`args: ${args.join(' ')}`);
+    log.info(`cwd: ${workingDir}`);
+    log.info(`sessionId: ${sessionId || 'new session'}`);
+    log.info(`resume: ${resume}`);
     
     const claudeProcess = spawn(nodeCommand, [claudeScript, ...args], {
       cwd: workingDir,
@@ -192,11 +241,22 @@ async function spawnClaude(command, options = {}, ws) {
       }
     });
     
-    console.log(`[SERVER] Claude process spawned with PID: ${claudeProcess.pid}`);
-    console.log(`[SERVER] Waiting for Claude CLI output...`);
+    log.debug(`spawned PID: ${claudeProcess.pid}`);
+    log.debug(`waiting for output...`);
     
-    // Close stdin immediately since we're using --print mode
-    claudeProcess.stdin.end();
+    // Send command to stdin after process starts
+    if (finalCommand) {
+      log.info(`📝 Sending command to stdin: ${finalCommand.substring(0, 100)}...`);
+      claudeProcess.stdin.write(finalCommand + '\n');
+      // Wait a bit then close stdin to signal end of input
+      setTimeout(() => {
+        log.info('📝 Closing stdin after command');
+        claudeProcess.stdin.end();
+      }, 100);
+    } else {
+      log.info('📝 No command to send, closing stdin');
+      claudeProcess.stdin.end();
+    }
     
     // Store process reference for potential abort
     const processKey = capturedSessionId || sessionId || Date.now().toString();
@@ -207,17 +267,19 @@ async function spawnClaude(command, options = {}, ws) {
     claudeProcess.stdout.on('data', (data) => {
       if (isFirstOutput) {
         isFirstOutput = false;
-        console.log('[SERVER] First stdout output received from Claude CLI');
+        log.info('▶ First stdout received from Claude');
       }
       const rawOutput = data.toString();
-      console.log('[SERVER] Claude stdout raw:', rawOutput.substring(0, 200)); // Log first 200 chars
+      log.info(`▸ Claude output (${rawOutput.length} chars): ${rawOutput.substring(0, 200)}`);
       
       const lines = rawOutput.split('\n').filter(line => line.trim());
-      console.log(`[SERVER] Processing ${lines.length} lines from Claude output`);
+      log.info(`📦 Processing ${lines.length} line(s) from Claude`);
       
       for (const line of lines) {
         try {
           const response = JSON.parse(line);
+          // Live, compact logging for one-shot mode
+          logClaudeEvent(response);
           
           // Capture session ID if it's in the response
           if (response.session_id && !capturedSessionId) {
@@ -269,14 +331,15 @@ async function spawnClaude(command, options = {}, ws) {
     claudeProcess.stderr.on('data', (data) => {
       if (isFirstError) {
         isFirstError = false;
+        log.error('❌ First stderr received from Claude');
       }
       const errorStr = data.toString();
-      console.error('Claude CLI stderr:', errorStr);
+      log.error(`❌ Claude stderr: ${errorStr}`);
       stderrBuffer += errorStr;
       
       // Check for "No conversation found" error when trying to resume
       if (errorStr.includes('No conversation found with session ID') && resume && sessionId) {
-        console.log(`Session ${sessionId} not found in Claude CLI, will create new session on next message`);
+        log.warn(`resume failed for session ${sessionId}; will create a new session`);
         
         // Send a special message indicating session needs to be recreated
         ws.send(JSON.stringify({
@@ -298,9 +361,7 @@ async function spawnClaude(command, options = {}, ws) {
     
     // Handle process completion
     claudeProcess.on('close', async (code) => {
-      console.log(`[SERVER] Claude process closed with code: ${code}`);
-      console.log(`[SERVER] Session ID captured: ${capturedSessionId || 'none'}`);
-      console.log(`[SERVER] Output received: ${!isFirstOutput}`);
+      log.info(`🏁 Claude process closed with code=${code} session=${capturedSessionId || 'none'} hadOutput=${!isFirstOutput}`);
       
       // Clean up process reference
       const finalSessionId = capturedSessionId || sessionId || processKey;
@@ -337,7 +398,7 @@ async function spawnClaude(command, options = {}, ws) {
     
     // Handle process errors
     claudeProcess.on('error', (error) => {
-      console.error('Claude CLI process error:', error);
+      log.error(`process error: ${error?.message || error}`);
       
       // Clean up process reference on error
       const finalSessionId = capturedSessionId || sessionId || processKey;
@@ -426,9 +487,11 @@ function spawnClaudeStream(options = {}, ws, onSession) {
   const nodeCommand = '/opt/homebrew/bin/node';
   const claudeScript = '/opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js';
 
-  console.log('[CLAUDE-CLI] Starting stream with args:', args);
-  console.log('[CLAUDE-CLI] Working dir:', workingDir);
-  console.log('[CLAUDE-CLI] Command:', nodeCommand, claudeScript);
+  log.info('🚀 Starting Claude stream mode');
+  log.info(`📦 Args: ${args.join(' ')}`);
+  log.info(`📁 CWD: ${workingDir}`);
+  log.info(`⚙️ CMD: ${nodeCommand} ${claudeScript}`);
+  log.info(`🆔 SessionID: ${sessionId || 'new session'}`);
 
   const proc = spawnProc(nodeCommand, [claudeScript, ...args], {
     cwd: workingDir,
@@ -441,24 +504,31 @@ function spawnClaudeStream(options = {}, ws, onSession) {
 
   let capturedId = sessionId || null;
   const onData = (chunk) => {
-    const lines = chunk.toString().split('\n').filter(Boolean);
+    const chunkStr = chunk.toString();
+    log.info(`📥 Received from Claude (${chunkStr.length} chars): ${chunkStr.substring(0, 200)}...`);
+    const lines = chunkStr.split('\n').filter(Boolean);
+    log.info(`📦 Processing ${lines.length} lines`);
     for (const line of lines) {
       try {
         const data = JSON.parse(line);
+        log.info(`🎯 Parsed event type: ${data.type || data.event_type || 'unknown'}`);
         if (data.session_id && !capturedId) {
           capturedId = data.session_id;
+          log.info(`🆔 Captured session ID: ${capturedId}`);
           try { ws.send(JSON.stringify({ type: 'session-created', sessionId: capturedId })); } catch {}
           try { if (typeof onSession === 'function') onSession(capturedId); } catch {}
         }
         try { ws.send(JSON.stringify({ type: 'claude-response', data })); } catch {}
-      } catch {
-        // Non-JSON lines are ignored in stream mode
+        // Live, compact logging
+        logClaudeEvent(data);
+      } catch (e) {
+        log.warn(`⚠️ Failed to parse line: ${line.substring(0, 100)}`);
       }
     }
   };
   proc.stdout.on('data', onData);
   proc.stderr.on('data', (e) => {
-    console.error('[CLAUDE-CLI] stderr:', e.toString());
+    log.warn(`stderr: ${e.toString()}`);
     const errStr = e.toString();
     try { ws.send(JSON.stringify({ type: 'claude-error', error: errStr })); } catch {}
     // Detect resume failures and notify client so it can clear stale session
@@ -469,16 +539,20 @@ function spawnClaudeStream(options = {}, ws, onSession) {
     }
   });
   proc.on('close', (code) => {
-    console.error(`[CLAUDE-CLI] Process closed with code: ${code}`);
+    log.debug(`stream closed code=${code}`);
     try { ws.send(JSON.stringify({ type: 'claude-session-closed', exitCode: code })); } catch {}
   });
   proc.on('error', (error) => {
-    console.error('[CLAUDE-CLI] Process error:', error);
+    log.error(`stream error: ${error?.message || error}`);
     try { ws.send(JSON.stringify({ type: 'claude-error', error: error.message })); } catch {}
   });
 
   const writeMessage = (text, sid = capturedId) => {
-    if (!proc.stdin.writable) return false;
+    log.info(`✍️ Sending message to Claude: "${String(text).substring(0, 100)}..."`);
+    if (!proc.stdin.writable) {
+      log.error('❌ stdin not writable!');
+      return false;
+    }
     const msg = {
       type: 'user',
       message: { role: 'user', content: String(text) },
@@ -486,9 +560,13 @@ function spawnClaudeStream(options = {}, ws, onSession) {
       session_id: sid || 'default'
     };
     try {
-      proc.stdin.write(JSON.stringify(msg) + '\n');
+      const msgStr = JSON.stringify(msg);
+      log.info(`📨 Writing to stdin: ${msgStr.substring(0, 200)}...`);
+      proc.stdin.write(msgStr + '\n');
+      log.info('✅ Message sent successfully');
       return true;
-    } catch {
+    } catch (e) {
+      log.error(`❌ Failed to send message: ${e.message}`);
       return false;
     }
   };

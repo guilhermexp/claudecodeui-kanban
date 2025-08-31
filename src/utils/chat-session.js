@@ -1,4 +1,4 @@
-// Persist Codex session metadata per project for resume capability
+// Persist session metadata per project for resume capability
 
 const STORAGE_KEY = 'overlayChatSessions';
 
@@ -15,10 +15,15 @@ function saveAll(obj) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(obj)); } catch {}
 }
 
-export function saveLastSession(projectPath, { sessionId, rolloutPath }) {
+function keyFor(projectPath, provider) {
+  const p = String(projectPath);
+  return provider ? `${p}::${provider}` : p;
+}
+
+export function saveLastSession(projectPath, { sessionId, rolloutPath }, provider = null) {
   if (!projectPath || (!sessionId && !rolloutPath)) return;
   const all = loadAll();
-  all[String(projectPath)] = {
+  all[keyFor(projectPath, provider)] = {
     sessionId: sessionId || null,
     rolloutPath: rolloutPath || null,
     updatedAt: Date.now()
@@ -28,21 +33,27 @@ export function saveLastSession(projectPath, { sessionId, rolloutPath }) {
   saveAll(Object.fromEntries(entries.slice(0, 8)));
 }
 
-export function loadLastSession(projectPath) {
+export function loadLastSession(projectPath, provider = null) {
   if (!projectPath) return null;
   const all = loadAll();
+  if (provider) {
+    return all[keyFor(projectPath, provider)] || all[String(projectPath)] || null; // fallback to legacy
+  }
   return all[String(projectPath)] || null;
 }
 
-export function hasLastSession(projectPath) {
-  const s = loadLastSession(projectPath);
+export function hasLastSession(projectPath, provider = null) {
+  const s = loadLastSession(projectPath, provider);
   return !!(s && (s.sessionId || s.rolloutPath));
 }
 
-export function clearLastSession(projectPath) {
+export function clearLastSession(projectPath, provider = null) {
   if (!projectPath) return;
   const all = loadAll();
-  delete all[String(projectPath)];
+  if (provider) {
+    delete all[keyFor(projectPath, provider)];
+  } else {
+    delete all[String(projectPath)];
+  }
   saveAll(all);
 }
-

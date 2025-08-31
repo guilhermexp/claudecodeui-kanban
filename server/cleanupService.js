@@ -26,7 +26,7 @@ class VibeKanbanCleanupService {
       checkInterval: 600000, // 10 minutos (reduzido de 2min para diminuir overhead)
       processTimeout: 900000, // 15 minutos para considerar órfão (mais conservador)
       maxOrphanCount: 10, // Máximo de processos órfãos antes de limpeza forçada
-      vibeKanbanPort: 8081,
+      vibeKanbanPort: 6734, // Corrigido para porta correta do Vibe Kanban
       logLevel: 'warn', // Reduzir logs para apenas warnings e erros
       skipHealthCheckIfNotRunning: true, // Nova opção para evitar checks desnecessários
       skipCleanupIfNoOrphans: true // Pular limpeza se não há processos órfãos
@@ -128,7 +128,7 @@ class VibeKanbanCleanupService {
         }
       }
       
-      this.logger.info('Starting cleanup check', {
+      this.logger.debug('Starting cleanup check', {
         event: 'cleanup_start',
         timestamp: new Date().toISOString()
       });
@@ -166,12 +166,21 @@ class VibeKanbanCleanupService {
       
     } catch (error) {
       const duration = Date.now() - startTime;
-      this.logger.error('Cleanup failed', {
-        event: 'cleanup_error',
-        duration: `${duration}ms`,
-        error: error.message,
-        stack: error.stack
-      });
+      // Só logar como erro se não for erro de porta esperado
+      if (error.message.includes('ECONNREFUSED') || error.message.includes('port')) {
+        this.logger.debug('Cleanup check skipped - service not available', {
+          event: 'cleanup_skipped',
+          duration: `${duration}ms`,
+          reason: 'service_unavailable'
+        });
+      } else {
+        this.logger.error('Cleanup failed', {
+          event: 'cleanup_error',
+          duration: `${duration}ms`,
+          error: error.message,
+          stack: error.stack
+        });
+      }
     }
   }
 

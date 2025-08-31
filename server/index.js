@@ -59,6 +59,11 @@ import claudeHooksRoutes from './routes/claude-hooks.js';
 import claudeStreamRoutes from './routes/claude-stream.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
+import { createLogger } from './utils/logger.js';
+
+const slog = createLogger('SERVER');
+const clog = createLogger('CLAUDE');
+const shlog = createLogger('SHELL');
 import cleanupService from './cleanupService.js';
 import { 
   apiRateLimit, 
@@ -102,7 +107,7 @@ function saveSystemSettings() {
     fs.writeFileSync(systemSettingsPath, JSON.stringify(next, null, 2));
     return true;
   } catch (e) {
-    console.error('Failed to save system settings:', e.message);
+    slog.error(`Failed to save system settings: ${e.message}`);
     return false;
   }
 }
@@ -240,7 +245,7 @@ async function setupProjectsWatcher() {
           broadcastProjectUpdate(updateMessage, eventType, filePath);
           
         } catch (error) {
-          console.error('❌ Error handling project changes:', error);
+          slog.error(`❌ Error handling project changes: ${error.message}`);
         }
       }, 300); // 300ms debounce (slightly faster than before)
     };
@@ -253,13 +258,13 @@ async function setupProjectsWatcher() {
       .on('addDir', (dirPath) => debouncedUpdate('addDir', dirPath))
       .on('unlinkDir', (dirPath) => debouncedUpdate('unlinkDir', dirPath))
       .on('error', (error) => {
-        console.error('❌ Chokidar watcher error:', error);
+        slog.error(`❌ Chokidar watcher error: ${error.message}`);
       })
       .on('ready', () => {
       });
     
   } catch (error) {
-    console.error('❌ Failed to setup projects watcher:', error);
+    slog.error(`❌ Failed to setup projects watcher: ${error.message}`);
   }
 }
 
@@ -297,7 +302,7 @@ app.use(express.json());
 
 // DEPRECATED: Temporary logo endpoint to handle cached browser requests
 app.get('/api/projects/:projectName/logo', (req, res) => {
-  console.log(`[DEPRECATED] Logo API call from cached code: ${req.path}`);
+  slog.warn(`[DEPRECATED] Logo API call from cached code: ${req.path}`);
   res.status(410).json({
     error: 'Logo API has been removed',
     message: 'Please refresh your browser (Ctrl+F5 or Cmd+Shift+R) to get the updated version',
@@ -308,7 +313,7 @@ app.get('/api/projects/:projectName/logo', (req, res) => {
 
 // DEPRECATED: Temporary system monitor endpoint to handle cached browser requests
 app.get('/api/system/monitor', (req, res) => {
-  console.log(`[DEPRECATED] System monitor API call from cached code: ${req.path}`);
+  slog.warn(`[DEPRECATED] System monitor API call from cached code: ${req.path}`);
   res.status(410).json({
     error: 'System monitor API has been removed',
     message: 'Please refresh your browser (Ctrl+F5 or Cmd+Shift+R) to get the updated version',
@@ -460,7 +465,7 @@ app.get('/api/sounds/:soundFile', (req, res) => {
     res.setHeader('Content-Type', mimeType);
     res.sendFile(path.resolve(soundPath));
   } catch (error) {
-    console.error('Error serving sound file:', error);
+    slog.error(`Error serving sound file: ${error.message}`);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -557,7 +562,7 @@ app.get('/api/settings', authenticateToken, async (req, res) => {
       });
     }
   } catch (error) {
-    console.error('Error loading settings:', error);
+    slog.error(`Error loading settings: ${error.message}`);
     res.status(500).json({ error: 'Failed to load settings' });
   }
 });
@@ -587,27 +592,28 @@ app.post('/api/settings', authenticateToken, async (req, res) => {
     
     res.json({ success: true, settings: allSettings[username] });
   } catch (error) {
-    console.error('Error saving settings:', error);
+    slog.error(`Error saving settings: ${error.message}`);
     res.status(500).json({ error: 'Failed to save settings' });
   }
 });
 
 app.get('/api/projects', authenticateToken, async (req, res) => {
   try {
-    // Add timeout to prevent hanging requests
-    const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Request timeout')), 5000)
-    );
+    // Directly get projects without timeout race condition
+    // The caching mechanism in getProjects() should handle performance
+    const projects = await getProjects();
     
-    const projects = await Promise.race([
-      getProjects(),
-      timeoutPromise
-    ]);
-    
+    // Set cache headers to reduce client requests
+    res.set('Cache-Control', 'private, max-age=60'); // Cache for 1 minute on client
     res.json(projects);
   } catch (error) {
-    console.error('[API] /api/projects error:', error.message);
-    res.status(500).json({ error: error.message });
+    slog.error(`[API] /api/projects error: ${error.message}`);
+    
+    // Return empty array on error to prevent UI crashes
+    res.status(500).json({ 
+      error: error.message,
+      projects: [] // Fallback empty array
+    });
   }
 });
 
@@ -754,7 +760,7 @@ app.get('/api/projects/analyze', projectAnalysisRateLimit, authenticateToken, as
     setCached(projectAnalysisCache, projectPath, result);
     res.json(result);
   } catch (error) {
-    console.error('Error analyzing project:', error);
+    slog.error(`Error analyzing project: ${error.message}`);
     res.status(500).json({ error: 'Failed to analyze project' });
   }
 });
@@ -870,7 +876,7 @@ app.post('/api/projects/create', authenticateToken, async (req, res) => {
     const project = await addProjectManually(projectPath.trim());
     res.json({ success: true, project });
   } catch (error) {
-    console.error('Error creating project:', error);
+    slog.error(`Error creating project: ${error.message}`);
     res.status(500).json({ error: error.message });
   }
 });
@@ -892,7 +898,7 @@ app.get('/api/projects/:projectName/file', authenticateToken, async (req, res) =
     const content = await fsPromises.readFile(filePath, 'utf8');
     res.json({ content, path: filePath });
   } catch (error) {
-    console.error('Error reading file:', error);
+    slog.error(`Error reading file: ${error.message}`);
     if (error.code === 'ENOENT') {
       res.status(404).json({ error: 'File not found' });
     } else if (error.code === 'EACCES') {
@@ -934,14 +940,14 @@ app.get('/api/projects/:projectName/files/content', authenticateToken, async (re
     fileStream.pipe(res);
     
     fileStream.on('error', (error) => {
-      console.error('Error streaming file:', error);
+      slog.error(`Error streaming file: ${error.message}`);
       if (!res.headersSent) {
         res.status(500).json({ error: 'Error reading file' });
       }
     });
     
   } catch (error) {
-    console.error('Error serving binary file:', error);
+    slog.error(`Error serving binary file: ${error.message}`);
     if (!res.headersSent) {
       res.status(500).json({ error: error.message });
     }
@@ -983,7 +989,7 @@ app.put('/api/projects/:projectName/file', authenticateToken, async (req, res) =
       message: 'File saved successfully' 
     });
   } catch (error) {
-    console.error('Error saving file:', error);
+    slog.error(`Error saving file: ${error.message}`);
     if (error.code === 'ENOENT') {
       res.status(404).json({ error: 'File or directory not found' });
     } else if (error.code === 'EACCES') {
@@ -1012,7 +1018,7 @@ app.post('/api/files/create', authenticateToken, async (req, res) => {
     try {
       projectDir = await extractProjectDirectory(projectName);
     } catch (error) {
-      console.error('Error extracting project directory:', error);
+      slog.error(`Error extracting project directory: ${error.message}`);
       return res.status(404).json({ error: 'Project not found' });
     }
     
@@ -1030,7 +1036,7 @@ app.post('/api/files/create', authenticateToken, async (req, res) => {
     if (type === 'folder') {
       // Create folder
       await fsPromises.mkdir(fullPath, { recursive: true });
-      console.log('📁 Created folder:', fullPath);
+      slog.info(`Created folder: ${fullPath}`);
     } else {
       // Create file
       // First ensure parent directory exists
@@ -1039,7 +1045,7 @@ app.post('/api/files/create', authenticateToken, async (req, res) => {
       
       // Create empty file
       await fsPromises.writeFile(fullPath, '', 'utf8');
-      console.log('📄 Created file:', fullPath);
+      slog.info(`Created file: ${fullPath}`);
     }
     
     res.json({ 
@@ -1049,7 +1055,7 @@ app.post('/api/files/create', authenticateToken, async (req, res) => {
     });
     
   } catch (error) {
-    console.error('Error creating file/folder:', error);
+    slog.error(`Error creating file/folder: ${error.message}`);
     if (error.code === 'EACCES') {
       res.status(403).json({ error: 'Permission denied' });
     } else {
@@ -1075,11 +1081,11 @@ app.get('/api/files/read', authenticateToken, async (req, res) => {
     const stream = fs.createReadStream(filePath);
     stream.pipe(res);
     stream.on('error', err => {
-      console.error('Error streaming file:', err);
+      slog.error(`Error streaming file: ${err.message}`);
       if (!res.headersSent) res.status(500).json({ error: 'Error reading file' });
     });
   } catch (error) {
-    console.error('Error in /api/files/read:', error);
+    slog.error(`Error in /api/files/read: ${error.message}`);
     if (!res.headersSent) res.status(500).json({ error: error.message });
   }
 });
@@ -1104,7 +1110,7 @@ app.post('/api/files/rename', authenticateToken, async (req, res) => {
     await fsPromises.rename(oldPath, newPath);
     res.json({ success: true, path: newPath });
   } catch (error) {
-    console.error('Error renaming file/folder:', error);
+    slog.error(`Error renaming file/folder: ${error.message}`);
     res.status(500).json({ error: error.message });
   }
 });
@@ -1136,7 +1142,7 @@ app.delete('/api/files/delete', authenticateToken, async (req, res) => {
     }
     res.json({ success: true });
   } catch (error) {
-    console.error('Error deleting file/folder:', error);
+    slog.error(`Error deleting file/folder: ${error.message}`);
     res.status(500).json({ error: error.message });
   }
 });
@@ -1151,7 +1157,7 @@ app.get('/api/projects/:projectName/files', authenticateToken, async (req, res) 
     try {
       actualPath = await extractProjectDirectory(req.params.projectName);
     } catch (error) {
-      console.error('Error extracting project directory:', error);
+      slog.error(`Error extracting project directory: ${error.message}`);
       // Fallback to simple dash replacement
       actualPath = req.params.projectName.replace(/-/g, '/');
     }
@@ -1167,7 +1173,7 @@ app.get('/api/projects/:projectName/files', authenticateToken, async (req, res) 
     const hiddenFiles = files.filter(f => f.name.startsWith('.'));
     res.json(files);
   } catch (error) {
-    console.error('❌ File tree error:', error.message);
+    slog.error(`❌ File tree error: ${error.message}`);
     res.status(500).json({ error: error.message });
   }
 });
@@ -1394,11 +1400,11 @@ function handleUnifiedClaudeConnection(ws, request) {
           break;
           
         default:
-          console.log('Unknown message type:', data.type);
+          clog.warn(`Unknown message type: ${data.type}`);
       }
       
     } catch (error) {
-      console.error('Error handling unified Claude message:', error);
+      slog.error(`Error handling unified Claude message: ${error.message}`);
       ws.send(JSON.stringify({ 
         type: 'error', 
         message: error.message 
@@ -1478,12 +1484,13 @@ async function handleShellInit(ws, data, sessions) {
 async function handleClaudeStart(ws, data, sessions) {
   const options = data.options || {};
   
-  console.log('[SERVER] [CLAUDE] Starting new Claude session:', {
+  slog.info('[CLAUDE] Starting new session');
+  clog.debug('start options: ' + JSON.stringify({
     projectPath: options.projectPath,
     cwd: options.cwd,
     sessionId: options.sessionId,
     resume: options.resume
-  });
+  }));
   
   // Normalize STANDALONE_MODE to user's home directory (same behavior as Shell)
   let projectPath = options.projectPath || process.cwd();
@@ -1519,7 +1526,7 @@ async function handleClaudeStart(ws, data, sessions) {
 async function handleClaudeMessage(ws, data, sessions) {
   // Ensure stream exists; if not, create streaming process now
   if (!sessions.claude || !sessions.claude.stream) {
-    console.log('[SERVER] [CLAUDE] No active stream, starting persistent process');
+    slog.info('[CLAUDE] Starting persistent stream');
     const options = data.options || {};
     const projectPath = (options.projectPath && options.projectPath !== 'STANDALONE_MODE') ? options.projectPath : (os.homedir?.() || process.env.HOME || process.cwd());
     const workingDir = projectPath;
@@ -1529,11 +1536,11 @@ async function handleClaudeMessage(ws, data, sessions) {
     sessions.claude = { projectPath, sessionId: null, stream };
   }
 
-  console.log('[SERVER] [CLAUDE] Sending message:', {
+  clog.debug('[CLAUDE] Sending message: ' + JSON.stringify({
     message: data.message?.substring(0, 50),
     sessionId: data.sessionId,
     hasStoredSession: !!sessions.claude?.sessionId
-  });
+  }));
 
   // Write into streaming stdin (fast path)
   try {
@@ -1574,7 +1581,7 @@ async function handleClaudeMessage(ws, data, sessions) {
       }
     }
   } catch (e) {
-    console.error('Stream write error:', e);
+    clog.warn(`Stream write error: ${e?.message || e}`);
   }
 }
 
@@ -1649,7 +1656,7 @@ function handleChatConnection(ws, request) {
       // Handle image upload from Shell/Chat
       if (data.type === 'upload-image') {
         const { imageData, fileName } = data;
-        console.log('📸 Received image upload request:', fileName);
+        slog.info(`Image upload requested: ${fileName}`);
         
         try {
           // Parse base64 data
@@ -1676,7 +1683,7 @@ function handleChatConnection(ws, request) {
           
           // Save image to disk
           await fsPromises.writeFile(imagePath, buffer);
-          console.log('💾 Image saved to:', imagePath);
+          slog.debug(`Image saved to: ${imagePath}`);
           
           // Store in global map
           if (!global.uploadedImages) {
@@ -1693,7 +1700,7 @@ function handleChatConnection(ws, request) {
           });
           
           // Return the actual file path for Claude to read
-          console.log('✅ Sending image path back to client:', imagePath);
+          slog.debug(`Sending image path to client: ${imagePath}`);
           ws.send(JSON.stringify({
             type: 'image-uploaded',
             imageId: imageId,
@@ -1702,7 +1709,7 @@ function handleChatConnection(ws, request) {
           }));
           
         } catch (error) {
-          console.error('Error uploading image:', error);
+          slog.error(`Error uploading image: ${error.message}`);
           ws.send(JSON.stringify({
             type: 'image-upload-error',
             error: 'Failed to upload image'
@@ -1712,7 +1719,7 @@ function handleChatConnection(ws, request) {
       }
       
       if (data.type === 'claude-command') {
-        console.log('Received claude-command:', { command: data.command?.substring(0, 50), options: data.options });
+        clog.debug('Received claude-command: ' + JSON.stringify({ command: data.command?.substring(0, 50), options: data.options }));
         
         // Register user's active project for smart broadcasting
         if (data.options?.projectPath) {
@@ -1792,7 +1799,7 @@ function handleChatConnection(ws, request) {
         }));
       }
     } catch (error) {
-      console.error('❌ Chat WebSocket error:', error.message);
+      slog.error(`❌ Chat WebSocket error: ${error.message}`);
       ws.send(JSON.stringify({
         type: 'error',
         error: error.message
@@ -1826,26 +1833,31 @@ function handleShellConnection(ws, request) {
   ws.on('message', async (message) => {
     try {
       const data = JSON.parse(message);
+      const LOG_SHELL_KEYS = process.env.LOG_SHELL_KEYS === 'true';
       
-      // Log all Shell messages like we do for Chat
-      console.log(`[SERVER] [SHELL] Received ${data.type}:`, {
-        type: data.type,
-        ...(data.type === 'init' ? {
-          projectPath: data.projectPath,
-          sessionId: data.sessionId,
-          hasSession: data.hasSession,
-          bypassPermissions: data.bypassPermissions,
-          cols: data.cols,
-          rows: data.rows
-        } : {}),
-        ...(data.type === 'input' ? {
-          data: data.data?.substring(0, 50) + (data.data?.length > 50 ? '...' : '')
-        } : {}),
-        ...(data.type === 'resize' ? {
-          cols: data.cols,
-          rows: data.rows
-        } : {})
-      });
+      // Log Shell messages (avoid per-keystroke noise)
+      if (data.type === 'input') {
+        const txt = data.data || '';
+        const isSignificant = LOG_SHELL_KEYS || txt.includes('\n') || txt.length > 2 || /[\u0003\u0004\u001b]/.test(txt);
+        if (isSignificant) {
+          shlog.debug(`Received input len=${txt.length} preview="${txt.substring(0, 50)}${txt.length > 50 ? '...' : ''}"`);
+        }
+      } else if (data.type !== 'ping') {
+        shlog.debug(`Received ${data.type}: ` + JSON.stringify({
+          ...(data.type === 'init' ? {
+            projectPath: data.projectPath,
+            sessionId: data.sessionId,
+            hasSession: data.hasSession,
+            bypassPermissions: data.bypassPermissions,
+            cols: data.cols,
+            rows: data.rows
+          } : {}),
+          ...(data.type === 'resize' ? {
+            cols: data.cols,
+            rows: data.rows
+          } : {})
+        }));
+      }
       
       if (data.type === 'init') {
         // Handle standalone mode - use home directory, never resume sessions
@@ -1906,13 +1918,8 @@ function handleShellConnection(ws, request) {
             const shellCommand = `cd "${projectPath}" && ${claudeCommand}`;
             
             // Log the Shell command being executed
-            console.log(`[SERVER] [SHELL] Spawning Claude with command:`, {
-              shell: userShell,
-              command: shellCommand,
-              cwd: projectPath,
-              cols: data.cols || 80,
-              rows: data.rows || 24
-            });
+            shlog.info('Spawning Claude shell');
+            shlog.debug(JSON.stringify({ shell: userShell, command: shellCommand, cwd: projectPath, cols: data.cols || 80, rows: data.rows || 24 }));
             
             // Start shell with the command directly
             shellProcess = pty.spawn(userShell, ['-lc', shellCommand], {
@@ -1944,7 +1951,7 @@ function handleShellConnection(ws, request) {
               ];
               
               if (suspiciousPatterns.some(pattern => output.match(pattern))) {
-                console.warn('Filtered out suspicious JS code output:', output.substring(0, 50) + '...');
+                shlog.warn('Filtered suspicious CLI output');
                 return; // Skip this output entirely
               }
               
@@ -1964,10 +1971,7 @@ function handleShellConnection(ws, request) {
             
             // Handle process exit
             shellProcess.onExit((exitCode) => {
-              console.log(`[SERVER] [SHELL] Process exited:`, {
-                exitCode: exitCode.exitCode,
-                signal: exitCode.signal
-              });
+              shlog.debug(`process exited code=${exitCode.exitCode} signal=${exitCode.signal}`);
               
               if (ws.readyState === ws.OPEN) {
                 ws.send(JSON.stringify({
@@ -1981,7 +1985,7 @@ function handleShellConnection(ws, request) {
             });
             
           } catch (spawnError) {
-            console.error('❌ Error spawning process:', spawnError);
+            shlog.error(`❌ Error spawning process: ${spawnError?.message || spawnError}`);
             ws.send(JSON.stringify({
               type: 'output',
               data: `\r\n\x1b[31mError: ${spawnError.message}\x1b[0m\r\n`
@@ -1990,10 +1994,9 @@ function handleShellConnection(ws, request) {
         
       } else if (data.type === 'input') {
         // Log Shell input for debugging
-        console.log(`[SERVER] [SHELL] Processing input:`, {
-          length: data.data?.length,
-          preview: data.data?.substring(0, 100) + (data.data?.length > 100 ? '...' : '')
-        });
+        const txt = data.data || '';
+        const isSignificant = LOG_SHELL_KEYS || txt.includes('\n') || txt.length > 2 || /[\u0003\u0004\u001b]/.test(txt);
+        if (isSignificant) shlog.debug(`Processing input len=${txt.length}`);
         
         // Send input to shell process
         if (shellProcess && shellProcess.write) {
@@ -2040,7 +2043,7 @@ function handleShellConnection(ws, request) {
                         data: `\r\n\x1b[32m✓ Imagem local encontrada: ${path.basename(fullFilePath)}\x1b[0m\r\n`
                       }));
                     } else {
-                      console.error('Image file not found:', fullFilePath);
+                      shlog.error(`Image file not found: ${fullFilePath}`);
                       ws.send(JSON.stringify({
                         type: 'output',
                         data: `\r\n\x1b[31m✗ Arquivo de imagem não encontrado: ${path.basename(filePath)}\x1b[0m\r\n`
@@ -2048,7 +2051,7 @@ function handleShellConnection(ws, request) {
                     }
                   }
                 } catch (error) {
-                  console.error('Error processing internal image URL:', error);
+                  shlog.error(`Error processing internal image URL: ${error.message}`);
                 }
               }
             }
@@ -2094,7 +2097,7 @@ function handleShellConnection(ws, request) {
                     data: `\r\n\x1b[32m✓ Imagem baixada: ${filename}\x1b[0m\r\n`
                   }));
                 } catch (error) {
-                  console.error('Error downloading external image:', error);
+                  shlog.error(`Error downloading external image: ${error.message}`);
                   ws.send(JSON.stringify({
                     type: 'output',
                     data: `\r\n\x1b[31m✗ Erro ao baixar imagem: ${error.message}\x1b[0m\r\n`
@@ -2106,17 +2109,14 @@ function handleShellConnection(ws, request) {
             // Send the processed input with file paths instead of URLs
             shellProcess.write(processedInput);
             } catch (error) {
-              console.error('Error writing to shell:', error);
+              shlog.error(`Error writing to shell: ${error.message}`);
             }
           })(); // Execute the async function immediately
         } else {
         }
       } else if (data.type === 'resize') {
         // Log Shell resize
-        console.log(`[SERVER] [SHELL] Resizing terminal:`, {
-          cols: data.cols,
-          rows: data.rows
-        });
+        shlog.debug(`[SHELL] Resizing terminal cols=${data.cols} rows=${data.rows}`);
         
         // Handle terminal resize
         if (shellProcess && shellProcess.resize) {
@@ -2184,7 +2184,7 @@ function handleShellConnection(ws, request) {
           }));
           
         } catch (error) {
-          console.error('Error processing image:', error);
+          shlog.error(`Error processing image: ${error.message}`);
           ws.send(JSON.stringify({
             type: 'output',
             data: `\r\n\x1b[31m❌ Erro ao processar imagem: ${error.message}\x1b[0m\r\n`
@@ -2192,7 +2192,7 @@ function handleShellConnection(ws, request) {
         }
       }
     } catch (error) {
-      console.error('❌ Shell WebSocket error:', error.message);
+      shlog.error(`❌ Shell WebSocket error: ${error.message}`);
       if (ws.readyState === ws.OPEN) {
         ws.send(JSON.stringify({
           type: 'output',
@@ -2203,18 +2203,18 @@ function handleShellConnection(ws, request) {
   });
   
   ws.on('close', () => {
-    console.log(`[SERVER] [SHELL] WebSocket closed`);
+    shlog.info(`[SHELL] WebSocket closed`);
     
     // Clean up shell process if still running
     if (shellProcess && shellProcess.kill) {
-      console.log(`[SERVER] [SHELL] Killing shell process on disconnect`);
+      shlog.debug(`[SHELL] Killing shell process on disconnect`);
       shellProcess.kill();
       shellProcess = null;
     }
   });
   
   ws.on('error', (error) => {
-    console.error('❌ [SERVER] [SHELL] WebSocket error:', error);
+    shlog.error(`❌ [SHELL] WebSocket error: ${error?.message || error}`);
   });
 }
 
@@ -2351,19 +2351,19 @@ Agent instructions:`;
           }
           
         } catch (gptError) {
-          console.error('GPT processing error:', gptError);
+          slog.error(`GPT processing error: ${gptError?.message || gptError}`);
           // Fall back to original transcription if GPT fails
         }
         
         res.json({ text: transcribedText });
         
       } catch (error) {
-        console.error('Transcription error:', error);
+        slog.error(`Transcription error: ${error.message}`);
         res.status(500).json({ error: error.message });
       }
     });
   } catch (error) {
-    console.error('Endpoint error:', error);
+    slog.error(`Endpoint error: ${error.message}`);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -2441,14 +2441,14 @@ app.post('/api/projects/:projectName/upload-images', authenticateToken, async (r
         
         res.json({ images: processedImages });
       } catch (error) {
-        console.error('Error processing images:', error);
+        slog.error(`Error processing images: ${error.message}`);
         // Clean up any remaining files
         await Promise.all(req.files.map(f => fs.unlink(f.path).catch(() => {})));
         res.status(500).json({ error: 'Failed to process images' });
       }
     });
   } catch (error) {
-    console.error('Error in image upload endpoint:', error);
+    slog.error(`Error in image upload endpoint: ${error.message}`);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -2505,7 +2505,7 @@ app.post('/api/vibe-kanban/upload-image', authenticateToken, async (req, res) =>
     
     upload(req, res, async (err) => {
       if (err) {
-        console.error('Upload error:', err);
+        slog.error(`Upload error: ${err?.message || err}`);
         return res.status(400).json({ error: err.message });
       }
       
@@ -2534,7 +2534,7 @@ app.post('/api/vibe-kanban/upload-image', authenticateToken, async (req, res) =>
       setTimeout(() => {
         if (global.vibeKanbanImages.has(imageId)) {
           const imageData = global.vibeKanbanImages.get(imageId);
-          fs.unlink(imageData.path).catch(err => console.error('Failed to delete image:', err));
+          fs.unlink(imageData.path).catch(err => slog.warn(`Failed to delete image: ${err?.message || err}`));
           global.vibeKanbanImages.delete(imageId);
         }
       }, 60 * 60 * 1000);
@@ -2542,7 +2542,7 @@ app.post('/api/vibe-kanban/upload-image', authenticateToken, async (req, res) =>
       res.json({ url: imageUrl });
     });
   } catch (error) {
-    console.error('Error handling image upload:', error);
+    slog.error(`Error handling image upload: ${error.message}`);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -2671,7 +2671,7 @@ app.get('/api/preview-proxy', async (req, res) => {
     res.setHeader('X-Frame-Options', 'SAMEORIGIN');
     res.send(html);
   } catch (error) {
-    console.error('Preview proxy error:', error);
+    slog.error(`Preview proxy error: ${error.message}`);
     
     // Better error messages
     let errorMessage = 'Failed to load preview';
@@ -2804,7 +2804,7 @@ app.use('/api/vibe-kanban', express.json(), async (req, res) => {
       res.send(response.data);
     }
   } catch (error) {
-    console.error('VibeKanban proxy error:', error);
+    slog.error(`VibeKanban proxy error: ${error.message}`);
     
     // Handle specific error types
     if (error.message.includes('Circuit breaker')) {
@@ -2846,7 +2846,7 @@ app.use('/api/vibe-kanban', express.json(), async (req, res) => {
 
 // General error handler middleware
 app.use((err, req, res, next) => {
-  console.error('Server error:', err);
+  slog.error(`Server error: ${err?.message || err}`);
   
   // Always send JSON for API routes
   if (req.path.startsWith('/api')) {
@@ -2873,7 +2873,7 @@ app.use('/api/*', (req, res) => {
                         req.originalUrl.includes('/api/sessions/current');
   
   if (!isPollingRoute) {
-    console.warn(`API 404: ${req.method} ${req.originalUrl}`);
+    slog.warn(`API 404: ${req.method} ${req.originalUrl}`);
   }
   
   res.status(404).json({ error: 'API endpoint not found', path: req.originalUrl });
@@ -2971,7 +2971,7 @@ async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden =
   } catch (error) {
     // Only log non-permission errors to avoid spam
     if (error.code !== 'EACCES' && error.code !== 'EPERM') {
-      console.error('Error reading directory:', error);
+      slog.error(`Error reading directory: ${error.message}`);
     }
   }
   
@@ -3006,7 +3006,7 @@ async function startServer() {
     
     // Listen on all interfaces (0.0.0.0) to allow access from network
     server.listen(PORT, '0.0.0.0', async () => {
-      // Server started silently
+      slog.success(`API server ready on http://localhost:${PORT}`);
       
       // Start watching the projects folder for changes
       await setupProjectsWatcher(); // Re-enabled with better-sqlite3
@@ -3029,7 +3029,7 @@ async function startServer() {
       cleanupService.start();
     });
   } catch (error) {
-    console.error('❌ Failed to start server:', error);
+    slog.error(`❌ Failed to start server: ${error.message}`);
     process.exit(1);
   }
 }
@@ -3079,7 +3079,7 @@ async function gracefulShutdown(signal) {
     try {
       global.db.close();
     } catch (error) {
-      console.error('❌ Error closing database:', error);
+      slog.error(`❌ Error closing database: ${error.message}`);
     }
   }
   
@@ -3095,12 +3095,12 @@ process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 
 // Handle uncaught errors
 process.on('uncaughtException', (error) => {
-  console.error('❌ Uncaught Exception:', error);
+  slog.error(`❌ Uncaught Exception: ${error?.stack || error}`);
   gracefulShutdown('uncaughtException');
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+  slog.error(`❌ Unhandled Rejection: ${reason}`);
   // Don't shutdown on unhandled rejections, just log them
 });
 

@@ -5,8 +5,10 @@ import path from 'path';
 import fs from 'fs';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { createLogger } from '../utils/logger.js';
 
 const execAsync = promisify(exec);
+const log = createLogger('CLAUDE-STREAM');
 const router = express.Router();
 
 // Store active Claude sessions
@@ -49,7 +51,7 @@ async function detectClaudePath() {
         // Try npx
         return { command: 'npx', script: '-y @anthropic-ai/claude-code@latest' };
     } catch (error) {
-        console.error('Failed to detect Claude CLI path:', error);
+        log.error(`Failed to detect Claude CLI path: ${error.message}`);
         // Fallback to npx
         return { command: 'npx', script: '-y @anthropic-ai/claude-code@latest' };
     }
@@ -257,14 +259,14 @@ router.post('/message/:sessionId', authenticateToken, async (req, res) => {
         // Handle stderr
         claudeProcess.stderr.on('data', (data) => {
             const error = data.toString();
-            console.error(`[Claude Stream] Error: ${error}`);
+            log.warn(`stderr: ${error}`);
             session.res.write('event: error\n');
             session.res.write(`data: ${JSON.stringify({ error })}\n\n`);
         });
 
         // Handle process exit
         claudeProcess.on('exit', (code, signal) => {
-            console.log(`[Claude Stream] Process exited with code ${code}, signal ${signal}`);
+            log.info(`process exited code=${code} signal=${signal}`);
             session.res.write('event: complete\n');
             session.res.write(`data: ${JSON.stringify({ 
                 sessionId, 
@@ -283,7 +285,7 @@ router.post('/message/:sessionId', authenticateToken, async (req, res) => {
         res.json({ success: true, sessionId });
 
     } catch (error) {
-        console.error('[Claude Stream] Error:', error);
+        log.error(`Error: ${error.message}`);
         session.res.write('event: error\n');
         session.res.write(`data: ${JSON.stringify({ 
             error: error.message 

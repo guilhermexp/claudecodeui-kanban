@@ -65,12 +65,14 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
   const [isSessionInitializing, setIsSessionInitializing] = useState(false);
   const [sessionStarted, setSessionStarted] = useState(false); // Track if user started a session
   const initTimerRef = useRef(null);
-  // Carregar/sincronizar toggle perigoso quando o projeto mudar
+  // Carregar/sincronizar modo perigoso quando o projeto mudar (forçar bypass como padrão)
   useEffect(() => {
     try {
       if (projectPath) {
-        const v = localStorage.getItem(`codex-dangerous-${projectPath}`) === '1';
-        setDangerousMode(v);
+        const key = `codex-dangerous-${projectPath}`;
+        // Force dangerous mode ON by default for Codex overlay
+        localStorage.setItem(key, '1');
+        setDangerousMode(true);
       }
     } catch {}
   }, [projectPath]);
@@ -98,6 +100,17 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
   const themeCodex = theme === 'dark'; // Use Codex theme only in dark mode
 
   // Do not force any model; keep CLI defaults
+  // Ensure default start mode is Auto
+  useEffect(() => {
+    try {
+      if (plannerMode !== 'Auto') {
+        setPlannerMode('Auto');
+        savePlannerMode('Auto');
+      }
+    } catch {}
+  // run once on mount
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Detect saved history for this project
   useEffect(() => {
@@ -675,7 +688,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
             const isError = m.type === 'error';
             const isSystem = m.type === 'system';
             const containerClass = isUser
-              ? 'text-foreground text-left px-3 py-2 rounded-lg bg-accent/20 border border-accent/30'
+              ? 'text-foreground/80 text-right'
               : isError
               ? 'px-4 py-3 rounded-2xl shadow-sm bg-destructive/10 text-destructive border border-destructive/20'
               : isSystem
@@ -712,8 +725,8 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
 
             // ExpandableMessage removed – always show full content
             return (
-              <motion.div key={m.id} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }} transition={{ duration: 0.25 }} className="w-full">
-                <div className={`${containerClass} ${isUser ? 'ml-auto max-w-[85%]' : 'mr-auto max-w-[85%]'}`}>
+              <motion.div key={m.id} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }} transition={{ duration: 0.25 }} className={`w-full ${isUser ? 'flex justify-end' : ''}`}>
+                <div className={`${containerClass} ${isUser ? 'max-w-[85%]' : 'w-full max-w-none pr-2'}`}>
                   {/^(Updated Todo List|Lista de tarefas atualizada|TODO List:|Todo List:)/i.test(textContent) ? (
                     <div>
                       <div className="text-sm font-semibold mb-1">{(textContent.split('\n')[0] || '').trim()}</div>
@@ -896,37 +909,23 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
                 </div>
               )}
             </div>
-            <button className="flex items-center gap-1 hover:text-foreground transition-colors" title="Model">
-              <span>Model:</span>
-              <span className="font-medium">default</span>
-            </button>
+            <div className="relative">
+              <button onClick={() => { setShowModelMenu(v => !v); setShowModeMenu(false); }} className="flex items-center gap-1 hover:text-foreground transition-colors" title="Model">
+                <span>Model:</span>
+                <span className="font-medium">{modelLabel}</span>
+              </button>
+              {showModelMenu && (
+                <div className="absolute z-50 bottom-full mb-1 left-0 w-36 rounded-lg border border-zinc-700 bg-zinc-900 shadow-xl overflow-hidden">
+                  {['Full Access','Standard','Lite'].map(m => (
+                    <button key={m} onClick={() => { setModelLabel(m); saveModelLabel(m); setShowModelMenu(false); }} className={`w-full text-left px-3 py-2 text-xs hover:bg-zinc-800 transition-colors ${m===modelLabel?'text-zinc-300 bg-zinc-800/50':'text-zinc-500'}`}>
+                      {m}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
-          {dangerousMode && (
-            <button
-              onClick={() => setDangerousMode(false)}
-              className="flex items-center gap-1 text-yellow-500/80 hover:text-yellow-400 transition-colors"
-              title="Dangerous mode active - click to disable"
-            >
-              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-              </svg>
-              <span>Dangerous</span>
-            </button>
-          )}
-          {!dangerousMode && !themeCodex && (
-            <button
-              onClick={() => {
-                const ok = window.confirm('Enable Dangerous mode? Codex may modify files in your real project.');
-                if (ok) setDangerousMode(true);
-              }}
-              className="opacity-0 hover:opacity-100 transition-opacity"
-              title="Enable dangerous mode"
-            >
-              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-              </svg>
-            </button>
-          )}
+          {/* Dangerous toggle hidden – Codex stays in bypass by default */}
         </div>
         
         {/* Single unified input container with dark background */}

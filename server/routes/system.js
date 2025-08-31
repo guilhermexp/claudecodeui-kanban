@@ -2,7 +2,9 @@ import express from 'express';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import os from 'os';
+import { createLogger } from '../utils/logger.js';
 const router = express.Router();
+const log = createLogger('SYSTEM');
 
 const execAsync = promisify(exec);
 
@@ -21,16 +23,16 @@ router.get('/info', async (req, res) => {
       return res.json(systemInfoCache.data);
     }
     
-    console.log('[SYSTEM] System info requested from:', req.ip);
+    log.debug(`System info requested from: ${req.ip}`);
     
     // Get active ports
     const activePorts = await getActivePorts();
-    console.log('[SYSTEM] Found active ports:', activePorts.length);
+    log.debug(`Found active ports: ${activePorts.length}`);
     
     // Get memory and CPU usage
     const memoryUsage = await getMemoryUsage();
     const cpuUsage = await getCpuUsage();
-    console.log('[SYSTEM] Resource usage - Memory:', memoryUsage, '% CPU:', cpuUsage, '%');
+    log.debug(`Resource usage - Memory: ${memoryUsage}% CPU: ${cpuUsage}%`);
 
     const result = {
       activePorts,
@@ -42,10 +44,10 @@ router.get('/info', async (req, res) => {
     // Cache the result
     systemInfoCache = { data: result, timestamp: Date.now() };
     
-    console.log('[SYSTEM] Sending response:', JSON.stringify(result, null, 2).slice(0, 200) + '...');
+    log.debug('Sending response (truncated)');
     res.json(result);
   } catch (error) {
-    console.error('[SYSTEM] System info error:', error);
+    log.error(`System info error: ${error.message}`);
     res.status(500).json({ 
       error: 'Failed to get system information',
       activePorts: [],
@@ -71,7 +73,7 @@ router.post('/ports', async (req, res) => {
       res.status(400).json({ error: 'Invalid action' });
     }
   } catch (error) {
-    console.error('Port action error:', error);
+    log.error(`Port action error: ${error.message}`);
     res.status(500).json({ error: 'Failed to perform port action' });
   }
 });
@@ -79,7 +81,7 @@ router.post('/ports', async (req, res) => {
 // Helper functions
 async function getActivePorts() {
   try {
-    console.log('[SYSTEM] Getting active ports...');
+    log.debug('Getting active ports...');
     
     // Define system/essential services to filter out
     const SYSTEM_SERVICES = [
@@ -109,14 +111,14 @@ async function getActivePorts() {
       // Windows netstat
       command = "netstat -ano | findstr LISTENING";
     } else {
-      console.log('[SYSTEM] Unsupported platform for port detection');
+      log.warn('Unsupported platform for port detection');
       return [];
     }
 
     const { stdout } = await execAsync(command);
     const lines = stdout.trim().split('\n').filter(line => line.trim());
     
-    console.log(`[SYSTEM] Found ${lines.length} listening processes`);
+    log.debug(`Found ${lines.length} listening processes`);
     
     const ports = [];
     const seenPorts = new Set();
@@ -219,7 +221,7 @@ async function getActivePorts() {
                 url
               });
               
-              console.log(`[SYSTEM] Found port ${port} (${processType}) PID: ${pid}`);
+              log.debug(`Found port ${port} (${processType}) PID: ${pid}`);
             }
           }
         } else if (process.platform === 'win32') {
@@ -268,17 +270,17 @@ async function getActivePorts() {
           }
         }
       } catch (parseError) {
-        console.error('[SYSTEM] Error parsing line:', line, parseError.message);
+        log.warn(`Error parsing line: ${parseError.message}`);
         continue;
       }
     }
 
     // Sort by port number
     const sortedPorts = ports.sort((a, b) => a.port - b.port);
-    console.log(`[SYSTEM] Returning ${sortedPorts.length} active ports`);
+    log.debug(`Returning ${sortedPorts.length} active ports`);
     return sortedPorts;
   } catch (error) {
-    console.error('[SYSTEM] Error getting active ports:', error.message);
+    log.error(`Error getting active ports: ${error.message}`);
     return [];
   }
 }
@@ -294,7 +296,7 @@ async function getMemoryUsage() {
     }
     return 0;
   } catch (error) {
-    console.error('Error getting memory usage:', error);
+    log.error(`Error getting memory usage: ${error.message}`);
     return 0;
   }
 }
@@ -335,7 +337,7 @@ async function getCpuUsage() {
     
     return 0;
   } catch (error) {
-    console.error('Error getting CPU usage:', error);
+    log.error(`Error getting CPU usage: ${error.message}`);
     return 0;
   }
 }
@@ -368,7 +370,7 @@ async function killProcessOnPort(port) {
     
     await execAsync(command);
   } catch (error) {
-    console.error(`Error killing process on port ${port}:`, error);
+    log.error(`Error killing process on port ${port}: ${error.message}`);
     throw error;
   }
 }
