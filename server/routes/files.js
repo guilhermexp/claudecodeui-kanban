@@ -6,8 +6,10 @@ import { extractProjectDirectory } from '../projects.js';
 import { authenticateToken } from '../middleware/auth.js';
 import multer from 'multer';
 import os from 'os';
+import { createLogger } from '../utils/logger.js';
 
 const router = express.Router();
+const log = createLogger('FILES');
 
 // Configure multer for file uploads
 const upload = multer({
@@ -32,7 +34,7 @@ router.post('/rename', authenticateToken, async (req, res) => {
     try {
       projectDir = await extractProjectDirectory(projectName);
     } catch (error) {
-      console.error('Error extracting project directory:', error);
+      log.error(`Error extracting project directory: ${error.message}`);
       return res.status(404).json({ error: 'Project not found' });
     }
     
@@ -58,7 +60,7 @@ router.post('/rename', authenticateToken, async (req, res) => {
     
     // Rename
     await fsPromises.rename(fullOldPath, fullNewPath);
-    console.log('✏️ Renamed:', fullOldPath, '→', fullNewPath);
+    log.info(`Renamed: ${fullOldPath} → ${fullNewPath}`);
     
     res.json({ 
       success: true, 
@@ -66,7 +68,7 @@ router.post('/rename', authenticateToken, async (req, res) => {
       newPath: fullNewPath
     });
   } catch (error) {
-    console.error('Error renaming:', error);
+    log.error(`Error renaming: ${error.message}`);
     res.status(500).json({ error: error.message });
   }
 });
@@ -85,7 +87,7 @@ router.delete('/delete', authenticateToken, async (req, res) => {
     try {
       projectDir = await extractProjectDirectory(projectName);
     } catch (error) {
-      console.error('Error extracting project directory:', error);
+      log.error(`Error extracting project directory: ${error.message}`);
       return res.status(404).json({ error: 'Project not found' });
     }
     
@@ -103,10 +105,10 @@ router.delete('/delete', authenticateToken, async (req, res) => {
     // Delete
     if (stats.isDirectory()) {
       await fsPromises.rm(fullPath, { recursive: true, force: true });
-      console.log('🗑️ Deleted folder:', fullPath);
+      log.info(`Deleted folder: ${fullPath}`);
     } else {
       await fsPromises.unlink(fullPath);
-      console.log('🗑️ Deleted file:', fullPath);
+      log.info(`Deleted file: ${fullPath}`);
     }
     
     res.json({ 
@@ -114,7 +116,7 @@ router.delete('/delete', authenticateToken, async (req, res) => {
       message: 'Deleted successfully'
     });
   } catch (error) {
-    console.error('Error deleting:', error);
+    log.error(`Error deleting: ${error.message}`);
     res.status(500).json({ error: error.message });
   }
 });
@@ -137,7 +139,7 @@ router.post('/paste', authenticateToken, async (req, res) => {
     try {
       projectDir = await extractProjectDirectory(projectName);
     } catch (error) {
-      console.error('Error extracting project directory:', error);
+      log.error(`Error extracting project directory: ${error.message}`);
       return res.status(404).json({ error: 'Project not found' });
     }
     
@@ -185,7 +187,7 @@ router.post('/paste', authenticateToken, async (req, res) => {
         await fsPromises.rename(fullSourcePath, newTargetPath);
       }
       
-      console.log(`📋 ${operation === 'copy' ? 'Copied' : 'Moved'}:`, fullSourcePath, '→', newTargetPath);
+      log.info(`${operation === 'copy' ? 'Copied' : 'Moved'}: ${fullSourcePath} → ${newTargetPath}`);
       res.json({ success: true, message: `${operation === 'copy' ? 'Copied' : 'Moved'} with new name`, newPath: newTargetPath });
       
     } catch (e) {
@@ -196,10 +198,10 @@ router.post('/paste', authenticateToken, async (req, res) => {
         } else {
           await fsPromises.copyFile(fullSourcePath, fullTargetPath);
         }
-        console.log('📋 Copied:', fullSourcePath, '→', fullTargetPath);
+        log.info(`Copied: ${fullSourcePath} → ${fullTargetPath}`);
       } else {
         await fsPromises.rename(fullSourcePath, fullTargetPath);
-        console.log('✂️ Moved:', fullSourcePath, '→', fullTargetPath);
+        log.info(`Moved: ${fullSourcePath} → ${fullTargetPath}`);
       }
       
       res.json({ 
@@ -209,7 +211,7 @@ router.post('/paste', authenticateToken, async (req, res) => {
       });
     }
   } catch (error) {
-    console.error('Error in paste operation:', error);
+    log.error(`Error in paste operation: ${error.message}`);
     res.status(500).json({ error: error.message });
   }
 });
@@ -228,7 +230,7 @@ router.post('/move', authenticateToken, async (req, res) => {
     try {
       projectDir = await extractProjectDirectory(projectName);
     } catch (error) {
-      console.error('Error extracting project directory:', error);
+      log.error(`Error extracting project directory: ${error.message}`);
       return res.status(404).json({ error: 'Project not found' });
     }
     
@@ -265,7 +267,7 @@ router.post('/move', authenticateToken, async (req, res) => {
     
     // Move
     await fsPromises.rename(fullSourcePath, fullTargetPath);
-    console.log('🚚 Moved:', fullSourcePath, '→', fullTargetPath);
+    log.info(`Moved: ${fullSourcePath} → ${fullTargetPath}`);
     
     res.json({ 
       success: true, 
@@ -273,7 +275,7 @@ router.post('/move', authenticateToken, async (req, res) => {
       newPath: fullTargetPath
     });
   } catch (error) {
-    console.error('Error moving:', error);
+    log.error(`Error moving: ${error.message}`);
     res.status(500).json({ error: error.message });
   }
 });
@@ -296,7 +298,7 @@ router.post('/upload', authenticateToken, upload.array('files', 100), async (req
     try {
       projectDir = await extractProjectDirectory(projectName);
     } catch (error) {
-      console.error('Error extracting project directory:', error);
+      log.error(`Error extracting project directory: ${error.message}`);
       return res.status(404).json({ error: 'Project not found' });
     }
     
@@ -337,7 +339,7 @@ router.post('/upload', authenticateToken, upload.array('files', 100), async (req
       
       // Move file from temp to target
       await fsPromises.rename(file.path, finalPath);
-      console.log('📤 Uploaded:', file.originalname, '→', finalPath);
+      log.info(`Uploaded: ${file.originalname} → ${finalPath}`);
       
       uploadedFiles.push({
         originalName: file.originalname,
@@ -352,7 +354,7 @@ router.post('/upload', authenticateToken, upload.array('files', 100), async (req
       files: uploadedFiles
     });
   } catch (error) {
-    console.error('Error uploading files:', error);
+    log.error(`Error uploading files: ${error.message}`);
     // Clean up temp files on error
     if (req.files) {
       for (const file of req.files) {

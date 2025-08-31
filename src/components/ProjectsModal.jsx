@@ -106,8 +106,8 @@ function ProjectsModal({
   return (
     <>
       <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="w-full max-w-5xl max-h-[85vh] p-0 bg-card border border-border mx-2 sm:mx-auto" onOpenChange={onClose}>
-        <DialogHeader className="px-5 pr-10 pt-4 pb-3 border-b border-border bg-card">
+      <DialogContent className="w-full max-w-5xl max-h-[70vh] sm:max-h-[75vh] p-0 bg-card border border-border mx-2 sm:mx-auto" onOpenChange={onClose}>
+        <DialogHeader className="px-3 sm:px-5 pr-10 pt-3 pb-2 sm:pt-4 sm:pb-3 border-b border-border bg-card">
           <div className="flex items-center justify-between">
             <div>
               <DialogTitle className="text-lg font-semibold text-foreground">Select Project</DialogTitle>
@@ -121,7 +121,7 @@ function ProjectsModal({
           </div>
 
           {/* Search */}
-          <div className="mt-4">
+          <div className="mt-2 sm:mt-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
@@ -129,27 +129,27 @@ function ProjectsModal({
                 placeholder="Search projects..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 h-9 bg-[#1a1a1a] border-[#2a2a2a] text-white rounded-lg focus:border-[#3a3a3a] focus:ring-1 focus:ring-[#3a3a3a]"
+                className="pl-10 h-8 sm:h-9 bg-[#1a1a1a] border-[#2a2a2a] text-white rounded-lg focus:border-[#3a3a3a] focus:ring-1 focus:ring-[#3a3a3a]"
               />
             </div>
           </div>
         </DialogHeader>
 
-        <ScrollArea className="h-[70vh] bg-card">
-          <div className="p-5">
+        <ScrollArea className="h-[calc(70vh-120px)] sm:h-[calc(75vh-140px)] bg-card">
+          <div className="p-3 sm:p-4">
           {/* Projects List */}
           {isLoading ? (
-            <div className="flex items-center justify-center py-8">
+            <div className="flex items-center justify-center py-6">
               <Loader2 className="w-6 h-6 animate-spin text-[#666]" />
             </div>
           ) : sortedProjects.length === 0 ? (
-            <div className="text-center py-8 text-[#666]">
+            <div className="text-center py-6 text-[#666]">
               {searchQuery || projectFilter !== 'all' 
                 ? 'No projects match your filters' 
                 : 'No projects yet. Click "New Project" to create one.'}
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
               {sortedProjects.map((project, index) => {
                 const projectSessions = project.sessions || [];
                 const latestSession = projectSessions[0]; // Pega apenas a última sessão
@@ -159,34 +159,85 @@ function ProjectsModal({
                   <div 
                     key={project.name || `project-${index}`} 
                     className={cn(
-                      "relative group rounded-lg border border-border bg-muted/20 hover:bg-muted/30 transition-colors flex flex-col min-h-[120px]",
+                      "relative group rounded-lg border border-border bg-muted/20 hover:bg-muted/30 transition-colors flex flex-col min-h-[100px] sm:min-h-[110px]",
                       selectedProject?.name === project.name && "ring-1 ring-border"
                     )}
                   >
                     {/* Card Content */}
                     <div
-                      className="p-3 sm:p-4 cursor-pointer flex-1 overflow-hidden"
+                      className="p-2.5 sm:p-3 cursor-pointer flex-1 overflow-hidden"
                       onClick={() => handleProjectClick(project)}
                     >
                       <div className="flex items-start gap-2 mb-2">
                         <ProjectIcon project={project} className="w-4 h-4 flex-shrink-0 text-foreground/70 mt-0.5" />
                         <div className="flex-1 min-w-0">
-                          <h3 className="text-xs sm:text-sm font-semibold text-foreground leading-tight truncate">
-                            {(() => {
-                              const pathSegments = project.path.split('/').filter(seg => seg);
-                              const lastTwo = pathSegments.slice(-2).join('/');
-                              return lastTwo || project.name;
-                            })()}
-                          </h3>
-                          <div className="text-[9px] sm:text-[10px] text-muted-foreground mt-1 overflow-x-auto whitespace-nowrap custom-scrollbar" title={project.path}>
-                            {project.path}
-                          </div>
+                          {editingProject === project.name ? (
+                            <div className="flex items-center gap-1">
+                              <Input
+                                value={editingName}
+                                onChange={(e) => setEditingName(e.target.value)}
+                                onClick={(e) => e.stopPropagation()}
+                                onKeyDown={(e) => {
+                                  e.stopPropagation();
+                                  if (e.key === 'Enter') {
+                                    // Save the edit
+                                    if (editingName && editingName !== project.name) {
+                                      api.updateProject(project.name, { name: editingName })
+                                        .then(() => onRefresh?.())
+                                        .catch(console.error);
+                                    }
+                                    setEditingProject(null);
+                                  } else if (e.key === 'Escape') {
+                                    setEditingProject(null);
+                                  }
+                                }}
+                                className="h-6 text-xs bg-background/60"
+                                autoFocus
+                              />
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (editingName && editingName !== project.name) {
+                                    api.updateProject(project.name, { name: editingName })
+                                      .then(() => onRefresh?.())
+                                      .catch(console.error);
+                                  }
+                                  setEditingProject(null);
+                                }}
+                                className="p-0.5 hover:bg-accent rounded"
+                              >
+                                <Check className="w-3 h-3 text-success" />
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditingProject(null);
+                                }}
+                                className="p-0.5 hover:bg-accent rounded"
+                              >
+                                <X className="w-3 h-3 text-destructive" />
+                              </button>
+                            </div>
+                          ) : (
+                            <>
+                              <h3 className="text-xs sm:text-sm font-semibold text-foreground leading-tight truncate">
+                                {(() => {
+                                  const pathSegments = project.path.split('/').filter(seg => seg);
+                                  const lastTwo = pathSegments.slice(-2).join('/');
+                                  return lastTwo || project.name;
+                                })()}
+                              </h3>
+                              <div className="text-[9px] sm:text-[10px] text-muted-foreground mt-1 whitespace-normal break-words break-all leading-snug" title={project.path}>
+                                {project.path}
+                              </div>
+                            </>
+                          )}
                         </div>
                       </div>
 
                       {/* Minimal meta + explicit actions: New, Resume, View all */}
-                      <div className="mt-2 space-y-2">
-                        <div className="text-[11px] text-muted-foreground">
+                      <div className="mt-1.5 space-y-1.5">
+                        <div className="text-[10px] sm:text-[11px] text-muted-foreground">
                           {latestSession ? `Updated ${formatTimeAgo(latestSession.updated_at, currentTime)}` : 'No sessions yet'}
                         </div>
                         <div className="flex flex-wrap gap-1">
@@ -228,7 +279,18 @@ function ProjectsModal({
                     </div>
 
                     {/* Bottom action icons - show on hover only on larger screens */}
-                    <div className="hidden sm:flex items-center justify-end gap-1 p-2 pt-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="hidden sm:flex items-center justify-end gap-1 p-1.5 pt-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        className="p-1 rounded hover:bg-accent transition-colors"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingProject(project.name);
+                          setEditingName(project.name);
+                        }}
+                        title="Edit project name"
+                      >
+                        <Edit2 className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground" />
+                      </button>
                       <button
                         className="p-1 rounded hover:bg-accent transition-colors"
                         onClick={(e) => {
@@ -250,6 +312,18 @@ function ProjectsModal({
                         title={`View all ${totalSessions} sessions`}
                       >
                         <Eye className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground" />
+                      </button>
+                      <button
+                        className="p-1 rounded hover:bg-destructive/10 transition-colors"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (confirm(`Delete project "${project.name}"?\n\nThis will delete all sessions and data for this project.`)) {
+                            onProjectDelete?.(project.name);
+                          }
+                        }}
+                        title="Delete project"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-muted-foreground hover:text-destructive" />
                       </button>
                     </div>
                   </div>

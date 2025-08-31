@@ -4,7 +4,7 @@ import { spawn } from 'child_process';
 import { createRequire } from 'module';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import chokidar from 'chokidar';
 // Port protection removed - was causing issues with browser processes
 
@@ -28,12 +28,97 @@ const colors = {
   yellow: '\x1b[33m',
   blue: '\x1b[34m',
   magenta: '\x1b[35m',
-  cyan: '\x1b[36m'
+  cyan: '\x1b[36m',
+  dim: '\x1b[90m'
 };
 
 function log(service, message, color = colors.reset) {
   const timestamp = new Date().toLocaleTimeString();
-  console.log(`${color}[${timestamp}] [${service}] ${message}${colors.reset}`);
+  console.log(`${colors.dim}[${timestamp}]${colors.reset} ${color}[${service}]${colors.reset} ${message}`);
+}
+
+function banner() {
+  // If a custom banner exists, print it verbatim (keeps exact style)
+  try {
+    const customPath = join(rootDir, 'scripts', 'banner.txt');
+    if (existsSync(customPath)) {
+      const text = readFileSync(customPath, 'utf8');
+      for (const line of text.split('\n')) {
+        if (line.trim().length === 0) { console.log(''); continue; }
+        console.log(colors.cyan + line + colors.reset);
+      }
+      return;
+    }
+  } catch {}
+
+  const glyphs = {
+    C: [
+      ' ███████ ',
+      '█        ',
+      '█        ',
+      '█        ',
+      '█        ',
+      ' ███████ '
+    ],
+    L: [
+      '█        ',
+      '█        ',
+      '█        ',
+      '█        ',
+      '█        ',
+      '████████ '
+    ],
+    A: [
+      ' █████  ',
+      '█     █ ',
+      '█     █ ',
+      '███████ ',
+      '█     █ ',
+      '█     █ '
+    ],
+    U: [
+      '█     █ ',
+      '█     █ ',
+      '█     █ ',
+      '█     █ ',
+      '█     █ ',
+      ' █████  '
+    ],
+    D: [
+      '██████  ',
+      '█     █ ',
+      '█     █ ',
+      '█     █ ',
+      '█     █ ',
+      '██████  '
+    ],
+    E: [
+      '████████ ',
+      '█        ',
+      '██████   ',
+      '█        ',
+      '█        ',
+      '████████ '
+    ],
+    I: [
+      '████████ ',
+      '   ██    ',
+      '   ██    ',
+      '   ██    ',
+      '   ██    ',
+      '████████ '
+    ]
+  };
+  const text = 'CLAUDEUI';
+  const rows = 6;
+  for (let r = 0; r < rows; r++) {
+    let line = '';
+    for (const ch of text) {
+      const g = glyphs[ch] || glyphs['I'];
+      line += (g[r] || '        ') + '  ';
+    }
+    console.log(colors.cyan + line + colors.reset);
+  }
 }
 
 // Kill processes on specific ports
@@ -79,7 +164,10 @@ function spawnService(name, command, args, options = {}) {
     process: null,
     restartCount: 0,
     maxRestarts: 3,
-    color: options.color || colors.reset
+    color: options.color || colors.reset,
+    _lastLine: '',
+    _repeatCount: 0,
+    _lastTime: 0
   };
 
   function start() {
@@ -101,10 +189,23 @@ function spawnService(name, command, args, options = {}) {
           !output.includes('VITE v') && 
           !output.includes('➜') &&
           !output.includes('ready in') &&
-          !output.includes('[INFO]') &&
-          !output.includes('[DEBUG]') &&
           !output.includes('Has users:') &&
           !output.includes('Auth status')) {
+        // Throttle highly repetitive stream start lines
+        if (output.includes('Starting stream with args:')) {
+          const now = Date.now();
+          if (now - service._lastTime < 1500 && service._lastLine.includes('Starting stream with args:')) {
+            service._repeatCount += 1;
+            service._lastTime = now;
+            return; // suppress duplicate burst
+          }
+          if (service._repeatCount > 0) {
+            log(name, `(previous line repeated ${service._repeatCount}x)`, colors.yellow);
+            service._repeatCount = 0;
+          }
+          service._lastTime = now;
+          service._lastLine = output;
+        }
         log(name, output, service.color);
       }
     });
@@ -149,7 +250,8 @@ function spawnService(name, command, args, options = {}) {
 // Main execution
 async function main() {
   // Simple startup message
-  console.log(`${colors.cyan}🚀 Starting Claude Code UI...${colors.reset}`);
+  console.log(`${colors.cyan}🚀 Starting ClaudeUI...${colors.reset}`);
+  banner();
   
   // Initialize Port Protection Service (but don't start monitoring yet)
   // const portProtector = new PortProtector(PORTS);
@@ -171,7 +273,7 @@ async function main() {
       ['--expose-gc', '--max-old-space-size=2048', 'server/index.js'],
       {
         color: colors.green,
-        env: { PORT: PORTS.SERVER },
+        env: { PORT: PORTS.SERVER, VITE_PORT: PORTS.CLIENT, VIBE_PORT: PORTS.VIBE_BACKEND },
         registerCallback: (pid) => {} // portProtector.registerAllowedProcess('SERVER', pid)
       }
     );
@@ -306,7 +408,10 @@ async function main() {
   // Simple ready message
   setTimeout(() => {
     console.log(`${colors.green}✅ Ready at http://localhost:${PORTS.CLIENT}${colors.reset}`);
+    // Custom banner already includes an endpoints panel when provided
   }, 2000);
 }
 
 main().catch(console.error);
+
+// printEndpointsPanel disabled; using custom banner panel when present

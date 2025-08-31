@@ -9,7 +9,7 @@ const PROJECT_DIR_CACHE_DURATION = 2 * 60 * 60 * 1000; // 2 hours per directory
 
 // Cache for projects list to reduce memory usage
 const projectsCache = { data: null, timestamp: 0 };
-const PROJECTS_CACHE_DURATION = 30 * 60 * 1000; // 30 minutes - increase cache to reduce load
+const PROJECTS_CACHE_DURATION = 60 * 60 * 1000; // 60 minutes - increased from 30 to reduce I/O operations
 
 // Clear cache when needed (called when project files change)
 function clearProjectDirectoryCache() {
@@ -226,25 +226,14 @@ async function getProjects() {
           sessions: []
         };
         
-        // Load basic session info for display in project cards
-        try {
-          // Load only 2 most recent sessions for performance, but get the real total count
-          const sessionData = await getSessions(entry.name, 2, 0); // limit=2 for performance, offset=0
-          project.sessions = sessionData.sessions || [];
-          project.sessionMeta = {
-            hasMore: sessionData.hasMore || false,
-            total: sessionData.total || 0,  // This contains the REAL total count
-            notLoaded: false
-          };
-        } catch (error) {
-          console.error(`[ERROR] Failed to load sessions for ${entry.name}:`, error);
-          project.sessions = [];
-          project.sessionMeta = {
-            hasMore: false,
-            total: 0,
-            notLoaded: true
-          };
-        }
+        // Skip loading sessions in the main projects list for performance
+        // Sessions will be loaded on-demand when a project is selected
+        project.sessions = [];
+        project.sessionMeta = {
+          hasMore: false,
+          total: 0,
+          notLoaded: true // Mark as not loaded to fetch later
+        };
         
         projects.push(project);
       }

@@ -1,7 +1,9 @@
 import express from 'express';
 import ClaudeHooksManager from '../../scripts/setup-claude-hooks.js';
+import { createLogger } from '../utils/logger.js';
 
 const router = express.Router();
+const log = createLogger('CLAUDE-HOOKS');
 const hooksManager = new ClaudeHooksManager();
 
 /**
@@ -15,7 +17,7 @@ router.get('/sounds', async (req, res) => {
       sounds
     });
   } catch (error) {
-    console.error('Erro ao listar sons:', error);
+    log.error(`Erro ao listar sons: ${error.message}`);
     res.status(500).json({
       success: false,
       error: error.message
@@ -79,7 +81,7 @@ router.get('/config', async (req, res) => {
       fullConfig: config
     });
   } catch (error) {
-    console.error('Erro ao obter configuração:', error);
+    log.error(`Erro ao obter configuração: ${error.message}`);
     res.status(500).json({
       success: false,
       error: error.message
@@ -97,7 +99,7 @@ router.post('/setup', async (req, res) => {
     
     res.json(result);
   } catch (error) {
-    console.error('Erro ao configurar hooks:', error);
+    log.error(`Erro ao configurar hooks: ${error.message}`);
     res.status(500).json({
       success: false,
       error: error.message
@@ -114,7 +116,7 @@ router.delete('/remove', async (req, res) => {
     
     res.json(result);
   } catch (error) {
-    console.error('Erro ao remover hooks:', error);
+    log.error(`Erro ao remover hooks: ${error.message}`);
     res.status(500).json({
       success: false,
       error: error.message
@@ -132,7 +134,7 @@ router.post('/test-sound', async (req, res) => {
     
     res.json(result);
   } catch (error) {
-    console.error('Erro ao testar som:', error);
+    log.error(`Erro ao testar som: ${error.message}`);
     res.status(500).json({
       success: false,
       error: error.message

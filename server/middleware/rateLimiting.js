@@ -109,41 +109,22 @@ export const speedLimiter = slowDown({
   validate: { delayMs: false } // disable deprecation warning
 });
 
-// Memory and resource monitoring middleware
+// Simplified resource monitoring - only track extremely slow requests
 export const resourceMonitor = (req, res, next) => {
   const startTime = Date.now();
-  const startMemory = process.memoryUsage();
 
-  // Monitor response completion
+  // Only monitor response time, not memory
   res.on('finish', () => {
     const duration = Date.now() - startTime;
-    const endMemory = process.memoryUsage();
-    const memoryDiff = {
-      rss: endMemory.rss - startMemory.rss,
-      heapUsed: endMemory.heapUsed - startMemory.heapUsed,
-      heapTotal: endMemory.heapTotal - startMemory.heapTotal
-    };
 
-    // Log slow requests
-    if (duration > 5000) { // 5 seconds
-      rateLimitLogger.warn('Slow request detected', {
+    // Only log extremely slow requests (over 15 seconds)
+    if (duration > 15000) {
+      rateLimitLogger.warn('Extremely slow request detected', {
         event: 'slow_request',
         path: req.path,
         method: req.method,
         duration: `${duration}ms`,
-        memoryDiff,
         statusCode: res.statusCode
-      });
-    }
-
-    // Log high memory usage (threshold tuned to reduce noise)
-    if (memoryDiff.heapUsed > 300 * 1024 * 1024) { // 300MB
-      rateLimitLogger.warn('High memory usage request', {
-        event: 'high_memory_usage',
-        path: req.path,
-        method: req.method,
-        memoryDiff,
-        duration: `${duration}ms`
       });
     }
   });
@@ -242,17 +223,5 @@ export const projectAnalysisRateLimit = rateLimit({
   }
 });
 
-// Cleanup interval to prevent memory leaks
-setInterval(() => {
-  const memUsage = process.memoryUsage();
-  if (memUsage.heapUsed > 500 * 1024 * 1024) { // 500MB
-    rateLimitLogger.warn('High system memory usage detected', {
-      event: 'high_system_memory',
-      memoryUsage: {
-        rss: Math.round(memUsage.rss / 1024 / 1024) + 'MB',
-        heapUsed: Math.round(memUsage.heapUsed / 1024 / 1024) + 'MB',
-        heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024) + 'MB'
-      }
-    });
-  }
-}, 60000); // Check every minute
+// Memory monitoring disabled - was causing performance issues
+// Can be re-enabled if needed with proper optimization

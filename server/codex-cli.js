@@ -87,8 +87,11 @@ export async function spawnCodex(prompt, options = {}, ws) {
     }
 
     // Safe mode by default: run Codex in a temporary mirror to prevent writes
+    // Allow override via env CODEX_SAFE_MODE=on|off. If not set, follow UI 'dangerous' flag.
     let tempMirrorPath = null;
-    const safeMode = !dangerous; // default true
+    const safeModeOverride = process.env.CODEX_SAFE_MODE;
+    const safeMode = (safeModeOverride === 'on') ? true : (safeModeOverride === 'off') ? false : !dangerous;
+    console.log('[Codex SafeMode]', safeMode ? 'ENABLED' : 'DISABLED', '(dangerous:', !!dangerous, ', override:', safeModeOverride || 'none', ')');
     if (safeMode) {
       try {
         const prefix = path.join(os.tmpdir(), 'codex-safe-');

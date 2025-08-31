@@ -3,6 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { authenticateToken } from '../middleware/auth.js';
+import { createLogger } from '../utils/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -11,6 +12,7 @@ const __dirname = dirname(__filename);
 import UsageTracker from '../../backend/usageTracker.js';
 
 const router = express.Router();
+const log = createLogger('USAGE');
 const usageTracker = new UsageTracker();
 
 // Get usage statistics
@@ -21,7 +23,7 @@ router.get('/stats', authenticateToken, async (req, res) => {
     const stats = await usageTracker.getUsageStats(startDate, endDate);
     res.json(stats);
   } catch (error) {
-    console.error('Error fetching usage stats:', error);
+    log.error(`Error fetching usage stats: ${error.message}`);
     res.status(500).json({ error: 'Failed to fetch usage statistics', details: error.message });
   }
 });
@@ -33,7 +35,7 @@ router.get('/sessions', authenticateToken, async (req, res) => {
     const sessions = await usageTracker.getSessionStats(startDate, endDate);
     res.json(sessions);
   } catch (error) {
-    console.error('Error fetching session stats:', error);
+    log.error(`Error fetching session stats: ${error.message}`);
     res.status(500).json({ error: 'Failed to fetch session statistics' });
   }
 });
@@ -45,7 +47,7 @@ router.get('/time', authenticateToken, async (req, res) => {
     const timeStats = await usageTracker.getUsageTime(startDate, endDate);
     res.json(timeStats);
   } catch (error) {
-    console.error('Error fetching usage time:', error);
+    log.error(`Error fetching usage time: ${error.message}`);
     res.status(500).json({ error: 'Failed to fetch usage time statistics' });
   }
 });
@@ -57,7 +59,7 @@ router.post('/track', async (req, res) => {
     const result = await usageTracker.trackUsage(req.body);
     res.json(result);
   } catch (error) {
-    console.error('Error tracking usage:', error);
+    log.error(`Error tracking usage: ${error.message}`);
     res.status(500).json({ error: 'Failed to track usage' });
   }
 });
@@ -69,7 +71,7 @@ router.post('/import', async (req, res) => {
     const result = await usageTracker.importFromClaudeProjects();
     res.json(result);
   } catch (error) {
-    console.error('Error importing usage data:', error);
+    log.error(`Error importing usage data: ${error.message}`);
     res.status(500).json({ error: 'Failed to import usage data' });
   }
 });
@@ -85,7 +87,7 @@ router.post('/clear-and-reimport', async (req, res) => {
     const result = await usageTracker.importFromClaudeProjects();
     res.json(result);
   } catch (error) {
-    console.error('Error clearing and reimporting data:', error);
+    log.error(`Error clearing and reimporting data: ${error.message}`);
     res.status(500).json({ error: 'Failed to clear and reimport data' });
   }
 });

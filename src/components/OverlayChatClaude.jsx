@@ -13,8 +13,87 @@ import CtaButton from './ui/CtaButton';
 import { loadPlannerMode, savePlannerMode, loadModelLabel, saveModelLabel, loadCliProvider, saveCliProvider } from '../utils/chat-prefs';
 import { hasChatHistory, loadChatHistory, saveChatHistory } from '../utils/chat-history';
 import { hasLastSession, loadLastSession, saveLastSession, clearLastSession } from '../utils/chat-session';
+import { useMessageFeedback } from '../hooks/useMessageFeedback';
+import { getMessageIndicator } from '../utils/message-feedback';
 // Claude now uses WebSocket - no need for SSE stream hook
 // import useClaudeStream from '../hooks/useClaudeStream';
+
+// Stable, memoized collapsible code block to avoid remount/reset on re-renders
+function CodeBlockCollapsible({ language, text }) {
+  const [copied, setCopied] = useState(false);
+  const src = String(text);
+  const lines = src.split('\n');
+  const lineCount = lines.length;
+  // Collapse only when it is long enough; small blocks open by default
+  const [collapsed, setCollapsed] = useState(lineCount > 12);
+  const handleCopy = async () => {
+    try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1200); } catch {}
+  };
+  // Try to extract a compact command/title from the first lines
+  const headerTitle = (() => {
+    for (let i = 0; i < Math.min(5, lines.length); i++) {
+      const l = (lines[i] || '').trim();
+      if (!l) continue;
+      if (/^(PS\s|>|\$\s)/.test(l)) continue; // skip prompts
+      if (l.length > 80) continue;
+      if (/^[a-zA-Z0-9_.\/-]+(\s+[^\n]{0,60})?$/.test(l)) return l;
+      break;
+    }
+    return null;
+  })();
+  return (
+    <div className="relative group w-full max-w-full">
+      <div className="flex items-center justify-between gap-2 mb-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-border/50 bg-transparent w-full">
+        <button
+          type="button"
+          onClick={() => setCollapsed(prev => !prev)}
+          aria-expanded={!collapsed}
+          className="flex items-center gap-2 text-[12px] sm:text-sm text-muted-foreground hover:text-foreground transition-colors min-w-0 flex-1 text-left cursor-pointer"
+        >
+          <svg className={`w-4 h-4 transition-transform ${collapsed ? '' : 'rotate-90'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+          {headerTitle ? (
+            <span className="font-mono text-[11px] sm:text-xs truncate block">{headerTitle}</span>
+          ) : (
+            <span className="font-mono text-[11px] sm:text-xs truncate block">{language || 'text'} • {lineCount} {collapsed ? 'lines (click to expand)' : 'lines'}</span>
+          )}
+        </button>
+        <button onClick={handleCopy} className="px-2 py-1 text-[11px] rounded-md bg-background/80 border border-border hover:bg-accent flex-shrink-0">
+          {copied ? 'Copied' : 'Copy'}
+        </button>
+      </div>
+      {!collapsed && (
+        <SyntaxHighlighter
+          style={vscDarkPlus}
+          language={language}
+          PreTag="div"
+          customStyle={{ margin: '0', borderRadius: '0 0 0.5rem 0.5rem', fontSize: '0.85rem', width: '100%', overflowX: 'auto' }}
+        >
+          {String(text).replace(/\n$/, '')}
+        </SyntaxHighlighter>
+      )}
+    </div>
+  );
+}
+
+// Collapsible block for "Thinking…" system content
+function ThinkingCollapsible({ text }) {
+  const body = String(text || '').replace(/^Thinking…\s*\n?/, '');
+  return (
+    <details className="group w-full max-w-full">
+      <summary className="list-none cursor-pointer flex items-center gap-2 mb-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-border/50 bg-transparent text-[12px] sm:text-sm text-muted-foreground hover:text-foreground">
+        <svg className="w-4 h-4 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+        <span className="font-medium truncate">Thinking…</span>
+      </summary>
+      <div className="prose prose-sm dark:prose-invert max-w-none leading-relaxed prose-p:my-1 prose-li:my-1">
+        <ReactMarkdown components={{}}>{body}</ReactMarkdown>
+      </div>
+    </details>
+  );
+}
 
 // Overlay Chat com formatação bonita usando ReactMarkdown
 // Usa NOSSO backend interno (porta 7347) - sem servidores externos!
@@ -34,6 +113,22 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
   const [claudeSessionActive, setClaudeSessionActive] = useState(false);
   const [currentModel, setCurrentModel] = useState(null);
   
+  // Use the new message feedback system for better UX
+  const {
+    messages: feedbackMessages,
+    statusMessage,
+    addMessage: addFeedbackMessage,
+    addTemporary,
+    startLoading,
+    completeLoading,
+    updateStatus,
+    clearTemporary,
+    clearAll: clearAllFeedback,
+    removeMessage,
+    updateMessage,
+    setMessages: setFeedbackMessages
+  } = useMessageFeedback();
+  
   // Current active states based on selected provider
   const messages = cliProvider === 'codex' ? codexMessages : claudeMessages;
   const setMessages = cliProvider === 'codex' ? setCodexMessages : setClaudeMessages;
@@ -42,9 +137,13 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
   const sessionActive = cliProvider === 'codex' ? codexSessionActive : claudeSessionActive;
   
   const [isTyping, setIsTyping] = useState(false);
+  const [isEnding, setIsEnding] = useState(false);
   const [typingStatus, setTypingStatus] = useState({ mode: 'idle', label: '' });
-  const [typingStart, setTypingStart] = useState(null);
+  const [typingStart, setTypingStart] = useState(null); // legacy; not used for timer anymore
   const [elapsedSec, setElapsedSec] = useState(0);
+  const activityStartRef = useRef(null);
+  // Lock indicator from first send to final done
+  const [activityLock, setActivityLock] = useState(false);
   const [selectedElement, setSelectedElement] = useState(null);
   const [attachments, setAttachments] = useState([]); // chips like "div", "span" etc
   const [imageAttachments, setImageAttachments] = useState([]); // Array of image data URLs
@@ -55,6 +154,23 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
   const fileInputRef = useRef(null);
   const [hasSaved, setHasSaved] = useState(false);
   const restoredRef = useRef(false);
+  const lastAssistantTextRef = useRef('');
+
+  // Project pinning: allow chat to stay on a project even if app selection changes
+  const [chatProjectPath, setChatProjectPath] = useState(projectPath || null);
+  const [pendingProjectPath, setPendingProjectPath] = useState(null);
+  const [showProjectSwitchPrompt, setShowProjectSwitchPrompt] = useState(false);
+  const activeProjectPath = chatProjectPath || projectPath || process.cwd();
+
+  // When outer project changes, ask user if chat should follow (shell can switch independently)
+  useEffect(() => {
+    if (!projectPath) return;
+    if (!chatProjectPath) { setChatProjectPath(projectPath); return; }
+    if (projectPath !== chatProjectPath) {
+      setPendingProjectPath(projectPath);
+      setShowProjectSwitchPrompt(true);
+    }
+  }, [projectPath]);
   
   // Preferences (kept, but control hidden from header)
   const [hideThinking] = useState(() => {
@@ -91,22 +207,22 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
   const [isSessionInitializing, setIsSessionInitializing] = useState(false);
   const [sessionStarted, setSessionStarted] = useState(false); // Track if user started a session
   const initTimerRef = useRef(null);
-  // Carregar/sincronizar toggle perigoso quando o projeto mudar
+  // Carregar/sincronizar toggle perigoso quando o projeto mudar (usar projeto ativo do chat)
   useEffect(() => {
     try {
-      if (projectPath) {
-        const v = localStorage.getItem(`codex-dangerous-${projectPath}`) === '1';
+      if (activeProjectPath) {
+        const v = localStorage.getItem(`codex-dangerous-${activeProjectPath}`) === '1';
         setDangerousMode(v);
       }
     } catch {}
-  }, [projectPath]);
+  }, [activeProjectPath]);
   useEffect(() => {
     try {
-      if (projectPath) {
-        localStorage.setItem(`codex-dangerous-${projectPath}`, dangerousMode ? '1' : '0');
+      if (activeProjectPath) {
+        localStorage.setItem(`codex-dangerous-${activeProjectPath}`, dangerousMode ? '1' : '0');
       }
     } catch {}
-  }, [projectPath, dangerousMode]);
+  }, [activeProjectPath, dangerousMode]);
   const [nearBottom, setNearBottom] = useState(true);
   const [showJump, setShowJump] = useState(false);
   const [plannerMode, setPlannerMode] = useState(() => loadPlannerMode());
@@ -164,7 +280,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
   // Detect saved history for this project
   useEffect(() => {
     try {
-      if (projectPath) {
+      if (activeProjectPath) {
         const hasHistory = hasChatHistory(projectPath);
         const hasSession = hasLastSession(projectPath);
         
@@ -184,30 +300,30 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
           }
         }
         
-        setHasSaved(hasHistory);
-        setHasSavedSession(hasSession);
+        setHasSaved(hasChatHistory(activeProjectPath));
+        setHasSavedSession(hasLastSession(activeProjectPath));
       }
     } catch (e) {
       console.error('Error checking saved data:', e);
     }
-  }, [projectPath]);
+  }, [activeProjectPath]);
 
   // Persist messages to localStorage (project-scoped)
   useEffect(() => {
     try {
-      if (projectPath && messages && messages.length) {
-        saveChatHistory(projectPath, messages);
+      if (activeProjectPath && messages && messages.length) {
+        saveChatHistory(activeProjectPath, messages);
         setHasSaved(true);
       }
     } catch {}
-  }, [projectPath, messages]);
+  }, [activeProjectPath, messages]);
 
   // Persist last session metadata when available
   useEffect(() => {
     try {
-      if (projectPath && sessionId && !sessionId.startsWith('temp-')) {
-        console.log('💾 Saving session for project:', projectPath, { sessionId, rolloutPath: resumeRolloutPath });
-        saveLastSession(projectPath, { sessionId, rolloutPath: resumeRolloutPath });
+      if (activeProjectPath && sessionId && !sessionId.startsWith('temp-')) {
+        console.log('💾 Saving session for project:', activeProjectPath, { sessionId, rolloutPath: resumeRolloutPath });
+        saveLastSession(activeProjectPath, { sessionId, rolloutPath: resumeRolloutPath });
         setHasSavedSession(true);
       }
     } catch (e) {
@@ -313,6 +429,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
   }, [projectPath, startSession]); // addMessage defined later; safe to omit
 
   const endSession = useCallback(() => {
+    setIsEnding(true);
     if (cliProvider === 'claude') {
       // For Claude, clear session state
       setClaudeSessionId(null);
@@ -340,7 +457,13 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
       setCodexSessionId(null);
       setCodexMessages([]);
     }
-  }, [isConnected, sendMessage, cliProvider, isSessionInitializing, projectPath]);
+    // Close panel with a subtle delay to show feedback
+    setTimeout(() => {
+      setIsEnding(false);
+      setOpen(false);
+      try { if (typeof onPanelClosed === 'function') onPanelClosed(); } catch {}
+    }, 400);
+  }, [isConnected, sendMessage, cliProvider, isSessionInitializing, projectPath, onPanelClosed]);
 
   // Expose controls to parent once (avoid rebind loops in dev StrictMode)
   useEffect(() => {
@@ -363,23 +486,27 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
     return '🔧';
   }, []);
 
-  // Elapsed time while thinking/using a tool
+  // Elapsed time for the whole "working" cycle (from start to done)
   useEffect(() => {
-    if (isTyping && (typingStatus.mode === 'thinking' || typingStatus.mode === 'tool')) {
-      const start = Date.now();
-      setTypingStart(start);
-      setElapsedSec(0);
-      const id = setInterval(() => {
+    const active = activityLock || isSessionInitializing || isTyping || ['queued','busy','thinking','tool'].includes(typingStatus.mode);
+    let id;
+    if (active) {
+      if (!activityStartRef.current) {
+        activityStartRef.current = Date.now();
+        setElapsedSec(0);
+      }
+      id = setInterval(() => {
+        const start = activityStartRef.current || Date.now();
         setElapsedSec(Math.max(0, Math.floor((Date.now() - start) / 1000)));
       }, 1000);
-      return () => clearInterval(id);
     } else {
-      setTypingStart(null);
+      activityStartRef.current = null;
       setElapsedSec(0);
     }
-  }, [isTyping, typingStatus.mode]);
+    return () => { if (id) clearInterval(id); };
+  }, [activityLock, isSessionInitializing, isTyping, typingStatus.mode]);
 
-  // Smart message merging logic inspired by Claudable
+  // Message handling (persistent, same behavior as Codex overlay)
   const addMessage = useCallback((newMessage) => {
     setMessages(prev => {
       const timestamp = new Date().toISOString();
@@ -388,6 +515,12 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
         timestamp,
         id: `msg-${Date.now()}-${Math.random()}`
       };
+      // Track last assistant text to avoid duplicating on 'result'
+      try {
+        if (newMessage?.type === 'assistant' && typeof newMessage.text === 'string') {
+          lastAssistantTextRef.current = newMessage.text.trim();
+        }
+      } catch {}
 
       // Respect preference: hide "Thinking…" system blocks
       if (
@@ -462,8 +595,8 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
   // Restore last chat for this project
   const restoreLastChat = useCallback(() => {
     try {
-      if (!projectPath) return;
-      const entry = loadChatHistory(projectPath);
+      if (!activeProjectPath) return;
+      const entry = loadChatHistory(activeProjectPath);
       if (entry && Array.isArray(entry.messages) && entry.messages.length) {
         // Only restore once per mount to avoid duplicate merges
         if (!restoredRef.current) {
@@ -506,6 +639,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
 
   const execStreamsRef = useRef(new Map()); // callId -> { id, buffer, lastTs }
   const processedMessagesRef = useRef(new Set()); // Track processed messages to prevent duplicates
+  const lastToolLabelRef = useRef(null); // Deduplicate consecutive tool_use lines
   
   // Process messages from WebSocket with cleaner formatting
   useEffect(() => {
@@ -612,8 +746,9 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
           } else if (data.type === 'text' && data.text) {
             // Text output from Claude
             addMessage({ type: 'assistant', text: data.text });
+            // Keep activity indicator via lock; update label heuristically
             setIsTyping(false);
-            setTypingStatus({ mode: 'idle', label: '' });
+            setTypingStatus({ mode: 'thinking', label: detectPhaseLabel(data.text) });
           } else if (data.type === 'assistant' && data.message) {
             // Assistant message from Claude CLI (new format)
             const msg = data.message;
@@ -621,7 +756,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
               if (typeof msg.content === 'string') {
                 addMessage({ type: 'assistant', text: msg.content });
                 setIsTyping(false);
-                setTypingStatus({ mode: 'idle', label: '' });
+                setTypingStatus({ mode: 'thinking', label: detectPhaseLabel(msg.content) });
               } else if (Array.isArray(msg.content)) {
                 // Handle content blocks
                 let hasTextContent = false;
@@ -633,11 +768,16 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
                     textContent += (textContent ? '\n' : '') + block.text;
                     hasTextContent = true;
                   } else if (block.type === 'tool_use') {
-                    // Handle tool use - show as system message
-                    const toolName = block.name || 'Tool';
-                    addMessage({ type: 'system', text: `🔧 Using ${toolName}...` });
+                    // tool_use may come embedded in assistant message
+                    const idRaw = block.tool_use_id || block.toolUseId || block.id || '';
+                    const shortId = idRaw ? String(idRaw).slice(0, 6) : null;
+                    const toolNameRaw = block.name || block.tool || '';
+                    const isMcp = /mcp/i.test(toolNameRaw) || /mcp/i.test(idRaw || '');
+                    const toolName = toolNameRaw || (isMcp ? 'MCP tool' : 'Tool');
+                    const label = `${toolName}${shortId ? ` #${shortId}` : ''}`;
                     setIsTyping(true);
-                    setTypingStatus({ mode: 'tool', label: toolName });
+                    setTypingStatus({ mode: 'tool', label });
+                    lastToolLabelRef.current = label;
                   }
                 });
                 
@@ -645,47 +785,114 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
                 if (hasTextContent && textContent) {
                   addMessage({ type: 'assistant', text: textContent });
                   setIsTyping(false);
-                  setTypingStatus({ mode: 'idle', label: '' });
+                  setTypingStatus({ mode: 'thinking', label: detectPhaseLabel(textContent) });
                 }
               }
             }
+          } else if (data.type === 'thinking' || data.type === 'reasoning') {
+            const content = data.content || data.text || '';
+            if (content && content.trim()) {
+              addMessage({ type: 'system', text: `Thinking…\n\n${content}` });
+            }
+            setIsTyping(true);
+            setTypingStatus({ mode: 'thinking', label: 'Thinking' });
           } else if (data.type === 'message' && data.content) {
             // Message with content (old format)
             if (typeof data.content === 'string') {
               addMessage({ type: 'assistant', text: data.content });
               setIsTyping(false);
-              setTypingStatus({ mode: 'idle', label: '' });
+              setTypingStatus({ mode: 'thinking', label: detectPhaseLabel(data.content) });
             } else if (Array.isArray(data.content)) {
               // Handle content blocks
               data.content.forEach(block => {
                 if (block.type === 'text' && block.text) {
                   addMessage({ type: 'assistant', text: block.text });
+                } else if (block.type === 'tool_use') {
+                  const idRaw = block.tool_use_id || block.toolUseId || block.id || '';
+                  const shortId = idRaw ? String(idRaw).slice(0, 6) : null;
+                  const toolNameRaw = block.name || block.tool || '';
+                  const isMcp = /mcp/i.test(toolNameRaw) || /mcp/i.test(idRaw || '');
+                  const toolName = toolNameRaw || (isMcp ? 'MCP tool' : 'Tool');
+                  const label = `${toolName}${shortId ? ` #${shortId}` : ''}`;
+                  setIsTyping(true);
+                  setTypingStatus({ mode: 'tool', label });
+                  lastToolLabelRef.current = label;
                 }
               });
               setIsTyping(false);
-              setTypingStatus({ mode: 'idle', label: '' });
+              setTypingStatus({ mode: 'thinking', label: '' });
             }
+          } else if (data.type === 'error' || data.error) {
+            const err = data.error || data.message || 'Unknown error';
+            addMessage({ type: 'error', text: String(err) });
+            setIsTyping(false);
+            setTypingStatus({ mode: 'idle', label: '' });
           } else if (data.type === 'tool_use') {
-            // Tool usage notification
-            const toolName = data.name || 'Tool';
-            addMessage({ type: 'system', text: `🔧 Using ${toolName}...` });
-          } else if (data.type === 'result' && data.result) {
-            // Result from Claude CLI - contains the final response
-            if (!data.is_error) {
-              // Don't add the result as a new message if we already processed the assistant message
-              // Just mark typing as complete
-              setIsTyping(false);
-              setTypingStatus({ mode: 'idle', label: '' });
+            // Tool usage notification (no noisy system message)
+            const idRaw = data.tool_use_id || data.toolUseId || data.id || '';
+            const shortId = idRaw ? String(idRaw).slice(0, 6) : null;
+            const toolNameRaw = data.name || data.tool || '';
+            const isMcp = /mcp/i.test(toolNameRaw) || /mcp/i.test(idRaw || '');
+            const toolName = toolNameRaw || (isMcp ? 'MCP tool' : 'Tool');
+            const label = `${toolName}${shortId ? ` #${shortId}` : ''}`;
+            setIsTyping(true);
+            setTypingStatus({ mode: 'tool', label });
+            lastToolLabelRef.current = label;
+          } else if (data.type === 'result') {
+            // Final result from Claude CLI — show it like the Codex completion
+            if (data.is_error) {
+              const errText = typeof data.error === 'string' ? data.error : (data.error?.message || 'Unknown error');
+              addMessage({ type: 'error', text: errText });
+            } else if (data.result) {
+              const text = typeof data.result === 'string' ? data.result : (data.result?.text || JSON.stringify(data.result, null, 2));
+              if (text && text.trim()) {
+                const trimmed = text.trim();
+                const last = (lastAssistantTextRef.current || '').trim();
+                // Avoid duplicate if assistant already emitted same text
+                if (!(last && (trimmed === last || trimmed.startsWith(last)))) {
+                  addMessage({ type: 'assistant', text: trimmed });
+                }
+              }
             }
+            setIsTyping(false);
+            setTypingStatus({ mode: 'idle', label: '' });
+            setActivityLock(false);
+            lastToolLabelRef.current = null;
           } else if (data.type === 'user' && data.message) {
-            // User message with tool results - don't display, just update typing status
+            // User message with tool results – show results like Codex shows tool output
             const msg = data.message;
             if (msg.content && Array.isArray(msg.content)) {
               msg.content.forEach(block => {
                 if (block.type === 'tool_result') {
-                  // Tool completed - stop showing the tool status
+                  // Tool completed – show the tool result as a system message
+                  try {
+                    const extractText = (content) => {
+                      if (!content) return '';
+                      if (typeof content === 'string') return content;
+                      if (Array.isArray(content)) {
+                        return content.map(c => (typeof c === 'string' ? c : (c?.text || ''))).filter(Boolean).join('\n');
+                      }
+                      if (typeof content === 'object') {
+                        if (typeof content.text === 'string') return content.text;
+                        if (Array.isArray(content.data)) return content.data.join('\n');
+                      }
+                      return '';
+                    };
+                    const resultText = extractText(block.content) || extractText(block.output) || '';
+                    if (resultText.trim()) {
+                      const lang = detectCodeLanguage(resultText);
+                      const fenced = '```' + lang + '\n' + resultText.replace(/```/g, '\\u0060\\u0060\\u0060') + '\n```';
+                      addMessage({ type: 'system', text: fenced });
+                    } else {
+                      // If no text, at least note completion
+                      addMessage({ type: 'system', text: 'Tool finished.' });
+                    }
+                  } catch {
+                    // Ignore parse errors, still end typing state
+                  }
                   setIsTyping(false);
                   setTypingStatus({ mode: 'idle', label: '' });
+                  lastToolLabelRef.current = null;
                 }
               });
             }
@@ -693,28 +900,40 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
             // Completion event - stop typing
             setIsTyping(false);
             setTypingStatus({ mode: 'idle', label: '' });
+            lastToolLabelRef.current = null;
           }
         }
         return;
       }
       if (lastMsg.type === 'claude-output') {
         // Raw output from Claude (non-JSON)
-        if (lastMsg.data && lastMsg.data.trim()) {
-          addMessage({ type: 'assistant', text: lastMsg.data });
+        const raw = (lastMsg.data || '').trim();
+        if (!raw) return;
+        // Some backends print a plain 'done' at end
+        if (raw.toLowerCase() === 'done') {
           setIsTyping(false);
           setTypingStatus({ mode: 'idle', label: '' });
+          setActivityLock(false);
+          lastToolLabelRef.current = null;
+          return;
         }
+        addMessage({ type: 'assistant', text: raw });
+        setIsTyping(false);
+        setTypingStatus({ mode: 'idle', label: '' });
+        setActivityLock(false);
         return;
       }
       if (lastMsg.type === 'claude-error') {
         setIsTyping(false);
         setTypingStatus({ mode: 'idle', label: '' });
+        setActivityLock(false);
         addMessage({ type: 'error', text: lastMsg.error });
         return;
       }
       if (lastMsg.type === 'claude-complete') {
         setIsTyping(false);
         setTypingStatus({ mode: 'idle', label: '' });
+        setActivityLock(false);
         // Optionally add a completion indicator
         if (cliProvider === 'claude') {
           console.log('[Claude] Response completed');
@@ -735,7 +954,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
           if (lastMsg.rolloutPath) setResumeRolloutPath(lastMsg.rolloutPath);
           // Only save if it's not a temporary session
           if (!lastMsg.sessionId.startsWith('temp-')) {
-            try { saveLastSession(projectPath || process.cwd(), { sessionId: lastMsg.sessionId, rolloutPath: lastMsg.rolloutPath || null }); setHasSavedSession(true);} catch {}
+          try { saveLastSession(activeProjectPath || process.cwd(), { sessionId: lastMsg.sessionId, rolloutPath: lastMsg.rolloutPath || null }, 'claude'); setHasSavedSession(true);} catch {}
           }
           addMessage({ type: 'system', text: `Session started (${lastMsg.sessionId.slice(0, 8)}…)` });
           setIsSessionInitializing(false);
@@ -825,6 +1044,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
         setTypingStatus({ mode: 'idle', label: '' });
         setTypingStart(null);
         setElapsedSec(0);
+        setActivityLock(false);
         return;
       }
       if (lastMsg.type === 'codex-error') {
@@ -833,6 +1053,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
         setTypingStart(null);
         setElapsedSec(0);
         addMessage({ type: 'error', text: lastMsg.error });
+        setActivityLock(false);
         return;
       }
       if (lastMsg.type === 'codex-tool') {
@@ -904,6 +1125,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
         setIsTyping(false);
         setTypingStatus({ mode: 'idle', label: '' });
         setQueueLength(0);
+        setActivityLock(false);
         return;
       }
       if (lastMsg.type === 'codex-aborted') {
@@ -911,6 +1133,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
         setTypingStatus({ mode: 'idle', label: '' });
         setQueueLength(0);
         addMessage({ type: 'system', text: 'Aborted and cleared queue' });
+        setActivityLock(false);
         return;
       }
     }
@@ -946,6 +1169,41 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
     }
   };
 
+  // Heuristic language detector for tool_result blocks
+  const detectCodeLanguage = (text) => {
+    try {
+      const t = String(text || '').trim();
+      if (!t) return 'text';
+      // Diffs
+      if (/^(diff --git|index [0-9a-f]+\.[0-9a-f]+|--- a\/|\+\+\+ b\/)/m.test(t)) return 'diff';
+      // SQL
+      if (/^(SELECT|INSERT|UPDATE|DELETE)\b/i.test(t) || /\bCREATE\s+TABLE\b/i.test(t)) return 'sql';
+      // HTML/XML
+      if (/<[a-z][^>]*>/i.test(t) && /<\/.+>/.test(t)) return 'html';
+      // TypeScript/JS (imports/exports/react)
+      if (/(^|\n)\s*import\s+.+from\s+['"][^'"]+['"];?/m.test(t)) return 'tsx';
+      if (/(^|\n)\s*export\s+(default|const|function|class)\b/m.test(t)) return 'tsx';
+      if (/(^|\n)\s*(const|let|var)\s+\w+\s*=/.test(t) && /(=>|function|class)\b/.test(t)) return 'javascript';
+      // Bash/CLI
+      if (/^\$\s+.+/m.test(t)) return 'bash';
+      if (/(^|\n)\s*(git|npm|pnpm|yarn|curl|wget|ls|cat|echo|chmod|chown|make)\b/.test(t)) return 'bash';
+      if (/^[a-zA-Z0-9_\-.]+\s+--?[a-zA-Z0-9][^\n]*/m.test(t)) return 'bash';
+      return 'text';
+    } catch { return 'text'; }
+  };
+
+  // Detect if assistant text looks like planning/spec/analysis
+  const detectPhaseLabel = (text) => {
+    try {
+      const t = String(text || '').slice(0, 400).toLowerCase();
+      const first = (t.split('\n')[0] || '').trim();
+      const hasPlanHead = /^(##?\s*plan\b|plan\b|plano\b|spec\b|especifica|observa|analysis|análise)/i.test(first);
+      const hasKeywords = /(plan|plano|spec|especifica|analysis|análise|observa(tion|ções)?)/i.test(t);
+      const looksBulleted = /\n\s*[-*]\s+/.test(t);
+      return (hasPlanHead || (hasKeywords && looksBulleted)) ? 'Planning' : 'Writing';
+    } catch { return 'Writing'; }
+  };
+
   // Resolve sidebar element when needed to support portal
   const [resolvedSidebarEl, setResolvedSidebarEl] = useState(null);
   useEffect(() => {
@@ -967,7 +1225,19 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
 
   // Shared chat panel content (can render inline or into a portal)
   const renderPanelContent = () => (
-    <div className={`${embedded ? 'w-full h-full flex flex-col bg-background' : 'w-full max-h-[70vh] bg-background rounded-2xl flex flex-col overflow-hidden border border-border shadow-2xl'}`}>
+    <div className={`${embedded ? 'w-full h-full flex flex-col bg-background' : 'w-full max-h-[70vh] bg-background rounded-2xl flex flex-col overflow-hidden border border-border shadow-2xl'} relative`}>
+      {isEnding && (
+        <div className="absolute inset-0 z-50 bg-background/40 backdrop-blur-sm flex items-center justify-center">
+          <div className="px-4 py-3 rounded-lg bg-background/90 border border-border/50 shadow-lg">
+            <div className="flex items-center gap-3">
+              <span className="w-4 h-4 border-2 border-destructive/40 border-t-destructive rounded-full animate-spin" />
+              <div className="text-sm font-medium text-foreground">
+                Ending session…
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Show provider selector and session info in embedded mode */}
       {embedded && (
         <>
@@ -1068,15 +1338,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
                 >
                   Bypass
                 </CtaButton>
-                <CtaButton
-                  onClick={resumeLastSession}
-                  disabled={!hasSavedSession}
-                  variant="default"
-                  className="w-full justify-center px-3 py-1.5 text-xs rounded-2xl disabled:opacity-50"
-                  title="Resume last session"
-                >
-                  Resume
-                </CtaButton>
+                {/* Resume removed from header; use the Resume chip above input */}
               </div>
             </div>
           )}
@@ -1093,11 +1355,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
       </div>
       )}
       <div ref={messagesScrollRef} className={`${embedded ? 'flex-1 overflow-y-auto px-3 py-2 space-y-2 pb-20' : 'overflow-y-auto px-4 py-3 space-y-2 bg-transparent max-h-[50vh] pb-20'} relative`} style={{ scrollBehavior: 'auto', overflowAnchor: 'none' }}>
-        {dangerousMode && (
-          <div className="mb-2 px-3 py-2 rounded-md border border-destructive/40 bg-destructive/10 text-[11px] text-destructive">
-            Dangerous mode ON: commands may modify your real project.
-          </div>
-        )}
+        {/* Removed top banner for Dangerous mode (we already have a chip near input) */}
         {codexLimitStatus && (
           <div className="mb-2 px-3 py-2 rounded-md border border-border/40 bg-muted/40 text-[11px] text-muted-foreground">
             Limits: {codexLimitStatus.remaining != null ? codexLimitStatus.remaining : '?'} remaining{codexLimitStatus.resetAt ? `, reset ${codexLimitStatus.resetAt}` : ''}
@@ -1126,7 +1384,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
                 setClaudeSessionActive(false);
                 setClaudeMessages([]);
                 setSessionMode(null);
-                clearLastSession(projectPath);
+                clearLastSession(projectPath, 'claude');
                 addMessage({ type: 'system', text: '👋 Session ended' });
                 setTimeout(() => {
                   setMessages([]);
@@ -1181,8 +1439,9 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
             const isUser = m.type === 'user';
             const isError = m.type === 'error';
             const isSystem = m.type === 'system';
+            const isAssistant = !isUser && !isError && !isSystem;
             const containerClass = isUser
-              ? 'text-foreground/80 text-right'
+              ? 'text-foreground'
               : isError
               ? 'px-4 py-3 rounded-2xl shadow-sm bg-destructive/10 text-destructive border border-destructive/20'
               : isSystem
@@ -1204,6 +1463,34 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
             const looksLikeSpec = !isUser && !isError && !isSystem && /^(plan|observations|spec|plano|observa|especifica)/i.test(firstLine);
             const specTitle = looksLikeSpec ? (firstLine.length > 2 ? firstLine : 'Plan Specification') : null;
 
+            // Rule Card heuristic ("Rule: <name>" then optional tags line)
+            const linesAll = textContent.split('\n');
+            const nonEmpty = linesAll.filter(l => l.trim().length > 0);
+            const ruleMatch = !isUser && !isError && !isSystem && /^rule:\s*/i.test((nonEmpty[0] || ''));
+            const ruleName = ruleMatch ? (nonEmpty[0].replace(/^rule:\s*/i, '').trim() || 'rule') : null;
+            const ruleTags = ruleMatch && nonEmpty[1] && /,/.test(nonEmpty[1]) ? nonEmpty[1].trim() : null;
+
+            const RuleCard = ({ children }) => {
+              if (!ruleMatch) return <>{children}</>;
+              // Build trimmed markdown excluding header lines
+              let body = textContent;
+              body = body.replace(/^\s*Rule:.*\n?/i, '');
+              if (ruleTags) body = body.replace(new RegExp(`^\s*${ruleTags.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\n?`), '');
+              return (
+                <div className="rounded-xl border border-border/50 bg-card/40 px-3 py-3 shadow-sm">
+                  <div className="text-[11px] text-muted-foreground mb-1">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-border/50">Rule: {ruleName}</span>
+                    {ruleTags && (
+                      <span className="ml-2 text-muted-foreground/80">{ruleTags}</span>
+                    )}
+                  </div>
+                  <div className="prose prose-sm dark:prose-invert max-w-none leading-relaxed prose-p:my-1 prose-li:my-1">
+                    <ReactMarkdown components={markdownComponents}>{body}</ReactMarkdown>
+                  </div>
+                </div>
+              );
+            };
+
             const SpecWrapper = ({ children }) => {
               if (!looksLikeSpec) return <>{children}</>;
               return (
@@ -1219,8 +1506,15 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
 
             // ExpandableMessage removed – always show full content
             return (
-              <motion.div key={m.id} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }} transition={{ duration: 0.25 }} className={`w-full ${isUser ? 'flex justify-end' : ''}`}>
-                <div className={`${containerClass} ${isUser ? 'max-w-[85%]' : 'mr-auto max-w-[85%]'}`}>
+              <motion.div 
+                key={m.id}
+                initial={{ opacity: 0, y: 14, scale: isAssistant ? 0.995 : 1 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -14 }}
+                transition={{ duration: isAssistant ? 0.35 : 0.25, ease: 'easeOut' }}
+                className={`w-full`}
+              >
+                <div className={`${containerClass} w-full max-w-none pr-2`}>
                   {/^(Updated Todo List|Lista de tarefas atualizada|TODO List:|Todo List:)/i.test(textContent) ? (
                     <div>
                       <div className="text-sm font-semibold mb-1">{(textContent.split('\n')[0] || '').trim()}</div>
@@ -1241,12 +1535,12 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
                     (isUser || isError)
                       ? (
                         <SpecWrapper>
-                        <div className={`prose prose-sm dark:prose-invert max-w-none leading-relaxed prose-p:my-1 prose-li:my-1 ${isUser ? 'text-right text-foreground/80' : ''}`}>
+                        <div className={`prose prose-sm dark:prose-invert max-w-none leading-relaxed prose-p:my-1 prose-li:my-1 ${isUser ? 'text-foreground/80' : ''}`}>
                           <ReactMarkdown components={markdownComponents}>{textContent}</ReactMarkdown>
                         </div>
                         </SpecWrapper>
                       ) : isSystem ? (
-                        <div className="relative">
+                        <div className="bg-transparent relative">
                           {isToolMessage && (
                             <button
                               className="absolute -top-1 -right-1 text-[10px] px-2 py-0.5 rounded bg-background/80 border border-border/50 opacity-60 hover:opacity-100 transition-opacity"
@@ -1258,18 +1552,29 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
                               Copy
                             </button>
                           )}
+                          {(/^Thinking…/.test(textContent)) ? (
+                            <ThinkingCollapsible text={textContent} />
+                          ) : isToolMessage && typingStatus.mode === 'tool' ? (
+                            <div className="inline-flex items-center gap-2 text-sm opacity-85">
+                              <span className="w-3 h-3 border-2 border-blue-500/40 border-t-blue-500 rounded-full animate-spin inline-block" />
+                              <span className="italic">
+                                <ReactMarkdown components={markdownComponents}>{textContent}</ReactMarkdown>
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="max-w-none leading-relaxed">
+                              <ReactMarkdown components={markdownComponents}>{textContent}</ReactMarkdown>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <RuleCard>
                           <SpecWrapper>
-                            <div className={`prose prose-sm dark:prose-invert max-w-none leading-relaxed prose-p:my-1 prose-li:my-1 ${isSystem ? 'opacity-80' : ''}`}>
+                            <div className="prose prose-sm dark:prose-invert max-w-none leading-relaxed prose-p:my-1 prose-li:my-1">
                               <ReactMarkdown components={markdownComponents}>{textContent}</ReactMarkdown>
                             </div>
                           </SpecWrapper>
-                        </div>
-                      ) : (
-                        <SpecWrapper>
-                          <div className="prose prose-sm dark:prose-invert max-w-none leading-relaxed prose-p:my-1 prose-li:my-1">
-                            <ReactMarkdown components={markdownComponents}>{textContent}</ReactMarkdown>
-                          </div>
-                        </SpecWrapper>
+                        </RuleCard>
                       )
                   )}
                   {/* timestamps hidden */}
@@ -1278,6 +1583,49 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
             );
           })}
         </AnimatePresence>
+        
+        {/* Temporary feedback messages area */}
+        {feedbackMessages.length > 0 && (
+          <div className="space-y-1 py-2">
+            <AnimatePresence>
+              {feedbackMessages.map((msg) => (
+                <motion.div
+                  key={msg.id}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 20 }}
+                  transition={{ duration: 0.2 }}
+                  className="flex items-center gap-2 text-xs text-muted-foreground px-2"
+                >
+                  {msg.isLoading && (
+                    <span className="w-3 h-3 border-2 border-primary/40 border-t-primary rounded-full animate-spin" />
+                  )}
+                  {msg.category && getMessageIndicator(msg.category)}
+                  <span className="italic">{msg.text}</span>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </div>
+        )}
+        
+        {/* Status message (floating, no background) */}
+        {statusMessage && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="px-2 py-1 flex items-center justify-between text-xs text-muted-foreground"
+          >
+            <div className="flex items-center gap-2">
+              <span className="w-3 h-3 border-2 border-primary/40 border-t-primary rounded-full animate-spin" />
+              <span>{statusMessage.operation}</span>
+            </div>
+            {statusMessage.progress && (
+              <div className="text-xs text-muted-foreground">{statusMessage.progress}</div>
+            )}
+          </motion.div>
+        )}
+        
         {isTyping && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-2 text-muted-foreground">
             <span className="w-4 h-4 border-2 border-muted-foreground/40 border-t-muted-foreground rounded-full animate-spin inline-block" />
@@ -1312,8 +1660,69 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
           </div>
         )}
       </div>
+      {/* Centered project switch prompt with blur over the chat */}
+      <AnimatePresence initial={false}>
+        {showProjectSwitchPrompt && (
+          <motion.div
+            key="project-switch"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-50 bg-background/50 backdrop-blur-sm flex items-center justify-center"
+          >
+            <div className="w-[min(460px,90%)] rounded-xl border border-border bg-background/95 shadow-2xl p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9"/></svg>
+                <div className="text-sm font-medium">Projeto alterado</div>
+              </div>
+              <div className="text-[13px] text-muted-foreground mb-4">
+                Você mudou para <b>{pendingProjectPath?.split('/').pop() || 'novo projeto'}</b> na página. Deseja que este chat também troque para esse projeto?
+              </div>
+              <div className="flex gap-2 justify-end">
+                <button
+                  onClick={() => { setShowProjectSwitchPrompt(false); setPendingProjectPath(null); }}
+                  className="px-3 py-1.5 text-xs rounded-md border border-border hover:bg-accent/20"
+                >
+                  Manter aqui
+                </button>
+                <button
+                  onClick={() => { setChatProjectPath(pendingProjectPath); setShowProjectSwitchPrompt(false); setPendingProjectPath(null); }}
+                  className="px-3 py-1.5 text-xs rounded-md bg-primary text-primary-foreground hover:bg-primary/90"
+                >
+                  Trocar
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <div className={`${embedded ? 'px-2 py-1.5' : 'p-3'} relative`}>
         
+        {/* Floating, minimal activity indicator above input */}
+        <AnimatePresence initial={false}>
+          {(() => {
+            const active = activityLock || isSessionInitializing || isTyping || ['queued','busy','thinking','tool'].includes(typingStatus.mode);
+            if (!active) return null;
+            const label = (
+              isSessionInitializing ? 'Iniciando sessão…' :
+              (typingStatus.mode === 'tool' && typingStatus.label) ? `Usando ${typingStatus.label}…` :
+              typingStatus.mode === 'queued' ? (typingStatus.label || 'Na fila…') :
+              typingStatus.mode === 'busy' ? (typingStatus.label || 'Ocupado…') :
+              'Working…'
+            );
+            return (
+              <motion.div key="activity-input" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }} className="pointer-events-none absolute -top-3 left-2 z-40 inline-flex items-center gap-2 text-[12px] text-muted-foreground">
+                <span className="relative flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/70 animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/70 animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/70 animate-bounce" style={{ animationDelay: '300ms' }} />
+                </span>
+                <span className="whitespace-nowrap">{label}</span>
+                <span className="text-muted-foreground/60">• {Math.max(0, elapsedSec)}s</span>
+              </motion.div>
+            );
+          })()}
+        </AnimatePresence>
         <div 
           className={`${themeCodex ? 'relative' : `rounded-2xl border ${isDragging ? 'border-primary border-2' : 'border-border/50 bg-zinc-900/90'} shadow-sm transition-all duration-200 focus-within:border-primary/50 relative`}`}
           onDragOver={handleDragOver}
@@ -1353,39 +1762,40 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
               </div>
             </div>
           )}
-          {/* Resume last session button - hidden in Codex theme for minimal look */}
-          {!themeCodex && hasLastSession(projectPath) && !sessionActive && messages.length === 0 && (
+          {/* Resume last session chip (always available when applicable) */}
+          {hasLastSession(activeProjectPath, 'claude') && !sessionActive && messages.length === 0 && (
             <div className="px-4 pb-2">
               <button
                 onClick={() => { 
                   primeResumeFromSaved(); 
                   startSession(); 
                   restoreLastChat(); 
-                  addMessage({ type: 'system', text: 'Resuming previous session...' });
+                  // Use temporary message that auto-dismisses
+                  addTemporary('🔄 Resuming previous session...', 'system', 2000);
                 }}
-                className="w-full px-3 py-2 rounded-lg bg-muted/50 hover:bg-muted/70 transition-all text-left flex items-center gap-2 group"
+                className="w-full px-2.5 py-1.5 rounded-md bg-muted/40 hover:bg-muted/60 transition-all text-left flex items-center gap-2 group"
                 title="Resume last session"
               >
                 <svg className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
                 </svg>
                 <div className="flex-1 min-w-0">
-                  <div className="text-xs font-medium text-foreground">Resume session:</div>
-                  <div className="text-xs text-muted-foreground truncate">
+                  <div className="text-[11px] font-medium text-foreground/90">Resume session</div>
+                  <div className="text-[11px] text-muted-foreground truncate">
                     {(() => {
                       try {
-                        const history = loadChatHistory(projectPath);
+                        const history = loadChatHistory(activeProjectPath);
                         if (history?.messages?.length > 0) {
                           // Get first user message for preview
                           const firstUserMsg = history.messages.find(m => m.type === 'user');
                           if (firstUserMsg?.text) {
-                            return firstUserMsg.text.slice(0, 50) + (firstUserMsg.text.length > 50 ? '...' : '');
+                             return firstUserMsg.text.slice(0, 50) + (firstUserMsg.text.length > 50 ? '...' : '');
                           }
                         }
-                        const s = loadLastSession(projectPath);
-                        return s?.sessionId ? `Session ${s.sessionId.slice(0, 8)}` : 'Previous session';
+                        const s = loadLastSession(activeProjectPath, 'claude');
+                        return s?.sessionId ? `Session ${s.sessionId.slice(0, 8)}` : '';
                       } catch { 
-                        return 'Previous session'; 
+                        return '';
                       }
                     })()}
                   </div>
@@ -1396,10 +1806,16 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
           {/* Segmented controls row - moved above input */}
           <div className="flex items-center justify-between text-muted-foreground text-xs px-2 mb-2">
             <div className="flex items-center gap-3">
-              <button className="flex items-center gap-1.5 hover:text-foreground transition-colors" title={projectPath || 'Current directory'}>
+              <button className="flex items-center gap-1.5 hover:text-foreground transition-colors" title={activeProjectPath || 'Current directory'}>
                 <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
-                <span className="max-w-[200px] truncate font-medium">{projectPath ? projectPath.split('/').pop() : 'STANDALONE_MODE'}</span>
+                <span className="max-w-[200px] truncate font-medium">{activeProjectPath ? activeProjectPath.split('/').pop() : 'STANDALONE_MODE'}</span>
               </button>
+              {chatProjectPath && projectPath && chatProjectPath !== projectPath && (
+                <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border border-border/50">
+                  Pinned to {chatProjectPath.split('/').pop()} 
+                  <button onClick={() => { setPendingProjectPath(projectPath); setShowProjectSwitchPrompt(true); }} className="underline hover:no-underline ml-1">switch</button>
+                </span>
+              )}
               {cliProvider === 'claude' && (
                 <div className="relative">
                   <button 
@@ -1463,9 +1879,38 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
                   </button>
                 </>
               )}
+              {/* Match Codex overlay: Dangerous chip toggle */}
+              {dangerousMode && (
+                <button
+                  onClick={() => setDangerousMode(false)}
+                  className="flex items-center gap-1 text-yellow-500/80 hover:text-yellow-400 transition-colors"
+                  title="Dangerous mode active - click to disable"
+                >
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                  </svg>
+                  <span>Dangerous</span>
+                </button>
+              )}
+              {!dangerousMode && !themeCodex && (
+                <button
+                  onClick={() => {
+                    const ok = window.confirm('Enable Dangerous mode? Codex may modify files in your real project.');
+                    if (ok) setDangerousMode(true);
+                  }}
+                  className="opacity-0 hover:opacity-100 transition-opacity"
+                  title="Enable dangerous mode"
+                >
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                  </svg>
+                </button>
+              )}
             </div>
           </div>
           
+          {/* Activity indicator moved to floating pill (top-right) */}
+
           {/* Single unified input container with dark background */}
           <div className="space-y-4 rounded-2xl bg-muted border border-border py-8 px-6">
             {/* Input area */}
@@ -1631,8 +2076,8 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
       
       // Build options for Claude command
       const options = {
-        projectPath: projectPath || process.cwd(),
-        cwd: projectPath || process.cwd(),
+        projectPath: activeProjectPath || process.cwd(),
+        cwd: activeProjectPath || process.cwd(),
         // Don't send temporary session IDs to Claude CLI
         sessionId: claudeSessionId && !claudeSessionId.startsWith('temp-') ? claudeSessionId : null,
         // Only resume if we have a real session ID (not temporary)
@@ -1642,6 +2087,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
       };
       
       // Send via WebSocket using the same format as the backend expects
+      setActivityLock(true);
       sendMessage({ 
         type: 'claude-command', 
         command: fullMessage,
@@ -1660,14 +2106,15 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
       }
       
       const options = {
-        projectPath: projectPath || process.cwd(),
-        cwd: projectPath || process.cwd(),
+        projectPath: activeProjectPath || process.cwd(),
+        cwd: activeProjectPath || process.cwd(),
         dangerous: dangerousMode,
         plannerMode,
         modelLabel,
         resumeRolloutPath: (!sessionActive && primedResumeRef.current) ? primedResumeRef.current : undefined
       };
       
+      setActivityLock(true);
       sendMessage({ type: 'codex-command', command: fullMessage, options });
       // Clear one-shot resume after use
       primedResumeRef.current = null;
@@ -1764,72 +2211,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
       const language = match ? match[1] : '';
       
       if (!inline && language) {
-        const CodeWithCopy = ({ text }) => {
-          const [copied, setCopied] = useState(false);
-          const [collapsed, setCollapsed] = useState(true); // Start collapsed
-          const handleCopy = async () => {
-            try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1200); } catch {}
-          };
-          
-          // Count lines for preview
-          const lines = String(text).split('\n');
-          const lineCount = lines.length;
-          const preview = lines.slice(0, 3).join('\n');
-          
-          return (
-            <div className="relative group w-full">
-              <div className="flex items-center justify-between mb-2 px-3 py-2 bg-muted/30 rounded-t-lg border border-border/50">
-                <button
-                  onClick={() => setCollapsed(!collapsed)}
-                  className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  <svg 
-                    className={`w-4 h-4 transition-transform ${collapsed ? '' : 'rotate-90'}`} 
-                    fill="none" 
-                    stroke="currentColor" 
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                  <span className="font-mono text-xs">
-                    {language} • {lineCount} lines {collapsed ? '(click to expand)' : ''}
-                  </span>
-                </button>
-                <button 
-                  onClick={handleCopy} 
-                  className="px-2 py-1 text-[11px] rounded-md bg-background/80 border border-border hover:bg-accent"
-                >
-                  {copied ? 'Copied' : 'Copy'}
-                </button>
-              </div>
-              
-              {collapsed ? (
-                <div className="px-3 py-2 bg-muted/10 rounded-b-lg border-x border-b border-border/50">
-                  <pre className="text-xs font-mono text-muted-foreground overflow-hidden">
-                    <code>{preview}{lineCount > 3 ? '\n...' : ''}</code>
-                  </pre>
-                </div>
-              ) : (
-                <SyntaxHighlighter
-                  style={vscDarkPlus}
-                  language={language}
-                  PreTag="div"
-                  customStyle={{ 
-                    margin: '0', 
-                    borderRadius: '0 0 0.5rem 0.5rem',
-                    fontSize: '0.875rem',
-                    width: '100%',
-                    overflowX: 'auto'
-                  }}
-                  {...props}
-                >
-                  {String(text).replace(/\n$/, '')}
-                </SyntaxHighlighter>
-              )}
-            </div>
-          );
-        };
-        return <CodeWithCopy text={String(children)} />;
+        return <CodeBlockCollapsible language={language} text={String(children)} />;
       }
       
       return (
@@ -1916,12 +2298,16 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
           return text;
         } catch { return children; }
       };
-      // Only transform simple text paragraphs
-      if (typeof children === 'string') {
-        return <p className="my-1" {...props}>{renderBadges(children)}</p>;
-      }
-      if (Array.isArray(children) && children.length === 1 && typeof children[0] === 'string') {
-        return <p className="my-1" {...props}>{renderBadges(children[0])}</p>;
+      // Special light-lines like "Thought for 2s", "Read file", "Grepped …", "Searched …"
+      const asString = Array.isArray(children) && children.length === 1 && typeof children[0] === 'string'
+        ? children[0]
+        : (typeof children === 'string' ? children : null);
+      if (typeof asString === 'string') {
+        const s = asString.trim();
+        if (/^(Thought for \d+s?|Read\b|Grepped\b|Searched\b|Listed\b|No linter errors found|Command cancelled)/i.test(s)) {
+          return <div className="text-xs text-muted-foreground my-1" {...props}>{s}</div>;
+        }
+        return <p className="my-1" {...props}>{renderBadges(s)}</p>;
       }
       return <p className="my-1" {...props}>{children}</p>;
     },
@@ -2005,7 +2391,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
       )}
       
 
-      {/* Persistent Open Button with Provider Dropdown */}
+      {/* Persistent Open Button with Provider Dropdown (provider unchanged) */}
       <div className="absolute right-4 bottom-4 z-40 flex items-center gap-2">
         {!sessionActive ? (
           <div className="flex items-center gap-1">
@@ -2063,22 +2449,18 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
                 </div>
               )}
             </div>
-            <button
+            <CtaButton
               onClick={() => {
-                // Prevent double-clicking by checking if already initializing
                 if (isSessionInitializing) return;
-                
-                // Start session before opening the panel
                 startSession();
                 if (onBeforeOpen) onBeforeOpen();
                 setOpen(true);
               }}
-              className="px-4 py-2 rounded-r-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 transition-colors text-sm disabled:opacity-60"
-              title={`Start ${cliProvider === 'claude' ? 'Claude Code' : 'Codex'} session for ${getHost()}`}
+              title={`Start Codex AI Session for ${getHost()}`}
               disabled={isSessionInitializing || !isConnected}
             >
-              {isSessionInitializing ? 'Starting…' : `Start ${cliProvider === 'claude' ? 'Claude Code' : 'Codex'} Session`}
-            </button>
+              {isSessionInitializing ? 'Starting…' : 'Start Codex AI Session'}
+            </CtaButton>
           </div>
         ) : (
           <>
@@ -2090,19 +2472,22 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
               End Session
             </button>
             {!open && (
-              <button
-                onClick={() => { if (onBeforeOpen) onBeforeOpen(); setOpen(true); }}
-                className="px-3 py-2 rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 transition-colors text-xs"
-              >
+              <CtaButton onClick={() => { if (onBeforeOpen) onBeforeOpen(); setOpen(true); }}>
                 Open Chat
-              </button>
+              </CtaButton>
             )}
           </>
         )}
         {/* Resume last session chip (outside panel) */}
         {!open && hasSavedSession && (
           <button
-            onClick={() => { primeResumeFromSaved(); startSession(); restoreLastChat(); }}
+            onClick={() => { 
+              primeResumeFromSaved(); 
+              startSession(); 
+              restoreLastChat();
+              // Use temporary message that auto-dismisses
+              addTemporary('🔄 Resuming previous session...', 'system', 2000);
+            }}
             className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-background/80 hover:bg-accent/40 transition-all text-muted-foreground hover:text-foreground text-xs border border-border/30 backdrop-blur-sm"
             title="Resume last chat session for this project"
           >
