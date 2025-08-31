@@ -6,6 +6,7 @@ import fs from 'fs';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { createLogger } from '../utils/logger.js';
+import { getProcessManager } from '../lib/ProcessManager.js';
 
 const execAsync = promisify(exec);
 const log = createLogger('CLAUDE-STREAM');
@@ -73,12 +74,19 @@ router.get('/stream/:sessionId', authenticateToken, async (req, res) => {
     res.write(`data: ${JSON.stringify({ sessionId, status: 'connected' })}\n\n`);
 
     // Handle client disconnect
-    req.on('close', () => {
+    req.on('close', async () => {
         const session = activeSessions.get(sessionId);
         if (session) {
             session.abortController.abort();
             if (session.process) {
-                session.process.kill('SIGTERM');
+                try {
+                    const processManager = getProcessManager();
+                    await processManager.terminate(sessionId, 'client-disconnect');
+                } catch (error) {
+                    log.error(`Error terminating process on disconnect: ${error.message}`);
+                    // Fallback to direct kill if ProcessManager fails
+                    try { session.process.kill('SIGTERM'); } catch {}
+                }
             }
             activeSessions.delete(sessionId);
         }
@@ -392,13 +400,20 @@ function createPatchForEntry(conversation, entry) {
 }
 
 // Endpoint to abort a session
-router.delete('/session/:sessionId', authenticateToken, (req, res) => {
+router.delete('/session/:sessionId', authenticateToken, async (req, res) => {
     const { sessionId } = req.params;
     const session = activeSessions.get(sessionId);
 
     if (session) {
         if (session.process) {
-            session.process.kill('SIGTERM');
+            try {
+                const processManager = getProcessManager();
+                await processManager.terminate(sessionId, 'user-abort');
+            } catch (error) {
+                log.error(`Error terminating process in abort: ${error.message}`);
+                // Fallback to direct kill if ProcessManager fails
+                try { session.process.kill('SIGTERM'); } catch {}
+            }
         }
         session.abortController.abort();
         activeSessions.delete(sessionId);

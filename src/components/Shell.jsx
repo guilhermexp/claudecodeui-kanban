@@ -192,7 +192,6 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       }
     } catch (e) {
       // Non-fatal: fall back to library defaults if imperative resize fails
-      // console.warn('Panel resize failed:', e);
     }
   }, [showPreview, isMobile]);
   const [previewUrl, setPreviewUrl] = useState('');
@@ -290,12 +289,10 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   useEffect(() => {
     window.previewGoBack = () => {
       // Implement go back functionality
-      console.log('Go back not implemented yet');
     };
     
     window.previewGoForward = () => {
       // Implement go forward functionality
-      console.log('Go forward not implemented yet');
     };
     
     window.previewRefresh = () => {
@@ -2084,13 +2081,11 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
                           } else {
                             // Use async detection for best URL
                             detectBestPreviewUrl().then(url => {
-                              console.log('Detected best preview URL:', url);
                               setPreviewUrl(url);
                             }).catch(() => {
                               // Fallback already set
                             });
                           }
-                          console.log('Opening preview with URL:', firstUrl);
                           setPreviewUrl(firstUrl);
                           // Close any right side panel to avoid overcrowding
                           if (onSidebarClose) {

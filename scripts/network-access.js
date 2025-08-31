@@ -53,7 +53,6 @@ function hasUserDatabase() {
 // Main function
 async function startNetworkServer() {
   console.clear();
-  console.log(`${colors.cyan}${colors.bright}
 ╔════════════════════════════════════════════════════════════════╗
 ║            Claude Code UI - Network Access Mode               ║
 ╚════════════════════════════════════════════════════════════════╝
@@ -63,45 +62,19 @@ ${colors.reset}`);
   const hasAuth = hasUserDatabase();
 
   // Security warnings
-  console.log(`${colors.yellow}${colors.bright}⚠️  AVISOS DE SEGURANÇA:${colors.reset}`);
-  console.log(`${colors.yellow}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${colors.reset}\n`);
 
   if (!hasAuth) {
-    console.log(`${colors.red}${colors.bright}❌ NENHUMA SENHA CONFIGURADA!${colors.reset}`);
-    console.log(`${colors.red}   Qualquer pessoa na sua rede pode acessar o sistema.${colors.reset}`);
-    console.log(`${colors.red}   Configure uma senha ao acessar pela primeira vez!${colors.reset}\n`);
   } else {
-    console.log(`${colors.green}✅ Autenticação ativada${colors.reset} - Login necessário para acessar\n`);
   }
 
-  console.log(`${colors.yellow}Esta aplicação permite:${colors.reset}`);
-  console.log('  • Executar comandos no seu computador');
-  console.log('  • Ler e modificar arquivos');
-  console.log('  • Acessar o Claude CLI com sua API key');
-  console.log('  • Controlar projetos Git\n');
 
-  console.log(`${colors.yellow}${colors.bright}Recomendações:${colors.reset}`);
-  console.log('  1. Use APENAS em rede local confiável');
-  console.log('  2. NUNCA exponha para a internet');
-  console.log('  3. Configure senha forte se ainda não configurou');
-  console.log('  4. Desative "Bypass Permissions" quando não precisar\n');
 
-  console.log(`${colors.cyan}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${colors.reset}\n`);
 
   // Network information
-  console.log(`${colors.green}${colors.bright}🌐 Endereços de Acesso:${colors.reset}`);
-  console.log(`${colors.green}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${colors.reset}\n`);
   
-  console.log(`${colors.bright}Deste computador:${colors.reset}`);
-  console.log(`  ${colors.blue}http://localhost:5892${colors.reset}\n`);
   
-  console.log(`${colors.bright}De outros dispositivos na rede:${colors.reset}`);
-  console.log(`  ${colors.blue}http://${localIP}:5892${colors.reset}\n`);
   
-  console.log(`${colors.bright}Seu IP na rede local:${colors.reset} ${localIP}`);
-  console.log(`${colors.bright}Nome do computador:${colors.reset} ${os.hostname()}\n`);
 
-  console.log(`${colors.cyan}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${colors.reset}\n`);
 
   // Set environment variables for network access
   const env = {
@@ -114,7 +87,6 @@ ${colors.reset}`);
     VITE_PORT: '5892'
   };
 
-  console.log(`${colors.green}🚀 Iniciando servidores...${colors.reset}\n`);
 
   // Start the smart dev orchestrator with network access
   const devProcess = spawn('npm', ['run', 'dev'], {
@@ -125,7 +97,6 @@ ${colors.reset}`);
 
   // Handle exit
   process.on('SIGINT', () => {
-    console.log(`\n${colors.yellow}Encerrando servidores...${colors.reset}`);
     devProcess.kill('SIGINT');
     process.exit(0);
   });

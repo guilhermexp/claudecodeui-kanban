@@ -17,10 +17,8 @@ const ws = {
       if (type === 'codex-exec-delta') {
         process.stdout.write(obj.text || '');
       } else {
-        console.log('[WS]', obj);
       }
     } catch {
-      console.log('[RAW]', msg);
     }
   }
 };
@@ -34,13 +32,9 @@ const options = {
   authMode: mode, // 'api-cli' (default), 'api-env', or 'subscription'
 };
 
-console.log('--- Codex Test ---');
-console.log('Prompt:', prompt);
-console.log('Auth mode:', options.authMode);
 
 spawnCodex(prompt, options, ws)
   .then(() => {
-    console.log("\n[TEST] Completed successfully.");
     process.exit(0);
   })
   .catch((err) => {

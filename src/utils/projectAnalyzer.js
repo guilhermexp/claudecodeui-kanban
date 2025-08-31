@@ -22,7 +22,6 @@ export const analyzeProjectFiles = async (projectPath) => {
     return null;
   } catch (error) {
     if (!error.message?.includes('Failed to fetch')) {
-      console.warn('Failed to analyze project files:', error);
     }
     return null;
   }
@@ -347,7 +346,6 @@ export const getEnhancedProjectAnalysis = async (project) => {
     }
     
   } catch (error) {
-    console.warn('Failed to get enhanced project analysis:', error);
     const fallback = detectProjectTypeFromName(project) || {
       type: 'unknown',
       confidence: 0.3,

@@ -91,7 +91,6 @@ export async function spawnCodex(prompt, options = {}, ws) {
     let tempMirrorPath = null;
     const safeModeOverride = process.env.CODEX_SAFE_MODE;
     const safeMode = (safeModeOverride === 'on') ? true : (safeModeOverride === 'off') ? false : !dangerous;
-    console.log('[Codex SafeMode]', safeMode ? 'ENABLED' : 'DISABLED', '(dangerous:', !!dangerous, ', override:', safeModeOverride || 'none', ')');
     if (safeMode) {
       try {
         const prefix = path.join(os.tmpdir(), 'codex-safe-');
@@ -99,9 +98,7 @@ export async function spawnCodex(prompt, options = {}, ws) {
         // Copy a lightweight snapshot of the project (no node_modules/.git, size-capped)
         copyDirSafe(workingDir, tempMirrorPath, 1024 * 1024); // 1MB/file cap
         workingDir = tempMirrorPath;
-        console.log('[Codex SafeMode] Using temp mirror:', workingDir);
       } catch (e) {
-        console.warn('[Codex SafeMode] Failed to create mirror, falling back to real dir:', e.message);
       }
     }
 
@@ -165,22 +162,14 @@ export async function spawnCodex(prompt, options = {}, ws) {
       // Subscription mode: avoid leaking API key into CLI process
       delete envVars.OPENAI_API_KEY;
     }
-    console.log('[Codex Spawn] authMode:', authMode);
     const apiSource = authMode === 'api' ? (envVars.OPENAI_API_KEY ? 'env' : 'cli') : '-';
     if (authMode === 'api-env') {
-      console.log('[Codex Spawn] apiSource:', apiSource, '(env OPENAI_API_KEY', envVars.OPENAI_API_KEY ? 'present' : 'absent', ')');
     }
 
     const trySpawnViaNode = () => {
       if (codexScriptCandidates.length === 0) return null;
       const nodeBin = process.execPath; // absolute path to current Node
       const script = codexScriptCandidates[0];
-      console.log('[Codex Spawn] Strategy=node+script');
-      console.log('[Codex Spawn] node:', nodeBin);
-      console.log('[Codex Spawn] script:', script);
-      console.log('[Codex Spawn] args:', commonArgs.join(' '));
-      console.log('[Codex Spawn] cwd:', workingDir);
-      console.log('[Codex Spawn] PATH:', envVars.PATH);
       try {
         const p = spawn(nodeBin, [script, ...commonArgs], {
           stdio: ['pipe', 'pipe', 'pipe'],
@@ -201,12 +190,6 @@ export async function spawnCodex(prompt, options = {}, ws) {
       if (parts.length === 0) return null;
       const bin = parts[0];
       const binArgs = parts.slice(1);
-      console.log('[Codex Spawn] Strategy=bin');
-      console.log('[Codex Spawn] bin:', bin);
-      console.log('[Codex Spawn] binArgs:', binArgs.join(' '));
-      console.log('[Codex Spawn] args:', commonArgs.join(' '));
-      console.log('[Codex Spawn] cwd:', workingDir);
-      console.log('[Codex Spawn] PATH:', envVars.PATH);
       try {
         const p = spawn(bin, [...binArgs, ...commonArgs], {
           stdio: ['pipe', 'pipe', 'pipe'],
@@ -246,11 +229,6 @@ export async function spawnCodex(prompt, options = {}, ws) {
         try { return fs.existsSync(p); } catch { return false; }
       }) || 'sh';
 
-      console.log('[Codex Spawn] Strategy=shell+npx');
-      console.log('[Codex Spawn] command:', codexCommand);
-      console.log('[Codex Spawn] shell:', chosenShell);
-      console.log('[Codex Spawn] cwd:', workingDir);
-      console.log('[Codex Spawn] PATH:', envVars.PATH);
       try {
         const p = spawn(chosenShell, ['-lc', codexCommand], {
           stdio: ['pipe', 'pipe', 'pipe'],
@@ -268,7 +246,6 @@ export async function spawnCodex(prompt, options = {}, ws) {
     let codexProcess = trySpawnViaBin();
     if (!codexProcess) {
       try {
-        console.log('[Codex Spawn] Strategy=bin(default)');
         codexProcess = spawn('codex', commonArgs, {
           stdio: ['pipe', 'pipe', 'pipe'],
           env: envVars,
@@ -394,7 +371,6 @@ export async function spawnCodex(prompt, options = {}, ws) {
           } else if (json.msg && json.msg.type === 'agent_message' && json.msg.message) {
             // Send agent messages to frontend (skip during warmup)
             if (!suppressOutput) {
-              console.log('Sending agent_message to frontend:', json.msg.message);
               ws.send(JSON.stringify({
                 type: 'codex-response',
                 text: json.msg.message
@@ -435,7 +411,6 @@ export async function spawnCodex(prompt, options = {}, ws) {
           if (!suppressOutput) {
             const trimmed = line.trim();
             if (trimmed) {
-              console.log('Non-JSON output from Codex:', trimmed);
               if (trimmed.length < 400) {
                 ws?.send?.(JSON.stringify({ type: 'codex-output', data: trimmed }));
               }
@@ -476,7 +451,6 @@ export async function spawnCodex(prompt, options = {}, ws) {
     
     // Handle process completion
     codexProcess.on('close', (code) => {
-      console.log('Codex process exited with code', code);
       ws.send(JSON.stringify({
         type: 'codex-complete',
         exitCode: code

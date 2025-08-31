@@ -556,7 +556,6 @@ function Sidebar({
     try {
       localStorage.setItem('sidebar_showAllProjects', JSON.stringify(showAllProjects));
     } catch (error) {
-      console.warn('Failed to save showAllProjects state:', error);
     }
   }, [showAllProjects]);
 

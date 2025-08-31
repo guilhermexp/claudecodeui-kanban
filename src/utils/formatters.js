@@ -15,20 +15,5 @@ export const formatFileSize = (bytes) => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 };
 
-/**
- * Format date as relative time
- * @param {Date|string} date - Date to format
- * @returns {string} Formatted relative time string
- */
-export const formatRelativeTime = (date) => {
-  if (!date) return '-';
-  const now = new Date();
-  const past = new Date(date);
-  const diffInSeconds = Math.floor((now - past) / 1000);
-  
-  if (diffInSeconds < 60) return 'just now';
-  if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} min ago`;
-  if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hours ago`;
-  if (diffInSeconds < 2592000) return `${Math.floor(diffInSeconds / 86400)} days ago`;
-  return past.toLocaleDateString();
-};
+// Time formatting functions moved to time.js to avoid duplication
+// Use: import { formatTimeAgo, formatTime, formatDateTime } from './time';

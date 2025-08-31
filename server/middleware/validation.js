@@ -4,9 +4,9 @@
  */
 
 import Joi from 'joi';
-import Logger from '../lib/logger.js';
+import { createLogger } from '../utils/logger.js';
 
-const logger = new Logger('ValidationMiddleware');
+const logger = createLogger('VALIDATION');
 
 // Base schemas for common data types
 const schemas = {

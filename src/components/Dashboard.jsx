@@ -140,7 +140,6 @@ const Dashboard = memo(({ onBack }) => {
       await loadUsageStats(false);
       
       // Show success message (could add a toast notification here)
-      console.log(`Imported ${result.imported} records from Claude projects`);
     } catch (err) {
       console.error('Failed to import usage data:', err);
       setError('Failed to import usage data');

@@ -9,7 +9,7 @@ import { spawn, exec } from 'child_process';
 import { promisify } from 'util';
 import fs from 'fs/promises';
 import path from 'path';
-import Logger from './lib/logger.js';
+import { createLogger } from './utils/logger.js';
 
 const execAsync = promisify(exec);
 
@@ -19,7 +19,7 @@ class VibeKanbanCleanupService {
     this.cleanupInterval = null;
     this.orphanProcesses = new Set();
     this.lastCleanup = null;
-    this.logger = new Logger('VibeKanbanCleanup');
+    this.logger = createLogger('VIBE-CLEANUP');
     
     // Configurações
     this.config = {

@@ -1,12 +1,6 @@
 import express from 'express';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
 import { authenticateToken } from '../middleware/auth.js';
 import { createLogger } from '../utils/logger.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
 // Import the usage tracker
 import UsageTracker from '../../backend/usageTracker.js';

@@ -98,7 +98,7 @@ const config = {
   security: {
     apiKeyRequired: process.env.API_KEY_REQUIRED === 'true',
     apiKey: process.env.API_KEY || null,
-    jwtSecret: process.env.JWT_SECRET || 'your-secret-key-change-this',
+    jwtSecret: process.env.JWT_SECRET || 'your-super-secret-jwt-key-here-change-in-production',
     jwtExpiry: process.env.JWT_EXPIRY || '7d',
     sessionTimeout: parseInt(process.env.SESSION_TIMEOUT) || 24 * 60 * 60 * 1000, // 24 hours
     csrfProtection: process.env.CSRF_PROTECTION === 'true'
@@ -152,7 +152,6 @@ function loadEnvironmentConfig() {
       return envConfig.default || envConfig;
     }
   } catch (error) {
-    console.warn(`Failed to load environment config for ${config.environment}:`, error.message);
   }
   
   return {};
@@ -177,9 +176,10 @@ function mergeConfig(base, override) {
 function validateConfig(config) {
   const errors = [];
 
-  // Required configurations
-  if (!config.security.jwtSecret || config.security.jwtSecret === 'your-secret-key-change-this') {
-    errors.push('JWT_SECRET must be set to a secure value');
+  // Required configurations - only warn in production
+  if (config.environment === 'production' && 
+      (!config.security.jwtSecret || config.security.jwtSecret === 'your-super-secret-jwt-key-here-change-in-production')) {
+    errors.push('JWT_SECRET must be set to a secure value in production');
   }
 
   if (config.security.apiKeyRequired && !config.security.apiKey) {

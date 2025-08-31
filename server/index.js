@@ -42,9 +42,11 @@ import pty from 'node-pty';
 import fetch from 'node-fetch';
 import mime from 'mime-types';
 import v8 from 'v8';
+import multer from 'multer';
 
 import { getProjects, getSessions, getSessionMessages, renameProject, deleteSession, deleteProject, deleteProjectCompletely, addProjectManually, extractProjectDirectory, clearProjectDirectoryCache } from './projects.js';
 import { spawnClaude, abortClaudeSession, spawnClaudeStream } from './claude-cli.js';
+import { getProcessManager } from './lib/ProcessManager.js';
 import { spawnCodex } from './codex-cli.js';
 import gitRoutes from './routes/git.js';
 import previewRoutes, { setPreviewBroadcasterFn } from './routes/preview.js';
@@ -59,11 +61,21 @@ import claudeHooksRoutes from './routes/claude-hooks.js';
 import claudeStreamRoutes from './routes/claude-stream.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
+import { 
+  createSecureVerifyClient, 
+  handleAuthMessage,
+  validateMessage, 
+  setupConnectionCleanup, 
+  startHeartbeatInterval, 
+  getSecurityStats 
+} from './middleware/websocket-security.js';
 import { createLogger } from './utils/logger.js';
 
+// Keep old loggers for compatibility
 const slog = createLogger('SERVER');
 const clog = createLogger('CLAUDE');
 const shlog = createLogger('SHELL');
+
 import cleanupService from './cleanupService.js';
 import { 
   apiRateLimit, 
@@ -272,26 +284,16 @@ async function setupProjectsWatcher() {
 const app = express();
 const server = http.createServer(app);
 
-// Single WebSocket server that handles both paths
+// Enhanced WebSocket server with security middleware
 const wss = new WebSocketServer({ 
   server,
-  verifyClient: (info) => {
-    
-    // Extract token from query parameters or headers
-    const url = new URL(info.req.url, 'http://localhost');
-    const token = url.searchParams.get('token') || 
-                  info.req.headers.authorization?.split(' ')[1];
-    
-    // Verify token
-    const user = authenticateWebSocket(token);
-    if (!user) {
-      return false;
-    }
-    
-    // Store user info in the request for later use
-    info.req.user = user;
-    return true;
-  }
+  verifyClient: createSecureVerifyClient()
+});
+
+// Log all HTTP requests
+app.use((req, res, next) => {
+  slog.debug(`[HTTP] ${req.method} ${req.path}`);
+  next();
 });
 
 // Security and rate limiting middleware
@@ -384,6 +386,7 @@ app.get('/api/health', async (req, res) => {
           Date.now() - client.lastActivity < 300000 // 5 minutes
         ).length
       },
+      security: getSecurityStats(),
       responseTime: `${Date.now() - startTime}ms`
     };
 
@@ -403,6 +406,41 @@ app.get('/api/health', async (req, res) => {
       timestamp: new Date().toISOString(),
       error: error.message,
       responseTime: `${Date.now() - startTime}ms`
+    });
+  }
+});
+
+// Process manager statistics endpoint
+app.get('/api/process-stats', (req, res) => {
+  try {
+    const processManager = getProcessManager();
+    const stats = processManager.getStats();
+    res.json({
+      success: true,
+      stats,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Security statistics endpoint (protected)
+app.get('/api/security/stats', authenticateToken, (req, res) => {
+  try {
+    const securityStats = getSecurityStats();
+    res.json({
+      success: true,
+      data: securityStats,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
     });
   }
 });
@@ -1178,29 +1216,109 @@ app.get('/api/projects/:projectName/files', authenticateToken, async (req, res) 
   }
 });
 
-// WebSocket connection handler that routes based on URL path
+/**
+ * UNIFIED WEBSOCKET ARCHITECTURE
+ * 
+ * Endpoints:
+ * - /shell  - Terminal operations only (handleShellConnection)
+ * - /claude - Unified Claude + Codex + File operations (handleUnifiedClaudeConnection) 
+ * - /ws     - DEPRECATED, forwards to /claude with warnings (handleDeprecatedChatConnection)
+ * 
+ * Migration Status: COMPLETE
+ * - OverlayChat.jsx: ✅ Migrated to /claude
+ * - OverlayChatClaude.jsx: ✅ Already using /claude  
+ * - Shell.jsx: ✅ Uses /shell (unchanged)
+ * 
+ * Next Steps: Remove /ws endpoint and handleChatConnection_DEPRECATED in v2.0
+ */
+// WebSocket connection handler with enhanced security
 wss.on('connection', (ws, request) => {
   const url = request.url;
+  const clientIP = request.clientIP || 'unknown';
+  let isAuthenticated = false;
+  let user = null;
+  
+  slog.info(`[WebSocket] New connection: ${url} from ${clientIP} (awaiting auth)`);
+  
+  // Setup connection security and cleanup
+  setupConnectionCleanup(ws, clientIP);
   
   // Parse URL to get pathname without query parameters
   const urlObj = new URL(url, 'http://localhost');
   const pathname = urlObj.pathname;
   
-  if (pathname === '/shell') {
-    handleShellConnection(ws, request);
-  } else if (pathname === '/ws') {
-    handleChatConnection(ws, request);
-  } else if (pathname === '/claude') {
-    // New unified Claude WebSocket endpoint
-    handleUnifiedClaudeConnection(ws, request);
-  } else {
-    ws.close();
-  }
+  // Set up authentication timeout
+  const authTimeout = setTimeout(() => {
+    if (!isAuthenticated) {
+      slog.warn(`[WebSocket] Authentication timeout for ${clientIP}`);
+      ws.send(JSON.stringify({
+        type: 'auth-error',
+        error: 'Authentication timeout'
+      }));
+      ws.close();
+    }
+  }, 10000); // 10 second timeout
+  
+  // Handle the first message for authentication
+  const authHandler = (message) => {
+    const authResult = handleAuthMessage(ws, message, clientIP);
+    
+    if (!authResult.authenticated) {
+      slog.warn(`[WebSocket] Authentication failed for ${clientIP}: ${authResult.error}`);
+      ws.send(JSON.stringify({
+        type: 'auth-error',
+        error: authResult.error
+      }));
+      ws.close();
+      return;
+    }
+    
+    // Authentication successful
+    clearTimeout(authTimeout);
+    isAuthenticated = true;
+    user = authResult.user;
+    request.user = user; // Store user in request
+    
+    // Send success response
+    ws.send(JSON.stringify(authResult.response));
+    
+    slog.info(`[WebSocket] Authentication successful: ${pathname} from ${user.username}@${clientIP}`);
+    
+    // Remove auth handler and set up route-specific handlers
+    ws.removeListener('message', authHandler);
+    
+    // Route to appropriate handler
+    if (pathname === '/shell') {
+      handleShellConnection(ws, request);
+    } else if (pathname === '/ws') {
+      // DEPRECATED: Redirect to unified endpoint with warning
+      slog.warn(`[WebSocket] DEPRECATED: Client connecting to /ws endpoint should use /claude`);
+      handleDeprecatedChatConnection(ws, request);
+    } else if (pathname === '/claude') {
+      // New unified Claude WebSocket endpoint
+      handleUnifiedClaudeConnection(ws, request);
+    } else {
+      slog.warn(`[WebSocket] Unknown path: ${pathname} from ${clientIP}`);
+      ws.close();
+    }
+  };
+  
+  // Set up authentication message handler
+  ws.on('message', authHandler);
+  
+  // Handle early close
+  ws.on('close', () => {
+    clearTimeout(authTimeout);
+  });
 });
+
+// Start heartbeat interval for connection health monitoring
+startHeartbeatInterval(wss);
 
 // Unified Claude WebSocket handler - combines Shell and Chat functionality
 function handleUnifiedClaudeConnection(ws, request) {
   const user = request.user || { userId: 'anonymous', username: 'anonymous' };
+  clog.info(`[CLAUDE WS] New unified connection from user: ${user.username}`);
   
   // Track different session types
   const sessions = {
@@ -1251,8 +1369,12 @@ function handleUnifiedClaudeConnection(ws, request) {
   };
   
   ws.on('message', async (message) => {
+    const clientIP = request.clientIP || 'unknown';
+    const data = validateMessage(message, ws, clientIP);
+    if (!data) return; // Message validation failed
+    
     try {
-      const data = JSON.parse(message);
+      clog.debug(`[CLAUDE WS] Message received - Type: ${data.type}`);
       const clientInfo = connectedClients.get(ws);
       if (clientInfo) {
         clientInfo.lastActivity = Date.now();
@@ -1260,6 +1382,34 @@ function handleUnifiedClaudeConnection(ws, request) {
       
       // Route messages based on type
       switch(data.type) {
+        // Image upload (support in unified endpoint so overlay chat can use one socket)
+        case 'upload-image': {
+          try {
+            const { imageData, fileName } = data;
+            const matches = (imageData || '').match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
+            if (!matches) {
+              ws.send(JSON.stringify({ type: 'image-upload-error', error: 'Invalid image data format' }));
+              break;
+            }
+            const mimeType = matches[1];
+            const base64Data = matches[2];
+            const buffer = Buffer.from(base64Data, 'base64');
+            const imageId = `img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            const uploadDir = path.join(os.tmpdir(), 'claude-ui-images');
+            await fsPromises.mkdir(uploadDir, { recursive: true });
+            const ext = (fileName && fileName.split('.').pop()) || 'png';
+            const imagePath = path.join(uploadDir, `${imageId}.${ext}`);
+            await fsPromises.writeFile(imagePath, buffer);
+            if (!global.uploadedImages) global.uploadedImages = new Map();
+            const userContext = connectedClients.get(ws);
+            global.uploadedImages.set(imageId, { path: imagePath, mimetype: mimeType, fileName, userId: userContext?.userId || 'anonymous', uploadedAt: new Date() });
+            ws.send(JSON.stringify({ type: 'image-uploaded', imageId, path: imagePath, fileName }));
+          } catch (e) {
+            slog.error(`Unified upload-image error: ${e?.message || e}`);
+            try { ws.send(JSON.stringify({ type: 'image-upload-error', error: 'Failed to upload image' })); } catch {}
+          }
+          break;
+        }
         // Shell-specific messages
         case 'init':
           await handleShellInit(ws, data, sessions);
@@ -1283,6 +1433,7 @@ function handleUnifiedClaudeConnection(ws, request) {
           
         // Claude-specific messages  
         case 'claude-start-session': {
+          console.log('[/claude endpoint] Received claude-start-session');
           // Start persistent streaming process for Claude with requested mode (normal/bypass/resume)
           const options = data.options || {};
           let projectPath = options.projectPath || process.cwd();
@@ -1293,16 +1444,37 @@ function handleUnifiedClaudeConnection(ws, request) {
           }
           // Determine bypass from options (permissionMode, bypass flag, or force)
           const bypass = options.bypass === true || options.forceBypassPermissions === true || options.permissionMode === 'bypassPermissions';
+          
+          // Initialize options signature to prevent unnecessary restarts
+          const initialNorm = {
+            model: options.model || null,
+            permissionMode: bypass ? null : (options.permissionMode || null),
+            allowedTools: Array.isArray(options.allowedTools) ? [...options.allowedTools].sort() : [],
+            disallowedTools: Array.isArray(options.disallowedTools) ? [...options.disallowedTools].sort() : [],
+            bypass: !!bypass,
+          };
+          const initialSig = JSON.stringify(initialNorm);
+          
           const stream = spawnClaudeStream({ 
             ...options, 
             projectPath, 
             cwd: workingDir, 
             forceBypassPermissions: bypass
           }, ws, (sid) => {
-            try { sessions.claude.sessionId = sid; } catch {}
+            try { 
+              sessions.claude.sessionId = sid; 
+              // Send the real session ID to the frontend when it's captured
+              ws.send(JSON.stringify({ type: 'claude-session-started', sessionId: sid, temporary: false }));
+            } catch {}
           });
-          sessions.claude = { projectPath, sessionId: options.sessionId || null, stream, hasSentMessage: false };
-          try { ws.send(JSON.stringify({ type: 'claude-session-started', sessionId: `temp-${Date.now().toString(36)}`, temporary: true })); } catch {}
+          sessions.claude = { 
+            projectPath, 
+            sessionId: options.sessionId || null, 
+            stream, 
+            hasSentMessage: false,
+            lastOptionsSig: initialSig // Initialize to prevent unnecessary restart on first options update
+          };
+          // Don't send a temp session ID - wait for the real one from the callback
           break;
         }
         case 'claude-message':
@@ -1342,6 +1514,7 @@ function handleUnifiedClaudeConnection(ws, request) {
           }
 
           // If session hasn't materialized (no user message yet), queue options to apply later
+          // DO NOT stop the stream if it just started - just queue the options
           if (!sessions.claude.hasSentMessage) {
             sessions.claude.pendingOptions = opts;
             sessions.claude.pendingOptionsSig = sig;
@@ -1350,6 +1523,7 @@ function handleUnifiedClaudeConnection(ws, request) {
             break;
           }
 
+          // Only restart the stream if we've already sent messages (real options change)
           // Claim desired options to prevent concurrent duplicates, then stop and respawn
           sessions.claude.lastOptionsSig = sig;
           // Stop existing stream and apply new options
@@ -1413,6 +1587,7 @@ function handleUnifiedClaudeConnection(ws, request) {
   });
   
   ws.on('close', () => {
+    clog.info('[CLAUDE WS] Connection closed');
     // Cleanup all sessions
     if (sessions.shell?.process) {
       sessions.shell.process.kill();
@@ -1544,6 +1719,18 @@ async function handleClaudeMessage(ws, data, sessions) {
 
   // Write into streaming stdin (fast path)
   try {
+    // If this message brings new images, restart stream to apply -i flags
+    const hasNewImages = Array.isArray(data.options?.images) && data.options.images.length > 0;
+    if (hasNewImages) {
+      try { sessions.claude.stream?.stop(); } catch {}
+      const options = data.options || {};
+      const projectPath = sessions.claude.projectPath;
+      const workingDir = projectPath;
+      const stream = spawnClaudeStream({ ...options, projectPath, cwd: workingDir, forceBypassPermissions: true }, ws, (sid) => {
+        try { sessions.claude.sessionId = sid; } catch {}
+      });
+      sessions.claude.stream = stream;
+    }
     const sid = data.sessionId || sessions.claude.sessionId || null;
     const ok = sessions.claude.stream.writeMessage(data.message, sid);
     if (!ok) {
@@ -1556,6 +1743,9 @@ async function handleClaudeMessage(ws, data, sessions) {
     // Mark session as materialized after first successful write
     if (!sessions.claude.hasSentMessage) {
       sessions.claude.hasSentMessage = true;
+      // DISABLED: This was killing the Claude process immediately after first message
+      // The frontend now handles preventing immediate options updates after session start
+      /*
       // If there are queued options, apply them now with resume
       if (sessions.claude.pendingOptions && sessions.claude.pendingOptionsSig) {
         try { sessions.claude.stream?.stop(); } catch {}
@@ -1579,6 +1769,7 @@ async function handleClaudeMessage(ws, data, sessions) {
         sessions.claude.pendingOptions = null;
         sessions.claude.pendingOptionsSig = null;
       }
+      */
     }
   } catch (e) {
     clog.warn(`Stream write error: ${e?.message || e}`);
@@ -1605,8 +1796,31 @@ async function handleCodexMessage(ws, data, codexSession, codexQueue, processNex
   processNext();
 }
 
-// Handle chat WebSocket connections
-function handleChatConnection(ws, request) {
+// DEPRECATED: Handle legacy /ws connections with warnings
+function handleDeprecatedChatConnection(ws, request) {
+  const user = request.user || { userId: 'anonymous', username: 'anonymous' };
+  
+  // Send immediate deprecation warning
+  try {
+    ws.send(JSON.stringify({ 
+      type: 'deprecation-warning', 
+      message: 'The /ws WebSocket endpoint is deprecated. Please use /claude endpoint instead.',
+      endpoint: '/ws',
+      recommendedEndpoint: '/claude'
+    }));
+  } catch {}
+  
+  // Log deprecation usage
+  slog.warn(`[DEPRECATED] User ${user.username} (${user.userId}) using deprecated /ws endpoint`);
+  
+  // Forward to unified handler for now (backward compatibility)
+  handleUnifiedClaudeConnection(ws, request);
+}
+
+// LEGACY: Handle chat WebSocket connections (DEPRECATED - scheduled for removal in v2.0)
+// This function is kept for reference only and should not be called
+// All functionality has been moved to handleUnifiedClaudeConnection
+function handleChatConnection_DEPRECATED(ws, request) {
   
   // Store user context for session isolation
   const user = request.user; // From WebSocket authentication
@@ -1650,12 +1864,17 @@ function handleChatConnection(ws, request) {
   };
   
   ws.on('message', async (message) => {
+    const clientIP = request.clientIP || 'unknown';
+    const data = validateMessage(message, ws, clientIP);
+    if (!data) return; // Message validation failed
+    
     try {
-      const data = JSON.parse(message);
+      slog.debug(`[WS] Received message type: ${data.type}`);
       
       // Handle image upload from Shell/Chat
       if (data.type === 'upload-image') {
         const { imageData, fileName } = data;
+        slog.debug(`[IMAGE UPLOAD] Requested: ${fileName}`);
         slog.info(`Image upload requested: ${fileName}`);
         
         try {
@@ -1719,6 +1938,8 @@ function handleChatConnection(ws, request) {
       }
       
       if (data.type === 'claude-command') {
+        clog.debug(`[CLAUDE] Command received: ${data.command?.substring(0, 100)}...`);
+        clog.debug(`[CLAUDE] Options:`, data.options);
         clog.debug('Received claude-command: ' + JSON.stringify({ command: data.command?.substring(0, 50), options: data.options }));
         
         // Register user's active project for smart broadcasting
@@ -1729,6 +1950,8 @@ function handleChatConnection(ws, request) {
         
         await spawnClaude(data.command, data.options, ws);
       } else if (data.type === 'codex-command') {
+        slog.debug(`[CODEX] Command received: ${data.command?.substring(0, 100)}...`);
+        slog.debug(`[CODEX] Options:`, data.options);
         // Register user's active project for smart broadcasting
         if (data.options?.projectPath) {
           const projectName = data.options.projectPath.split('/').pop();
@@ -1770,17 +1993,15 @@ function handleChatConnection(ws, request) {
         // Inform idle state
         try { ws.send(JSON.stringify({ type: 'codex-idle' })); } catch {}
       } else if (data.type === 'claude-start-session') {
-        // Start Claude session just like the unified handler
-        // Aligns overlay start with Shell behaviour (spawn with no command)
-        await handleClaudeStart(ws, data, sessions);
+        // DEPRECATED: Claude sessions are now handled via the /claude WebSocket endpoint
+        // This handler is kept only for backward compatibility but does nothing
+        console.log('[/ws endpoint] WRONG ENDPOINT - Received claude-start-session, should use /claude');
+        slog.warn('[WS] Received claude-start-session on /ws endpoint - ignoring (use /claude endpoint instead)');
+        // Do NOT send any response - frontend should use /claude endpoint
       } else if (data.type === 'claude-end-session') {
-        // End Claude session
-        try {
-          if (sessions.claude?.sessionId) {
-            abortClaudeSession(sessions.claude.sessionId);
-          }
-        } catch {}
-        sessions.claude = null;
+        // DEPRECATED: Claude sessions are now handled via the /claude WebSocket endpoint
+        // This handler is kept only for backward compatibility but does nothing
+        slog.warn('[WS] Received claude-end-session on /ws endpoint - ignoring (use /claude endpoint instead)');
         ws.send(JSON.stringify({ type: 'claude-session-closed' }));
       } else if (data.type === 'codex-start-session') {
         // Acknowledgement-only: do NOT spawn Codex here to avoid autonomous actions
@@ -1831,8 +2052,11 @@ function handleShellConnection(ws, request) {
   let bypassPermissions = false;
   
   ws.on('message', async (message) => {
+    const clientIP = request.clientIP || 'unknown';
+    const data = validateMessage(message, ws, clientIP);
+    if (!data) return; // Message validation failed
+    
     try {
-      const data = JSON.parse(message);
       const LOG_SHELL_KEYS = process.env.LOG_SHELL_KEYS === 'true';
       
       // Log Shell messages (avoid per-keystroke noise)
@@ -2455,7 +2679,6 @@ app.post('/api/projects/:projectName/upload-images', authenticateToken, async (r
 
 // Import the robust Vibe proxy
 import VibeKanbanProxy from './lib/vibe-proxy.js';
-import multer from 'multer';
 
 // Initialize Vibe Kanban proxy with configuration
 const vibeProxy = new VibeKanbanProxy({
@@ -2622,11 +2845,9 @@ app.get('/api/preview-proxy', async (req, res) => {
         // Disable WebSocket in preview mode to prevent interference
         (function() {
           if (window.parent !== window) {
-            console.log('Preview Mode: Disabling WebSocket connections');
             const OriginalWebSocket = window.WebSocket;
             window.WebSocket = class WebSocketDisabled {
               constructor(url) {
-                console.log('WebSocket blocked in preview mode:', url);
                 this.readyState = 0;
                 this.url = url;
               }
@@ -2983,6 +3204,7 @@ async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden =
   });
 }
 
+
 const PORT = process.env.PORT || 8080;
 
 // Initialize database and start server
@@ -3006,7 +3228,16 @@ async function startServer() {
     
     // Listen on all interfaces (0.0.0.0) to allow access from network
     server.listen(PORT, '0.0.0.0', async () => {
-      slog.success(`API server ready on http://localhost:${PORT}`);
+      // Use the enhanced printStartupBanner from logger
+      const { printStartupBanner, logReady } = await import('./utils/logger.js');
+      
+      // Clear any pending logs and show beautiful banner
+      console.log('');
+      printStartupBanner({ CLIENT: 5892, SERVER: PORT, VIBE: 6734 });
+      
+      // Log ready status
+      logReady('SERVER', PORT);
+      
       
       // Start watching the projects folder for changes
       await setupProjectsWatcher(); // Re-enabled with better-sqlite3
@@ -3062,6 +3293,16 @@ async function gracefulShutdown(signal) {
   // Stop Vibe Kanban proxy health checks
   if (vibeProxy) {
     vibeProxy.destroy();
+  }
+  
+  // Shutdown all Claude processes via ProcessManager
+  try {
+    const processManager = getProcessManager();
+    slog.info('🔄 Shutting down all Claude processes...');
+    await processManager.shutdownAll();
+    slog.info('✅ All Claude processes shut down successfully');
+  } catch (error) {
+    slog.error(`❌ Error shutting down Claude processes: ${error.message}`);
   }
   
   // Close shell sessions

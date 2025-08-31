@@ -4,7 +4,6 @@ export const cleanUsageData = () => {
   localStorage.removeItem('lastUsageImport');
   localStorage.removeItem('cachedUsageStats');
   
-  console.log('Usage data cache cleared. Will reimport on next load.');
   
   // Reload the page to trigger fresh import
   window.location.reload();

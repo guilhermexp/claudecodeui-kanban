@@ -81,6 +81,14 @@ function MainContent({
   const [showGitModal, setShowGitModal] = useState(false);
   const [claudeOverlaySessionId, setClaudeOverlaySessionId] = useState(null);
   const [endClaudeOverlaySession, setEndClaudeOverlaySession] = useState(null);
+  
+  // Debug logging for endClaudeOverlaySession updates
+  useEffect(() => {
+    console.log('[MainContent] endClaudeOverlaySession updated:', {
+      hasFunction: typeof endClaudeOverlaySession === 'function',
+      value: endClaudeOverlaySession
+    });
+  }, [endClaudeOverlaySession]);
 
   // Notify parent component about active side panel changes
   useEffect(() => {
@@ -455,6 +463,7 @@ function MainContent({
                   <span className="hidden sm:inline">Claude</span>
                 </span>
               </button>
+              
 
             </div>
           </div>
@@ -469,9 +478,17 @@ function MainContent({
               )}
               {endClaudeOverlaySession && (
                 <button
-                  onClick={() => { try { endClaudeOverlaySession(); } catch {} }}
+                  onClick={() => { 
+                    try { 
+                      endClaudeOverlaySession(); 
+                      // Close panel after a delay to allow session to end properly
+                      setTimeout(() => {
+                        setActiveSidePanel(null);
+                      }, 500);
+                    } catch {} 
+                  }}
                   className="px-2 h-7 rounded-md text-[11px] bg-background/80 border border-border/40 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                  title="End Claude session"
+                  title="End Claude session and close panel"
                 >End</button>
               )}
               {/* Settings */}
@@ -570,6 +587,7 @@ function MainContent({
             </div>
           </div>
         )}
+        
 
         {/* Mobile support - keeping existing tabs behavior */}
         {isMobile && (

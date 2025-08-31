@@ -24,7 +24,6 @@ export function useMessageFeedback(initialMessages = []) {
       setMessages(prev => {
         const filtered = filterExpiredMessages(prev);
         if (filtered.length !== prev.length) {
-          console.log(`🧹 Cleaned ${prev.length - filtered.length} expired messages`);
         }
         return filtered;
       });
@@ -48,7 +47,6 @@ export function useMessageFeedback(initialMessages = []) {
       const timerId = setTimeout(() => {
         setMessages(prev => prev.filter(m => m.id !== processed.id));
         timersRef.current.delete(processed.id);
-        console.log(`🗑️ Auto-dismissed: ${processed.text.substring(0, 30)}...`);
       }, processed.dismissTimeout);
       
       timersRef.current.set(processed.id, timerId);
@@ -112,7 +110,6 @@ export function useMessageFeedback(initialMessages = []) {
     
     // Remove temporary messages
     setMessages(prev => prev.filter(m => !m.temporary));
-    console.log('🧹 Cleared all temporary messages');
   }, []);
 
   // Clear all messages
@@ -124,7 +121,6 @@ export function useMessageFeedback(initialMessages = []) {
     
     setMessages([]);
     setStatusMessage(null);
-    console.log('🗑️ Cleared all messages');
   }, []);
 
   // Remove a specific message

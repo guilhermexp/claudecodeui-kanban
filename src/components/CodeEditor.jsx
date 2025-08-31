@@ -43,7 +43,6 @@ const CodeEditor = forwardRef(({
       import('remark-gfm').then(module => {
         setRemarkGfm(() => module.default);
       }).catch(err => {
-        console.log('Could not load remark-gfm, using basic markdown');
       });
     }
   }, [file.name]);
