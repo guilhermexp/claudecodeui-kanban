@@ -1,0 +1,30 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": [
+    "src/main.jsx",
+    "server/index.js",
+    "scripts/dev.js",
+    "vibe-kanban/backend/src/**/*.rs"
+  ],
+  "project": [
+    "src/**/*.{js,jsx,ts,tsx}",
+    "server/**/*.js",
+    "scripts/**/*.js"
+  ],
+  "ignore": [
+    "**/*.test.{js,jsx,ts,tsx}",
+    "**/*.spec.{js,jsx,ts,tsx}",
+    "**/tests/**",
+    "vibe-kanban/backend/bindings/**",
+    "public/**",
+    "examples/**"
+  ],
+  "ignoreDependencies": [
+    "@vitejs/plugin-react",
+    "autoprefixer",
+    "postcss",
+    "tailwindcss",
+    "vite"
+  ],
+  "ignoreExportsUsedInFile": true
+}

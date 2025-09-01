@@ -20,26 +20,34 @@ export default function createMarkdownComponents() {
           const lineCount = lines.length;
           const preview = lines.slice(0, 3).join('\n');
           return (
-            <div className="relative group w-full">
-              <div className="flex items-center justify-between mb-2 px-3 py-2 bg-muted/30 rounded-t-lg border border-border/50">
-                <button onClick={() => setCollapsed(!collapsed)} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+            <div className="relative group w-full -mx-2 sm:-mx-3">
+              <div className="flex items-center justify-between px-3 py-1.5 border-b border-border/20 rounded-t-md bg-zinc-950/70 border border-border/30">
+                <button onClick={() => setCollapsed(!collapsed)} className="flex items-center gap-1.5 text-[12px] text-muted-foreground hover:text-foreground transition-colors">
                   <svg className={`w-4 h-4 transition-transform ${collapsed ? '' : 'rotate-90'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
-                  <span className="font-mono text-xs">{language} • {lineCount} lines {collapsed ? '(click to expand)' : ''}</span>
+                  <span className="font-mono text-[11px]">{language} • {lineCount} {collapsed ? 'lines (click to expand)' : 'lines'}</span>
                 </button>
-                <button onClick={handleCopy} className="px-2 py-1 text-[11px] rounded-md bg-background/80 border border-border hover:bg-accent">{copied ? 'Copied' : 'Copy'}</button>
+                <button onClick={handleCopy} className="px-2 py-0.5 text-[11px] rounded-md border border-border/40 bg-transparent hover:bg-accent/40">{copied ? 'Copied' : 'Copy'}</button>
               </div>
               {collapsed ? (
-                <div className="px-3 py-2 bg-muted/10 rounded-b-lg border-x border-b border-border/50">
+                <div className="px-3 py-2 bg-zinc-950/50 rounded-b-md border border-t-0 border-border/30">
                   <pre className="text-xs font-mono text-muted-foreground whitespace-pre-wrap break-words overflow-auto">
                     <code>{preview}{lineCount > 3 ? '\n...' : ''}</code>
                   </pre>
                 </div>
               ) : (
-                <SyntaxHighlighter style={vscDarkPlus} language={language} PreTag="div" customStyle={{ margin: 0, borderRadius: '0 0 0.5rem 0.5rem', fontSize: '0.875rem', width: '100%', overflowX: 'auto' }} {...props}>
-                  {String(text).replace(/\n$/, '')}
-                </SyntaxHighlighter>
+                <div className="border border-t-0 border-border/30 rounded-b-md overflow-hidden">
+                  <SyntaxHighlighter
+                    style={vscDarkPlus}
+                    language={language}
+                    PreTag="div"
+                    customStyle={{ margin: 0, fontSize: '0.9rem', width: '100%', overflowX: 'auto', overflowY: 'auto', maxHeight: '60vh', background: 'transparent', padding: '12px 14px' }}
+                    {...props}
+                  >
+                    {String(text).replace(/\n$/, '')}
+                  </SyntaxHighlighter>
+                </div>
               )}
             </div>
           );
@@ -49,9 +57,13 @@ export default function createMarkdownComponents() {
       // Multiline code block without language: collapsible minimal block
       if (!inline) {
         const text = String(children || '');
+        // Persist collapse per text
+        const collapsedStore = (createMarkdownComponents.__collapsedStore ||= new Map());
+        const hash = (s) => { let h=2166136261; for(let i=0;i<s.length;i++){h^=s.charCodeAt(i); h=(h*16777619)>>>0;} return h.toString(36); };
+        const key = 'plain:'+hash(text);
         const CollapsiblePlain = () => {
           const [copied, setCopied] = useState(false);
-          const [collapsed, setCollapsed] = useState(true);
+          const [collapsed, setCollapsed] = useState(() => collapsedStore.has(key) ? !!collapsedStore.get(key) : true);
           const lines = text.split('\n');
           const lineCount = lines.length;
           const preview = lines.slice(0, 3).join('\n');
@@ -59,26 +71,24 @@ export default function createMarkdownComponents() {
             try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1200); } catch {}
           };
           return (
-            <div className="relative group w-full">
-              <div className="flex items-center justify-between mb-2 px-3 py-2 bg-muted/30 rounded-lg border border-border/50">
-                <button onClick={() => setCollapsed(!collapsed)} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+            <div className="relative group w-full -mx-2 sm:-mx-3">
+              <div className="flex items-center justify-between px-3 py-1.5 border-b border-border/20 rounded-t-md bg-zinc-950/70 border border-border/30">
+                <button onClick={() => setCollapsed(!collapsed)} className="flex items-center gap-1.5 text-[12px] text-muted-foreground hover:text-foreground transition-colors">
                   <svg className={`w-4 h-4 transition-transform ${collapsed ? '' : 'rotate-90'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
-                  <span className="font-mono text-xs">
-                    text • {lineCount} {collapsed ? 'lines (click to expand)' : 'lines'}
-                  </span>
+                  <span className="font-mono text-[11px]">text • {lineCount} {collapsed ? 'lines (click to expand)' : 'lines'}</span>
                 </button>
-                <button onClick={handleCopy} className="px-2 py-1 text-[11px] rounded-md bg-background/80 border border-border hover:bg-accent">{copied ? 'Copied' : 'Copy'}</button>
+                <button onClick={handleCopy} className="px-2 py-0.5 text-[11px] rounded-md border border-border/40 bg-transparent hover:bg-accent/40">{copied ? 'Copied' : 'Copy'}</button>
               </div>
               {collapsed ? (
-                <div className="px-3 py-2 bg-muted/10 rounded-lg border border-border/50">
+                <div className="px-3 py-2 bg-zinc-950/50 rounded-b-md border border-t-0 border-border/30">
                   <pre className="text-xs font-mono text-muted-foreground whitespace-pre-wrap break-words overflow-auto">
                     {preview}{lineCount > 3 ? '\n...' : ''}
                   </pre>
                 </div>
               ) : (
-                <pre className="w-full bg-muted/20 border border-border/50 rounded-lg p-3 text-[13px] leading-relaxed font-mono whitespace-pre-wrap break-words overflow-auto">
+                <pre className="w-full border border-t-0 border-border/30 rounded-b-md p-3 text-[13px] leading-relaxed font-mono whitespace-pre-wrap break-words overflow-auto bg-zinc-950/50 max-h-[60vh]">
                   {text}
                 </pre>
               )}

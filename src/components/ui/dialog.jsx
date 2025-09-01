@@ -2,14 +2,14 @@ import React, { useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
-const Dialog = ({ open, onOpenChange, children }) => {
+const Dialog = ({ open, onOpenChange, children, backdropClassName }) => {
   if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-50">
       {/* Backdrop */}
       <div 
-        className="fixed inset-0 bg-black/50 backdrop-blur-sm"
+        className={cn("fixed inset-0", backdropClassName || "bg-black/50 backdrop-blur-sm")}
         onClick={() => onOpenChange?.(false)}
       />
       {/* Content */}

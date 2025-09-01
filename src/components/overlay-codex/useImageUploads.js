@@ -58,7 +58,8 @@ export default function useImageUploads() {
     onDragLeave,
     onDrop,
     removeImageAttachment,
-    clearImages
+    clearImages,
+    // Allow external callers (e.g., paste handler) to add files directly
+    addFiles: handleFiles
   };
 }
-

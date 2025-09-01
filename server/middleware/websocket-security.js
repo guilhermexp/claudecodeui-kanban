@@ -251,18 +251,27 @@ function setupConnectionCleanup(ws, clientIP) {
   ws.isAlive = true;
   ws.on('pong', () => {
     ws.isAlive = true;
+    // Treat pong as activity
+    try { resetInactivityTimer(); } catch {}
   });
   
-  // Connection timeout
-  const timeout = setTimeout(() => {
-    if (ws.readyState === ws.OPEN) {
-      wslog.warn(`Connection timeout for ${clientIP}`);
-      ws.terminate();
-    }
-  }, SECURITY_CONFIG.CONNECTION_TIMEOUT_MS);
+  // Idle timeout (resets on activity)
+  let inactivityTimer = null;
+  const resetInactivityTimer = () => {
+    if (inactivityTimer) clearTimeout(inactivityTimer);
+    inactivityTimer = setTimeout(() => {
+      if (ws.readyState === ws.OPEN) {
+        wslog.warn(`Inactivity timeout for ${clientIP}`);
+        ws.terminate();
+      }
+    }, SECURITY_CONFIG.CONNECTION_TIMEOUT_MS);
+  };
+  // Consider any message as activity
+  ws.on('message', resetInactivityTimer);
+  resetInactivityTimer();
   
-  ws.on('close', () => clearTimeout(timeout));
-  ws.on('error', () => clearTimeout(timeout));
+  ws.on('close', () => { if (inactivityTimer) clearTimeout(inactivityTimer); });
+  ws.on('error', () => { if (inactivityTimer) clearTimeout(inactivityTimer); });
 }
 
 /**
