@@ -16,7 +16,7 @@
     "client:network": "vite --host 0.0.0.0",
     "vibe-backend": "cd vibe-kanban && PORT=6734 cargo run --release",
     "build": "vite build",
-    "preview": "vite preview",
+    "preview": "vite build && vite preview",
     "start": "npm run build && npm run server",
     "protect-ports": "node scripts/port-protection.js",
     "port-status": "node scripts/port-management.js detect",

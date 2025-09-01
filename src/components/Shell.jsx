@@ -126,6 +126,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   const [isConnecting, setIsConnecting] = useState(false);
   const [isBypassingPermissions, setIsBypassingPermissions] = useState(false);
   const [isManualDisconnect, setIsManualDisconnect] = useState(false);
+  const isAuthenticatedRef = useRef(false);
   
   // Command history state
   const commandHistory = useRef([]);
@@ -1606,7 +1607,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
         wsBaseUrl = `${protocol}//${window.location.hostname}:${apiPort}`;
       }
       
-      // Include token in WebSocket URL as query parameter
+      // Include token in WebSocket URL for backward compatibility (server now expects auth message)
       const wsUrl = `${wsBaseUrl}/shell?token=${encodeURIComponent(token)}`;
       
       // Reset initialization flag before creating new connection
@@ -1617,6 +1618,13 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       ws.current.onopen = () => {
         setIsConnected(true);
         setIsConnecting(false);
+        // Reset auth state for this connection and send auth as FIRST message
+        isAuthenticatedRef.current = false;
+        try {
+          ws.current.send(JSON.stringify({ type: 'auth', token }));
+        } catch (e) {
+          // If sending fails, connection will close and retry
+        }
         
         // Show reconnection success message if this was a reconnection
         if (lastSessionId && terminal.current) {
@@ -1637,61 +1645,55 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
           }
         }, 30000); // Send ping every 30 seconds
         
-        // Wait for terminal to be ready, then fit and send dimensions
-        setTimeout(() => {
-          if (fitAddon.current && terminal.current) {
-            // Force a fit to ensure proper dimensions
-            fitAddon.current.fit();
-            
-            // Wait a bit more for fit to complete, then send dimensions
-            setTimeout(() => {
-              // Only send init if not already initialized for this connection
-              if (!hasInitialized.current) {
-                // Use stored session ID if this is a reconnection, otherwise use current session
-                const sessionIdToUse = lastSessionId || selectedSession?.id;
-                const projectPathToUse = lastProjectPath.current || selectedProject.fullPath || selectedProject.path;
-                
-                const initPayload = {
-                  type: 'init',
-                  projectPath: projectPathToUse,
-                  sessionId: sessionIdToUse,
-                  hasSession: !!sessionIdToUse,
-                  cols: terminal.current.cols,
-                  rows: terminal.current.rows,
-                  bypassPermissions: isBypassingPermissions,
-                  isReconnection: !!lastSessionId // Flag to indicate this is a reconnection
-                };
-                
-                // Store session info for future reconnections
-                if (sessionIdToUse) {
-                  setLastSessionId(sessionIdToUse);
-                }
-                if (projectPathToUse) {
-                  lastProjectPath.current = projectPathToUse;
-                }
-                
-                ws.current.send(JSON.stringify(initPayload));
-                hasInitialized.current = true;
-              }
-              
-              // Also send resize message immediately after init
-              setTimeout(() => {
-                if (terminal.current && ws.current && ws.current.readyState === WebSocket.OPEN) {
-                  ws.current.send(JSON.stringify({
-                    type: 'resize',
-                    cols: terminal.current.cols,
-                    rows: terminal.current.rows
-                  }));
-                }
-              }, 100);
-            }, 50);
-          }
-        }, 200);
+        // Initialization now happens after receiving auth-success
       };
 
       ws.current.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+          if (data.type === 'auth-success') {
+            // Mark authenticated and perform initialization handshake
+            isAuthenticatedRef.current = true;
+            // Fit and send init + initial resize
+            setTimeout(() => {
+              if (fitAddon.current && terminal.current && ws.current?.readyState === WebSocket.OPEN) {
+                try { fitAddon.current.fit(); } catch {}
+                setTimeout(() => {
+                  if (!hasInitialized.current && ws.current?.readyState === WebSocket.OPEN) {
+                    const sessionIdToUse = lastSessionId || selectedSession?.id;
+                    const projectPathToUse = lastProjectPath.current || selectedProject.fullPath || selectedProject.path;
+                    const initPayload = {
+                      type: 'init',
+                      projectPath: projectPathToUse,
+                      sessionId: sessionIdToUse,
+                      hasSession: !!sessionIdToUse,
+                      cols: terminal.current.cols,
+                      rows: terminal.current.rows,
+                      bypassPermissions: isBypassingPermissions,
+                      isReconnection: !!lastSessionId
+                    };
+                    if (sessionIdToUse) setLastSessionId(sessionIdToUse);
+                    if (projectPathToUse) lastProjectPath.current = projectPathToUse;
+                    try { ws.current.send(JSON.stringify(initPayload)); } catch {}
+                    hasInitialized.current = true;
+                  }
+                  // Send resize after init
+                  setTimeout(() => {
+                    if (terminal.current && ws.current?.readyState === WebSocket.OPEN) {
+                      try {
+                        ws.current.send(JSON.stringify({
+                          type: 'resize',
+                          cols: terminal.current.cols,
+                          rows: terminal.current.rows
+                        }));
+                      } catch {}
+                    }
+                  }, 100);
+                }, 50);
+              }
+            }, 200);
+            return;
+          }
           if (data.type === 'output') {
             // Mark session as active when receiving output from Claude
             markSessionActive();

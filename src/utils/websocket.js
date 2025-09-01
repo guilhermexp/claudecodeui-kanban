@@ -3,7 +3,7 @@ import { createLogger } from './logger';
 
 const log = createLogger('WebSocket');
 
-export function useWebSocket(authReady = false, wsPath = '/ws') {
+export function useWebSocket(authReady = false, wsPath = '/claude') {
   const [ws, setWs] = useState(null);
   const [messages, setMessages] = useState([]);
   const [isConnected, setIsConnected] = useState(false);

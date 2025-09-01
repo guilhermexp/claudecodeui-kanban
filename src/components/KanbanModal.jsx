@@ -103,9 +103,9 @@ function KanbanModal({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-6xl max-h-[85vh] p-0">
-        <DialogHeader className="px-4 pr-12 pt-4 pb-3 border-b border-border/50 bg-background/50">
+    <Dialog open={isOpen} onOpenChange={onClose} backdropClassName="bg-black/50">
+      <DialogContent className="w-full max-w-6xl max-h-[85vh] p-0 bg-card border border-border mx-2 sm:mx-auto">
+        <DialogHeader className="px-3 sm:px-5 pr-12 pt-3 pb-2 sm:pt-4 sm:pb-3 border-b border-border bg-card">
           <div className="flex items-center justify-between w-full">
             <div className="flex items-center gap-2">
               <Kanban className="w-5 h-5 text-primary/70" />
@@ -162,7 +162,7 @@ function KanbanModal({
                 
                 {/* Dropdown Menu - Grid Layout */}
                 {dropdownOpen && (
-                  <div className="absolute top-full left-0 mt-2 w-[600px] bg-background border border-border rounded-xl shadow-2xl z-50 p-4">
+                  <div className="absolute top-full left-0 mt-2 w-[600px] bg-card border border-border rounded-xl shadow-2xl z-50 p-4">
                     <div className="mb-3">
                       <h3 className="text-sm font-semibold text-foreground">Select Project</h3>
                       <p className="text-xs text-muted-foreground mt-1">Choose a project to view its task board</p>
@@ -279,7 +279,7 @@ function KanbanModal({
           </div>
         </DialogHeader>
 
-        <div className="h-[calc(85vh-4rem)] overflow-hidden bg-background/30">
+        <div className="h-[calc(85vh-4rem)] overflow-hidden bg-card">
           {activeTab === 'kanban' ? (
             <KanbanModalContent 
               selectedProject={selectedProject}

@@ -37,6 +37,7 @@ export function useClaudeStreamHandler({
 }) {
   const processedMessagesRef = useRef(new Set());
   const lastToolLabelRef = useRef(null);
+  const lastAssistantTextRef = useRef(null);
   const log = createLogger('ClaudeStream');
 
   const processClaudeMessage = useCallback((lastMsg) => {
@@ -48,7 +49,7 @@ export function useClaudeStreamHandler({
       return true; // already handled
     }
     // Only track keys we handle
-    const handledTypes = new Set(['claude-session-started','session-not-found','claude-session-closed','claude-response','claude-output','claude-error','claude-complete']);
+    const handledTypes = new Set(['claude-session-started','session-not-found','claude-session-closed','claude-response','claude-output','claude-error','claude-complete','session-aborted']);
     if (!handledTypes.has(lastMsg.type)) return false;
     processedMessagesRef.current.add(msgKey);
     if (processedMessagesRef.current.size > 200) {
@@ -131,8 +132,15 @@ export function useClaudeStreamHandler({
         }
         if (data.type === 'assistant') {
           const text = normalizeAssistantEvent(data);
-          if (text && String(text).trim()) {
-            addMessage?.({ type: 'assistant', text: String(text).trim() });
+          const t = text && String(text).trim();
+          if (t) {
+            // Deduplicate identical assistant texts (often followed by a 'result' event)
+            if (lastAssistantTextRef.current !== t) {
+              addMessage?.({ type: 'assistant', text: t });
+              lastAssistantTextRef.current = t;
+            } else {
+              log.debug('Skipped duplicate assistant text');
+            }
           }
           setIsTyping(false);
           setTypingStatus({ mode: 'idle', label: '' });
@@ -142,11 +150,21 @@ export function useClaudeStreamHandler({
         }
         if (data.type === 'completion' || data.type === 'result') {
           const finalText = normalizeResultEvent(data);
-          if (finalText) addMessage?.({ type: 'assistant', text: finalText });
+          if (finalText) {
+            const ft = String(finalText).trim();
+            // If result repeats the same content as the last assistant event, skip to avoid duplicates
+            if (lastAssistantTextRef.current && lastAssistantTextRef.current === ft) {
+              log.debug('Skipped duplicate result text');
+            } else {
+              addMessage?.({ type: 'assistant', text: ft });
+            }
+          }
           setIsTyping(false);
           setTypingStatus({ mode: 'idle', label: '' });
           setActivityLock(false);
           lastToolLabelRef.current = null;
+          // Reset remembered assistant text after finalization
+          lastAssistantTextRef.current = null;
           return true;
         }
       } catch (e) {
@@ -177,6 +195,14 @@ export function useClaudeStreamHandler({
       setTypingStatus({ mode: 'idle', label: '' });
       setActivityLock(false);
       addMessage?.({ type: 'error', text: lastMsg.error });
+      return true;
+    }
+
+    if (lastMsg.type === 'session-aborted') {
+      setIsTyping(false);
+      setTypingStatus({ mode: 'idle', label: '' });
+      setActivityLock(false);
+      addMessage?.({ type: 'system', text: 'Aborted current operation' });
       return true;
     }
 

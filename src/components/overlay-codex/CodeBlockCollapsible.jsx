@@ -1,6 +1,13 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+
+const collapsedStore = new Map();
+function hash(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = (h * 16777619) >>> 0; }
+  return h.toString(36);
+}
 
 export default function CodeBlockCollapsible({ language, text }) {
   const [copied, setCopied] = React.useState(false);
@@ -8,7 +15,8 @@ export default function CodeBlockCollapsible({ language, text }) {
   const src = String(text || '');
   const lines = src.split('\n');
   const lineCount = lines.length;
-  const [collapsed, setCollapsed] = React.useState(lineCount > 12);
+  const key = useMemo(() => `codex:${hash(src)}`, [src]);
+  const [collapsed, setCollapsed] = React.useState(() => collapsedStore.has(key) ? !!collapsedStore.get(key) : (lineCount > 12));
 
   const handleCopy = async () => {
     try { await navigator.clipboard.writeText(src); setCopied(true); setTimeout(() => setCopied(false), 1200); } catch {}
@@ -23,11 +31,12 @@ export default function CodeBlockCollapsible({ language, text }) {
   }, [src]);
 
   return (
-    <div className="w-full max-w-full">
-      <div className="flex items-center justify-between gap-2 px-1.5 sm:px-2 py-1">
+    <div className="w-full max-w-full -mx-2 sm:-mx-3">
+      <div className="rounded-md border border-border/30 bg-zinc-950/70 overflow-hidden">
+      <div className="flex items-center justify-between gap-2 px-2 sm:px-3 py-1.5 border-b border-border/20">
         <button
           type="button"
-          onClick={() => setCollapsed(prev => !prev)}
+          onClick={() => { const next = !collapsed; collapsedStore.set(key, next); setCollapsed(next); }}
           aria-expanded={!collapsed}
           className="flex items-center gap-2 text-[12px] sm:text-sm text-muted-foreground hover:text-foreground transition-colors min-w-0 flex-1 text-left cursor-pointer"
         >
@@ -60,7 +69,7 @@ export default function CodeBlockCollapsible({ language, text }) {
               fontSize: '0.9rem',
               whiteSpace: wrap ? 'pre-wrap' : 'pre',
               wordBreak: wrap ? 'break-word' : 'normal',
-              overflowX: 'hidden',
+              overflowX: 'auto',
               overflowY: 'auto',
               maxHeight: '60vh'
             }}
@@ -69,7 +78,7 @@ export default function CodeBlockCollapsible({ language, text }) {
           </SyntaxHighlighter>
         </div>
       )}
+      </div>
     </div>
   );
 }
-

@@ -38,7 +38,11 @@ function formatToolUse(block) {
   }
   if (type.includes('bash')) {
     const cmd = block.input?.command || block.input?.cmd || '';
-    return cmd ? `💻 Bash: ${cmd}` : '💻 Bash';
+    if (!cmd) return '💻 Bash';
+    // Present the command as a small heading plus fenced code for readability
+    const pretty = cmd.replace(/\s+/g, ' ').trim();
+    const fence = '```bash\n' + cmd + '\n```';
+    return `💻 Bash\n\n${fence}`;
   }
   if (type.includes('write') || type.includes('edit')) {
     const p = block.input?.file_path || block.input?.path || '';
@@ -69,11 +73,12 @@ function tryExtractTodoList(text) {
     .split(/\n+/)
     .map(s => s.trim())
     .filter(Boolean)
-    .map(s => (s.startsWith('- ') ? s.slice(2) : s));
+    .map(s => (s.replace(/^[-*]\s+/, '')));
   if (!items.length) return null;
   const lines = ['✅ TODO List:'];
   for (const it of items) {
-    lines.push(`• ${it}`);
+    // Render as markdown checklist so UI mostra checkboxes
+    lines.push(`- [ ] ${it}`);
   }
   return lines.join('\n');
 }
@@ -102,4 +107,3 @@ export function normalizeResultEvent(data) {
   } catch {}
   return '';
 }
-

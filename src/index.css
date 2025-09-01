@@ -924,6 +924,10 @@ body {
   background: rgba(148, 163, 184, 0.18); /* slate-400/18 */
   border: 1px solid rgba(148, 163, 184, 0.35);
   color: #e5e7eb; /* text-gray-200 */
+  /* Prevent clipping of long inline code */
+  white-space: normal !important;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 .dark .prose :not(pre) > code.chat-inline-code,
 .dark .chat-inline-code {

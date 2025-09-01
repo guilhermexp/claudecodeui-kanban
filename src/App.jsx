@@ -95,7 +95,7 @@ function AppContent() {
   const { isLoading: authLoading, user } = useAuth();
   const authReady = !authLoading && !!user;
   
-  const { ws, sendMessage, messages, reconnect } = useWebSocket(authReady);
+  const { ws, sendMessage, messages, reconnect } = useWebSocket(authReady, '/claude');
 
   // Determine if sidebar should use overlay mode (when side panels are active)
   // Sidebar overlay mode no longer needed

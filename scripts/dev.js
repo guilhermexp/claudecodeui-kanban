@@ -50,6 +50,9 @@ function log(service, message, color = colors.reset) {
   console.log(`${colors.dim}[${timestamp}]${colors.reset} ${color}[${service}]${colors.reset} ${message}`);
 }
 
+// Optional: auto-kill conflicting ports when enabled
+const AUTO_KILL_PORTS = String(process.env.AUTO_KILL_PORTS || '').toLowerCase() === 'true';
+
 function logSuccess(service, message) {
   const now = new Date();
   const hours = String(now.getHours()).padStart(2, '0');
@@ -172,6 +175,10 @@ async function killPortProcesses(ports) {
 // Check if vibe-kanban directory exists
 function checkVibeKanban() {
   const vibeKanbanPath = join(rootDir, 'vibe-kanban');
+  if (DISABLE_VIBE) {
+    log('INFO', 'Vibe Kanban disabled via DISABLE_VIBE', colors.yellow);
+    return false;
+  }
   if (!existsSync(vibeKanbanPath)) {
     log('WARNING', 'vibe-kanban directory not found. Skipping Rust backend.', colors.yellow);
     return false;
@@ -232,11 +239,43 @@ function spawnService(name, command, args, options = {}) {
       }
     });
 
-    service.process.stderr?.on('data', (data) => {
+    const maybeAutoKillByOutput = async (text) => {
+      if (!AUTO_KILL_PORTS) return false;
+      try {
+        // Vite style: "Port 5892 is already in use"
+        let m = /Port\s+(\d{2,5})\s+is\s+already\s+in\s+use/i.exec(text);
+        // Node style: EADDRINUSE ... :5892
+        if (!m) {
+          const m2 = /EADDRINUSE[^\d]*(\d{2,5})/.exec(text);
+          if (m2) m = m2;
+        }
+        const port = m ? parseInt(m[1], 10) : null;
+        if (port) {
+          log(name, `Port ${port} busy — attempting auto-kill (AUTO_KILL_PORTS)`, colors.yellow);
+          await killPortProcesses([port]);
+          // Give OS a moment to release
+          await new Promise(r => setTimeout(r, 500));
+          // Reset restart budget and restart service
+          try { service.restartCount = 0; } catch {}
+          if (service.process && !service.process.killed) {
+            service.process.once('exit', () => start());
+            try { service.process.kill('SIGTERM'); } catch {}
+          } else {
+            start();
+          }
+          return true;
+        }
+      } catch {}
+      return false;
+    };
+
+    service.process.stderr?.on('data', async (data) => {
       const output = data.toString().trim();
-      if (output && !output.includes('EADDRINUSE')) {
+      if (output) {
         log(name, output, colors.red);
       }
+      // Attempt auto-recovery on port-in-use errors
+      await maybeAutoKillByOutput(output);
     });
 
     service.process.on('exit', (code, signal) => {
@@ -351,7 +390,7 @@ async function main() {
     ['vite', '--host', '--port', PORTS.CLIENT.toString()],
     {
       color: colors.brightCyan,
-      env: { VITE_PORT: PORTS.CLIENT },
+      env: { VITE_PORT: PORTS.CLIENT, AUTO_KILL_PORTS: process.env.AUTO_KILL_PORTS || '' },
       registerCallback: (pid) => {} // portProtector.registerAllowedProcess('CLIENT', pid)
     }
   );
@@ -431,11 +470,12 @@ async function main() {
     // Custom banner already includes an endpoints panel when provided
     log('READY', `Development server running at http://localhost:${PORTS.CLIENT}`, colors.green);
     log('READY', `Backend API available at http://localhost:${PORTS.SERVER}`, colors.green);
-    if (checkVibeKanban()) {
+    if (!DISABLE_VIBE && checkVibeKanban()) {
       log('READY', `Vibe Kanban backend at http://localhost:${PORTS.VIBE_BACKEND}`, colors.green);
     }
   }, 2000);
 }
+const DISABLE_VIBE = String(process.env.DISABLE_VIBE || process.env.VIBE_DISABLED || '').toLowerCase() === 'true';
 
 main().catch(console.error);
 

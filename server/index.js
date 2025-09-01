@@ -76,6 +76,7 @@ import { onStartSession as wsClaudeOnStartSession, onEndSession as wsClaudeOnEnd
 const slog = createLogger('SERVER');
 const clog = createLogger('CLAUDE');
 const shlog = createLogger('SHELL');
+const xlog = createLogger('CODEX');
 
 import cleanupService from './cleanupService.js';
 import { 
@@ -540,7 +541,8 @@ try { setPreviewBroadcasterFn(broadcastToAll); } catch {}
 app.use('/api', authenticateToken, previewRoutes);
 
 // Same-origin preview proxy: /preview/:projectName/* -> http://localhost:<port>/*
-app.use('/preview/:projectName', authenticateToken, (req, res, next) => {
+// Note: Do NOT require auth here because iframe navigation can't attach headers
+app.use('/preview/:projectName', (req, res, next) => {
   try {
     const projectName = req.params.projectName;
     const st = getPreviewStatus(projectName);
@@ -1358,6 +1360,8 @@ function handleUnifiedClaudeConnection(ws, request) {
     }
     codexProcessing = true;
     try {
+      // Visible log at info level for Codex activity
+      try { xlog.info(`Running task in ${task.options?.projectPath || process.cwd()}`); } catch {}
       try { ws.send(JSON.stringify({ type: 'codex-busy', queueLength: codexQueue.length })); } catch {}
       codexCurrentProcess = null;
       await spawnCodex(task.command, { ...task.options, onProcess: (p) => { codexCurrentProcess = p; } }, ws);
@@ -1565,6 +1569,9 @@ function handleUnifiedClaudeConnection(ws, request) {
           break;
         case 'codex-message':
           await handleCodexMessage(ws, data, codexSession, codexQueue, processNextCodex);
+          break;
+        case 'codex-command': // alias for backwards compatibility
+          await handleCodexMessage(ws, { message: data.command, options: data.options }, codexSession, codexQueue, processNextCodex);
           break;
         case 'codex-end-session':
           codexSession = null;
@@ -1789,6 +1796,7 @@ async function handleCodexMessage(ws, data, codexSession, codexQueue, processNex
       ...options
     }
   };
+  try { xlog.info(`Enqueue: ${String(task.command).slice(0, 80)}…`); } catch {}
   
   codexQueue.push(task);
   ws.send(JSON.stringify({ 
@@ -2680,18 +2688,17 @@ app.post('/api/projects/:projectName/upload-images', authenticateToken, async (r
   }
 });
 
-// Import the robust Vibe proxy
+// Optional Vibe Kanban proxy (disabled via DISABLE_VIBE)
 import VibeKanbanProxy from './lib/vibe-proxy.js';
-
-// Initialize Vibe Kanban proxy with configuration
-const vibeProxy = new VibeKanbanProxy({
+const VIBE_DISABLED = String(process.env.DISABLE_VIBE || process.env.VIBE_DISABLED || '').toLowerCase() === 'true';
+const vibeProxy = VIBE_DISABLED ? null : new VibeKanbanProxy({
   baseUrl: 'http://localhost:6734',
-  timeout: 30000, // 30 seconds
+  timeout: 30000,
   retries: 3,
-  retryDelay: 1000, // 1 second
-  healthCheckInterval: 30000, // 30 seconds
+  retryDelay: 1000,
+  healthCheckInterval: 30000,
   circuitBreakerThreshold: 5,
-  circuitBreakerTimeout: 60000 // 1 minute
+  circuitBreakerTimeout: 60000
 });
 
 // Image upload endpoint for Vibe Kanban
@@ -2986,6 +2993,12 @@ app.get('/api/preview-proxy', async (req, res) => {
 
 // Proxy VibeKanban API requests to Rust backend
 app.use('/api/vibe-kanban', express.json(), async (req, res) => {
+  if (!vibeProxy) {
+    return res.status(503).json({
+      success: false,
+      message: 'Vibe Kanban disabled on this server (DISABLE_VIBE)'
+    });
+  }
   try {
     const vibeKanbanPath = req.path.replace('/api/vibe-kanban', '');
     const queryString = req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : '';
@@ -3105,12 +3118,13 @@ app.use('/api/*', (req, res) => {
 
 // Serve React app for all other routes
 app.get('*', (req, res) => {
-  if (process.env.NODE_ENV === 'production') {
-    res.sendFile(path.join(__dirname, '../dist/index.html'));
-  } else {
-    // In development, redirect to Vite dev server
-    res.redirect(`http://localhost:9000`);
+  const distIndex = path.join(__dirname, '../dist/index.html');
+  if (fs.existsSync(distIndex)) {
+    // If a built UI exists, serve it regardless of NODE_ENV
+    return res.sendFile(distIndex);
   }
+  // Otherwise, redirect to Vite dev server (default port 5892)
+  return res.redirect('http://localhost:5892');
 });
 
 // Helper function to convert permissions to rwx format
