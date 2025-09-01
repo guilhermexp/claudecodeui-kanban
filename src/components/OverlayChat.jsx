@@ -22,7 +22,7 @@ import MessageList from './overlay-codex/MessageList';
 
 // Overlay Chat com formatação bonita usando ReactMarkdown
 // Usa NOSSO backend interno (porta 7347) - sem servidores externos!
-const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, embedded = false, disableInlinePanel = false, useSidebarWhenOpen = false, sidebarContainerRef = null, onBeforeOpen, onPanelClosed, chatId = 'default' }) {
+const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, embedded = false, disableInlinePanel = false, useSidebarWhenOpen = false, sidebarContainerRef = null, onBeforeOpen, onPanelClosed, chatId = 'default', onBindControls = null, cliProviderFixed = null, onActivityChange = null }) {
   // Debug props removed - use React DevTools for debugging
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
@@ -118,6 +118,13 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
   const [plannerMode, setPlannerMode] = useState(() => loadPlannerMode());
   const [modelLabel, setModelLabel] = useState(() => loadModelLabel());
   const [showModeMenu, setShowModeMenu] = useState(false);
+  // Report activity to parent for intelligent panel management (after state declarations)
+  useEffect(() => {
+    const active = activityLock || isSessionInitializing || isTyping || ['queued','busy','thinking','tool'].includes(typingStatus.mode);
+    try {
+      if (typeof onActivityChange === 'function') onActivityChange(active);
+    } catch {}
+  }, [activityLock, isSessionInitializing, isTyping, typingStatus.mode, onActivityChange]);
   const [showModelMenu, setShowModelMenu] = useState(false);
   
   const [hasSavedSession, setHasSavedSession] = useState(false);
@@ -231,6 +238,17 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
     // Small delay to allow server to clear state
     setTimeout(() => startSession(), 200);
   }, [endSession, startSession]);
+
+  // Expose controls to global header (Codex)
+  useEffect(() => {
+    if (typeof onBindControls !== 'function') return;
+    const controls = {
+      end: () => { try { if (sessionActive) endSession(); } catch {} },
+      new: () => { try { if (sessionActive) endSession(); } catch {}; setTimeout(() => startSession(), 200); }
+    };
+    try { onBindControls(controls); } catch {}
+    return () => { try { onBindControls(null); } catch {} };
+  }, [onBindControls]);
 
   // Map tool names to small icons
   const getToolIcon = useCallback((name) => {
@@ -636,11 +654,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
         <div className="flex items-center gap-2">
           <div className={`text-sm tracking-widest font-extrabold ${themeCodex ? 'text-zinc-400' : ''}`}>CODEX</div>
           <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-green-500' : 'bg-yellow-500'}`} />
-          {(sessionActive && sessionId) || clientSessionId ? (
-            <span className="text-[10px] text-muted-foreground/60 font-mono" title={`Session: ${(sessionId || clientSessionId)}`}>
-              {(sessionId || clientSessionId).slice(0, 8)}
-            </span>
-          ) : null}
+          {/* session chip hidden to keep header clean */}
           {!sessionActive && isSessionInitializing && (
             <span className="ml-2 inline-flex items-center gap-2 text-xs opacity-80">
               <span className="w-3 h-3 border-2 border-muted-foreground border-t-transparent rounded-full animate-spin inline-block" />
@@ -674,16 +688,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
             Limits: {codexLimitStatus.remaining != null ? codexLimitStatus.remaining : '?'} remaining{codexLimitStatus.resetAt ? `, reset ${codexLimitStatus.resetAt}` : ''}
           </div>
         )}
-        {/* Floating session info and End button at top of chat */}
-        {(messages.length > 0 || (!isSessionInitializing && hasSavedSession)) && (
-            <div className="absolute top-2 right-2 z-50 flex items-center gap-1.5 pointer-events-none">
-            {(sessionId || clientSessionId || messages.length > 0) && (
-              <span className="inline-flex items-center h-6 px-2 rounded-full bg-background/80 text-[10px] text-muted-foreground/70 font-mono border border-border/30 backdrop-blur-sm pointer-events-auto">
-                {sessionId || clientSessionId ? `Session: ${(sessionId || clientSessionId).slice(0, 8)}` : 'Active Session'}
-              </span>
-            )}
-          </div>
-        )}
+        {/* session chip removed per design */}
         {/* Minimal empty state when no messages */}
         {messages.length === 0 && !isTyping && !sessionActive && !isSessionInitializing && (
           <EmptyStateCodex
