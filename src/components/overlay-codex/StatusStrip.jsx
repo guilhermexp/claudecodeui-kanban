@@ -6,7 +6,8 @@ export default function StatusStrip({
   onPlannerChange,
   modelLabel,
   onModelChange,
-  working
+  working,
+  compact = false,
 }) {
   const [showModeMenu, setShowModeMenu] = useState(false);
   const [showModelMenu, setShowModelMenu] = useState(false);
@@ -14,7 +15,7 @@ export default function StatusStrip({
   const projectLabel = projectPath ? projectPath.split('/').pop() : 'Local';
 
   return (
-    <div className="text-muted-foreground text-xs px-2 mb-2">
+    <div className={`text-muted-foreground text-xs ${compact ? '' : 'px-2 mb-2'}`}>
       {working?.active && (
         <div className="flex items-center gap-2 text-[11px] mb-1">
           <span className="relative flex items-center gap-1">

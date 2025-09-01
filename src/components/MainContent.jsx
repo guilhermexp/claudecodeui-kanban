@@ -566,32 +566,7 @@ function MainContent({
           </div>
         </div>
 
-        {/* Empty state when nothing visible (no shell, no preview, no chat) */}
-        {(!shellVisible && !hasPreviewOpen && !activeSidePanel) && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="text-center pointer-events-auto">
-              <div className="mx-auto mb-4 w-16 h-16 rounded-2xl bg-orange-500/20 flex items-center justify-center">
-                <span className="text-2xl">✳️</span>
-              </div>
-              <div className="text-3xl font-extrabold mb-1">vibeclaude</div>
-              <div className="text-muted-foreground mb-4">Choose Your Project</div>
-              <div className="flex flex-col items-center gap-4">
-                <button
-                  onClick={() => { try { window.__shellControls?.showTerminal?.(); } catch {}; setActiveSidePanel('claude-chat'); }}
-                  className="px-6 py-2 rounded-2xl bg-white text-black hover:bg-white/90 transition-colors"
-                  title="Start session"
-                >
-                  Start vibeclaude Session
-                </button>
-                <div className="flex items-center w-full max-w-sm gap-2 text-muted-foreground"><div className="flex-1 h-px bg-border"/>OR<div className="flex-1 h-px bg-border"/></div>
-                <button
-                  onClick={() => setShowProjectsModal(true)}
-                  className="px-4 py-2 rounded-2xl bg-white text-black hover:bg-white/90 transition-colors"
-                >Browse Projects</button>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Removed empty-state overlay when shell is hidden to avoid duplication */}
 
         {/* Codex Chat panel integrated */}
         {!isMobile && (

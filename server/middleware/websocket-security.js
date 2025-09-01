@@ -169,7 +169,7 @@ function handleAuthMessage(ws, message, clientIP) {
       return { authenticated: false, error: 'Invalid token' };
     }
     
-    wslog.info(`Authentication successful for user ${user.username} from ${clientIP}`);
+    wslog.debug(`Authentication successful for user ${user.username} from ${clientIP}`);
     
     return { 
       authenticated: true, 

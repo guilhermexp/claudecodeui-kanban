@@ -15,6 +15,31 @@ const upload = multer({
   }
 });
 
+// Connection tracking for consolidated logging
+const connectionTracker = {
+  connections: new Map(), // user -> count
+  lastLog: 0,
+  logInterval: 5000, // Log summary every 5 seconds max
+  
+  track(user) {
+    const count = this.connections.get(user) || 0;
+    this.connections.set(user, count + 1);
+    this.maybeLog();
+  },
+  
+  maybeLog() {
+    const now = Date.now();
+    if (now - this.lastLog > this.logInterval && this.connections.size > 0) {
+      const total = Array.from(this.connections.values()).reduce((a, b) => a + b, 0);
+      if (total > 1) {
+        console.log(`[${new Date().toTimeString().slice(0, 8)}] [SERVER] [WebSocket] Active connections: ${total} total (${this.connections.size} users)`);
+      }
+      this.connections.clear();
+      this.lastLog = now;
+    }
+  }
+};
+
 try {
   const envPath = path.join(__dirname, '../.env');
   const envFile = fs.readFileSync(envPath, 'utf8');
@@ -1241,7 +1266,7 @@ wss.on('connection', (ws, request) => {
   let isAuthenticated = false;
   let user = null;
   
-  slog.info(`[WebSocket] New connection: ${url} from ${clientIP} (awaiting auth)`);
+  slog.debug(`[WebSocket] New connection: ${url} from ${clientIP} (awaiting auth)`);
   
   // Setup connection security and cleanup
   setupConnectionCleanup(ws, clientIP);
@@ -1285,7 +1310,8 @@ wss.on('connection', (ws, request) => {
     // Send success response
     ws.send(JSON.stringify(authResult.response));
     
-    slog.info(`[WebSocket] Authentication successful: ${pathname} from ${user.username}@${clientIP}`);
+    // Log apenas uma vez por conexão única, não a cada reconexão
+    slog.debug(`[WebSocket] Authentication successful: ${pathname} from ${user.username}@${clientIP}`);
     
     // Remove auth handler and set up route-specific handlers
     ws.removeListener('message', authHandler);
@@ -1321,7 +1347,8 @@ startHeartbeatInterval(wss);
 // Unified Claude WebSocket handler - combines Shell and Chat functionality
 function handleUnifiedClaudeConnection(ws, request) {
   const user = request.user || { userId: 'anonymous', username: 'anonymous' };
-  clog.info(`[CLAUDE WS] New unified connection from user: ${user.username}`);
+  // Track connection without spamming logs
+  connectionTracker.track(user.username);
   
   // Track different session types
   const sessions = {
@@ -1360,15 +1387,41 @@ function handleUnifiedClaudeConnection(ws, request) {
     }
     codexProcessing = true;
     try {
+      // Format project path consistently
+      const shortPath = task.options?.projectPath ? 
+        '~' + task.options.projectPath.replace(process.env.HOME, '') : 
+        process.cwd();
+      
       // Visible log at info level for Codex activity
-      try { xlog.info(`Running task in ${task.options?.projectPath || process.cwd()}`); } catch {}
+      try { 
+        xlog.info(`[CODEX] Processing message from queue`);
+        xlog.info(`[CODEX] Working directory: ${shortPath}`);
+        if (codexQueue.length > 0) {
+          xlog.info(`[CODEX] Remaining in queue: ${codexQueue.length}`);
+        }
+      } catch {}
       try { ws.send(JSON.stringify({ type: 'codex-busy', queueLength: codexQueue.length })); } catch {}
       codexCurrentProcess = null;
       await spawnCodex(task.command, { ...task.options, onProcess: (p) => { codexCurrentProcess = p; } }, ws);
+      try { 
+        xlog.info(`[CODEX] Message processing completed`);
+      } catch {}
     } catch (e) {
       // Errors are already forwarded by spawnCodex
+      try { 
+        xlog.info(`[CODEX] Message processing failed: ${e.message || 'Unknown error'}`);
+      } catch {}
     } finally {
       codexProcessing = false;
+      if (codexQueue.length > 0) {
+        try { 
+          xlog.info(`[CODEX] Moving to next message in queue (${codexQueue.length} remaining)`);
+        } catch {}
+      } else {
+        try { 
+          xlog.info(`[CODEX] Queue empty, returning to idle state`);
+        } catch {}
+      }
       processNextCodex();
     }
   };
@@ -1796,7 +1849,18 @@ async function handleCodexMessage(ws, data, codexSession, codexQueue, processNex
       ...options
     }
   };
-  try { xlog.info(`Enqueue: ${String(task.command).slice(0, 80)}…`); } catch {}
+  // Format message similar to how we show it in logs
+  const truncatedCommand = String(task.command).slice(0, 100).replace(/\n/g, ' ');
+  const shortPath = task.options?.projectPath ? 
+    '~' + task.options.projectPath.replace(process.env.HOME, '') : 
+    process.cwd();
+  
+  try { 
+    xlog.info(`[CODEX] New message received`);
+    xlog.info(`[CODEX] Message: "${truncatedCommand}${task.command.length > 100 ? '...' : ''}"`);
+    xlog.info(`[CODEX] Project: ${shortPath}`);
+    xlog.info(`[CODEX] Queue length: ${codexQueue.length + 1}`);
+  } catch {}
   
   codexQueue.push(task);
   ws.send(JSON.stringify({ 
