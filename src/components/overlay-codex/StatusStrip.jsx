@@ -14,19 +14,19 @@ export default function StatusStrip({
   const projectLabel = projectPath ? projectPath.split('/').pop() : 'Local';
 
   return (
-    <div className="flex items-center justify-between text-muted-foreground text-xs px-2 mb-2">
-      <div className="flex items-center gap-3">
-        {working?.active && (
-          <span className="inline-flex items-center gap-2 text-[11px] text-muted-foreground">
-            <span className="relative flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/70 animate-bounce" style={{ animationDelay: '0ms' }} />
-              <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/70 animate-bounce" style={{ animationDelay: '150ms' }} />
-              <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/70 animate-bounce" style={{ animationDelay: '300ms' }} />
-            </span>
-            <span className="whitespace-nowrap">{working.label} • {Math.max(0, working.elapsedSec || 0)}s</span>
+    <div className="text-muted-foreground text-xs px-2 mb-2">
+      {working?.active && (
+        <div className="flex items-center gap-2 text-[11px] mb-1">
+          <span className="relative flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/70 animate-bounce" style={{ animationDelay: '0ms' }} />
+            <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/70 animate-bounce" style={{ animationDelay: '150ms' }} />
+            <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/70 animate-bounce" style={{ animationDelay: '300ms' }} />
           </span>
-        )}
+          <span className="whitespace-nowrap">{working.label} • {Math.max(0, working.elapsedSec || 0)}s</span>
+        </div>
+      )}
 
+      <div className="flex items-center gap-3">
         <button className="flex items-center gap-1 hover:text-foreground transition-colors" title={projectPath || 'Current directory'}>
           <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
           <span className="max-w-[200px] truncate">{projectLabel}</span>
@@ -67,4 +67,3 @@ export default function StatusStrip({
     </div>
   );
 }
-

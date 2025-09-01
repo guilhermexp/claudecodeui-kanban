@@ -131,6 +131,13 @@ const CodeEditor = forwardRef(({
     }
   });
 
+  // Slightly darker background for light mode editor
+  const lightEditorTheme = EditorView.theme({
+    '&': { backgroundColor: '#f5f7fa' },
+    '.cm-scroller': { backgroundColor: '#f5f7fa' },
+    '.cm-content': { backgroundColor: '#f5f7fa' }
+  });
+
   // Get language extension based on file extension
   const getLanguageExtension = (filename) => {
     const ext = filename.split('.').pop()?.toLowerCase();
@@ -338,6 +345,7 @@ const CodeEditor = forwardRef(({
         fontSize: '14px'
       }
     }),
+    ...(!isDarkMode ? [lightEditorTheme] : []),
     ...(wordWrap ? [EditorView.lineWrapping] : [])
   ];
 
@@ -537,6 +545,7 @@ const CodeEditor = forwardRef(({
               ...getLanguageExtension(file.name),
               diffField,
               diffTheme,
+              ...(!isDarkMode ? [lightEditorTheme] : []),
               ...(wordWrap ? [EditorView.lineWrapping] : [])
             ]}
             theme={isDarkMode ? oneDark : undefined}

@@ -70,6 +70,7 @@ import {
   getSecurityStats 
 } from './middleware/websocket-security.js';
 import { createLogger } from './utils/logger.js';
+import { onStartSession as wsClaudeOnStartSession, onEndSession as wsClaudeOnEndSession, notifySessionStarted as wsClaudeNotifySessionStarted, notifySessionClosed as wsClaudeNotifySessionClosed } from './lib/ws/claude.js';
 
 // Keep old loggers for compatibility
 const slog = createLogger('SERVER');
@@ -1433,7 +1434,8 @@ function handleUnifiedClaudeConnection(ws, request) {
           
         // Claude-specific messages  
         case 'claude-start-session': {
-          console.log('[/claude endpoint] Received claude-start-session');
+          clog.info('[/claude endpoint] Received claude-start-session');
+          try { wsClaudeOnStartSession(data.options || {}); } catch {}
           // Start persistent streaming process for Claude with requested mode (normal/bypass/resume)
           const options = data.options || {};
           let projectPath = options.projectPath || process.cwd();
@@ -1464,7 +1466,7 @@ function handleUnifiedClaudeConnection(ws, request) {
             try { 
               sessions.claude.sessionId = sid; 
               // Send the real session ID to the frontend when it's captured
-              ws.send(JSON.stringify({ type: 'claude-session-started', sessionId: sid, temporary: false }));
+              try { wsClaudeNotifySessionStarted(ws, sid, false); } catch { try { ws.send(JSON.stringify({ type: 'claude-session-started', sessionId: sid, temporary: false })); } catch {} }
             } catch {}
           });
           sessions.claude = { 
@@ -1551,7 +1553,8 @@ function handleUnifiedClaudeConnection(ws, request) {
               }
             } catch {}
             sessions.claude = null;
-            try { ws.send(JSON.stringify({ type: 'claude-session-closed' })); } catch {}
+          try { wsClaudeNotifySessionClosed(ws); } catch { try { ws.send(JSON.stringify({ type: 'claude-session-closed' })); } catch {} }
+          try { wsClaudeOnEndSession(sessions?.claude?.sessionId || null); } catch {}
           }
           break;
           
@@ -1995,7 +1998,7 @@ function handleChatConnection_DEPRECATED(ws, request) {
       } else if (data.type === 'claude-start-session') {
         // DEPRECATED: Claude sessions are now handled via the /claude WebSocket endpoint
         // This handler is kept only for backward compatibility but does nothing
-        console.log('[/ws endpoint] WRONG ENDPOINT - Received claude-start-session, should use /claude');
+        slog.warn('[/ws endpoint] WRONG ENDPOINT - Received claude-start-session, should use /claude');
         slog.warn('[WS] Received claude-start-session on /ws endpoint - ignoring (use /claude endpoint instead)');
         // Do NOT send any response - frontend should use /claude endpoint
       } else if (data.type === 'claude-end-session') {

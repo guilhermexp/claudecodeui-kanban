@@ -397,8 +397,9 @@ function FileManagerSimple({ selectedProject, onClose }) {
       ? filterFiles(items)
       : filterFiles(items.filter(item => !item.name.startsWith('.')));
     
-    const indentSize = compact ? 8 : 10;
-    const indentBase = compact ? 6 : 8;
+    // Improve tree readability: larger, consistent indents
+    const indentSize = compact ? 12 : 14;
+    const indentBase = compact ? 8 : 10;
 
     return filtered.map((item) => {
       const isExpanded = expandedDirs.has(item.path);
@@ -460,7 +461,7 @@ function FileManagerSimple({ selectedProject, onClose }) {
                   autoFocus
                 />
               ) : (
-                <span className={`truncate text-foreground ${compact ? 'text-[11px] max-w-[120px]' : 'text-xs max-w-[150px]'}`} title={item.name}>
+                <span className={`truncate text-foreground ${compact ? 'text-[11px]' : 'text-xs'} max-w-full`} title={item.name}>
                   {item.name}
                 </span>
               )}
@@ -468,7 +469,7 @@ function FileManagerSimple({ selectedProject, onClose }) {
           </div>
           
           {item.type === 'directory' && isExpanded && item.children && item.children.length > 0 && (
-            <div>
+            <div className="border-l border-transparent">
               {renderFileTree(item.children, level + 1)}
             </div>
           )}
@@ -498,28 +499,28 @@ function FileManagerSimple({ selectedProject, onClose }) {
         showFilePanel ? 'hidden md:flex md:w-[25%] lg:w-[20%] xl:w-[18%]' : 'flex-1'
       }`}>
         {/* Header */}
-        <div className={`${compact ? 'py-2' : 'py-3'} px-3 md:px-4 border-b border-border`}> 
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <h3 className={`text-foreground font-medium ${compact ? 'text-sm' : ''}`}>Files</h3>
-              {selectedProject?.path && (
-                <div className={`mt-1 flex items-center gap-1 text-muted-foreground/70 ${compact ? 'text-[10px]' : 'text-[11px] sm:text-xs'}`}>
+        <div className={`${compact ? 'py-2' : 'py-3'} pl-3 pr-2 md:pl-4 md:pr-3 border-b border-border`}> 
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <h3 className={`text-foreground font-medium truncate ${tight ? 'text-xs' : compact ? 'text-sm' : 'text-base'}`}>Files</h3>
+              {selectedProject?.path && !tight && (
+                <div className={`mt-1 flex items-center gap-1 text-muted-foreground/70 ${compact ? 'text-[10px]' : 'text-[11px] sm:text-xs'} overflow-x-auto whitespace-nowrap`}> 
                   <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-5l-2-2H5a2 2 0 00-2 2z" />
                   </svg>
-                  <span className={`break-all ${compact ? 'text-[10px]' : 'text-[11px]'}`} title={selectedProject.path}>
+                  <span className={`${compact ? 'text-[10px]' : 'text-[11px]'}`} title={selectedProject.path}>
                     {selectedProject.path}
                   </span>
                 </div>
               )}
             </div>
-            <div className={`flex items-center ${compact ? 'gap-0.5' : 'gap-1'}`}>
+            <div className={`flex items-center ${compact ? 'gap-0.5' : 'gap-1'} flex-shrink-0`}>
               <button
                onClick={() => setShowHiddenFiles(!showHiddenFiles)}
-              className={cn("hover:bg-accent rounded-md transition-colors", compact ? 'p-0.5' : 'p-1', showHiddenFiles && "bg-accent")}
+              className={cn("hover:bg-accent rounded-md transition-colors", (compact || tight) ? 'p-0.5' : 'p-1', showHiddenFiles && "bg-accent")}
                title={showHiddenFiles ? "Hide hidden files" : "Show hidden files"}
              >
-              {showHiddenFiles ? <Eye className={`${compact ? 'w-3.5 h-3.5' : 'w-4 h-4'}`} /> : <EyeOff className={`${compact ? 'w-3.5 h-3.5' : 'w-4 h-4'}`} />}
+              {showHiddenFiles ? <Eye className={`${tight ? 'w-3 h-3' : compact ? 'w-3.5 h-3.5' : 'w-4 h-4'}`} /> : <EyeOff className={`${tight ? 'w-3 h-3' : compact ? 'w-3.5 h-3.5' : 'w-4 h-4'}`} />}
               </button>
               {onClose && (
                 <button
@@ -527,7 +528,7 @@ function FileManagerSimple({ selectedProject, onClose }) {
                   className="text-muted-foreground hover:text-foreground transition-colors"
                   title="Close"
                 >
-                  <X className={`${compact ? 'w-3.5 h-3.5' : 'w-4 h-4'}`} />
+                  <X className={`${tight ? 'w-3 h-3' : compact ? 'w-3.5 h-3.5' : 'w-4 h-4'}`} />
                 </button>
               )}
               <button
@@ -539,10 +540,10 @@ function FileManagerSimple({ selectedProject, onClose }) {
                   setCreateName('');
                   setCreateError('');
                 }}
-              className={`hover:bg-accent rounded-md transition-colors ${compact ? 'p-0.5' : 'p-1'}`}
+              className={`hover:bg-accent rounded-md transition-colors ${(compact || tight) ? 'p-0.5' : 'p-1'}`}
                 title="New File"
               >
-              <FilePlus className={`${compact ? 'w-3.5 h-3.5' : 'w-4 h-4'} text-muted-foreground`} />
+              <FilePlus className={`${tight ? 'w-3 h-3' : compact ? 'w-3.5 h-3.5' : 'w-4 h-4'} text-muted-foreground`} />
               </button>
               <button
                 onClick={() => {
@@ -552,46 +553,46 @@ function FileManagerSimple({ selectedProject, onClose }) {
                   setCreateName('');
                   setCreateError('');
                 }}
-              className={`hover:bg-accent rounded-md transition-colors ${compact ? 'p-0.5' : 'p-1'}`}
+              className={`hover:bg-accent rounded-md transition-colors ${(compact || tight) ? 'p-0.5' : 'p-1'}`}
                 title="New Folder"
               >
-              <FolderPlus className={`${compact ? 'w-3.5 h-3.5' : 'w-4 h-4'} text-muted-foreground`} />
+              <FolderPlus className={`${tight ? 'w-3 h-3' : compact ? 'w-3.5 h-3.5' : 'w-4 h-4'} text-muted-foreground`} />
               </button>
               <button
                 onClick={handleRefresh}
-              className={cn(`hover:bg-accent rounded-md transition-colors ${compact ? 'p-0.5' : 'p-1'}`, loading && "animate-spin")}
+              className={cn(`hover:bg-accent rounded-md transition-colors ${(compact || tight) ? 'p-0.5' : 'p-1'}`, loading && "animate-spin")}
                 title="Refresh"
               >
-              <RefreshCw className={`${compact ? 'w-3.5 h-3.5' : 'w-4 h-4'} text-muted-foreground`} />
+              <RefreshCw className={`${tight ? 'w-3 h-3' : compact ? 'w-3.5 h-3.5' : 'w-4 h-4'} text-muted-foreground`} />
               </button>
             </div>
           </div>
         </div>
         
         {/* Search Bar */}
-        <div className={`${compact ? 'p-1.5' : 'p-2'} border-b border-border`}>
+        <div className={`${tight ? 'px-1 py-1' : compact ? 'px-1.5 py-1.5' : 'px-2 py-2'} border-b border-border`}>
           <div className="relative">
-            <Search className={`absolute left-2 top-1/2 -translate-y-1/2 ${compact ? 'w-3.5 h-3.5' : 'w-4 h-4'} text-muted-foreground`} />
+            <Search className={`absolute left-2 top-1/2 -translate-y-1/2 ${tight ? 'w-3 h-3' : compact ? 'w-3.5 h-3.5' : 'w-4 h-4'} text-muted-foreground`} />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search files..."
-              className={`w-full ${compact ? 'pl-7 pr-7 py-1 text-[13px]' : 'pl-8 pr-8 py-1 text-sm'} bg-background border rounded focus:outline-none focus:ring-1 focus:ring-primary`}
+              className={`w-full ${tight ? 'pl-6 pr-6 py-1 text-[12px]' : compact ? 'pl-7 pr-7 py-1 text-[13px]' : 'pl-8 pr-8 py-1 text-sm'} bg-background border rounded focus:outline-none focus:ring-1 focus:ring-primary`}
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className={`absolute right-2 top-1/2 -translate-y-1/2 ${compact ? 'p-0.5' : 'p-0.5'} hover:bg-accent rounded`}
+                className={`absolute right-2 top-1/2 -translate-y-1/2 ${tight ? 'p-0.5' : 'p-0.5'} hover:bg-accent rounded`}
               >
-                <X className={`${compact ? 'w-3 h-3' : 'w-3 h-3'}`} />
+                <X className={`${tight ? 'w-3 h-3' : 'w-3 h-3'}`} />
               </button>
             )}
           </div>
         </div>
         
         {/* File Tree */}
-        <ScrollArea className={`flex-1 ${compact ? 'p-2' : 'p-4'}`}>
+        <ScrollArea className={`flex-1 ${compact ? 'pl-2 pr-1 py-2' : 'pl-3 pr-2 py-3'}`}>
           {selectedProject?.isStandalone || selectedProject?.path === 'STANDALONE_MODE' ? (
             <div className="text-center py-8">
               <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center mx-auto mb-3">
@@ -728,10 +729,13 @@ function FileManagerSimple({ selectedProject, onClose }) {
                       try {
                         const response = await fetch('/api/files/delete', {
                           method: 'DELETE',
-                          headers: { 'Content-Type': 'application/json' },
+                          headers: { 
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${localStorage.getItem('auth-token')}`
+                          },
                           body: JSON.stringify({ 
-                            path: selectedFile.path,
-                            projectPath: selectedFile.projectPath 
+                            projectName: selectedFile.projectName,
+                            path: selectedFile.path
                           })
                         });
                         
@@ -860,10 +864,13 @@ function FileManagerSimple({ selectedProject, onClose }) {
                       try {
                         const response = await fetch('/api/files/delete', {
                           method: 'DELETE',
-                          headers: { 'Content-Type': 'application/json' },
+                          headers: { 
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${localStorage.getItem('auth-token')}`
+                          },
                           body: JSON.stringify({ 
-                            path: selectedImage.path,
-                            projectPath: selectedImage.projectPath 
+                            projectName: selectedImage.projectName,
+                            path: selectedImage.path
                           })
                         });
                         

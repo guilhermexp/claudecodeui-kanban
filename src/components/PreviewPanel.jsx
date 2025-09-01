@@ -1,15 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { refreshPreviewStatus as apiRefreshStatus, startPreview as apiStartPreview, stopPreview as apiStopPreview, fetchProjectFiles } from '../utils/preview/api';
+import { useConsoleCapture } from '../hooks/preview/useConsoleCapture';
+import { useElementSelection } from '../hooks/preview/useElementSelection';
 import FileManagerSimple from './FileManagerSimple';
 import CtaButton from './ui/CtaButton';
 
-function PreviewPanel({ url, projectPath, projectName = null, onClose, onRefresh, onOpenExternal, isMobile, initialPaused = false }) {
+function PreviewPanel({ url, projectPath, projectName = null, onClose, onRefresh, onOpenExternal, isMobile, initialPaused = false, onBindControls = null }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [currentUrl, setCurrentUrl] = useState(url || '');
   const [isPaused, setIsPaused] = useState(initialPaused);
   const [logs, setLogs] = useState([]);
-  const [captureReady, setCaptureReady] = useState(false);
-  const captureReadyTimer = useRef(null);
   const [showLogs, setShowLogs] = useState(false);
   const [pausedUrl, setPausedUrl] = useState(initialPaused ? (url || '') : null); // Store URL when paused
   const [microphoneStatus, setMicrophoneStatus] = useState('idle'); // idle, granted, denied, requesting
@@ -40,43 +41,43 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, onRefresh
 
   const refreshPreviewStatus = async () => {
     if (!projectName) return;
-    try {
-      const token = localStorage.getItem('auth-token');
-      const r = await fetch(`/api/projects/${encodeURIComponent(projectName)}/preview/status`, {
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
-      });
-      if (r.ok) {
-        const d = await r.json();
-        const running = !!d.running;
-        setPreviewRunning(running);
-        if (running && !userEditedUrl && !isPaused) {
-          setCurrentUrl(`/preview/${encodeURIComponent(projectName)}/`);
-          if (d.url) setUiUrl(d.url);
-        }
-      }
-    } catch {}
+    const { running, url: detectedUrl } = await apiRefreshStatus(projectName);
+    setPreviewRunning(running);
+    if (running && !userEditedUrl && !isPaused) {
+      setCurrentUrl(`/preview/${encodeURIComponent(projectName)}/`);
+      if (detectedUrl) setUiUrl(detectedUrl);
+    }
   };
 
   useEffect(() => { refreshPreviewStatus(); }, [projectName]);
+
+  // Expose minimal controls to parent (via Shell → MainContent)
+  useEffect(() => {
+    if (typeof onBindControls === 'function') {
+      const controls = {
+        showFiles: () => setShowFileTree(true),
+        hideFiles: () => setShowFileTree(false),
+        toggleFiles: () => setShowFileTree(v => !v)
+      };
+      onBindControls(controls);
+      return () => {
+        try { onBindControls(null); } catch {}
+      };
+    }
+  }, [onBindControls]);
 
   const startBackendPreview = async () => {
     if (!projectName || starting) return;
     setStarting(true);
     setShowFileTree(false);
     try {
-      const token = localStorage.getItem('auth-token');
-      const r = await fetch(`/api/projects/${encodeURIComponent(projectName)}/preview/start`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) }, body: JSON.stringify({}) });
-      if (r.ok) {
-        const d = await r.json();
-        setPreviewRunning(true);
-        if (d.url) {
-          // Use same-origin proxy path for element selection & console capture
-          setCurrentUrl(`/preview/${encodeURIComponent(projectName)}/`);
-          setUiUrl(d.url);
-          setUserEditedUrl(false);
-          // Proactively ping the URL until it responds
-          waitForServer(d.url);
-        }
+      const { url: detectedUrl } = await apiStartPreview(projectName);
+      setPreviewRunning(true);
+      if (detectedUrl) {
+        setCurrentUrl(`/preview/${encodeURIComponent(projectName)}/`);
+        setUiUrl(detectedUrl);
+        setUserEditedUrl(false);
+        waitForServer(detectedUrl);
       }
     } catch {}
     // Keep loader until iframe load or timeout
@@ -115,8 +116,7 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, onRefresh
     if (!projectName || stopping) return;
     setStopping(true);
     try {
-      const token = localStorage.getItem('auth-token');
-      await fetch(`/api/projects/${encodeURIComponent(projectName)}/preview/stop`, { method: 'POST', headers: token ? { 'Authorization': `Bearer ${token}` } : {} });
+      await apiStopPreview(projectName);
     } catch {}
     setStopping(false);
     setPreviewRunning(false);
@@ -133,7 +133,7 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, onRefresh
     // Try to detect framework from package.json
     (async () => {
       try {
-        if (!projectPath) return;
+        if (!projectPath || projectPath === 'STANDALONE_MODE') return;
         const token = localStorage.getItem('auth-token');
         const pkgPath = `${projectPath}/package.json`;
         const r = await fetch(`/api/files/read?path=${encodeURIComponent(pkgPath)}`, { headers: token ? { 'Authorization': `Bearer ${token}` } : {} });
@@ -165,18 +165,12 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, onRefresh
 
   // Load project file tree when toggled open
   useEffect(() => {
-    if (!showFileTree || !projectName) return;
+    if (!showFileTree || !projectName || /standalone/i.test(projectName)) return;
     let aborted = false;
     (async () => {
       try {
-        const token = localStorage.getItem('auth-token');
-        const r = await fetch(`/api/projects/${encodeURIComponent(projectName)}/files`, {
-          headers: token ? { 'Authorization': `Bearer ${token}` } : {}
-        });
-        if (r.ok) {
-          const data = await r.json();
-          if (!aborted) setFileTree(Array.isArray(data) ? data : []);
-        }
+        const data = await fetchProjectFiles(projectName);
+        if (!aborted) setFileTree(data);
       } catch {}
     })();
     return () => { aborted = true; };
@@ -225,436 +219,7 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, onRefresh
     checkMicrophonePermission();
   }, []);
 
-  // Handle console messages from iframe via postMessage
-  useEffect(() => {
-    const handleMessage = (event) => {
-      // Debug all messages
-      if (event.data) {
-        if (event.data.type === 'test-message') {
-          alert('📨 TEST MESSAGE RECEIVED FROM: ' + event.data.from);
-        }
-      }
-      
-      // Validate origin is localhost
-      try {
-        const origin = new URL(event.origin);
-        const validHosts = ['localhost', '127.0.0.1', '0.0.0.0', '[::1]'];
-        if (!validHosts.includes(origin.hostname)) {
-          return;
-        }
-      } catch {
-        return;
-      }
-
-      // Handle console messages from iframe
-      if (event.data && event.data.type === 'console-message') {
-        // Filter out vite/HMR noise that sometimes leaks as errors
-        const raw = String(event.data.message || '');
-        const low = raw.toLowerCase();
-        if (raw.includes('[vite]') || raw.includes('[HMR]') || low.includes('websocket') || low.includes('connecting') || low.includes('connected')) {
-          return;
-        }
-        const { level, message, timestamp, url, filename, line, column, stack } = event.data;
-        
-        const logEntry = {
-          type: level,
-          message: message || 'Unknown message',
-          timestamp: new Date(timestamp).toLocaleTimeString(),
-          url: url,
-          filename: filename,
-          line: line,
-          column: column,
-          stack: stack,
-          count: 1
-        };
-        
-        setLogs(prev => {
-          // Check if the last error is identical (same message and location)
-          const lastLog = prev[prev.length - 1];
-          if (lastLog && 
-              lastLog.message === logEntry.message && 
-              lastLog.filename === logEntry.filename && 
-              lastLog.line === logEntry.line) {
-            // Increment count of the last error instead of adding duplicate
-            const updatedLogs = [...prev];
-            updatedLogs[updatedLogs.length - 1] = {
-              ...lastLog,
-              count: (lastLog.count || 1) + 1,
-              timestamp: logEntry.timestamp // Update timestamp to latest
-            };
-            return updatedLogs;
-          }
-          // Add new error, keeping only last 100 unique errors
-          return [...prev.slice(-99), logEntry];
-        });
-      }
-      
-      // Handle console capture ready notification
-      if (event.data && event.data.type === 'console-capture-ready') {
-        // Console capture initialized for preview
-        setCaptureReady(true);
-        if (captureReadyTimer.current) {
-          clearTimeout(captureReadyTimer.current);
-          captureReadyTimer.current = null;
-        }
-      }
-      
-    };
-
-    window.addEventListener('message', handleMessage);
-
-    return () => {
-      window.removeEventListener('message', handleMessage);
-    };
-  }, []); // Sem dependências - listener criado apenas uma vez
-
-  // Inject console capture script when iframe loads
-  useEffect(() => {
-    // Reset capture state on URL change
-    setCaptureReady(false);
-    if (captureReadyTimer.current) {
-      clearTimeout(captureReadyTimer.current);
-      captureReadyTimer.current = null;
-    }
-    const injectConsoleCapture = () => {
-      if (iframeRef.current && !isPaused) {
-        try {
-          // Try to inject the script into the iframe
-          const iframe = iframeRef.current;
-          
-          // Function to perform the actual injection
-          const performInjection = () => {
-            try {
-              // Try to access iframe content window
-              const iframeWindow = iframe.contentWindow;
-              const iframeDocument = iframe.contentDocument || (iframeWindow && iframeWindow.document);
-              
-              if (iframeWindow && iframeDocument) {
-                // Check if already injected
-                if (iframeWindow.__consoleInjected) return;
-                iframeWindow.__consoleInjected = true;
-
-                // Create and inject script
-                const script = iframeDocument.createElement('script');
-                script.src = '/preview-console-injector.js';
-                script.async = false;
-                
-                // Also inject inline as fallback
-                const inlineScript = iframeWindow.document.createElement('script');
-                inlineScript.textContent = `
-                  (function() {
-                    const originalConsole = {
-                      log: console.log,
-                      error: console.error,
-                      warn: console.warn,
-                      info: console.info,
-                      debug: console.debug
-                    };
-                    
-                    function safeStringify(obj) {
-                      try {
-                        const seen = new WeakSet();
-                        return JSON.stringify(obj, function(key, value) {
-                          if (typeof value === 'object' && value !== null) {
-                            if (seen.has(value)) return '[Circular]';
-                            seen.add(value);
-                          }
-                          if (value instanceof Error) {
-                            return { message: value.message, stack: value.stack, name: value.name };
-                          }
-                          return value;
-                        });
-                      } catch (e) {
-                        return String(obj);
-                      }
-                    }
-                    
-                    // Only capture real errors, not warnings or regular logs
-                    ['error'].forEach(method => {
-                      console[method] = function(...args) {
-                        originalConsole[method].apply(console, args);
-                        try {
-                          const message = args.map(arg => {
-                            if (typeof arg === 'object') return safeStringify(arg);
-                            return String(arg);
-                          }).join(' ');
-                          
-                          // Skip empty, Vite connection messages, and other non-error logs
-                          if (!message || message.trim() === '') return;
-                          if (message.includes('[vite]')) return;
-                          if (message.includes('[HMR]')) return;
-                          if (message.includes('WebSocket')) return;
-                          if (message.toLowerCase().includes('connect')) return;
-                          
-                          // Only send if we can safely communicate with parent
-                          if (window.parent !== window && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
-                            window.parent.postMessage({
-                              type: 'console-message',
-                              level: method,
-                              message: message,
-                              timestamp: new Date().toISOString(),
-                              url: window.location.href
-                            }, '*');
-                          }
-                        } catch (e) {}
-                      };
-                    });
-                    
-                    window.addEventListener('error', function(event) {
-                      try {
-                        // Skip Vite and other non-application errors
-                        const msg = event.message || '';
-                        if (msg.includes('[vite]')) return;
-                        if (msg.includes('[HMR]')) return;
-                        if (msg.includes('WebSocket')) return;
-                        
-                        // Only send real JavaScript errors if we can safely communicate with parent
-                        if (window.parent !== window && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
-                          window.parent.postMessage({
-                            type: 'console-message',
-                            level: 'error',
-                            message: msg || 'Unknown error',
-                            timestamp: new Date().toISOString(),
-                            url: window.location.href,
-                            filename: event.filename,
-                            line: event.lineno,
-                            column: event.colno,
-                            stack: event.error?.stack
-                          }, '*');
-                        }
-                      } catch (e) {}
-                    });
-                    
-                    window.addEventListener('unhandledrejection', function(event) {
-                      try {
-                        // Skip non-application promise rejections
-                        const reason = event.reason?.message || event.reason || '';
-                        if (typeof reason === 'string') {
-                          if (reason.includes('[vite]')) return;
-                          if (reason.includes('[HMR]')) return;
-                          if (reason.includes('WebSocket')) return;
-                        }
-                        
-                        // Only send if we can safely communicate with parent
-                        if (window.parent !== window && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
-                          window.parent.postMessage({
-                            type: 'console-message',
-                            level: 'error',
-                            message: 'Unhandled Promise Rejection: ' + (event.reason?.message || event.reason || 'Unknown'),
-                            timestamp: new Date().toISOString(),
-                            url: window.location.href,
-                            stack: event.reason?.stack
-                          }, '*');
-                        }
-                      } catch (e) {}
-                    });
-                    
-                    // Don't log initialization - it's just noise
-                    // Silently notify parent that we're ready - but only if same origin or localhost
-                    try {
-                      // Check if we can access parent window safely
-                      if (window.parent !== window && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
-                        window.parent.postMessage({
-                          type: 'console-capture-ready',
-                          timestamp: new Date().toISOString()
-                        }, '*');
-                      }
-                    } catch (e) {
-                      // Cross-origin, ignore silently
-                    }
-                    
-                    // Also capture React errors
-                    if (window.React && window.React.createElement) {
-                      const originalCreateElement = window.React.createElement;
-                      window.React.createElement = function(...args) {
-                        try {
-                          return originalCreateElement.apply(this, args);
-                        } catch (error) {
-                          console.error('React Error:', error);
-                          throw error;
-                        }
-                      };
-                    }
-                    
-                    // Capture Vite error overlay
-                    const captureViteErrors = () => {
-                      // Look for Vite's error overlay element
-                      const viteErrorOverlay = document.querySelector('vite-error-overlay');
-                      if (viteErrorOverlay) {
-                        // Try to access shadow DOM (Vite uses shadow DOM for error overlay)
-                        const shadowRoot = viteErrorOverlay.shadowRoot;
-                        if (shadowRoot) {
-                          // Find error message elements
-                          const errorMessage = shadowRoot.querySelector('.message-body');
-                          const errorFile = shadowRoot.querySelector('.file');
-                          const errorFrame = shadowRoot.querySelector('.frame');
-                          const errorStack = shadowRoot.querySelector('.stack');
-                          
-                          if (errorMessage) {
-                            const message = errorMessage.textContent || 'Vite compilation error';
-                            const file = errorFile ? errorFile.textContent : '';
-                            const frame = errorFrame ? errorFrame.textContent : '';
-                            const stack = errorStack ? errorStack.textContent : '';
-                            
-                            // Send the error to parent if we can safely communicate
-                            if (window.parent !== window && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
-                              window.parent.postMessage({
-                                type: 'console-message',
-                                level: 'error',
-                                message: '[Vite Error] ' + message,
-                                timestamp: new Date().toISOString(),
-                                url: window.location.href,
-                                filename: file,
-                                stack: frame + '\\n' + stack,
-                                source: 'vite-overlay'
-                              }, '*');
-                            }
-                          }
-                        }
-                      }
-                      
-                      // Also check for standard error overlay (older Vite versions or other bundlers)
-                      const errorOverlay = document.querySelector('#vite-error-overlay, .vite-error-overlay, [data-vite-error]');
-                      if (errorOverlay && !errorOverlay.dataset.captured) {
-                        errorOverlay.dataset.captured = 'true';
-                        const errorText = errorOverlay.textContent || errorOverlay.innerText;
-                        if (errorText && window.parent !== window && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
-                          window.parent.postMessage({
-                            type: 'console-message',
-                            level: 'error',
-                            message: '[Build Error] ' + errorText.slice(0, 500),
-                            timestamp: new Date().toISOString(),
-                            url: window.location.href,
-                            source: 'error-overlay'
-                          }, '*');
-                        }
-                      }
-                    };
-                    
-                    // Set up MutationObserver to detect when Vite error overlay appears
-                    const observer = new MutationObserver((mutations) => {
-                      for (const mutation of mutations) {
-                        if (mutation.type === 'childList') {
-                          for (const node of mutation.addedNodes) {
-                            if (node.nodeName && (
-                              node.nodeName.toLowerCase() === 'vite-error-overlay' ||
-                              (node.id && node.id.includes('vite')) ||
-                              (node.className && typeof node.className === 'string' && node.className.includes('error'))
-                            )) {
-                              // Wait a bit for the error content to render
-                              setTimeout(captureViteErrors, 100);
-                            }
-                          }
-                        }
-                      }
-                    });
-                    
-                    // Start observing document body for error overlays
-                    observer.observe(document.body, {
-                      childList: true,
-                      subtree: true
-                    });
-                    
-                    // Also check periodically for error overlays
-                    setInterval(captureViteErrors, 2000);
-                    
-                    // Initial check
-                    setTimeout(captureViteErrors, 500);
-                  })();
-                `;
-                
-                // Try to inject in both head and body
-                const head = iframeDocument.head || iframeDocument.getElementsByTagName('head')[0];
-                const body = iframeDocument.body || iframeDocument.getElementsByTagName('body')[0];
-                
-                // Inject inline script first (more reliable)
-                if (head) {
-                  head.appendChild(inlineScript);
-                } else if (body) {
-                  body.appendChild(inlineScript);
-                }
-                
-                // Then inject external script
-                if (head) {
-                  head.appendChild(script);
-                }
-                
-                // Console capture injected successfully
-              }
-            } catch (e) {
-              // Cross-origin restriction, can't inject script - this is expected for external URLs
-              // Only log if not a cross-origin error
-              if (!e.message.includes('cross-origin')) {
-              }
-            }
-          };
-
-          // Try to inject immediately
-          performInjection();
-          
-          // Also try after a short delay
-          setTimeout(performInjection, 100);
-          
-          // And after a longer delay for slow-loading content
-          setTimeout(performInjection, 500);
-          
-        } catch (e) {
-        }
-      }
-    };
-
-    if (iframeRef.current && !isPaused) {
-      const iframe = iframeRef.current;
-      
-      // Try to inject immediately if iframe already has content
-      injectConsoleCapture();
-      
-      // Also inject on load event
-      iframe.addEventListener('load', injectConsoleCapture);
-      
-      // And monitor for dynamic content changes
-      const observer = new MutationObserver(() => {
-        injectConsoleCapture();
-      });
-      
-      if (iframe.contentDocument) {
-        observer.observe(iframe.contentDocument, {
-          childList: true,
-          subtree: true
-        });
-      }
-      
-      // If cross-origin and capture not ready soon, show info log
-      try {
-        const topUrl = new URL(window.location.href);
-        const frameUrl = new URL(currentUrl);
-        const sameOrigin = topUrl.protocol === frameUrl.protocol && topUrl.hostname === frameUrl.hostname && topUrl.port === frameUrl.port;
-        if (!sameOrigin) {
-          captureReadyTimer.current = setTimeout(() => {
-            if (!captureReady) {
-              setLogs(prev => ([
-                ...prev,
-                {
-                  type: 'info',
-                  message: 'Cross-origin preview: console capture limited. To capture errors here, run the helper snippet in the app or open with proxy.',
-                  timestamp: new Date().toLocaleTimeString(),
-                }
-              ]));
-            }
-          }, 1500);
-        }
-      } catch {}
-
-      return () => {
-        iframe.removeEventListener('load', injectConsoleCapture);
-        observer.disconnect();
-        if (captureReadyTimer.current) {
-          clearTimeout(captureReadyTimer.current);
-          captureReadyTimer.current = null;
-        }
-      };
-    }
-  }, [isPaused, currentUrl]);
+  const { captureReady, helperSnippet, clearLogs, refreshLogs, copyLogsToClipboard } = useConsoleCapture({ iframeRef, isPaused, currentUrl, logs, setLogs });
 
   const handleRefresh = () => {
     if (iframeRef.current && !isPaused) {
@@ -711,50 +276,7 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, onRefresh
     }
   };
 
-  const clearLogs = () => {
-    setLogs([]);
-  };
-
-  const refreshLogs = () => {
-    // Clear logs and re-inject console capture to get fresh state
-    setLogs([]);
-    if (iframeRef.current) {
-      // Force reload to clear any cached errors
-      iframeRef.current.src = iframeRef.current.src;
-    }
-  };
-
-  // Helper snippet that users can paste in the target app console (only once)
-  const helperSnippet = `(() => {try{const send=(m,s)=>parent.postMessage({type:'console-message',level:'error',message:String(m),timestamp:new Date().toISOString(),url:location.href,stack:s},'*');const oe=console.error;console.error=(...a)=>{try{send(a.map(x=>x&&x.message?x.message:typeof x==='object'?JSON.stringify(x):String(x)).join(' '),a[0]&&a[0].stack);}catch{}oe.apply(console,a)};addEventListener('error',e=>{try{send(e.message,e.error&&e.error.stack)}catch{}});addEventListener('unhandledrejection',e=>{try{send('Unhandled Promise Rejection: '+(e.reason&&e.reason.message?e.reason.message:String(e.reason)),e.reason&&e.reason.stack)}catch{}});parent.postMessage({type:'console-capture-ready'},'*')}catch{}})();`;
-
-  const copyLogsToClipboard = () => {
-    const errorText = logs.map(log => {
-      const count = log.count > 1 ? ` (${log.count}×)` : '';
-      const location = log.filename ? `\n  File: ${log.filename}:${log.line}:${log.column}` : '';
-      const stack = log.stack ? `\n  Stack: ${log.stack}` : '';
-      return `ERROR${count}: ${log.message}${location}${stack}`;
-    }).join('\n\n');
-
-    if (!errorText) {
-      alert('No errors to copy');
-      return;
-    }
-
-    navigator.clipboard.writeText(errorText).then(() => {
-      // Visual feedback
-      const button = document.querySelector('[data-copy-button]');
-      if (button) {
-        const originalText = button.textContent;
-        button.textContent = 'Copied!';
-        setTimeout(() => {
-          button.textContent = originalText;
-        }, 2000);
-      }
-    }).catch(err => {
-      console.error('Failed to copy:', err);
-      alert('Failed to copy to clipboard');
-    });
-  };
+  
 
   // Close logs dropdown when clicking outside
   useEffect(() => {
@@ -772,213 +294,12 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, onRefresh
     }
   }, [showLogs]);
   
-  // Handle element selection mode (no reload)
-  useEffect(() => {
-    
-    if (!elementSelectionMode || !iframeRef.current) {
-      return;
-    }
-    
-    const handleElementSelected = (event) => {
-      if (event.data?.type === 'element-selected') {
-        setSelectedElement(event.data.data);
-        setElementSelectionMode(false);
-        
-        // Element selection now handled by OverlayChat component
-        
-        // Also store globally for other uses
-        if (window.selectedElementContext !== undefined) {
-          window.selectedElementContext = event.data.data;
-        }
-      }
-    };
-    
-    window.addEventListener('message', handleElementSelected);
-    
-    // Inject selection script after a delay
-    const timer = setTimeout(() => {
-      
-      if (iframeRef.current && elementSelectionMode) {
-        const iframe = iframeRef.current;
-        
-        // SIMPLES: Sempre tenta injetar no iframe principal (que agora sempre é a aplicação)
-        try {
-          const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-          
-          if (iframeDoc) {
-            // Check if script already injected
-            if (iframeDoc.querySelector('#element-selector-script')) {
-              return;
-            }
-            
-            // Inject element selection code
-            const script = iframeDoc.createElement('script');
-            script.id = 'element-selector-script';
-            script.textContent = `
-              (function() {
-                document.body.style.cursor = 'crosshair';
-                let hoveredElement = null;
-                
-                // Create style for highlighting
-                const style = document.createElement('style');
-                style.id = 'element-selector-highlight-styles';
-                style.textContent = \`
-                  .element-selector-hover {
-                    outline: 2px solid #3b82f6 !important;
-                    outline-offset: 2px !important;
-                    background-color: rgba(59, 130, 246, 0.1) !important;
-                    cursor: crosshair !important;
-                    position: relative !important;
-                  }
-                  .element-selector-hover::after {
-                    content: attr(data-selector-info) !important;
-                    position: absolute !important;
-                    bottom: 100% !important;
-                    left: 0 !important;
-                    background: #3b82f6 !important;
-                    color: white !important;
-                    padding: 4px 8px !important;
-                    border-radius: 4px !important;
-                    font-size: 12px !important;
-                    white-space: nowrap !important;
-                    z-index: 10000 !important;
-                    pointer-events: none !important;
-                    margin-bottom: 4px !important;
-                    font-family: monospace !important;
-                  }
-                  .element-selector-hover * {
-                    cursor: crosshair !important;
-                  }
-                \`;
-                document.head.appendChild(style);
-                
-                // Handle mouse move for highlighting
-                const handleMouseMove = (e) => {
-                  const element = e.target;
-                  
-                  // Remove previous highlight
-                  if (hoveredElement && hoveredElement !== element) {
-                    hoveredElement.classList.remove('element-selector-hover');
-                    hoveredElement.removeAttribute('data-selector-info');
-                  }
-                  
-                  // Add highlight to current element
-                  if (element && element !== document.body && element !== document.documentElement) {
-                    element.classList.add('element-selector-hover');
-                    // Add selector info as tooltip
-                    const selectorInfo = element.tagName.toLowerCase() + 
-                                       (element.id ? '#' + element.id : '') + 
-                                       (element.className && typeof element.className === 'string' ? '.' + element.className.split(' ').filter(c => c && !c.includes('element-selector')).join('.') : '');
-                    element.setAttribute('data-selector-info', selectorInfo);
-                    hoveredElement = element;
-                  }
-                };
-                
-                // Handle click
-                const handleClick = (e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  
-                  const element = e.target;
-                  const rect = element.getBoundingClientRect();
-                  
-                  // Remove highlight
-                  if (hoveredElement) {
-                    hoveredElement.classList.remove('element-selector-hover');
-                    hoveredElement.removeAttribute('data-selector-info');
-                  }
-                  
-                  // Only send if we can safely communicate with parent
-                  if (window.parent !== window && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
-                    window.parent.postMessage({
-                      type: 'element-selected',
-                      data: {
-                        html: element.outerHTML.substring(0, 500),
-                        text: element.textContent?.substring(0, 200),
-                        tag: element.tagName.toLowerCase(),
-                        id: element.id,
-                        classes: element.className,
-                        path: element.tagName.toLowerCase() + (element.id ? '#' + element.id : ''),
-                      }
-                    }, '*');
-                  }
-                  
-                  // Cleanup
-                  document.body.style.cursor = '';
-                  document.removeEventListener('click', handleClick, true);
-                  document.removeEventListener('mousemove', handleMouseMove, true);
-                  style.remove();
-                  return false;
-                };
-                
-                // Handle escape key to cancel
-                const handleKeyDown = (e) => {
-                  if (e.key === 'Escape') {
-                    if (hoveredElement) {
-                      hoveredElement.classList.remove('element-selector-hover');
-                      hoveredElement.removeAttribute('data-selector-info');
-                    }
-                    document.body.style.cursor = '';
-                    document.removeEventListener('click', handleClick, true);
-                    document.removeEventListener('mousemove', handleMouseMove, true);
-                    document.removeEventListener('keydown', handleKeyDown);
-                    style.remove();
-                  }
-                };
-                
-                document.addEventListener('click', handleClick, true);
-                document.addEventListener('mousemove', handleMouseMove, true);
-                document.addEventListener('keydown', handleKeyDown);
-              })();
-            `;
-            iframeDoc.body.appendChild(script);
-          } else {
-            // Error: Cannot access iframe document
-          }
-        } catch (error) {
-          // Error: Failed to inject element selector
-          // Try alternative approach with postMessage
-          const iframe = iframeRef.current;
-          if (iframe && iframe.contentWindow) {
-            iframe.contentWindow.postMessage({ 
-              type: 'enable-element-selection',
-              enabled: true 
-            }, '*');
-          }
-        }
-      }
-    }, 500);
-    
-    return () => {
-      clearTimeout(timer);
-      window.removeEventListener('message', handleElementSelected);
-      
-      // Clean up injected script
-      if (iframeRef.current) {
-        try {
-          const iframe = iframeRef.current;
-          const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-          
-          if (iframeDoc) {
-            iframeDoc.body.style.cursor = '';
-            const script = iframeDoc.querySelector('#element-selector-script');
-            if (script) {
-              script.remove();
-            }
-          }
-          
-          // Also send disable message via postMessage for cross-origin
-          if (iframe.contentWindow) {
-            iframe.contentWindow.postMessage({ 
-              type: 'enable-element-selection',
-              enabled: false 
-            }, '*');
-          }
-        } catch (e) {
-        }
-      }
-    };
-  }, [elementSelectionMode]);
+  useElementSelection({
+    iframeRef,
+    enabled: elementSelectionMode,
+    onSelected: (data) => setSelectedElement(data),
+    onToggleOff: () => setElementSelectionMode(false)
+  });
 
   const handleOpenExternal = () => {
     window.open(currentUrl, '_blank');
@@ -1514,11 +835,28 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, onRefresh
         {/* Iframe principal - sempre mostra a aplicação */}
         {/* Optional side file panel */}
         {showFileTree && projectName && projectPath && (
-          <div className="absolute inset-0 z-30">
-            <FileManagerSimple 
-              selectedProject={{ name: projectName, path: projectPath }} 
-              onClose={() => setShowFileTree(false)}
-            />
+          <div className="absolute inset-0 z-30 bg-background">
+            {/standalone/i.test(String(projectName)) || String(projectPath) === 'STANDALONE_MODE' ? (
+              <div className="w-full h-full flex items-center justify-center select-none">
+                <div className="flex flex-col items-center text-center gap-4">
+                  <div className="w-20 h-20 md:w-24 md:h-24 rounded-2xl overflow-hidden shadow-lg">
+                    <img
+                      src="/icons/claude-ai-icon.svg"
+                      alt="vibeclaude"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <h1 className="text-3xl md:text-4xl font-bold text-foreground">vibeclaude</h1>
+                  <p className="text-sm md:text-base text-muted-foreground">Choose Your Project</p>
+                  <div className="w-20 h-0.5 bg-gradient-to-r from-primary to-accent" />
+                </div>
+              </div>
+            ) : (
+              <FileManagerSimple
+                selectedProject={{ name: projectName, path: projectPath }}
+                onClose={() => setShowFileTree(false)}
+              />
+            )}
           </div>
         )}
 
@@ -1622,23 +960,7 @@ function ClaudableLoader({ starting, onStart }) {
   );
 }
 
-function RingLogo({ spinning }) {
-  return (
-    <svg width="220" height="220" viewBox="0 0 100 100" className="mx-auto" style={spinning ? { animation: 'spin 1.8s linear infinite' } : undefined}>
-      <g fill="#b56a52">
-        <path d="M46 5a45 45 0 0 1 8 0v18a27 27 0 0 0-8 0z"/>
-        <path d="M74 12a45 45 0 0 1 6 6l-13 13a27 27 0 0 0-4-4z"/>
-        <path d="M95 46a45 45 0 0 1 0 8h-18a27 27 0 0 0 0-8z"/>
-        <path d="M82 74a45 45 0 0 1-6 6l-13-13a27 27 0 0 0 4-4z"/>
-        <path d="M54 95a45 45 0 0 1-8 0V77a27 27 0 0 0 8 0z"/>
-        <path d="M26 88a45 45 0 0 1-6-6l13-13a27 27 0 0 0 4 4z"/>
-        <path d="M5 54a45 45 0 0 1 0-8h18a27 27 0 0 0 0 8z"/>
-        <path d="M18 26a45 45 0 0 1 6-6l13 13a27 27 0 0 0-4 4z"/>
-      </g>
-      <circle cx="50" cy="50" r="34" fill="none" stroke="#000" strokeOpacity="0.3" strokeWidth="2"/>
-    </svg>
-  );
-}
+function RingLogo() { return null; }
 
 function FrameworkIcon({ name }) {
   const color = '#ffbe55';

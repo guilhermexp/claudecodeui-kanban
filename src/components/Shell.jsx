@@ -114,7 +114,7 @@ if (typeof document !== 'undefined') {
 // Global store for shell sessions to persist across tab switches AND project switches
 const shellSessions = new Map();
 
-function Shell({ selectedProject, selectedSession, isActive, onConnectionChange, onSessionStateChange, isMobile, resizeTrigger, onSidebarClose, activeSidePanel, onPreviewStateChange }) {
+function Shell({ selectedProject, selectedSession, isActive, onConnectionChange, onSessionStateChange, isMobile, resizeTrigger, onSidebarClose, activeSidePanel, onPreviewStateChange, onBindControls = null }) {
   const terminalRef = useRef(null);
   const terminal = useRef(null);
   const fitAddon = useRef(null);
@@ -197,6 +197,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   const [previewUrl, setPreviewUrl] = useState('');
   // (Removed global publish of preview URL; assistant now lives inside preview again)
   const [detectedUrls, setDetectedUrls] = useState(new Set());
+  const previewControlsRef = useRef(null);
   
   // Image drag & drop states
   const [isDraggedImageOver, setIsDraggedImageOver] = useState(false);
@@ -329,6 +330,23 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       onSidebarClose();
     }
   };
+
+  // Expose preview/file controls to parent (MainContent)
+  useEffect(() => {
+    if (typeof onBindControls === 'function') {
+      const controls = {
+        openPreview: () => setShowPreview(true),
+        closePreview: () => setShowPreview(false),
+        toggleFiles: () => previewControlsRef.current?.toggleFiles?.(),
+        showFiles: () => previewControlsRef.current?.showFiles?.(),
+        hideFiles: () => previewControlsRef.current?.hideFiles?.()
+      };
+      onBindControls(controls);
+      return () => {
+        try { onBindControls(null); } catch {}
+      };
+    }
+  }, [onBindControls]);
 
   const detectUrlsInTerminal = () => {
     if (!terminal.current) return new Set();
@@ -2185,6 +2203,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
               onRefresh={() => detectUrlsInTerminal()}
               isMobile={false}
               initialPaused={initialPreviewPaused}
+              onBindControls={(controls) => { previewControlsRef.current = controls; }}
             />
           )}
         </Panel>

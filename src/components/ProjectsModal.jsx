@@ -129,7 +129,7 @@ function ProjectsModal({
                 placeholder="Search projects..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 h-8 sm:h-9 bg-[#1a1a1a] border-[#2a2a2a] text-white rounded-lg focus:border-[#3a3a3a] focus:ring-1 focus:ring-[#3a3a3a]"
+                className="pl-10 h-8 sm:h-9 bg-background border-border text-foreground rounded-lg focus:border-ring focus:ring-1 focus:ring-ring"
               />
             </div>
           </div>

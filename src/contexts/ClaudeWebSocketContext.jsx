@@ -116,11 +116,15 @@ export const ClaudeWebSocketProvider = ({ children }) => {
         wsBaseUrl = `${protocol}//${window.location.host}`;
       }
       
-      // Create WebSocket connection with token
-      const wsUrl = `${wsBaseUrl}/claude?token=${encodeURIComponent(token)}`;
+      // Create WebSocket connection; token will be sent in first message
+      const wsUrl = `${wsBaseUrl}/claude`;
       ws.current = new WebSocket(wsUrl);
       
       ws.current.onopen = () => {
+        try {
+          // Send authentication as the first message (server expects this)
+          ws.current.send(JSON.stringify({ type: 'auth', token }));
+        } catch {}
         setIsConnected(true);
         setIsConnecting(false);
         reconnectAttempts.current = 0;
@@ -145,6 +149,22 @@ export const ClaudeWebSocketProvider = ({ children }) => {
       ws.current.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+          if (data?.type === 'auth-error') {
+            // Authentication failed — force disconnect and retry after small delay
+            try { ws.current.close(); } catch {}
+            setIsConnected(false);
+            setIsConnecting(false);
+            // Clear any stale attempt and retry quickly if token still exists
+            if (token) {
+              if (reconnectTimeout.current) clearTimeout(reconnectTimeout.current);
+              reconnectTimeout.current = setTimeout(() => connect(), 1200);
+            }
+            return;
+          }
+          if (data?.type === 'auth-success') {
+            // Auth OK; proceed normally
+            // optional: could notify handlers here
+          }
           
           // Distribute message to all registered handlers
           messageHandlers.current.forEach(handler => {
