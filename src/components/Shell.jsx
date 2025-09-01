@@ -1862,25 +1862,30 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       
       {/* Connect button when not connected */}
       {isInitialized && !isConnected && !isConnecting && (
-        <div className="absolute inset-0 flex items-center justify-center bg-background bg-opacity-90 p-3 sm:p-4">
-          <div className="text-center max-w-sm w-full">
+        <div className="absolute inset-0 flex items-center justify-center bg-background/95 p-6">
+          <div className="text-center max-w-lg w-full">
+            <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
+              <svg className="w-10 h-10 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <h3 className="text-xl font-semibold mb-2 text-foreground">Shell disconnected</h3>
+            <p className="text-muted-foreground text-sm sm:text-base mb-4 px-2">
+              Click “Continue in Shell” to start or resume the session.
+            </p>
+            <div className="inline-flex items-center gap-2 bg-muted/60 border border-border rounded-xl px-4 py-3 mb-5">
+              <span className="text-foreground/80 font-medium">Tip:</span>
+              <span className="text-muted-foreground text-sm">Use</span>
+              <code className="px-2 py-1 rounded-md bg-background border border-border text-xs">Ctrl/⌘ + K</code>
+              <span className="text-muted-foreground text-sm">to clear the terminal.</span>
+            </div>
             <CtaButton onClick={connectToShell} className="w-full justify-center">Continue in Shell</CtaButton>
-            <p className="text-muted-foreground text-sm sm:text-base mt-3 sm:mt-4 px-2 break-words font-medium">
-              {selectedSession ? (
-                <>Resume session: {selectedSession.summary.slice(0, isMobile ? 30 : 50)}...</>
-              ) : (
-                'Start a new vibeclaude session'
-              )}
-            </p>
-            <p className="text-muted-foreground text-xs mt-1 px-2 text-center">
-              Arraste imagens ou pressione ⌘V para adicionar ao chat
-            </p>
             {isBypassingPermissions && (
-              <p className="text-warning text-xs mt-2 px-2 flex items-center justify-center space-x-1 flex-wrap">
-                <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+              <p className="text-warning text-xs mt-2 px-2 flex items-center justify-center gap-1">
+                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
                 </svg>
-                <span className="text-center">Bypass permissions enabled</span>
+                Bypass permissions enabled
               </p>
             )}
           </div>
@@ -2029,39 +2034,27 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
           className="h-full min-h-0 flex flex-col bg-background rounded-xl border border-border" 
           {...dropzoneProps}>
           <input {...inputProps} />
-            {/* Status Bar (aligned with Files header) */}
-            <div className="flex-shrink-0 border-b border-border px-3 py-3">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center space-x-2 flex-1 min-w-0">
-                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isConnected ? 'bg-success' : 'bg-destructive'}`} />
-                  {selectedSession && (
-                    <span className="text-xs text-primary-foreground truncate">
-                      ({selectedSession.summary.slice(0, isMobile ? 20 : 30)}...)
-                    </span>
-                  )}
-                  {!selectedSession && (
-                    <span className="text-xs text-muted-foreground hidden xs:inline">(New Session)</span>
-                  )}
-                  {!isInitialized && (
-                    <span className="text-xs text-warning">
-                      {isMobile ? 'Init...' : '(Initializing...)'}
-                    </span>
-                  )}
-                  {isRestarting && (
-                    <span className="text-xs text-blue-400">
-                      {isMobile ? 'Restart...' : '(Restarting...)'}
-                    </span>
-                  )}
+            {/* Header — compact style to match Source Control */}
+            <div className="flex-shrink-0 border-b border-border px-3 py-2">
+              <div className="flex items-center justify-between">
+                {/* Left: icon + chevron (decorative) */}
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <svg className="w-4 h-4 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 7v6a3 3 0 106 0V7m0 0a3 3 0 106 0m-6 0a3 3 0 10-6 0" />
+                  </svg>
+                  <svg className="w-3 h-3 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 9l6 6 6-6" />
+                  </svg>
                 </div>
-                <div className="flex items-center space-x-1 min-w-0 flex-shrink-0">
-                  
-                  {/* Terminal Theme Toggle - always shows icon */}
+                {/* Right controls (all) */}
+                <div className="flex items-center gap-1">
+                  {/* Theme */}
                   <button
                     onClick={cycleTerminalTheme}
-                    className="p-1 sm:p-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent rounded transition-all duration-200 flex-shrink-0"
+                    className="p-1 sm:p-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent rounded transition"
                     title={`Terminal theme: ${terminalTheme} (click to change)`}
                   >
-                    <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
                         d={terminalTheme === 'light' 
                           ? "M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"
@@ -2072,31 +2065,30 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
                       />
                     </svg>
                   </button>
-                  
-                  {/* Bypass Permissions Toggle - Minimalista */}
+
+                  {/* Bypass permissions */}
                   <button
                     onClick={toggleBypassPermissions}
-                    className={`p-1.5 rounded-md transition-all duration-200 ${
+                    className={`p-1.5 rounded-md transition ${
                       isBypassingPermissions 
                         ? 'bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30' 
                         : 'hover:bg-accent text-muted-foreground hover:text-foreground'
                     }`}
-                    title={isBypassingPermissions ? "Bypass permissions enabled (sudo mode)" : "Enable bypass permissions (sudo mode)"}
+                    title={isBypassingPermissions ? 'Bypass permissions enabled (sudo mode)' : 'Enable bypass permissions (sudo mode)'}
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                         d={isBypassingPermissions 
-                          ? "M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" 
-                          : "M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-                        } 
+                          ? 'M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z'
+                          : 'M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z'}
                       />
                     </svg>
                   </button>
-                  
-                  {/* Toggle Terminal (show/hide) */}
+
+                  {/* Show/Hide terminal */}
                   <button
                     onClick={() => setShowTerminal(v => !v)}
-                    className={`p-1.5 rounded-md transition-all duration-200 ${showTerminal ? 'text-muted-foreground hover:text-foreground hover:bg-accent' : 'text-blue-500 hover:text-blue-600 bg-blue-500/10 hover:bg-blue-500/20'}`}
+                    className={`p-1.5 rounded-md transition ${showTerminal ? 'text-muted-foreground hover:text-foreground hover:bg-accent' : 'text-blue-500 hover:text-blue-600 bg-blue-500/10 hover:bg-blue-500/20'}`}
                     title={showTerminal ? 'Hide terminal' : 'Show terminal'}
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2104,7 +2096,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
                     </svg>
                   </button>
 
-                  {/* Preview Toggle Button */}
+                  {/* Preview toggle (desktop) */}
                   {!isMobile && (
                     <button
                       onClick={() => {
@@ -2112,105 +2104,80 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
                           setShowPreview(false);
                           setPreviewUrl('');
                         } else {
-                          // Try to detect URL from terminal or use default
                           const urls = detectUrlsInTerminal() || new Set();
-                          // Use detected URLs from terminal or smart detection
                           let firstUrl = 'http://localhost:5892';
-                          
                           if (urls.size > 0) {
                             firstUrl = Array.from(urls)[0];
                           } else {
-                            // Use async detection for best URL
-                            detectBestPreviewUrl().then(url => {
-                              setPreviewUrl(url);
-                            }).catch(() => {
-                              // Fallback already set
-                            });
+                            detectBestPreviewUrl().then(url => setPreviewUrl(url)).catch(() => {});
                           }
                           setPreviewUrl(firstUrl);
                           setShowPreview(true);
                         }
                       }}
-                      className={`p-1 sm:p-1.5 text-xs rounded transition-all duration-200 flex-shrink-0 ${
-                        showPreview 
-                          ? 'text-blue-500 hover:text-blue-600 bg-blue-500/10 hover:bg-blue-500/20' 
-                          : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-                      }`}
-                      title={showPreview ? "Close preview panel" : "Open preview panel"}
+                      className={`p-1 sm:p-1.5 text-xs rounded transition ${showPreview ? 'text-blue-500 hover:text-blue-600 bg-blue-500/10 hover:bg-blue-500/20' : 'text-muted-foreground hover:text-foreground hover:bg-accent'}`}
+                      title={showPreview ? 'Close preview panel' : 'Open preview panel'}
                     >
-                      <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                          d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" 
-                        />
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
                       </svg>
                     </button>
                   )}
-            
-            {/* Preview Close Button - Only shows when preview is open */}
-            {false && !isMobile && showPreview && (
-              <button
-              onClick={() => {
-                setShowPreview(false);
-                setPreviewUrl('');
-              }}
-              className="p-1 text-muted-foreground hover:text-foreground hover:bg-accent/50 rounded transition-all"
-              title="Close preview panel"
-            >
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-              </button>
-            )}
-            
-            {isConnected && (
-              <button
-                onClick={disconnectFromShell}
-                className="p-1.5 rounded-md bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-all duration-200"
-                title="Disconnect from shell"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            )}
-            
+
+                  {/* Disconnect */}
+                  {isConnected && (
+                    <button
+                      onClick={disconnectFromShell}
+                      className="p-1.5 rounded-md bg-red-500/20 text-red-400 hover:bg-red-500/30 transition"
+                      title="Disconnect from shell"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  )}
+
+                  {/* Restart */}
                   <button
                     onClick={restartShell}
                     disabled={isRestarting || isConnected}
-                    className="p-1 sm:px-1.5 lg:px-2 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1 hover:bg-accent rounded transition-all duration-200 flex-shrink-0"
-                    title="Restart Shell (disconnect first)"
+                    className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition disabled:opacity-50"
+                    title="Restart shell"
                   >
-              <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              <span className="hidden lg:inline whitespace-nowrap">Restart</span>
-              </button>
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                  </button>
 
-              {/* Close Shell panel (recede) */}
-              <button
-                onClick={() => { setShowPreview(false); setPreviewUrl(''); setShowTerminal(false); }}
-                className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-all duration-200"
-                title="Close shell panel"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+                  {/* Close Shell panel */}
+                  <button
+                    onClick={() => { setShowPreview(false); setPreviewUrl(''); setShowTerminal(false); }}
+                    className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition"
+                    title="Close"
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
+            {/* End compact header */}
+          
 
         {/* Terminal area or Files (empty state of Shell) */}
         <div className={`flex-1 min-h-0 p-1 md:p-2 pb-1 md:pb-2 overflow-hidden relative`}>
-          {showTerminal
-            ? terminalContent
-            : (!showPreview && (
-                <div className="h-full overflow-auto rounded-2xl border border-border">
-                  <FileManagerSimple selectedProject={selectedProject} />
-                </div>
-              ))}
+          {showTerminal ? (
+            terminalContent
+          ) : (
+            !showPreview && (
+              <div className="h-full rounded-2xl border border-border bg-card flex items-center justify-center">
+                <span className="text-xs text-muted-foreground">Terminal hidden</span>
+              </div>
+            )
+          )}
         </div>
-      </div>
+        </div>
     </Panel>
     
     {/* Preview panel - always render for consistent DOM structure */}

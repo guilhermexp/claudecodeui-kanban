@@ -231,7 +231,7 @@ class VibeKanbanProxy {
           // Service recovered
           this.circuitOpen = false;
           this.failureCount = 0;
-          logger.info('Vibe Kanban service recovered');
+          logger.debug('Vibe Kanban service recovered');
         }
         lastHealthyState = result.healthy;
       }

@@ -136,6 +136,8 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
   const { theme } = useTheme();
   const themeCodex = theme === 'dark'; // Use Codex theme only in dark mode
 
+  // Chat input visual state
+
   // Do not force any model; keep CLI defaults
   // Ensure default start mode is Auto
   useEffect(() => {
@@ -717,82 +719,101 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
         )}
         <div ref={bottomRef} />
       </div>
-      <div className={`${embedded ? 'px-2 py-1.5' : 'p-3'} relative`}>
+      <div className={`${embedded ? 'px-2 py-1.5' : 'p-3'} relative ios-bottom-safe chat-input-mobile`}>
         
         {/* Image preview area */}
         <ImagePreviewList images={imageAttachments} onRemove={removeImageAttachment} />
         
-        {/* Resume chip REMOVIDO no Codex (evitar confusão com Claude) */}
+        {/* Project path header and status strip - exactly like Claude */}
+        <div className="flex items-center justify-between text-muted-foreground text-xs px-2 mb-2 overflow-hidden">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <button className="flex items-center gap-1.5 hover:text-foreground transition-colors h-6 min-w-0" title={projectPath || 'Current directory'}>
+              <svg className="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+              </svg>
+              <span className="max-w-[120px] sm:max-w-[150px] truncate font-medium">
+                {projectPath ? projectPath.split('/').pop() : 'STANDALONE_MODE'}
+              </span>
+            </button>
+            
+            <StatusStrip
+              projectPath={projectPath}
+              plannerMode={plannerMode}
+              onPlannerChange={(m) => { setPlannerMode(m); savePlannerMode(m); }}
+              modelLabel={modelLabel}
+              onModelChange={(m) => { setModelLabel(m); saveModelLabel(m); }}
+              working={{
+                active: (activityLock || isSessionInitializing || isTyping || ['queued','busy','thinking','tool'].includes(typingStatus.mode)),
+                label: (
+                  isSessionInitializing ? 'Starting…' :
+                  (typingStatus.mode === 'tool' && typingStatus.label) ? `Using ${typingStatus.label}…` :
+                  typingStatus.mode === 'queued' ? (typingStatus.label || 'Queued…') :
+                  typingStatus.mode === 'busy' ? (typingStatus.label || 'Busy…') :
+                  'Working…'
+                ),
+                elapsedSec
+              }}
+            />
+          </div>
+        </div>
         
-        {/* Status strip extracted component */}
-        <StatusStrip
-          projectPath={projectPath}
-          plannerMode={plannerMode}
-          onPlannerChange={(m) => { setPlannerMode(m); savePlannerMode(m); }}
-          modelLabel={modelLabel}
-          onModelChange={(m) => { setModelLabel(m); saveModelLabel(m); }}
-          working={{
-            active: (activityLock || isSessionInitializing || isTyping || ['queued','busy','thinking','tool'].includes(typingStatus.mode)),
-            label: (
-              isSessionInitializing ? 'Starting…' :
-              (typingStatus.mode === 'tool' && typingStatus.label) ? `Using ${typingStatus.label}…` :
-              typingStatus.mode === 'queued' ? (typingStatus.label || 'Queued…') :
-              typingStatus.mode === 'busy' ? (typingStatus.label || 'Busy…') :
-              'Working…'
-            ),
-            elapsedSec
-          }}
-        />
-        
-        {/* Single unified input container with dark background */}
-        <div className="space-y-4 rounded-2xl bg-muted border border-border py-8 px-6 relative"
-             onDragOver={onDragOver}
-             onDragLeave={onDragLeave}
-             onDrop={onDrop}>
-          {/* Activity indicator moved inline to the row above */}
+        {/* Single unified input container with dark background - identical to Claude */}
+        <div className="space-y-4 rounded-2xl bg-muted border border-border py-8 px-6">
+          {/* Drag overlay */}
           {isDragging && (
             <div className="absolute inset-0 bg-primary/10 backdrop-blur-sm rounded-xl z-10 flex items-center justify-center">
               <div className="text-primary font-medium">Drop images here</div>
             </div>
           )}
+          
           {/* Input area */}
-          <div className="flex items-center gap-3">
-            {/* plus */}
-            <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={onFileInputChange} />
-            <button onClick={() => fileInputRef.current?.click()} className="w-9 h-9 rounded-full text-muted-foreground hover:text-foreground hover:bg-accent flex items-center justify-center transition-all" title="Attach">
-              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
-            </button>
-            {/* textarea */}
-            <textarea
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              onPaste={onPasteImages}
-              placeholder=""
-              className="flex-1 text-[15px] leading-relaxed bg-transparent outline-none text-foreground placeholder:text-[#999999] resize-none py-1"
-              disabled={!isConnected || (isSessionInitializing && !sessionActive)}
-              rows={1}
-              style={{ minHeight: '60px', maxHeight: '280px', height: 'auto', overflowY: input.split('\n').length > 4 ? 'auto' : 'hidden' }}
-            />
-            {/* send */}
-            <button
-              onClick={handleSend}
-              title="Send"
-              className="relative w-9 h-9 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-all disabled:opacity-40"
-              disabled={!isConnected || (isSessionInitializing && !sessionActive) || (!input.trim() && attachments.length === 0 && imageAttachments.length === 0)}
-            >
-              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M12 5l7 7-7 7"/></svg>
-              {queueLength > 0 && (
-                <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] leading-4 text-center">
-                  {queueLength}
-                </span>
-              )}
-            </button>
-          </div>
-
+          <div className="flex items-center gap-3" onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}>
+              {/* plus */}
+              <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={onFileInputChange} />
+              <button 
+                onClick={() => fileInputRef.current?.click()} 
+                className="w-9 h-9 rounded-full text-muted-foreground hover:text-foreground hover:bg-accent flex items-center justify-center transition-all" 
+                title="Attach"
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 5v14M5 12h14"/>
+                </svg>
+              </button>
+              
+              {/* textarea */}
+              <textarea
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                onPaste={onPasteImages}
+                placeholder=""
+                className="flex-1 text-[15px] leading-relaxed bg-transparent outline-none text-foreground placeholder:text-[#999999] resize-none py-1"
+                disabled={!isConnected || (isSessionInitializing && !sessionActive)}
+                rows={1}
+                style={{ minHeight: '60px', maxHeight: '280px', height: 'auto', overflowY: input.split('\n').length > 4 ? 'auto' : 'hidden' }}
+              />
+              
+              {/* send */}
+              <button
+                onClick={handleSend}
+                title="Send"
+                className="relative w-9 h-9 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-all disabled:opacity-40"
+                disabled={!isConnected || (isSessionInitializing && !sessionActive) || (!input.trim() && attachments.length === 0 && imageAttachments.length === 0)}
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M12 5l7 7-7 7"/>
+                </svg>
+                {queueLength > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] leading-4 text-center">
+                    {queueLength}
+                  </span>
+                )}
+              </button>
+            </div>
+            
           {/* Attachments preview */}
           {attachments.length > 0 && (
-            <div className={`${themeCodex ? 'text-zinc-300' : ''}`}>
+            <div className={`mt-3 ${themeCodex ? 'text-zinc-300' : ''}`}>
               <AttachmentsChips attachments={attachments} />
             </div>
           )}
