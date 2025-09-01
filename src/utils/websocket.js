@@ -1,4 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
+import { createLogger } from './logger';
+
+const log = createLogger('WebSocket');
 
 export function useWebSocket(authReady = false, wsPath = '/ws') {
   const [ws, setWs] = useState(null);
@@ -73,7 +76,7 @@ export function useWebSocket(authReady = false, wsPath = '/ws') {
       // Create WebSocket URL without token in query parameters
       const normalizedPath = wsPath.startsWith('/') ? wsPath : `/${wsPath}`;
       const wsUrl = `${wsBaseUrl}${normalizedPath}`;
-      console.log('[WebSocket] Connecting to:', wsUrl, 'Path:', normalizedPath);
+      log.info('Connecting to:', wsUrl, 'Path:', normalizedPath);
       
       // Browser WebSocket API doesn't support custom headers
       // For browser security, we need to send the token after connection
@@ -95,9 +98,22 @@ export function useWebSocket(authReady = false, wsPath = '/ws') {
       websocket.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+          if (data?.type === 'auth-error') {
+            // Close and attempt a reconnect after a short delay
+            try { websocket.close(); } catch {}
+            setIsConnected(false);
+            setWs(null);
+            if (!reconnectTimeoutRef.current) {
+              reconnectTimeoutRef.current = setTimeout(() => {
+                reconnectTimeoutRef.current = null;
+                connect();
+              }, 1200);
+            }
+            return;
+          }
           setMessages(prev => [...prev, data]);
         } catch (error) {
-          console.error('Error parsing WebSocket message:', error);
+          log.error('Error parsing WebSocket message:', error);
         }
       };
 
@@ -118,11 +134,11 @@ export function useWebSocket(authReady = false, wsPath = '/ws') {
       };
 
       websocket.onerror = (error) => {
-        console.error('WebSocket error:', error);
+        log.error('WebSocket error:', error);
       };
 
     } catch (error) {
-      console.error('Error creating WebSocket connection:', error);
+      log.error('Error creating WebSocket connection:', error);
     }
   };
 

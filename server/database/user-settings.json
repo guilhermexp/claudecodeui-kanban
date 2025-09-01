@@ -2,8 +2,8 @@
   "guilherme-varela@hotmail.com": {
     "allowedTools": [],
     "disallowedTools": [],
-    "skipPermissions": false,
+    "skipPermissions": true,
     "projectSortOrder": "recent",
-    "updatedAt": "2025-08-29T18:16:19.339Z"
+    "updatedAt": "2025-09-01T01:19:32.927Z"
   }
 }

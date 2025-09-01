@@ -599,9 +599,9 @@ function GitPanel({ selectedProject, isMobile, isVisible = false, onClose }) {
     const diff = commitDiffs[commit.hash];
     
     return (
-      <div key={commit.hash} className="border-b border-gray-200 dark:border-gray-700 last:border-0">
+      <div key={commit.hash} className="border-b border-border last:border-0">
         <div 
-          className="flex items-start p-3 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
+          className="flex items-start p-3 hover:bg-muted/40 cursor-pointer"
           onClick={() => toggleCommitExpanded(commit.hash)}
         >
           <div className="mr-2 mt-1 p-0.5 hover:bg-gray-200 dark:hover:bg-gray-800 rounded">
@@ -624,7 +624,7 @@ function GitPanel({ selectedProject, isMobile, isVisible = false, onClose }) {
           </div>
         </div>
         {isExpanded && diff && (
-          <div className="bg-gray-50 dark:bg-gray-950">
+          <div className="bg-muted/30">
             <div className="max-h-96 overflow-y-auto p-2">
               <div className="text-xs font-mono text-gray-600 dark:text-gray-400 mb-2">
                 {commit.stats}
@@ -644,7 +644,7 @@ function GitPanel({ selectedProject, isMobile, isVisible = false, onClose }) {
     
     return (
       <div key={filePath} className="border-b border-border last:border-0">
-        <div className={`flex items-center hover:bg-gray-50 dark:hover:bg-gray-800 ${isMobile ? 'px-2 py-1.5' : 'px-3 py-2'}`}>
+        <div className={`flex items-center hover:bg-muted/40 ${isMobile ? 'px-2 py-1.5' : 'px-3 py-2'}`}>
           <input
             type="checkbox"
             checked={isSelected}
@@ -656,7 +656,7 @@ function GitPanel({ selectedProject, isMobile, isVisible = false, onClose }) {
             className="flex items-center flex-1 cursor-pointer"
             onClick={() => toggleFileExpanded(filePath)}
           >
-            <div className={`p-0.5 hover:bg-gray-200 dark:hover:bg-gray-800 rounded ${isMobile ? 'mr-1' : 'mr-2'}`}>
+            <div className={`p-0.5 hover:bg-accent rounded ${isMobile ? 'mr-1' : 'mr-2'}`}>
               <ChevronRight className={`w-3 h-3 transition-transform duration-200 ease-in-out ${isExpanded ? 'rotate-90' : 'rotate-0'}`} />
             </div>
             <span className={`flex-1 truncate ${isMobile ? 'text-xs' : 'text-sm'}`}>{filePath}</span>
@@ -761,13 +761,13 @@ function GitPanel({ selectedProject, isMobile, isVisible = false, onClose }) {
   }
 
   return (
-    <div className="h-full flex flex-col bg-card rounded-xl border border-border">
+    <div className="h-full flex flex-col bg-card rounded-2xl border border-border shadow-sm">
       {/* Header */}
-      <div className={`flex items-center justify-between border-b border-border bg-gradient-to-r from-orange-900/10 to-red-900/10 ${isMobile ? 'px-3 py-2' : 'px-4 py-3'}`}>
+      <div className={`flex items-center justify-between border-b border-border bg-card ${isMobile ? 'px-3 py-2' : 'px-4 py-3'}`}>
         <div className="relative" ref={dropdownRef}>
           <button
             onClick={() => setShowBranchDropdown(!showBranchDropdown)}
-            className={`flex items-center hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors ${isMobile ? 'space-x-1 px-2 py-1' : 'space-x-2 px-3 py-1.5'}`}
+            className={`flex items-center hover:bg-accent rounded-md transition-colors ${isMobile ? 'space-x-1 px-2 py-1' : 'space-x-2 px-3 py-1.5'}`}
           >
             <GitBranch className={`text-orange-500 ${isMobile ? 'w-3 h-3' : 'w-4 h-4'}`} />
             <div className="flex items-center gap-1">
@@ -804,8 +804,8 @@ function GitPanel({ selectedProject, isMobile, isVisible = false, onClose }) {
                   <button
                     key={branch}
                     onClick={() => switchBranch(branch)}
-                    className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-800 ${
-                      branch === currentBranch ? 'bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-gray-100' : 'text-gray-700 dark:text-gray-300'
+                    className={`w-full text-left px-4 py-2 text-sm hover:bg-accent ${
+                      branch === currentBranch ? 'bg-muted text-foreground' : 'text-muted-foreground'
                     }`}
                   >
                     <div className="flex items-center space-x-2">
@@ -821,7 +821,7 @@ function GitPanel({ selectedProject, isMobile, isVisible = false, onClose }) {
                     setShowNewBranchModal(true);
                     setShowBranchDropdown(false);
                   }}
-                  className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center space-x-2"
+                  className="w-full text-left px-4 py-2 text-sm hover:bg-accent flex items-center space-x-2"
                 >
                   <Plus className="w-3 h-3" />
                   <span>Create new branch</span>
@@ -910,7 +910,7 @@ function GitPanel({ selectedProject, isMobile, isVisible = false, onClose }) {
               fetchRemoteStatus();
             }}
             disabled={isLoading}
-            className={`hover:bg-gray-100 dark:hover:bg-gray-800 rounded ${isMobile ? 'p-1' : 'p-1.5'}`}
+            className={`hover:bg-accent rounded ${isMobile ? 'p-1' : 'p-1.5'}`}
           >
             <RefreshCw className={`${isLoading ? 'animate-spin' : ''} ${isMobile ? 'w-3 h-3' : 'w-4 h-4'}`} />
           </button>
@@ -943,7 +943,7 @@ function GitPanel({ selectedProject, isMobile, isVisible = false, onClose }) {
       ) : (
         <>
           {/* Tab Navigation - Only show when git is available and no files expanded */}
-          <div className={`flex border-b border-gray-200 dark:border-gray-700 transition-all duration-300 ease-in-out ${
+          <div className={`flex border-b border-border transition-all duration-300 ease-in-out ${
             expandedFiles.size === 0 
               ? 'max-h-16 opacity-100 translate-y-0' 
               : 'max-h-0 opacity-0 -translate-y-2 overflow-hidden'
@@ -986,7 +986,7 @@ function GitPanel({ selectedProject, isMobile, isVisible = false, onClose }) {
                   : 'max-h-0 opacity-0 -translate-y-2 overflow-hidden'
               }`}>
                 {isMobile && isCommitAreaCollapsed ? (
-                  <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700">
+              <div className="px-4 py-2 border-b border-border">
                       <button
                         onClick={() => setIsCommitAreaCollapsed(false)}
                         className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm bg-muted text-foreground rounded-2xl hover:bg-muted/80"
@@ -999,7 +999,7 @@ function GitPanel({ selectedProject, isMobile, isVisible = false, onClose }) {
                   ) : (
                 <>
                   {/* Commit Message Input */}
-                  <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+                  <div className="px-4 py-3 border-b border-border">
                     {/* Mobile collapse button */}
                     {isMobile && (
                       <div className="flex items-center justify-between mb-2">
@@ -1074,7 +1074,7 @@ function GitPanel({ selectedProject, isMobile, isVisible = false, onClose }) {
 
           {/* File Selection Controls - Only show in changes view and when git is working and no files expanded */}
           {activeView === 'changes' && gitStatus && !gitStatus.error && (
-            <div className={`border-b border-gray-200 dark:border-gray-700 flex items-center justify-between transition-all duration-300 ease-in-out ${isMobile ? 'px-3 py-1.5' : 'px-4 py-2'} ${
+            <div className={`border-b border-border flex items-center justify-between transition-all duration-300 ease-in-out ${isMobile ? 'px-3 py-1.5' : 'px-4 py-2'} ${
               expandedFiles.size === 0 
                 ? 'max-h-16 opacity-100 translate-y-0' 
                 : 'max-h-0 opacity-0 -translate-y-2 overflow-hidden'
@@ -1110,7 +1110,7 @@ function GitPanel({ selectedProject, isMobile, isVisible = false, onClose }) {
 
           {/* Status Legend Toggle - Hide on mobile by default */}
           {!gitStatus?.error && !isMobile && (
-            <div className="border-b border-gray-200 dark:border-gray-700">
+            <div className="border-b border-border">
               <button
                 onClick={() => setShowLegend(!showLegend)}
                 className="w-full px-4 py-2 bg-muted hover:bg-muted/80 text-xs text-muted-foreground flex items-center justify-center gap-1"
@@ -1122,7 +1122,7 @@ function GitPanel({ selectedProject, isMobile, isVisible = false, onClose }) {
               
               {showLegend && (
                 <div className="px-4 py-3 bg-muted text-xs">
-                  <div className={`${isMobile ? 'grid grid-cols-2 gap-3 justify-items-center' : 'flex justify-center gap-6'}`}>
+                  <div className={`${isMobile ? 'grid grid-cols-2 gap-3 justify-items-center' : 'flex justify-center gap-6'}`}> 
                     <div className="flex items-center gap-2">
                       <span className="inline-flex items-center justify-center w-5 h-5 bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300 rounded border border-yellow-200 dark:border-yellow-800 font-bold text-xs">
                         M

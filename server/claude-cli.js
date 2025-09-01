@@ -18,7 +18,21 @@ function logClaudeEvent(ev) {
       return;
     }
     if (type === 'assistant') {
-      const txt = ev.message?.text || ev.message?.content || ev.text || '';
+      // Claude often sends { message: { content: [ {type: 'text', text: '...'}, {type:'tool_use', ...} ] } }
+      const content = ev.message?.content ?? ev.content;
+      let txt = ev.message?.text || ev.text || '';
+      if (!txt && Array.isArray(content)) {
+        const firstTextBlock = content.find(b => b && b.type === 'text' && typeof b.text === 'string');
+        if (firstTextBlock) txt = firstTextBlock.text;
+        else {
+          // If no text, summarize blocks for readable logs
+          const desc = content
+            .map(b => (b?.type === 'tool_use' ? `tool_use:${b.name || 'tool'}` : b?.type || 'block'))
+            .slice(0, 3)
+            .join(', ');
+          txt = `[${desc}]`;
+        }
+      }
       if (!txt) return;
       const snippet = String(txt).replace(/\s+/g, ' ').slice(0, 140);
       if (STREAM_MODE === 'full') log.info(`assistant: ${snippet}`);

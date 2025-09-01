@@ -40,11 +40,10 @@ export default function CodeBlockCollapsible({ language, text }) {
         </button>
       </div>
       {!collapsed && (
-        <SyntaxHighlighter style={vscDarkPlus} language={language} PreTag="div" customStyle={{ margin: '0', borderRadius: '0 0 0.5rem 0.5rem', fontSize: '0.85rem', width: '100%', overflowX: 'auto' }}>
+        <SyntaxHighlighter style={vscDarkPlus} language={language} PreTag="div" customStyle={{ margin: '0', borderRadius: '0 0 0.5rem 0.5rem', fontSize: '0.85rem', width: '100%', overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
           {String(text).replace(/\n$/, '')}
         </SyntaxHighlighter>
       )}
     </div>
   );
 }
-

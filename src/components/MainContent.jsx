@@ -21,6 +21,7 @@ import OverlayChatClaude from './OverlayChatClaude';
 import ResourceMonitor from './ResourceMonitor';
 import ErrorBoundary from './ErrorBoundary';
 import { TextShimmer } from './ui/text-shimmer';
+import { createLogger } from '../utils/logger';
 import { ConfigProvider } from './vibe-kanban/config-provider';
 import ProjectsModal from './ProjectsModal';
 import KanbanModal from './KanbanModal';
@@ -79,12 +80,14 @@ function MainContent({
   const [showProjectsModal, setShowProjectsModal] = useState(false);
   const [showKanbanModal, setShowKanbanModal] = useState(false);
   const [showGitModal, setShowGitModal] = useState(false);
+  const [toast, setToast] = useState(null);
   const [claudeOverlaySessionId, setClaudeOverlaySessionId] = useState(null);
   const [endClaudeOverlaySession, setEndClaudeOverlaySession] = useState(null);
   
   // Debug logging for endClaudeOverlaySession updates
   useEffect(() => {
-    console.log('[MainContent] endClaudeOverlaySession updated:', {
+    const log = createLogger('MainContent');
+    log.debug('endClaudeOverlaySession updated:', {
       hasFunction: typeof endClaudeOverlaySession === 'function',
       value: endClaudeOverlaySession
     });
@@ -345,25 +348,16 @@ function MainContent({
               
               <button
                 onClick={() => {
-                  // Toggle Files panel
-                  if (activeSidePanel === 'files') {
-                    setActiveSidePanel(null);
-                  } else {
-                    // If preview is open, close it to avoid overcrowding
-                    if (hasPreviewOpen && window.closePreview) {
-                      window.closePreview();
-                    }
-                    setActiveSidePanel('files');
-                    if (sidebarOpen && onSidebarOpen) {
-                      onSidebarOpen();
-                    }
-                  }
+                  try {
+                    window.__shellControls?.openPreview?.();
+                    window.__shellControls?.showFiles?.();
+                  } catch {}
+                  // Ensure no separate side panel is active
+                  if (activeSidePanel) setActiveSidePanel(null);
                   setTimeout(() => setShellResizeTrigger(prev => prev + 1), 350);
                 }}
                 className={`relative inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
-                  activeSidePanel === 'files'
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                  'text-muted-foreground hover:text-foreground hover:bg-accent'
                 }`}
               >
                 <span className="flex items-center gap-1 sm:gap-1.5 leading-none">
@@ -386,7 +380,14 @@ function MainContent({
               </button>
               
               <button
-                onClick={() => setShowGitModal(true)}
+                onClick={() => {
+                  if (!selectedProject || selectedProject?.isStandalone || selectedProject?.path === 'STANDALONE_MODE') {
+                    setToast({ message: 'Source Control is disabled in standalone sessions' });
+                    setTimeout(() => setToast(null), 2200);
+                    return;
+                  }
+                  setShowGitModal(true);
+                }}
                 className="relative inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 text-muted-foreground hover:text-foreground hover:bg-accent"
               >
                 <span className="flex items-center gap-1 sm:gap-1.5 leading-none">
@@ -525,6 +526,7 @@ function MainContent({
                 resizeTrigger={shellResizeTrigger}
                 activeSidePanel={activeSidePanel}
                 onPreviewStateChange={setHasPreviewOpen}
+                onBindControls={(controls) => { window.__shellControls = controls; }}
                 onSidebarClose={() => {
                   if (sidebarOpen && onSidebarOpen) {
                     onSidebarOpen(); // This toggles the sidebar (closes it when open)
@@ -579,14 +581,7 @@ function MainContent({
           </div>
         )}
 
-        {/* Files Panel as full overlay on desktop */}
-        {!isMobile && activeSidePanel === 'files' && (
-          <div className="absolute inset-0 z-30 p-3 md:p-5 lg:p-6 pointer-events-auto">
-            <div className="w-full h-full rounded-xl border border-border/60 overflow-hidden bg-background shadow-xl">
-              <FileManagerSimple selectedProject={selectedProject} onClose={() => setActiveSidePanel(null)} />
-            </div>
-          </div>
-        )}
+        {/* Files panel overlay removed: Files now always opens integrated over the Preview */}
         
 
         {/* Mobile support - keeping existing tabs behavior */}
@@ -654,13 +649,22 @@ function MainContent({
       {showGitModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="fixed inset-0 bg-black/50" onClick={() => setShowGitModal(false)} />
-          <div className="relative z-50 w-full max-w-4xl max-h-[85vh] bg-background rounded-lg shadow-xl overflow-hidden">
+          <div className="relative z-50 w-full max-w-4xl max-h-[85vh] bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
             <GitPanel 
               selectedProject={selectedProject} 
               isMobile={false} 
               isVisible={true} 
               onClose={() => setShowGitModal(false)} 
             />
+          </div>
+        </div>
+      )}
+
+      {/* Toast - discrete top-center notice */}
+      {toast && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50">
+          <div className="px-3 py-2 text-xs bg-background/90 text-muted-foreground border border-border rounded-md shadow-sm">
+            {toast.message}
           </div>
         </div>
       )}

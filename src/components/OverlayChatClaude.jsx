@@ -4,7 +4,8 @@ import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useWebSocket } from '../utils/websocket';
+// Use unified Claude WebSocket from context to avoid duplicate connections
+import { useClaudeWebSocket } from '../contexts/ClaudeWebSocketContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { normalizeCodexEvent } from '../utils/codex-normalizer';
@@ -14,84 +15,17 @@ import { loadPlannerMode, savePlannerMode, loadModelLabel, saveModelLabel, loadC
 import { hasChatHistory, loadChatHistory, saveChatHistory } from '../utils/chat-history';
 import { hasLastSession, loadLastSession, saveLastSession, clearLastSession } from '../utils/chat-session';
 import { useMessageFeedback } from '../hooks/useMessageFeedback';
+import { useClaudeSessionState } from '../hooks/claude/useClaudeSessionState';
 import { getMessageIndicator } from '../utils/message-feedback';
+import { createLogger } from '../utils/logger';
+import CodeBlockCollapsible from './overlay-claude/CodeBlockCollapsible';
+import ThinkingCollapsible from './overlay-claude/ThinkingCollapsible';
+import { useActivityTimer } from '../hooks/useActivityTimer';
+import { useClaudeStreamHandler } from '../hooks/claude/useClaudeStreamHandler';
 
-// Stable, memoized collapsible code block to avoid remount/reset on re-renders
-function CodeBlockCollapsible({ language, text }) {
-  const [copied, setCopied] = useState(false);
-  const src = String(text);
-  const lines = src.split('\n');
-  const lineCount = lines.length;
-  // Collapse only when it is long enough; small blocks open by default
-  const [collapsed, setCollapsed] = useState(lineCount > 12);
-  const handleCopy = async () => {
-    try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1200); } catch {}
-  };
-  // Try to extract a compact command/title from the first lines
-  const headerTitle = (() => {
-    for (let i = 0; i < Math.min(5, lines.length); i++) {
-      const l = (lines[i] || '').trim();
-      if (!l) continue;
-      if (/^(PS\s|>|\$\s)/.test(l)) continue; // skip prompts
-      if (l.length > 80) continue;
-      if (/^[a-zA-Z0-9_.\/-]+(\s+[^\n]{0,60})?$/.test(l)) return l;
-      break;
-    }
-    return null;
-  })();
-  return (
-    <div className="relative group w-full max-w-full">
-      <div className="flex items-center justify-between gap-2 mb-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-border/50 bg-transparent w-full">
-        <button
-          type="button"
-          onClick={() => setCollapsed(prev => !prev)}
-          aria-expanded={!collapsed}
-          className="flex items-center gap-2 text-[12px] sm:text-sm text-muted-foreground hover:text-foreground transition-colors min-w-0 flex-1 text-left cursor-pointer"
-        >
-          <svg className={`w-4 h-4 transition-transform ${collapsed ? '' : 'rotate-90'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-          </svg>
-          {headerTitle ? (
-            <span className="font-mono text-[11px] sm:text-xs truncate block">{headerTitle}</span>
-          ) : (
-            <span className="font-mono text-[11px] sm:text-xs truncate block">{language || 'text'} • {lineCount} {collapsed ? 'lines (click to expand)' : 'lines'}</span>
-          )}
-        </button>
-        <button onClick={handleCopy} className="px-2 py-1 text-[11px] rounded-md bg-background/80 border border-border hover:bg-accent flex-shrink-0">
-          {copied ? 'Copied' : 'Copy'}
-        </button>
-      </div>
-      {!collapsed && (
-        <SyntaxHighlighter
-          style={vscDarkPlus}
-          language={language}
-          PreTag="div"
-          customStyle={{ margin: '0', borderRadius: '0 0 0.5rem 0.5rem', fontSize: '0.85rem', width: '100%', overflowX: 'auto' }}
-        >
-          {String(text).replace(/\n$/, '')}
-        </SyntaxHighlighter>
-      )}
-    </div>
-  );
-}
+const log = createLogger('OverlayChatClaude');
 
-// Collapsible block for "Thinking…" system content
-function ThinkingCollapsible({ text }) {
-  const body = String(text || '').replace(/^Thinking…\s*\n?/, '');
-  return (
-    <details className="group w-full max-w-full">
-      <summary className="list-none cursor-pointer flex items-center gap-2 mb-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-border/50 bg-transparent text-[12px] sm:text-sm text-muted-foreground hover:text-foreground">
-        <svg className="w-4 h-4 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-        </svg>
-        <span className="font-medium truncate">Thinking…</span>
-      </summary>
-      <div className="prose prose-sm dark:prose-invert max-w-none leading-relaxed prose-p:my-1 prose-li:my-1">
-        <ReactMarkdown components={{}}>{body}</ReactMarkdown>
-      </div>
-    </details>
-  );
-}
+// Using external, shared components from overlay-claude/ to reduce file size
 
 // Overlay Chat com formatação bonita usando ReactMarkdown
 // Usa NOSSO backend interno (porta 7347) - sem servidores externos!
@@ -106,9 +40,8 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
   const [codexMessages, setCodexMessages] = useState([]);
   const [claudeMessages, setClaudeMessages] = useState([]);
   const [codexSessionId, setCodexSessionId] = useState(null);
-  const [claudeSessionId, setClaudeSessionId] = useState(null);
+  const { claudeSessionId, setClaudeSessionId, claudeSessionActive, setClaudeSessionActive, resetClaudeSession } = useClaudeSessionState(null, false);
   const [codexSessionActive, setCodexSessionActive] = useState(false);
-  const [claudeSessionActive, setClaudeSessionActive] = useState(false);
   const [currentModel, setCurrentModel] = useState(null);
   
   // Use the new message feedback system for better UX
@@ -138,8 +71,6 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
   const [isEnding, setIsEnding] = useState(false);
   const [typingStatus, setTypingStatus] = useState({ mode: 'idle', label: '' });
   const [typingStart, setTypingStart] = useState(null); // legacy; not used for timer anymore
-  const [elapsedSec, setElapsedSec] = useState(0);
-  const activityStartRef = useRef(null);
   // Lock indicator from first send to final done
   const [activityLock, setActivityLock] = useState(false);
   const [selectedElement, setSelectedElement] = useState(null);
@@ -153,7 +84,6 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
   const [hasSaved, setHasSaved] = useState(false);
   const restoredRef = useRef(false);
   const lastAssistantTextRef = useRef('');
-
   // Project pinning: allow chat to stay on a project even if app selection changes
   const [chatProjectPath, setChatProjectPath] = useState(projectPath || null);
   const [pendingProjectPath, setPendingProjectPath] = useState(null);
@@ -187,7 +117,15 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
   const { isLoading: authLoading, token } = useAuth();
   const authReady = !!token && !authLoading;
   // Use unified Claude endpoint to isolate Claude traffic
-  const { ws, sendMessage, messages: wsMessages, isConnected, reconnect } = useWebSocket(authReady, '/claude');
+  const { sendMessage, isConnected, registerMessageHandler, connect } = useClaudeWebSocket();
+  const [wsMessages, setWsMessages] = useState([]);
+  useEffect(() => {
+    // Subscribe to unified Claude messages via context
+    const unsub = registerMessageHandler('overlay-claude', (data) => {
+      setWsMessages(prev => [...prev, data]);
+    });
+    return () => { try { unsub && unsub(); } catch {} };
+  }, [registerMessageHandler]);
   const [clientSessionId, setClientSessionId] = useState(null); // synthetic id when real id is not yet available
   const [resumeRolloutPath, setResumeRolloutPath] = useState(null);
   
@@ -201,6 +139,8 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
   useEffect(() => {
   }, [sessionId, sessionActive]);
   const [isSessionInitializing, setIsSessionInitializing] = useState(false);
+
+  
   const [sessionStarted, setSessionStarted] = useState(false); // Track if user started a session
   const initTimerRef = useRef(null);
   // Carregar/sincronizar toggle perigoso quando o projeto mudar (usar projeto ativo do chat)
@@ -253,6 +193,24 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
       const pieces = [];
       let rest = text;
       const badge = (cls, label) => <span className={`badge ${cls}`}>{label}</span>;
+      const copyBadge = (cls, label, value) => (
+        <span
+          className={`badge ${cls}`}
+          onClick={() => { try { navigator.clipboard.writeText(value); } catch {} }}
+          title="Copy"
+          style={{ cursor: 'pointer' }}
+        >{label}</span>
+      );
+      const extToCls = (p) => {
+        try {
+          const ext = (p.split('.').pop() || '').toLowerCase();
+          if (ext === 'js' || ext === 'jsx') return 'badge-js';
+          if (ext === 'ts' || ext === 'tsx') return 'badge-ts';
+          if (ext === 'md' || ext === 'markdown') return 'badge-md';
+          if (ext === 'json') return 'badge-json';
+          return 'badge-ref';
+        } catch { return 'badge-ref'; }
+      };
       
       // Leading language/file-kind badges
       if (/^(JS|TS|MD|JSON)\s+/.test(rest)) {
@@ -282,11 +240,54 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
         return pieces;
       }
       
+      // Inline path highlighting with copy (best-effort)
+      const pathRegex = /(\/?[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+\.[a-zA-Z0-9]{1,6})/g; // /a/b/c.ext
+      const parts = rest.split(pathRegex);
+      if (parts.length > 1) {
+        const out = [];
+        for (let i = 0; i < parts.length; i++) {
+          const part = parts[i];
+          if (!part) continue;
+          const isPath = /(\/[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+\.[a-zA-Z0-9]{1,6})/.test(part);
+          if (isPath) {
+            const label = part.length > 48 ? part.slice(0, 46) + '…' : part;
+            out.push(copyBadge(extToCls(part), label, part));
+            out.push(' ');
+          } else {
+            out.push(part);
+          }
+        }
+        return out;
+      }
+      
       return text;
     } catch { 
       return content; 
     }
   }, []);
+
+  // Collapsible for long plain text paragraphs
+  const ShowMoreText = ({ text, maxLines = 14, maxChars = 1200 }) => {
+    try {
+      const s = String(text || '');
+      const lines = s.split('\n');
+      const tooLong = lines.length > maxLines || s.length > maxChars;
+      const [open, setOpen] = useState(false);
+      if (!tooLong) return <span>{s}</span>;
+      const head = lines.slice(0, maxLines).join('\n');
+      const tail = lines.slice(maxLines).join('\n');
+      return (
+        <div className="my-1">
+          <pre className="whitespace-pre-wrap leading-relaxed">{open ? s : head}</pre>
+          {!open && tail && <div className="text-xs text-muted-foreground mt-1">… {lines.length - maxLines} more lines</div>}
+          <button
+            className="mt-1 text-xs px-2 py-0.5 rounded-md bg-muted hover:bg-accent transition"
+            onClick={() => setOpen(v => !v)}
+          >{open ? 'Show less' : 'Show more'}</button>
+        </div>
+      );
+    } catch { return <span>{text}</span>; }
+  };
   
   // Reset chat when provider changes
   useEffect(() => {
@@ -464,8 +465,11 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
         permissionMode: bypass ? 'bypassPermissions' : 'default',
         bypass: bypass
       };
-      console.log('[OverlayChatClaude] Sending claude-start-session with options:', options);
+      log.info('Sending claude-start-session with options:', options);
       sendMessage({ type: 'claude-start-session', options });
+      // Do not block input while initializing Claude
+      setIsSessionInitializing(false);
+      setSessionStarted(true);
 
       // Inject a friendly welcome immediately for better UX
       if (mode === 'bypass') {
@@ -477,6 +481,12 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
       }
       
       // Session will be created and ID will be received via WebSocket
+      // Fallback timeout if session id isn't received (keeps UI usable)
+      if (initTimerRef.current) clearTimeout(initTimerRef.current);
+      initTimerRef.current = setTimeout(() => {
+        setIsSessionInitializing(false);
+        addMessage({ type: 'system', text: 'Session start timeout. You can retry or continue without session.' });
+      }, 45000);
       
     } else if (isConnected) {
       // For Codex, use WebSocket
@@ -512,7 +522,15 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
     }
   }, [projectPath, startSession]); // addMessage defined later; safe to omit
 
-  const endSession = useCallback(() => {
+  // Guard to ensure only user actions can truly end the session
+  const allowEndRef = useRef(false);
+
+  const endSessionCore = useCallback(() => {
+    if (!allowEndRef.current) {
+      try { log.debug('OverlayChatClaude: endSession blocked (non-user)'); } catch {}
+      return;
+    }
+    try { log.debug('OverlayChatClaude: endSession invoked'); } catch {}
     setIsEnding(true);
     if (cliProvider === 'claude') {
       // For Claude, clear session state
@@ -538,42 +556,30 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
       setCodexSessionId(null);
       setCodexMessages([]);
     }
-    // Close panel with a subtle delay to show feedback
+    // Do not auto-close panel here; let explicit close button handle it
     setTimeout(() => {
       setIsEnding(false);
-      setOpen(false);
-      try { if (typeof onPanelClosed === 'function') onPanelClosed(); } catch {}
     }, 400);
   }, [isConnected, sendMessage, cliProvider, isSessionInitializing, projectPath, onPanelClosed]);
 
+  const endSessionUser = useCallback(() => {
+    allowEndRef.current = true;
+    endSessionCore();
+    allowEndRef.current = false;
+  }, [endSessionCore]);
+
   // Expose controls to parent when session is active
+  // Temporarily disable external end-session binding to avoid accidental triggers
   useEffect(() => {
-    // Only run this effect when session state actually changes
     if (typeof onBindControls !== 'function') return;
-    
-    const hasActiveSession = claudeSessionActive || codexSessionActive;
-    
-    console.log('[OverlayChatClaude] Session state:', {
-      claudeSessionActive,
-      codexSessionActive,
-      hasActiveSession,
-      willBind: hasActiveSession
-    });
-    
-    if (hasActiveSession) {
-      // Bind the end session function when there's an active session
-      onBindControls(endSession);
-    } else {
-      // Clear the function when no session is active
-      onBindControls(null);
-    }
-  }, [claudeSessionActive, codexSessionActive, onBindControls, endSession]);
+    try { onBindControls(null); } catch {}
+  }, [onBindControls]);
 
   const restartSession = useCallback(() => {
-    endSession();
+    endSessionUser();
     // Small delay to allow server to clear state
     setTimeout(() => startSession(), 200);
-  }, [endSession, startSession]);
+  }, [endSessionUser, startSession]);
 
   // Map tool names to small icons
   const getToolIcon = useCallback((name) => {
@@ -585,24 +591,9 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
   }, []);
 
   // Elapsed time for the whole "working" cycle (from start to done)
-  useEffect(() => {
-    const active = activityLock || isSessionInitializing || isTyping || ['queued','busy','thinking','tool'].includes(typingStatus.mode);
-    let id;
-    if (active) {
-      if (!activityStartRef.current) {
-        activityStartRef.current = Date.now();
-        setElapsedSec(0);
-      }
-      id = setInterval(() => {
-        const start = activityStartRef.current || Date.now();
-        setElapsedSec(Math.max(0, Math.floor((Date.now() - start) / 1000)));
-      }, 1000);
-    } else {
-      activityStartRef.current = null;
-      setElapsedSec(0);
-    }
-    return () => { if (id) clearInterval(id); };
-  }, [activityLock, isSessionInitializing, isTyping, typingStatus.mode]);
+  const elapsedSec = useActivityTimer(
+    activityLock || isSessionInitializing || isTyping || ['queued','busy','thinking','tool'].includes(typingStatus.mode)
+  );
 
   // Message handling (persistent, same behavior as Codex overlay)
   const addMessage = useCallback((newMessage) => {
@@ -669,6 +660,29 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
       return [...prev, messageWithMeta];
     });
   }, [hideThinking]);
+  // Claude stream handler (processes CLAUDE-specific WS messages)
+  const { processClaudeMessage } = useClaudeStreamHandler({
+    claudeSessionId,
+    setClaudeSessionId,
+    claudeSessionActive,
+    setClaudeSessionActive,
+    setIsSessionInitializing,
+    setIsTyping,
+    setTypingStatus,
+    setActivityLock,
+    clientSessionId,
+    setClientSessionId,
+    onSessionIdChange,
+    onSessionInfoChange,
+    currentModel,
+    setCurrentModel,
+    projectPath,
+    clearLastSession,
+    addMessage,
+    getToolIcon,
+    optionsRestartingRef,
+  });
+
 
   // Add message and return created id (for streaming updates)
   const addMessageAndGetId = useCallback((newMessage) => {
@@ -741,6 +755,22 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
   useEffect(() => {
     if (wsMessages && wsMessages.length > 0) {
       const lastMsg = wsMessages[wsMessages.length - 1];
+      // Let the Claude-specific handler process Claude events first
+      if (cliProvider === 'claude') {
+        const handled = processClaudeMessage(lastMsg);
+        if (handled) {
+          // Clear init timer if session is effectively started via response
+          try {
+            if (lastMsg.type === 'claude-response' && lastMsg.data && lastMsg.data.session_id) {
+              if (initTimerRef.current) { clearTimeout(initTimerRef.current); initTimerRef.current = null; }
+              setIsSessionInitializing(false);
+              // Remove any lingering timeout messages
+              setMessages(prev => prev.filter(m => !(m.type === 'system' && typeof m.text === 'string' && m.text.startsWith('Session start timeout'))));
+            }
+          } catch {}
+          return;
+        }
+      }
       
       // Create a unique key for this message to prevent duplicate processing
       const msgKey = `${lastMsg.type}-${lastMsg.sessionId || ''}-${JSON.stringify(lastMsg)}-${wsMessages.length}`;
@@ -759,7 +789,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
       if (lastMsg.type === 'claude-session-started' && cliProvider === 'claude') {
         if (initTimerRef.current) { clearTimeout(initTimerRef.current); initTimerRef.current = null; }
         
-        console.log('[OverlayChatClaude] Session started:', {
+        log.info('Session started:', {
           type: lastMsg.type,
           sessionId: lastMsg.sessionId,
           temporary: lastMsg.temporary
@@ -774,7 +804,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
           setClaudeSessionId(lastMsg.sessionId);
           setIsSessionInitializing(false);
           // claude-session-started always contains real session IDs (no more temp IDs)
-          console.log('[OverlayChatClaude] Setting session active = true');
+          log.debug('Setting session active = true');
           setClaudeSessionActive(true);
           // Mark that session just started to prevent immediate options update
           sessionJustStartedRef.current = true;
@@ -1127,21 +1157,21 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
           setIsTyping(true);
           setTypingStatus({ mode: 'thinking', label: 'Thinking' });
           setTypingStart(Date.now());
-          setElapsedSec(0);
+          // elapsed timer resets automatically when active state changes
         }
         return;
       }
       if (lastMsg.type === 'codex-complete') {
         resetTypingState();
         setTypingStart(null);
-        setElapsedSec(0);
+        // elapsed timer resets automatically when active state changes
         setActivityLock(false);
         return;
       }
       if (lastMsg.type === 'codex-error') {
         resetTypingState();
         setTypingStart(null);
-        setElapsedSec(0);
+        // elapsed timer resets automatically when active state changes
         addMessage({ type: 'error', text: lastMsg.error });
         setActivityLock(false);
         return;
@@ -1153,7 +1183,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
           setTypingStatus({ mode: 'tool', label: toolData.name });
           addMessage({ type: 'system', text: `${getToolIcon(toolData.name)} ${toolData.name}` });
           setTypingStart(Date.now());
-          setElapsedSec(0);
+          // elapsed timer resets automatically when active state changes
         }
         return;
       }
@@ -1430,6 +1460,18 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
               </div>
             </div>
           )}
+          {/* Close panel (does NOT end session) */}
+          <button
+            onClick={() => {
+              try { log.debug('OverlayChatClaude: close panel clicked'); } catch {}
+              setOpen(false);
+              try { if (typeof onPanelClosed === 'function') onPanelClosed(); } catch {}
+            }}
+            className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-white/10"
+            title="Close panel"
+          >
+            <svg className="w-4 h-4 text-zinc-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
           <button
             onClick={restartSession}
             disabled={!isConnected}
@@ -1437,6 +1479,18 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
             title="Restart"
           >
             <svg className="w-4 h-4 text-zinc-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v8h8"/></svg>
+          </button>
+          {/* End session (ends and closes) */}
+          <button
+            onClick={() => {
+              try { log.debug('OverlayChatClaude: end session clicked'); } catch {}
+              endSessionUser();
+            }}
+            disabled={!isConnected}
+            className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-white/10 disabled:opacity-50"
+            title="End session"
+          >
+            <svg className="w-4 h-4 text-red-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 18L18 6M6 6l12 12"/></svg>
           </button>
           {/* Settings removed: functionality moved to bottom segmented controls */}
         </div>
@@ -1620,7 +1674,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
                               </span>
                             </div>
                           ) : (
-                            <div className="max-w-none leading-relaxed">
+                            <div className="max-w-none leading-relaxed prose prose-sm dark:prose-invert prose-pre:whitespace-pre-wrap prose-pre:break-words prose-pre:overflow-auto">
                               <ReactMarkdown components={markdownComponents}>{textContent}</ReactMarkdown>
                             </div>
                           )}
@@ -1782,7 +1836,9 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
           })()}
         </AnimatePresence>
         <div 
-          className={`${themeCodex ? 'relative' : `rounded-2xl border ${isDragging ? 'border-primary border-2' : 'border-border/50 bg-zinc-900/90'} shadow-sm transition-all duration-200 focus-within:border-primary/50 relative`}`}
+          className={`${themeCodex 
+            ? 'relative'
+            : `rounded-2xl border ${isDragging ? 'border-primary border-2' : 'border-border bg-muted'} shadow-sm transition-all duration-200 focus-within:border-primary/50 relative`}`}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
@@ -2046,24 +2102,23 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
     }
     // Upload images to backend and get file paths for CLI consumption
     let uploadedPaths = [];
-    if (imageAttachments.length > 0 && ws && ws.readyState === WebSocket.OPEN) {
+    if (imageAttachments.length > 0) {
       const uploadOne = (img) => new Promise((resolve) => {
-        const timeout = setTimeout(() => { try { ws.removeEventListener('message', onMsg); } catch {}; resolve(null); }, 8000);
-        const onMsg = (ev) => {
+        const handlerId = `overlay-claude-upload-${Date.now()}-${Math.random()}`;
+        const timeout = setTimeout(() => { try { unsub && unsub(); } catch {}; resolve(null); }, 8000);
+        const unsub = registerMessageHandler(handlerId, (payload) => {
           try {
-            const payload = JSON.parse(ev.data);
             if (payload.type === 'image-uploaded' && payload.fileName === img.name) {
               clearTimeout(timeout);
-              ws.removeEventListener('message', onMsg);
+              try { unsub && unsub(); } catch {}
               resolve(payload.path);
             } else if (payload.type === 'image-upload-error') {
               clearTimeout(timeout);
-              ws.removeEventListener('message', onMsg);
+              try { unsub && unsub(); } catch {}
               resolve(null);
             }
           } catch {}
-        };
-        try { ws.addEventListener('message', onMsg); } catch {}
+        });
         sendMessage({ type: 'upload-image', imageData: img.dataUrl, fileName: img.name });
       });
       for (const img of imageAttachments) {
@@ -2188,12 +2243,12 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
   useEffect(() => {
     const onStorage = (e) => {
       if (e.key === 'auth-token' && e.newValue) {
-        reconnect?.();
+        try { connect && connect(); } catch {}
       }
     };
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
-  }, [reconnect]);
+  }, [connect]);
 
   // Claude messages now come via WebSocket, not SSE stream
   // Process them in the wsMessages effect above
@@ -2306,7 +2361,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
       return <h3 className="text-base font-semibold mt-2 mb-1" {...props}>{children}</h3>;
     },
     p({ children, ...props }) {
-      // Special light-lines like "Thought for 2s", "Read file", "Grepped …", "Searched …"
+      // Special light-lines like "Thought for …", or tool logs
       const asString = Array.isArray(children) && children.length === 1 && typeof children[0] === 'string'
         ? children[0]
         : (typeof children === 'string' ? children : null);
@@ -2314,6 +2369,10 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
         const s = asString.trim();
         if (/^(Thought for \d+s?|Read\b|Grepped\b|Searched\b|Listed\b|No linter errors found|Command cancelled)/i.test(s)) {
           return <div className="text-xs text-muted-foreground my-1" {...props}>{s}</div>;
+        }
+        // Long text → collapsible
+        if (s.length > 1200 || s.split('\n').length > 14) {
+          return <ShowMoreText text={s} />;
         }
         return <p className="my-1" {...props}>{renderContentBadges(s)}</p>;
       }
@@ -2336,10 +2395,10 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
         );
       }
       if (typeof children === 'string') {
-        return <li className="my-1" {...props}>{renderBadges(children)}</li>;
+        return <li className="my-1" {...props}>{renderContentBadges(children)}</li>;
       }
       if (Array.isArray(children) && children.length === 1 && typeof children[0] === 'string') {
-        return <li className="my-1" {...props}>{renderBadges(children[0])}</li>;
+        return <li className="my-1" {...props}>{renderContentBadges(children[0])}</li>;
       }
       return <li className="my-1" {...props}>{children}</li>;
     }

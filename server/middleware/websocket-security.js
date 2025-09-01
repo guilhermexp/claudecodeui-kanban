@@ -8,7 +8,8 @@ const rateLimiter = new Map(); // IP -> { connections: number, lastReset: timest
 const connectionCounts = new Map(); // IP -> current active connections
 
 // Security configuration (adjusted for development vs production)
-const isDevelopment = process.env.NODE_ENV === 'development';
+// Default to development-friendly if NODE_ENV is not explicitly 'production'
+const isDevelopment = process.env.NODE_ENV !== 'production';
 const SECURITY_CONFIG = {
   MAX_CONNECTIONS_PER_MINUTE: isDevelopment ? 200 : 10, // Muito mais permissivo em dev
   MAX_MESSAGE_SIZE: isDevelopment ? 100 * 1024 : 10 * 1024, // 100KB dev, 10KB prod
