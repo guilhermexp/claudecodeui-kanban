@@ -7,6 +7,7 @@ import { SearchAddon } from '@xterm/addon-search';
 import { useDropzone } from 'react-dropzone';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import PreviewPanel from './PreviewPanel';
+import FileManagerSimple from './FileManagerSimple';
 import CtaButton from './ui/CtaButton';
 import { useConfig } from './vibe-kanban/config-provider';
 import { detectBestPreviewUrl } from '../utils/detectPreviewUrl';
@@ -114,7 +115,7 @@ if (typeof document !== 'undefined') {
 // Global store for shell sessions to persist across tab switches AND project switches
 const shellSessions = new Map();
 
-function Shell({ selectedProject, selectedSession, isActive, onConnectionChange, onSessionStateChange, isMobile, resizeTrigger, onSidebarClose, activeSidePanel, onPreviewStateChange, onBindControls = null }) {
+function Shell({ selectedProject, selectedSession, isActive, onConnectionChange, onSessionStateChange, isMobile, resizeTrigger, onSidebarClose, activeSidePanel, onPreviewStateChange, onBindControls = null, onTerminalVisibilityChange = null }) {
   const terminalRef = useRef(null);
   const terminal = useRef(null);
   const fitAddon = useRef(null);
@@ -150,6 +151,12 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   const [lockedTerminalWidth, setLockedTerminalWidth] = useState(null);
   const [wasPreviewOpen, setWasPreviewOpen] = useState(false);
   
+  // Terminal visibility (allow chat + preview without terminal)
+  const [showTerminal, setShowTerminal] = useState(true);
+  useEffect(() => {
+    try { onTerminalVisibilityChange && onTerminalVisibilityChange(showTerminal); } catch {}
+  }, [showTerminal, onTerminalVisibilityChange]);
+
   // Notify parent when preview state changes
   useEffect(() => {
     if (onPreviewStateChange) {
@@ -338,6 +345,9 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       const controls = {
         openPreview: () => setShowPreview(true),
         closePreview: () => setShowPreview(false),
+        showTerminal: () => setShowTerminal(true),
+        hideTerminal: () => setShowTerminal(false),
+        toggleTerminal: () => setShowTerminal(v => !v),
         toggleFiles: () => previewControlsRef.current?.toggleFiles?.(),
         showFiles: () => previewControlsRef.current?.showFiles?.(),
         hideFiles: () => previewControlsRef.current?.hideFiles?.()
@@ -2083,6 +2093,17 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
                     </svg>
                   </button>
                   
+                  {/* Toggle Terminal (show/hide) */}
+                  <button
+                    onClick={() => setShowTerminal(v => !v)}
+                    className={`p-1.5 rounded-md transition-all duration-200 ${showTerminal ? 'text-muted-foreground hover:text-foreground hover:bg-accent' : 'text-blue-500 hover:text-blue-600 bg-blue-500/10 hover:bg-blue-500/20'}`}
+                    title={showTerminal ? 'Hide terminal' : 'Show terminal'}
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4h18v12H3zM7 20h10M9 8l2 2-2 2m4 0h4" />
+                    </svg>
+                  </button>
+
                   {/* Preview Toggle Button */}
                   {!isMobile && (
                     <button
@@ -2107,10 +2128,6 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
                             });
                           }
                           setPreviewUrl(firstUrl);
-                          // Close any right side panel to avoid overcrowding
-                          if (onSidebarClose) {
-                            onSidebarClose();
-                          }
                           setShowPreview(true);
                         }
                       }}
@@ -2157,24 +2174,41 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
               </button>
             )}
             
-            <button
-              onClick={restartShell}
-              disabled={isRestarting || isConnected}
-              className="p-1 sm:px-1.5 lg:px-2 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1 hover:bg-accent rounded transition-all duration-200 flex-shrink-0"
-              title="Restart Shell (disconnect first)"
-            >
+                  <button
+                    onClick={restartShell}
+                    disabled={isRestarting || isConnected}
+                    className="p-1 sm:px-1.5 lg:px-2 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1 hover:bg-accent rounded transition-all duration-200 flex-shrink-0"
+                    title="Restart Shell (disconnect first)"
+                  >
               <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
               <span className="hidden lg:inline whitespace-nowrap">Restart</span>
-            </button>
+              </button>
+
+              {/* Close Shell panel (recede) */}
+              <button
+                onClick={() => { setShowPreview(false); setPreviewUrl(''); setShowTerminal(false); }}
+                className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-all duration-200"
+                title="Close shell panel"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
             </div>
           </div>
         </div>
 
-        {/* Terminal */}
-        <div className="flex-1 min-h-0 p-1 md:p-2 pb-1 md:pb-2 overflow-hidden relative">
-          {terminalContent}
+        {/* Terminal area or Files (empty state of Shell) */}
+        <div className={`flex-1 min-h-0 p-1 md:p-2 pb-1 md:pb-2 overflow-hidden relative`}>
+          {showTerminal
+            ? terminalContent
+            : (!showPreview && (
+                <div className="h-full overflow-auto rounded-2xl border border-border">
+                  <FileManagerSimple selectedProject={selectedProject} />
+                </div>
+              ))}
         </div>
       </div>
     </Panel>

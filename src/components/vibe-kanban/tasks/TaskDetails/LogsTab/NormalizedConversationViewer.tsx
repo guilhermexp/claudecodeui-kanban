@@ -1,7 +1,7 @@
 import { Hammer } from 'lucide-react';
 import { Loader } from '../../../ui/loader';
 import MarkdownRendererCompact from '../../../ui/markdown-renderer-compact';
-import type { ExecutionProcess, WorktreeDiff } from '../../../../lib/vibe-kanban/shared-types';
+import type { ExecutionProcess, WorktreeDiff } from '../../../../../lib/vibe-kanban/shared-types';
 import DisplayConversationEntry from '../DisplayConversationEntry';
 import useNormalizedConversation from '../../../../../hooks/vibe-kanban/useNormalizedConversation';
 

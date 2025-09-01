@@ -14,7 +14,7 @@ import { Button } from '../../../ui/button';
 import { AlertTriangle } from 'lucide-react';
 import Prompt from './Prompt';
 import ConversationEntry from './ConversationEntry';
-import { ConversationEntryDisplayType } from '../../../../lib/vibe-kanban/types';
+import { ConversationEntryDisplayType } from '../../../../../lib/vibe-kanban/types';
 
 function Conversation() {
   const { attemptData, isAttemptRunning } = useContext(TaskAttemptDataContext);

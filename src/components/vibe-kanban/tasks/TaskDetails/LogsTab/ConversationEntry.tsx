@@ -1,9 +1,9 @@
-import { ConversationEntryDisplayType } from '../../../../lib/vibe-kanban/types';
+import { ConversationEntryDisplayType } from '../../../../../lib/vibe-kanban/types';
 import DisplayConversationEntry from '../DisplayConversationEntry';
 import { NormalizedConversationViewer } from './NormalizedConversationViewer';
 import Prompt from './Prompt';
 import { Loader } from '../../../ui/loader';
-import { ExecutionProcess } from '../../../../lib/vibe-kanban/shared-types';
+import { ExecutionProcess } from '../../../../../lib/vibe-kanban/shared-types';
 
 type Props = {
   item: ConversationEntryDisplayType;

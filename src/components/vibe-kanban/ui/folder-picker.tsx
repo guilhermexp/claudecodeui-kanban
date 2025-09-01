@@ -29,7 +29,7 @@ import {
   Star,
 } from 'lucide-react';
 import { fileSystemApi } from '../../../lib/vibe-kanban/api';
-import { DirectoryEntry } from '../../lib/vibe-kanban/shared-types';
+import { DirectoryEntry } from '../../../lib/vibe-kanban/shared-types';
 import { cn } from '../../../lib/utils';
 
 interface FolderPickerProps {

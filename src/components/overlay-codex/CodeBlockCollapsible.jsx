@@ -31,27 +31,27 @@ export default function CodeBlockCollapsible({ language, text }) {
   }, [src]);
 
   return (
-    <div className="w-full max-w-full -mx-2 sm:-mx-3">
-      <div className="rounded-md border border-border/30 bg-zinc-950/70 overflow-hidden">
-      <div className="flex items-center justify-between gap-2 px-2 sm:px-3 py-1.5 border-b border-border/20">
+    <div className="w-full max-w-full">
+      <div className="rounded-xl border border-white/10 bg-white/5 backdrop-blur-sm shadow-[0_8px_28px_rgba(0,0,0,0.25)] overflow-hidden">
+      <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-white/10">
         <button
           type="button"
           onClick={() => { const next = !collapsed; collapsedStore.set(key, next); setCollapsed(next); }}
           aria-expanded={!collapsed}
-          className="flex items-center gap-2 text-[12px] sm:text-sm text-muted-foreground hover:text-foreground transition-colors min-w-0 flex-1 text-left cursor-pointer"
+          className="flex items-center gap-2 text-[12px] sm:text-sm text-zinc-300 hover:text-white transition-colors min-w-0 flex-1 text-left cursor-pointer"
         >
           <svg className={`w-4 h-4 transition-transform ${collapsed ? '' : 'rotate-90'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
           </svg>
-          <span className="font-mono text-[11px] sm:text-xs truncate block">{language || 'text'} • {lineCount} {collapsed ? 'lines (click to expand)' : 'lines'}</span>
+          <span className="font-mono text-[11px] sm:text-xs truncate block text-zinc-400">{language || 'text'} • {lineCount} {collapsed ? 'lines (click to expand)' : 'lines'}</span>
         </button>
         <div className="flex items-center gap-1">
           <button
             onClick={() => setWrap(w => !w)}
-            className="px-2 py-1 text-[11px] rounded-md border border-border hover:bg-accent/20 flex-shrink-0 bg-transparent"
+            className="px-2 py-1 text-[11px] rounded-md border border-white/20 bg-white/5 hover:bg-white/10 flex-shrink-0"
             title={wrap ? 'Disable wrap' : 'Enable wrap'}
           >{wrap ? 'Wrap' : 'No-wrap'}</button>
-          <button onClick={handleCopy} className="px-2 py-1 text-[11px] rounded-md border border-border hover:bg-accent/20 flex-shrink-0 bg-transparent">
+          <button onClick={handleCopy} className="px-2 py-1 text-[11px] rounded-md border border-white/20 bg-white/5 hover:bg-white/10 flex-shrink-0">
             {copied ? 'Copied' : 'Copy'}
           </button>
         </div>

@@ -21,6 +21,10 @@ export async function startPreview(projectName) {
   });
   if (!r.ok) return { url: null };
   const d = await r.json();
+  // Check if preview was blocked
+  if (d.blocked) {
+    return { blocked: true, error: d.error, url: null };
+  }
   return { url: d.url || null };
 }
 
@@ -47,5 +51,19 @@ export async function fetchProjectFiles(projectName) {
   if (!r.ok) return [];
   const data = await r.json();
   return Array.isArray(data) ? data : [];
+}
+
+export async function fetchPreviewLogs(projectName, lines = 200) {
+  if (!projectName) return '';
+  const token = localStorage.getItem('auth-token');
+  try {
+    const r = await fetch(`/api/projects/${encodeURIComponent(projectName)}/preview/logs?lines=${lines}`, {
+      headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+    });
+    if (!r.ok) return '';
+    return await r.text();
+  } catch {
+    return '';
+  }
 }
 

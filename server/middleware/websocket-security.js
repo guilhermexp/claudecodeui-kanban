@@ -12,7 +12,9 @@ const connectionCounts = new Map(); // IP -> current active connections
 const isDevelopment = process.env.NODE_ENV !== 'production';
 const SECURITY_CONFIG = {
   MAX_CONNECTIONS_PER_MINUTE: isDevelopment ? 200 : 10, // Muito mais permissivo em dev
-  MAX_MESSAGE_SIZE: isDevelopment ? 100 * 1024 : 10 * 1024, // 100KB dev, 10KB prod
+  // Increase dev message size to support base64 image uploads via WebSocket
+  // Typical small image (png/jpg) ~200KB-1MB; allow up to 4MB in dev
+  MAX_MESSAGE_SIZE: isDevelopment ? 4 * 1024 * 1024 : 10 * 1024, // 4MB dev, 10KB prod
   MAX_CONCURRENT_CONNECTIONS: isDevelopment ? 500 : 100, // Maior limite em dev
   MAX_CONNECTIONS_PER_IP: isDevelopment ? 200 : 10, // Muito maior em dev
   RATE_LIMIT_WINDOW_MS: 60 * 1000, // 1 minute

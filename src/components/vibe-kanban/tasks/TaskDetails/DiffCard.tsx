@@ -1,7 +1,7 @@
 import { useContext, useState } from 'react';
 import { Button } from '../../ui/button';
 import { GitCompare } from 'lucide-react';
-import type { WorktreeDiff } from '../../../lib/vibe-kanban/shared-types';
+import type { WorktreeDiff } from '../../../../lib/vibe-kanban/shared-types';
 // import { TaskBackgroundRefreshContext } from '../context/taskDetailsContext.ts';
 import DiffFile from './DiffFile';
 import { Loader } from '../../ui/loader';

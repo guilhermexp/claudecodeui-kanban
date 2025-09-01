@@ -4,6 +4,7 @@ import path from 'path';
 
 // In-memory registry
 const processes = new Map(); // key: projectName -> { proc, port, logs: string[], startedAt }
+const portsInUse = new Set(); // Track ports allocated to preview processes
 let broadcaster = null; // function(messageObj)
 
 export function setPreviewBroadcaster(fn) {
@@ -16,26 +17,115 @@ function broadcast(message) {
 }
 
 export async function findFreePort(start = 4000, end = 4999) {
-  const tryPort = (port) => new Promise((resolve) => {
-    const srv = net.createServer();
-    srv.once('error', () => resolve(false));
-    srv.once('listening', () => srv.close(() => resolve(true)));
-    srv.listen(port, '127.0.0.1');
+  const isPortFree = (port) => new Promise((resolve) => {
+    // Skip ports we already allocated to preview processes
+    if (portsInUse.has(port)) {
+      resolve(false);
+      return;
+    }
+    
+    // First, try to connect to see if something is already listening
+    const client = new net.Socket();
+    let resolved = false;
+    
+    const cleanup = () => {
+      if (!resolved) {
+        resolved = true;
+        client.destroy();
+      }
+    };
+    
+    client.setTimeout(50);
+    
+    client.once('connect', () => {
+      // Successfully connected, port is in use
+      cleanup();
+      resolve(false);
+    });
+    
+    client.once('error', (err) => {
+      // Connection failed
+      cleanup();
+      
+      // Now try to bind to the port to make sure we can use it
+      const srv = net.createServer();
+      srv.once('error', () => {
+        // Can't bind, port is in use
+        resolve(false);
+      });
+      srv.once('listening', () => {
+        // Can bind, port is free
+        srv.close(() => resolve(true));
+      });
+      srv.listen(port, '127.0.0.1');
+    });
+    
+    client.once('timeout', () => {
+      // Connection timed out
+      cleanup();
+      
+      // Try to bind to the port
+      const srv = net.createServer();
+      srv.once('error', () => {
+        resolve(false);
+      });
+      srv.once('listening', () => {
+        srv.close(() => resolve(true));
+      });
+      srv.listen(port, '127.0.0.1');
+    });
+    
+    // Try to connect to the port
+    client.connect(port, '127.0.0.1');
   });
 
+  // Log port scanning for debugging
+  console.log(`[Preview] Scanning for free port from ${start} to ${end} (allocated: ${Array.from(portsInUse).join(', ') || 'none'})`);
+  
   for (let p = start; p <= end; p++) {
     // eslint-disable-next-line no-await-in-loop
-    const ok = await tryPort(p);
-    if (ok) return p;
+    const ok = await isPortFree(p);
+    if (ok) {
+      console.log(`[Preview] Found free port: ${p}`);
+      return p;
+    } else {
+      const reason = portsInUse.has(p) ? 'allocated to another preview' : 'in use by external process';
+      console.log(`[Preview] Port ${p} is ${reason}, trying next...`);
+    }
   }
-  throw new Error('No free preview port available');
+  throw new Error(`No free preview port available in range ${start}-${end}`);
 }
 
 export function getStatus(projectName) {
   const rec = processes.get(projectName);
   if (!rec) return { running: false };
   const running = rec.proc && !rec.proc.killed && rec.proc.exitCode == null;
-  return { running, port: rec.port, startedAt: rec.startedAt };
+  return { 
+    running, 
+    port: rec.port, 
+    startedAt: rec.startedAt,
+    allocatedPorts: Array.from(portsInUse).sort((a, b) => a - b)
+  };
+}
+
+export function getAllocatedPorts() {
+  return Array.from(portsInUse).sort((a, b) => a - b);
+}
+
+export function getActivePreview() {
+  const previews = [];
+  for (const [name, rec] of processes.entries()) {
+    const running = rec.proc && !rec.proc.killed && rec.proc.exitCode == null;
+    if (running) {
+      previews.push({
+        project: name,
+        port: rec.port,
+        startedAt: rec.startedAt,
+        path: rec.repoPath
+      });
+    }
+  }
+  return previews;
 }
 
 export function getLogs(projectName, lines = 200) {
@@ -46,18 +136,144 @@ export function getLogs(projectName, lines = 200) {
 }
 
 export async function startPreview(projectName, repoPath, preferredPort = null) {
+  // Check if this project should not have preview
+  const blockedPaths = [
+    '/Users/guilhermevarela/.claude',
+    '/Users/guilhermevarela/Documents',
+    '/Users/guilhermevarela',
+    '/.claude',
+    '/Documents'
+  ];
+  
+  const normalizedPath = path.resolve(repoPath);
+  const isBlocked = blockedPaths.some(blocked => {
+    const resolvedBlocked = path.resolve(blocked);
+    return normalizedPath === resolvedBlocked || normalizedPath.startsWith(resolvedBlocked + '/');
+  });
+  
+  if (isBlocked) {
+    console.log(`[Preview] Blocked preview for system/config directory: ${repoPath}`);
+    broadcast({ 
+      type: 'preview_error', 
+      project: projectName, 
+      error: 'Preview is not available for system or configuration directories' 
+    });
+    return { 
+      error: 'Preview not available for this directory type',
+      blocked: true 
+    };
+  }
+  
+  // Check if it's standalone mode (no package.json)
+  const fs = await import('fs').then(m => m.promises);
+  const packageJsonPath = path.join(repoPath, 'package.json');
+  
+  try {
+    await fs.access(packageJsonPath);
+  } catch {
+    console.log(`[Preview] No package.json found in ${repoPath} - preview not available`);
+    broadcast({ 
+      type: 'preview_error', 
+      project: projectName, 
+      error: 'No package.json found. Preview requires a Node.js project with package.json' 
+    });
+    return { 
+      error: 'Preview requires a Node.js project with package.json',
+      blocked: true 
+    };
+  }
+  
   // Stop existing
   try { await stopPreview(projectName); } catch {}
 
-  const port = preferredPort || await findFreePort(
-    Number(process.env.PREVIEW_PORT_START) || 4000,
-    Number(process.env.PREVIEW_PORT_END) || 4999
-  );
+  // If preferred port is provided, check if it's free first
+  let port;
+  if (preferredPort) {
+    const tryPort = (p) => new Promise((resolve) => {
+      const srv = net.createServer();
+      srv.once('error', () => resolve(false));
+      srv.once('listening', () => srv.close(() => resolve(true)));
+      srv.listen(p, '127.0.0.1');
+    });
+    
+    const isPreferredFree = await tryPort(preferredPort);
+    if (isPreferredFree) {
+      port = preferredPort;
+      console.log(`[Preview] Using preferred port ${port} for ${projectName}`);
+    } else {
+      console.log(`[Preview] Preferred port ${preferredPort} is in use for ${projectName}, finding alternative...`);
+      // Find next available port starting from preferredPort + 1
+      port = await findFreePort(
+        preferredPort + 1,
+        Number(process.env.PREVIEW_PORT_END) || 4999
+      );
+    }
+  } else {
+    // No preferred port, find first available starting from 4000
+    port = await findFreePort(
+      Number(process.env.PREVIEW_PORT_START) || 4000,
+      Number(process.env.PREVIEW_PORT_END) || 4999
+    );
+  }
 
-  // Basic command: npm run dev -- -p PORT
+  // Detect the right command to run
+  let command = 'npm';
+  let args = ['run', 'dev'];
+  let isNextJs = false;
+  let isVite = false;
+  
+  try {
+    // Check if package.json exists and what scripts are available
+    const packageJsonPath = path.join(repoPath, 'package.json');
+    const fs = await import('fs').then(m => m.promises);
+    const packageContent = await fs.readFile(packageJsonPath, 'utf8');
+    const packageJson = JSON.parse(packageContent);
+    
+    // Detect framework
+    if (packageJson.dependencies) {
+      isNextJs = !!packageJson.dependencies.next || !!packageJson.devDependencies?.next;
+      isVite = !!packageJson.dependencies.vite || !!packageJson.devDependencies?.vite;
+    }
+    
+    if (packageJson.scripts) {
+      // Priority order for dev server scripts
+      if (packageJson.scripts.dev) {
+        args = ['run', 'dev'];
+      } else if (packageJson.scripts.start) {
+        args = ['start'];
+      } else if (packageJson.scripts.serve) {
+        args = ['run', 'serve'];
+      } else if (packageJson.scripts.preview) {
+        args = ['run', 'preview'];
+      } else {
+        // Log available scripts for debugging
+        console.log(`Available scripts for ${projectName}:`, Object.keys(packageJson.scripts));
+        broadcast({ type: 'preview_error', project: projectName, error: `No dev script found. Available: ${Object.keys(packageJson.scripts).join(', ')}` });
+      }
+    }
+  } catch (e) {
+    console.error(`Failed to read package.json for ${projectName}:`, e.message);
+    // Fall back to default
+  }
+
+  // Append port argument based on framework
+  let fullArgs;
+  if (isNextJs) {
+    // Next.js uses -p PORT directly (no --)
+    fullArgs = [...args, '-p', String(port)];
+  } else if (isVite) {
+    // Vite uses --port PORT
+    fullArgs = [...args, '--', '--port', String(port)];
+  } else {
+    // Generic npm script - try to pass port via --
+    fullArgs = [...args, '--', '-p', String(port)];
+  }
+
   const env = { ...process.env, PORT: String(port), NODE_ENV: 'development' };
 
-  const proc = spawn('npm', ['run', 'dev', '--', '-p', String(port)], {
+  console.log(`Starting preview for ${projectName} with command: ${command} ${fullArgs.join(' ')}`);
+  
+  const proc = spawn(command, fullArgs, {
     cwd: repoPath,
     env,
     detached: process.platform !== 'win32',
@@ -65,6 +281,8 @@ export async function startPreview(projectName, repoPath, preferredPort = null) 
   });
 
   const logs = [];
+  let portErrorDetected = false;
+  
   const append = (buf) => {
     const text = typeof buf === 'string' ? buf : buf.toString('utf8');
     logs.push(text);
@@ -72,21 +290,66 @@ export async function startPreview(projectName, repoPath, preferredPort = null) 
 
     // Heuristic error/success detection
     const low = text.toLowerCase();
-    if (low.includes('ready in') || low.includes('compiled') || low.includes('listening on') || low.includes('started server')) {
+    
+    // Success detection
+    if (low.includes('ready in') || low.includes('compiled') || low.includes('listening on') || 
+        low.includes('started server') || low.includes('local:') || low.includes('server running')) {
       broadcast({ type: 'preview_success', project: projectName, port, url: `http://localhost:${port}` });
     }
+    
+    // Port error detection - retry with next port
+    if ((low.includes('eaddrinuse') || low.includes('address already in use') || 
+         low.includes('port is already in use') || low.includes(`port ${port} is in use`)) && !portErrorDetected) {
+      portErrorDetected = true;
+      console.log(`[Preview] Port ${port} error detected for ${projectName}, will retry with next port...`);
+      broadcast({ type: 'preview_error', project: projectName, error: `Port ${port} is in use, retrying with next available port...` });
+      
+      // Clean up this failed attempt
+      portsInUse.delete(port); // Release this port since it failed
+      try { proc.kill('SIGTERM'); } catch {}
+      processes.delete(projectName);
+      
+      // Retry with next port asynchronously
+      setTimeout(async () => {
+        console.log(`[Preview] Retrying ${projectName} with next available port...`);
+        try {
+          // Start search from next port
+          const nextPort = await findFreePort(port + 1, Number(process.env.PREVIEW_PORT_END) || 4999);
+          console.log(`[Preview] Retrying ${projectName} on port ${nextPort}`);
+          await startPreview(projectName, repoPath, nextPort);
+        } catch (e) {
+          console.error(`[Preview] Failed to retry ${projectName}:`, e);
+          broadcast({ type: 'preview_error', project: projectName, error: `Failed to start preview: ${e.message}` });
+        }
+      }, 1000);
+      return;
+    }
+    
+    // Other errors
     if (low.includes('error') || low.includes('failed') || low.includes('uncaught') || low.includes('module not found')) {
-      broadcast({ type: 'preview_error', project: projectName, error: text.slice(0, 500) });
+      if (!portErrorDetected) { // Don't broadcast generic errors if we're handling port error
+        broadcast({ type: 'preview_error', project: projectName, error: text.slice(0, 500) });
+      }
     }
   };
   proc.stdout?.on('data', append);
   proc.stderr?.on('data', append);
 
   proc.on('exit', (code, signal) => {
+    // Clean up port allocation
+    const processRec = processes.get(projectName);
+    if (processRec && processRec.port) {
+      portsInUse.delete(processRec.port);
+      console.log(`[Preview] Released port ${processRec.port} from ${projectName}`);
+    }
+    
     broadcast({ type: 'preview_stopped', project: projectName, code, signal });
     processes.delete(projectName);
   });
 
+  // Register the port as in use
+  portsInUse.add(port);
+  
   processes.set(projectName, { proc, port, logs, startedAt: Date.now(), repoPath: path.resolve(repoPath) });
 
   // Optimistic URL
@@ -97,8 +360,16 @@ export async function startPreview(projectName, repoPath, preferredPort = null) 
 export async function stopPreview(projectName) {
   const rec = processes.get(projectName);
   if (!rec) return { success: true };
+  
   try {
-    const { proc } = rec;
+    const { proc, port } = rec;
+    
+    // Clean up port allocation
+    if (port) {
+      portsInUse.delete(port);
+      console.log(`[Preview] Released port ${port} from ${projectName} (manual stop)`);
+    }
+    
     if (proc && proc.pid) {
       if (process.platform !== 'win32') {
         try { process.kill(-proc.pid, 'SIGTERM'); } catch { try { proc.kill('SIGTERM'); } catch {} }

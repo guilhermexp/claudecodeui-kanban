@@ -21,7 +21,7 @@ import {
   NormalizedEntry,
   type NormalizedEntryType,
   type WorktreeDiff,
-} from '../../../lib/vibe-kanban/shared-types';
+} from '../../../../lib/vibe-kanban/shared-types';
 // import { TaskDiffContext } from '../context/taskDetailsContext.ts';
 
 type Props = {
