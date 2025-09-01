@@ -14,7 +14,7 @@ import {
 import { useTaskPlan } from '../../context/TaskPlanContext.ts';
 import { Loader } from '../../ui/loader';
 import MarkdownRenderer from '../../ui/markdown-renderer';
-import { NormalizedEntry } from '../../../lib/vibe-kanban/shared-types';
+import { NormalizedEntry } from '../../../../lib/vibe-kanban/shared-types';
 
 interface PlanEntry {
   entry: NormalizedEntry;

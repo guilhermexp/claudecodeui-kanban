@@ -13,7 +13,7 @@ import { executionProcessesApi } from '../../../../lib/vibe-kanban/api.js';
 import type {
   ExecutionProcessStatus,
   ExecutionProcessSummary,
-} from '../../../lib/vibe-kanban/shared-types';
+} from '../../../../lib/vibe-kanban/shared-types';
 
 function ProcessesTab() {
   const { attemptData, setAttemptData } = useContext(TaskAttemptDataContext);

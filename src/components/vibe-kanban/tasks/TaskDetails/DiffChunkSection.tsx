@@ -1,8 +1,8 @@
 import { Button } from '../../ui/button';
 import { ChevronDown, ChevronUp } from 'lucide-react';
-import type { DiffChunkType } from '../../../lib/vibe-kanban/shared-types';
+import type { DiffChunkType } from '../../../../lib/vibe-kanban/shared-types';
 import { Dispatch, SetStateAction } from 'react';
-import { ProcessedSection } from '../../../lib/vibe-kanban/types';
+import { ProcessedSection } from '../../../../lib/vibe-kanban/types';
 
 type Props = {
   section: ProcessedSection;

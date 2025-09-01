@@ -74,6 +74,7 @@ function MainContent({
   // Panel states - only one can be open at a time
   const [activeSidePanel, setActiveSidePanel] = useState(null); // 'files' | 'git' | 'chat' | null
   const [hasPreviewOpen, setHasPreviewOpen] = useState(false); // Track if preview is open
+  const [shellVisible, setShellVisible] = useState(true); // Terminal visibility for header dynamics
   // Shell terminals state removed - single terminal mode only
   
   // Modal states
@@ -82,16 +83,18 @@ function MainContent({
   const [showGitModal, setShowGitModal] = useState(false);
   const [toast, setToast] = useState(null);
   const [claudeOverlaySessionId, setClaudeOverlaySessionId] = useState(null);
-  const [endClaudeOverlaySession, setEndClaudeOverlaySession] = useState(null);
+  const [claudeOverlayControls, setClaudeOverlayControls] = useState(null);
+  const [codexOverlayControls, setCodexOverlayControls] = useState(null);
+  const [chatActivity, setChatActivity] = useState(false); // true if any chat is active
   
   // Debug logging for endClaudeOverlaySession updates
   useEffect(() => {
     const log = createLogger('MainContent');
-    log.debug('endClaudeOverlaySession updated:', {
-      hasFunction: typeof endClaudeOverlaySession === 'function',
-      value: endClaudeOverlaySession
+    log.debug('claudeOverlayControls updated:', {
+      hasEnd: typeof claudeOverlayControls?.end === 'function',
+      hasNew: typeof claudeOverlayControls?.new === 'function'
     });
-  }, [endClaudeOverlaySession]);
+  }, [claudeOverlayControls]);
 
   // Notify parent component about active side panel changes
   useEffect(() => {
@@ -335,6 +338,21 @@ function MainContent({
         <div className="pointer-events-auto hidden sm:flex absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 z-40">
           <div className="flex items-center bg-muted rounded-lg p-1 gap-1 shadow-sm">
               {/* Projects */}
+              {!shellVisible && (
+              <button
+                onClick={() => { try { window.__shellControls?.showTerminal?.(); } catch {}; }}
+                className="relative inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 text-muted-foreground hover:text-foreground hover:bg-accent"
+                title="Open Shell"
+              >
+                <span className="flex items-center gap-1 sm:gap-1.5 leading-none">
+                  <svg className="w-3 sm:w-3.5 h-3 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4h18v12H3zM7 20h10M9 8l2 2-2 2m4 0h4" />
+                  </svg>
+                  <span className="hidden sm:inline">Shell</span>
+                </span>
+              </button>
+              )}
+
               <button
                 onClick={() => setShowProjectsModal(true)}
                 className="relative inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 text-muted-foreground hover:text-foreground hover:bg-accent"
@@ -348,12 +366,14 @@ function MainContent({
               
               <button
                 onClick={() => {
+                  // Prefer Chat + Preview (two panels). If a chat is open, recede terminal by default.
+                  if (activeSidePanel === 'claude-chat' || activeSidePanel === 'codex-chat') {
+                    try { window.__shellControls?.hideTerminal?.(); } catch {}
+                  }
                   try {
                     window.__shellControls?.openPreview?.();
                     window.__shellControls?.showFiles?.();
                   } catch {}
-                  // Ensure no separate side panel is active
-                  if (activeSidePanel) setActiveSidePanel(null);
                   setTimeout(() => setShellResizeTrigger(prev => prev + 1), 350);
                 }}
                 className={`relative inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
@@ -477,11 +497,11 @@ function MainContent({
                   Active
                 </span>
               )}
-              {endClaudeOverlaySession && (
+              {(activeSidePanel === 'claude-chat' ? claudeOverlayControls?.end : codexOverlayControls?.end) && (
                 <button
                   onClick={() => { 
                     try { 
-                      endClaudeOverlaySession(); 
+                      (activeSidePanel === 'claude-chat' ? claudeOverlayControls.end : codexOverlayControls.end)(); 
                       // Close panel after a delay to allow session to end properly
                       setTimeout(() => {
                         setActiveSidePanel(null);
@@ -491,6 +511,13 @@ function MainContent({
                   className="px-2 h-7 rounded-md text-[11px] bg-background/80 border border-border/40 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                   title="End Claude session and close panel"
                 >End</button>
+              )}
+              {(activeSidePanel === 'claude-chat' ? claudeOverlayControls?.new : codexOverlayControls?.new) && (
+                <button
+                  onClick={() => { try { (activeSidePanel === 'claude-chat' ? claudeOverlayControls.new : codexOverlayControls.new)(); } catch {}; if (!activeSidePanel) setActiveSidePanel('claude-chat'); }}
+                  className="px-2 h-7 rounded-md text-[11px] bg-background/80 border border-border/40 text-muted-foreground hover:text-foreground hover:bg-accent/20"
+                  title="Start new Claude session"
+                >New</button>
               )}
               {/* Settings */}
               <button
@@ -527,6 +554,7 @@ function MainContent({
                 activeSidePanel={activeSidePanel}
                 onPreviewStateChange={setHasPreviewOpen}
                 onBindControls={(controls) => { window.__shellControls = controls; }}
+                onTerminalVisibilityChange={setShellVisible}
                 onSidebarClose={() => {
                   if (sidebarOpen && onSidebarOpen) {
                     onSidebarOpen(); // This toggles the sidebar (closes it when open)
@@ -537,6 +565,33 @@ function MainContent({
             </ConfigProvider>
           </div>
         </div>
+
+        {/* Empty state when nothing visible (no shell, no preview, no chat) */}
+        {(!shellVisible && !hasPreviewOpen && !activeSidePanel) && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="text-center pointer-events-auto">
+              <div className="mx-auto mb-4 w-16 h-16 rounded-2xl bg-orange-500/20 flex items-center justify-center">
+                <span className="text-2xl">✳️</span>
+              </div>
+              <div className="text-3xl font-extrabold mb-1">vibeclaude</div>
+              <div className="text-muted-foreground mb-4">Choose Your Project</div>
+              <div className="flex flex-col items-center gap-4">
+                <button
+                  onClick={() => { try { window.__shellControls?.showTerminal?.(); } catch {}; setActiveSidePanel('claude-chat'); }}
+                  className="px-6 py-2 rounded-2xl bg-white text-black hover:bg-white/90 transition-colors"
+                  title="Start session"
+                >
+                  Start vibeclaude Session
+                </button>
+                <div className="flex items-center w-full max-w-sm gap-2 text-muted-foreground"><div className="flex-1 h-px bg-border"/>OR<div className="flex-1 h-px bg-border"/></div>
+                <button
+                  onClick={() => setShowProjectsModal(true)}
+                  className="px-4 py-2 rounded-2xl bg-white text-black hover:bg-white/90 transition-colors"
+                >Browse Projects</button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Codex Chat panel integrated */}
         {!isMobile && (
@@ -552,6 +607,8 @@ function MainContent({
                 onPanelClosed={() => setActiveSidePanel(null)}
                 cliProviderFixed="codex"
                 chatId="codex-instance"
+                onBindControls={setCodexOverlayControls}
+                onActivityChange={(active) => setChatActivity(active)}
               />
             )}
           </div>
@@ -573,7 +630,8 @@ function MainContent({
                   projectPath={selectedProject?.path}
                   previewUrl={null}
                   onSessionIdChange={setClaudeOverlaySessionId}
-                  onBindControls={setEndClaudeOverlaySession}
+                  onBindControls={setClaudeOverlayControls}
+                  onActivityChange={(active) => setChatActivity(active)}
                   onPanelClosed={() => setActiveSidePanel(null)}
                 />
               </div>

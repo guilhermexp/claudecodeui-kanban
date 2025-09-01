@@ -75,6 +75,8 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
   const [typingStart, setTypingStart] = useState(null); // legacy; not used for timer anymore
   // Lock indicator from first send to final done
   const [activityLock, setActivityLock] = useState(false);
+  // Minimal tool header indicator (running/success/error)
+  const [toolIndicator, setToolIndicator] = useState({ label: null, status: 'idle' });
   const [selectedElement, setSelectedElement] = useState(null);
   const [attachments, setAttachments] = useState([]); // chips like "div", "span" etc
   const [imageAttachments, setImageAttachments] = useState([]); // Array of image data URLs
@@ -1047,6 +1049,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
                   setIsTyping(true);
                   setTypingStatus({ mode: 'tool', label });
                   lastToolLabelRef.current = label;
+                  try { setToolIndicator({ label: toolNameRaw || toolName, status: 'running' }); } catch {}
                 }
               });
               setIsTyping(false);
@@ -1068,6 +1071,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
             setIsTyping(true);
             setTypingStatus({ mode: 'tool', label });
             lastToolLabelRef.current = label;
+            try { setToolIndicator({ label: toolNameRaw || toolName, status: 'running' }); } catch {}
           } else if (data.type === 'result') {
             // Final result from Claude CLI — show it like the Codex completion
             if (data.is_error) {
@@ -1088,6 +1092,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
             setTypingStatus({ mode: 'idle', label: '' });
             setActivityLock(false);
             lastToolLabelRef.current = null;
+            try { setToolIndicator((ti) => ({ ...ti, status: data.is_error ? 'error' : 'success' })); } catch {}
           } else if (data.type === 'user' && data.message) {
             // User message with tool results – show results like Codex shows tool output
             const msg = data.message;
@@ -1672,6 +1677,8 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
             </div>
           </div>
         )}
+        {/* Hide any empty pre blocks that slip through Markdown renderers */}
+        <style>{`.prose pre:empty{display:none}`}</style>
         <AnimatePresence initial={false}>
           {messages.map((m) => {
             const isUser = m.type === 'user';
@@ -2523,7 +2530,15 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
         const text = getText(children).trim();
         if (!text) return null; // drop empty <pre></pre>
       } catch {}
-      return <pre {...props}>{children}</pre>;
+      return (
+        <pre
+          {...props}
+          className="bg-transparent p-0 m-0"
+          style={{ background: 'transparent', padding: 0, margin: 0 }}
+        >
+          {children}
+        </pre>
+      );
     },
     code({ node, inline, className, children, ...props }) {
       const match = /(?:language|lang)-(\w+)/.exec(className || '');
@@ -2642,6 +2657,32 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
         : (typeof children === 'string' ? children : null);
       if (typeof asString === 'string') {
         const s = shortenPath(asString.trim());
+        // Tool header indicator (e.g., WebSearch)
+        const headerMatch = /^([A-Z][\w\s-]{1,40})$/.exec(s.replace(/^🔧\s*/, ''));
+        const header = headerMatch ? headerMatch[1] : null;
+        const isToolHeader = header && /^(WebSearch|WebFetch|Search)$/i.test(header);
+        if (isToolHeader) {
+          const status = (toolIndicator.label && new RegExp(toolIndicator.label, 'i').test(header)) ? toolIndicator.status : (typingStatus.mode === 'tool' ? 'running' : 'idle');
+          const iconKey = `tool-${header}-${status}`;
+          const Icon = () => {
+            if (status === 'running') return <span className="inline-block w-3 h-3 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />;
+            if (status === 'success') return (
+              <svg className="w-3.5 h-3.5 text-green-500 transition duration-200 ease-out" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M8 12l2.5 2.5L16 9"/></svg>
+            );
+            if (status === 'error') return (
+              <svg className="w-3.5 h-3.5 text-red-500 transition duration-200 ease-out" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M9 9l6 6M15 9l-6 6"/></svg>
+            );
+            return <span className="inline-block w-3 h-3 rounded-full bg-muted-foreground/40" />;
+          };
+          return (
+            <div className="flex items-center gap-2 my-1">
+              <span key={iconKey} className="inline-flex items-center justify-center transform transition-transform duration-200 ease-out scale-100">
+                <Icon />
+              </span>
+              <span className="text-foreground/90">{header}</span>
+            </div>
+          );
+        }
         if (/^(Thought for \d+s?|Read\b|Grepped\b|Searched\b|Listed\b|No linter errors found|Command cancelled)/i.test(s)) {
           return <div className="text-xs text-muted-foreground my-1" {...props}>{s}</div>;
         }
@@ -2692,7 +2733,15 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
         const text = getText(children).trim();
         if (!text) return null; // drop empty <pre></pre>
       } catch {}
-      return <pre {...props}>{children}</pre>;
+      return (
+        <pre
+          {...props}
+          className="bg-transparent p-0 m-0"
+          style={{ background: 'transparent', padding: 0, margin: 0 }}
+        >
+          {children}
+        </pre>
+      );
     },
     p({ children, ...props }) {
       const asString = Array.isArray(children) && children.length === 1 && typeof children[0] === 'string'

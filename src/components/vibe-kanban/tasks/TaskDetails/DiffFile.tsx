@@ -1,7 +1,7 @@
 import { Button } from '../../ui/button';
 import { ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 import DiffChunkSection from './DiffChunkSection';
-import { FileDiff } from '../../../lib/vibe-kanban/shared-types';
+import { FileDiff } from '../../../../lib/vibe-kanban/shared-types';
 import {
   Dispatch,
   SetStateAction,
@@ -11,7 +11,7 @@ import {
   useState,
 } from 'react';
 // import { TaskDeletingFilesContext } from '../context/taskDetailsContext.ts';
-import { ProcessedLine, ProcessedSection } from '../../../lib/vibe-kanban/types';
+import { ProcessedLine, ProcessedSection } from '../../../../lib/vibe-kanban/types';
 
 type Props = {
   collapsedFiles: Set<string>;

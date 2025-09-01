@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { refreshPreviewStatus as apiRefreshStatus, startPreview as apiStartPreview, stopPreview as apiStopPreview, fetchProjectFiles } from '../utils/preview/api';
+import { refreshPreviewStatus as apiRefreshStatus, startPreview as apiStartPreview, stopPreview as apiStopPreview, fetchProjectFiles, fetchPreviewLogs } from '../utils/preview/api';
 import { useConsoleCapture } from '../hooks/preview/useConsoleCapture';
 import { useElementSelection } from '../hooks/preview/useElementSelection';
 import FileManagerSimple from './FileManagerSimple';
@@ -20,10 +20,15 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, onRefresh
   const [deviceMode, setDeviceMode] = useState('desktop'); // 'desktop' | 'mobile'
   const [showFileTree, setShowFileTree] = useState(true);
   const [fileTree, setFileTree] = useState([]);
+  const [showServerLogs, setShowServerLogs] = useState(false); // Server logs panel
+  const [serverLogs, setServerLogs] = useState(''); // Server logs content
   
-  // Debug state changes
+  // Disable element selection mode when using cross-origin URLs
   useEffect(() => {
-  }, [elementSelectionMode]);
+    if (elementSelectionMode && currentUrl && !currentUrl.startsWith('/preview/')) {
+      setElementSelectionMode(false);
+    }
+  }, [currentUrl, elementSelectionMode]);
   const iframeRef = useRef(null);
   const logsRef = useRef(null);
   const startTimerRef = useRef(null);
@@ -36,6 +41,8 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, onRefresh
   const [previewRunning, setPreviewRunning] = useState(false);
   const [starting, setStarting] = useState(false);
   const [stopping, setStopping] = useState(false);
+  const [previewBlocked, setPreviewBlocked] = useState(false);
+  const [blockReason, setBlockReason] = useState('');
   const pingTimerRef = useRef(null);
   const pingAttemptsRef = useRef(0);
 
@@ -44,12 +51,23 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, onRefresh
     const { running, url: detectedUrl } = await apiRefreshStatus(projectName);
     setPreviewRunning(running);
     if (running && !userEditedUrl && !isPaused) {
-      setCurrentUrl(`/preview/${encodeURIComponent(projectName)}/`);
-      if (detectedUrl) setUiUrl(detectedUrl);
+      // If we have a detected URL, use it directly for the iframe
+      if (detectedUrl) {
+        setCurrentUrl(detectedUrl);
+        setUiUrl(detectedUrl);
+      } else {
+        // Fall back to proxy route only if no direct URL available
+        setCurrentUrl(`/preview/${encodeURIComponent(projectName)}/`);
+      }
     }
   };
 
-  useEffect(() => { refreshPreviewStatus(); }, [projectName]);
+  useEffect(() => { 
+    // Reset blocked state when project changes
+    setPreviewBlocked(false);
+    setBlockReason('');
+    refreshPreviewStatus(); 
+  }, [projectName]);
 
   // Expose minimal controls to parent (via Shell → MainContent)
   useEffect(() => {
@@ -71,18 +89,32 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, onRefresh
     setStarting(true);
     setShowFileTree(false);
     try {
-      const { url: detectedUrl } = await apiStartPreview(projectName);
+      const result = await apiStartPreview(projectName);
+      
+      // Check if preview was blocked
+      if (result.blocked) {
+        setStarting(false);
+        setPreviewRunning(false);
+        setPreviewBlocked(true);
+        setBlockReason(result.error || 'Preview not available for this project');
+        // Show error message to user
+        console.warn('[Preview]', result.error);
+        return;
+      }
+      
+      const { url: detectedUrl } = result;
       setPreviewRunning(true);
       if (detectedUrl) {
-        setCurrentUrl(`/preview/${encodeURIComponent(projectName)}/`);
+        // Use the actual URL for the iframe
+        setCurrentUrl(detectedUrl);
         setUiUrl(detectedUrl);
         setUserEditedUrl(false);
         waitForServer(detectedUrl);
       }
-    } catch {}
-    // Keep loader until iframe load or timeout
-    if (startTimerRef.current) clearTimeout(startTimerRef.current);
-    startTimerRef.current = setTimeout(() => setStarting(false), 15000);
+    } catch (err) {
+      setStarting(false);
+      console.error('[Preview] Error starting preview:', err);
+    }
   };
 
   const waitForServer = (url) => {
@@ -155,8 +187,9 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, onRefresh
   
   useEffect(() => {
     // Only update from props if user hasn't edited the URL
-    if (!userEditedUrl && !isPaused) {
+    if (!userEditedUrl && !isPaused && url) {
       setCurrentUrl(url);
+      setUiUrl(url); // Also set the UI URL for external open
       setIsLoading(true);
       setError(null);
       setLogs([]);
@@ -177,6 +210,26 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, onRefresh
   }, [showFileTree, projectName]);
 
   // File content preview removed here; FileManagerSimple cuida da visualização/edição
+
+  // Fetch server logs
+  const fetchServerLogs = async () => {
+    if (!projectName) return;
+    try {
+      const logsText = await fetchPreviewLogs(projectName, 500);
+      setServerLogs(logsText || 'No server logs available');
+    } catch (e) {
+      setServerLogs('Failed to fetch server logs');
+    }
+  };
+
+  // Auto-refresh server logs when panel is open
+  useEffect(() => {
+    if (showServerLogs && projectName) {
+      fetchServerLogs();
+      const interval = setInterval(fetchServerLogs, 2000); // Refresh every 2 seconds
+      return () => clearInterval(interval);
+    }
+  }, [showServerLogs, projectName]);
 
   // Check microphone permission status
   const checkMicrophonePermission = async () => {
@@ -302,7 +355,9 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, onRefresh
   });
 
   const handleOpenExternal = () => {
-    window.open(currentUrl, '_blank');
+    // Use the actual preview URL (uiUrl) if available, otherwise fall back to currentUrl
+    const urlToOpen = uiUrl || currentUrl;
+    window.open(urlToOpen, '_blank');
   };
 
   const handleIframeLoad = () => {
@@ -534,15 +589,28 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, onRefresh
             {/* Element Selection Toggle */}
             <button
               onClick={() => {
+                // Element selection only works with same-origin content (proxy route)
+                if (currentUrl && !currentUrl.startsWith('/preview/')) {
+                  alert('Element selection only works when the preview is started through Claude Code UI.\n\nThe current preview is using a direct URL (cross-origin) which blocks element inspection for security reasons.');
+                  return;
+                }
                 setElementSelectionMode(!elementSelectionMode);
               }}
               className={`p-1.5 rounded-md transition-colors ${
                 elementSelectionMode 
                   ? 'bg-blue-500/20 text-blue-600 dark:text-blue-400 hover:bg-blue-500/30' 
-                  : 'hover:bg-accent'
+                  : currentUrl && !currentUrl.startsWith('/preview/') 
+                    ? 'opacity-50 cursor-not-allowed' 
+                    : 'hover:bg-accent'
               }`}
-              title={elementSelectionMode ? "Element selection active - Click any element" : "Click to select elements"}
-              
+              title={
+                currentUrl && !currentUrl.startsWith('/preview/')
+                  ? "Element selection disabled (cross-origin)"
+                  : elementSelectionMode 
+                    ? "Element selection active - Click any element" 
+                    : "Click to select elements"
+              }
+              disabled={currentUrl && !currentUrl.startsWith('/preview/')}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2z" />
@@ -690,6 +758,21 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, onRefresh
                 </div>
               )}
             </div>
+            
+            {/* Server Logs Button */}
+            <button
+              onClick={() => setShowServerLogs(!showServerLogs)}
+              className={`p-1.5 rounded-md transition-colors ${
+                showServerLogs 
+                  ? 'bg-blue-500/20 text-blue-600 dark:text-blue-400' 
+                  : 'hover:bg-accent'
+              }`}
+              title="Server Logs"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </button>
             
             <button
               onClick={handleOpenExternal}
@@ -861,7 +944,11 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, onRefresh
         )}
 
         <div className={`w-full h-full flex items-center justify-center bg-background`}>
-          {(starting || !previewRunning || !currentUrl) ? (
+          {previewBlocked ? (
+            <div className="text-center text-foreground/90">
+              <PreviewBlockedMessage reason={blockReason} />
+            </div>
+          ) : (starting || !previewRunning || !currentUrl) ? (
             <div className="text-center text-foreground/90">
               <ClaudableLoader starting={starting} onStart={startBackendPreview} />
             </div>
@@ -877,7 +964,7 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, onRefresh
                 title="Preview"
                 loading="lazy"
                 data-preview-frame="true"
-                {...(!elementSelectionMode && {
+                {...(currentUrl && !currentUrl.startsWith('/preview/') && {
                   sandbox: "allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads allow-storage-access-by-user-activation allow-top-navigation-by-user-activation"
                 })}
                 allow="microphone *; camera *; geolocation *; accelerometer *; gyroscope *; magnetometer *; midi *; encrypted-media *"
@@ -885,6 +972,38 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, onRefresh
             </div>
           )}
         </div>
+
+        {/* Server Logs Panel */}
+        {showServerLogs && (
+          <div className="absolute bottom-0 left-0 right-0 h-64 bg-card border-t border-border z-50 flex flex-col">
+            <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-muted/50">
+              <span className="text-sm font-medium">Server Logs</span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={fetchServerLogs}
+                  className="text-xs px-2 py-1 hover:bg-accent rounded transition-colors"
+                  title="Refresh logs"
+                >
+                  Refresh
+                </button>
+                <button
+                  onClick={() => setShowServerLogs(false)}
+                  className="p-1 hover:bg-accent rounded transition-colors"
+                  title="Close logs"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-auto p-3 bg-black/50">
+              <pre className="text-xs font-mono text-muted-foreground whitespace-pre-wrap">
+                {serverLogs || 'Loading server logs...'}
+              </pre>
+            </div>
+          </div>
+        )}
 
         {/* File viewer duplicado removido: FileManagerSimple assume a visualização/edição */}
         
@@ -956,6 +1075,26 @@ function ClaudableLoader({ starting, onStart }) {
       <div className="mt-6">{!starting && (<CtaButton onClick={onStart}>Start Preview</CtaButton>)}</div>
       <h2 className="text-3xl font-semibold mt-6">{starting ? 'Starting Preview…' : 'Preview Not Running'}</h2>
       <p className="text-sm text-white/60 mt-2">Start your development server to see live changes</p>
+    </div>
+  );
+}
+
+function PreviewBlockedMessage({ reason }) {
+  return (
+    <div className="text-center p-8">
+      <div className="mb-6">
+        <svg className="w-16 h-16 mx-auto text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        </svg>
+      </div>
+      <h2 className="text-2xl font-semibold mb-3">Preview Not Available</h2>
+      <p className="text-sm text-white/60 max-w-md mx-auto">
+        {reason || 'This project type does not support preview functionality'}
+      </p>
+      <div className="mt-6 text-xs text-white/40">
+        Preview is only available for Node.js projects with a package.json file
+      </div>
     </div>
   );
 }

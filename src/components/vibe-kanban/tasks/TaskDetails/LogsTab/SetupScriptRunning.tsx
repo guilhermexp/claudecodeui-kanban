@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { ExecutionProcess } from '../../../../lib/vibe-kanban/shared-types';
+import { ExecutionProcess } from '../../../../../lib/vibe-kanban/shared-types';
 
 type Props = {
   setupProcessId: string | null;

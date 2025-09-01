@@ -1,0 +1,46 @@
+# Unused files identified by knip - Safe to delete
+
+## Scripts (4 files)
+scripts/cleanup-console-logs.js
+scripts/reset-app.js
+scripts/test-codex.js
+scripts/verify-refactor.js
+
+## Server config and middleware (5 files)
+server/config/development.js
+server/config/index.js
+server/config/production.js
+server/middleware/validation.js
+server/shellSessions.js
+
+## React Components (18 files)
+src/components/ClaudeStatus.jsx
+src/components/Dashboard.jsx
+src/components/Dashboard/TabContents.jsx
+src/components/LoginForm.jsx
+src/components/overlay-claude/EmptyStateClaude.jsx
+src/components/overlay-claude/MarkdownConfig.jsx
+src/components/overlay-claude/MessageItem.jsx
+src/components/overlay-claude/MessageList.jsx
+src/components/Sidebar.jsx
+src/components/vibe-kanban/keyboard-shortcuts-demo.tsx
+src/components/vibe-kanban/logo.tsx
+src/components/vibe-kanban/projects/projects-page.tsx
+src/components/vibe-kanban/tasks/index.ts
+src/components/vibe-kanban/tasks/TaskDetailsPanelWrapper.tsx
+src/components/vibe-kanban/theme-toggle.tsx
+src/components/vibe-kanban/ui/scroll-area.tsx
+src/components/vibe-kanban/ui/separator.tsx
+src/components/vibe-kanban/ui/table.tsx
+
+## Utilities and Hooks (8 files)
+src/constants/theme.js
+src/hooks/useClaudeSession.js
+src/hooks/useClaudeStream.js
+src/hooks/vibe-kanban/use-system-info.ts
+src/lib/shellSessionManager.js
+src/utils/cleanUsageData.js
+src/utils/safe-local-storage.js
+src/utils/vibe-kanban/script-placeholders.ts
+
+Total: 35 files to delete

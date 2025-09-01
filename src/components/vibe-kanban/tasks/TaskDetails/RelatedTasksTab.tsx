@@ -5,7 +5,7 @@ import {
   TaskRelatedTasksContext,
 } from '../../context/taskDetailsContext.ts';
 import { attemptsApi, tasksApi } from '../../../../lib/vibe-kanban/api.js';
-import type { Task, TaskAttempt } from '../../../lib/vibe-kanban/shared-types';
+import type { Task, TaskAttempt } from '../../../../lib/vibe-kanban/shared-types';
 import {
   AlertCircle,
   CheckCircle,
