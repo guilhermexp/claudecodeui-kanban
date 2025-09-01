@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { motion, AnimatePresence } from 'framer-motion';
 // Use unified Claude WebSocket from context to avoid duplicate connections
 import { useClaudeWebSocket } from '../contexts/ClaudeWebSocketContext';
@@ -19,6 +20,7 @@ import { useClaudeSessionState } from '../hooks/claude/useClaudeSessionState';
 import { getMessageIndicator } from '../utils/message-feedback';
 import { createLogger } from '../utils/logger';
 import CodeBlockCollapsible from './overlay-claude/CodeBlockCollapsible';
+import ToolResultItem from './overlay-claude/ToolResultItem';
 import ThinkingCollapsible from './overlay-claude/ThinkingCollapsible';
 import { useActivityTimer } from '../hooks/useActivityTimer';
 import { useClaudeStreamHandler } from '../hooks/claude/useClaudeStreamHandler';
@@ -29,7 +31,7 @@ const log = createLogger('OverlayChatClaude');
 
 // Overlay Chat com formatação bonita usando ReactMarkdown
 // Usa NOSSO backend interno (porta 7347) - sem servidores externos!
-const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, embedded = false, disableInlinePanel = false, useSidebarWhenOpen = false, sidebarContainerRef = null, onBeforeOpen, onPanelClosed, cliProviderFixed = null, chatId = 'default', onSessionIdChange = null, onBindControls = null, onSessionInfoChange = null }) {
+const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, embedded = false, disableInlinePanel = false, useSidebarWhenOpen = false, sidebarContainerRef = null, onBeforeOpen, onPanelClosed, cliProviderFixed = null, chatId = 'default', onSessionIdChange = null, onBindControls = null, onSessionInfoChange = null, onActivityChange = null }) {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
   
@@ -167,6 +169,8 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
   const [showModeMenu, setShowModeMenu] = useState(false);
   const [showModelMenu, setShowModelMenu] = useState(false);
   const [showProviderMenu, setShowProviderMenu] = useState(false);
+  // UI preferences (temporary hard default): hide outputs/code cards from assistant/system
+  const HIDE_OUTPUTS = true;
   
   // Helper functions to eliminate duplications
   const resetTypingState = useCallback(() => {
@@ -193,6 +197,9 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
       const text = String(content || '');
       const pieces = [];
       let rest = text;
+      const keyify = (arr) => arr.map((el, idx) => (
+        typeof el === 'string' ? <React.Fragment key={`t-${idx}`}>{el}</React.Fragment> : React.cloneElement(el, { key: el.key ?? `k-${idx}` })
+      ));
       const badge = (cls, label) => <span className={`badge ${cls}`}>{label}</span>;
       const copyBadge = (cls, label, value) => (
         <span
@@ -226,7 +233,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
         pieces.push(badge('badge-ref', 'References'));
         rest = rest.replace(/^References\b\s*/, '');
         if (rest) pieces.push(<span key="tail"> {rest} </span>);
-        return pieces;
+        return keyify(pieces);
       }
       
       // Trailing MODIFY badge
@@ -238,7 +245,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
         pieces.push(badge('badge-modify', 'MODIFY'));
         const tail = after.replace(/^MODIFY\b\s*/, '');
         if (tail) pieces.push(<span key="tail"> {tail} </span>);
-        return pieces;
+        return keyify(pieces);
       }
       
       // Inline path highlighting with copy (best-effort)
@@ -258,14 +265,106 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
             out.push(part);
           }
         }
-        return out;
+        return keyify(out);
       }
-      
+
       return text;
     } catch { 
       return content; 
     }
   }, []);
+
+  // Utilities inspired by Claudable UI
+  const shortenPath = (text) => {
+    try {
+      if (!text) return text;
+      const pathPattern = /(\/[^\/\s]+(?:\/[^\/\s]+){3,}\/([^\/\s]+\.[^\/\s]+))/g;
+      return String(text).replace(pathPattern, (_m, _full, filename) => `.../${filename}`);
+    } catch { return text; }
+  };
+
+  const isToolUsageMessage = (content, metadata = null) => {
+    try {
+      const txt = String(content || '');
+      if (!txt.trim()) return false;
+      if (txt.includes('[object Object]')) return true;
+      // Pattern used by Claudable
+      const p = /\*\*(Read|LS|Glob|Grep|Edit|Write|Bash|MultiEdit|TodoWrite)\*\*\s*`?([^`\n]+)`?/;
+      if (p.test(txt)) return true;
+      // Our older system message sometimes: "🔧 Tool …`arg`"
+      if (/^🔧\s+.+`[^`]+`/.test(txt)) return true;
+      // Generic emoji tool name (e.g., "🔎 WebSearch" / "🛠 WebFetch")
+      const emojiTool = /^(?:[\p{Emoji}\p{Extended_Pictographic}]\s*)?(WebSearch|WebFetch|Search)\b/iu;
+      if (emojiTool.test(txt)) return true;
+      return false;
+    } catch { return false; }
+  };
+
+  const ToolMessage = ({ content, metadata }) => {
+    try {
+      const txt = String(content || '');
+      let action = 'Executed';
+      let filePath = '';
+      let cleanContent = undefined;
+      const m = /\*\*(Read|LS|Glob|Grep|Edit|Write|Bash|MultiEdit|TodoWrite)\*\*\s*`?([^`\n]+)`?/.exec(txt);
+      if (m) {
+        const toolName = m[1];
+        const arg = m[2].trim();
+        switch (toolName) {
+          case 'Read': action = 'Read'; filePath = arg; break;
+          case 'Edit':
+          case 'MultiEdit': action = 'Edited'; filePath = arg; break;
+          case 'Write': action = 'Created'; filePath = arg; break;
+          case 'LS':
+          case 'Glob':
+          case 'Grep': action = 'Searched'; filePath = arg; break;
+          case 'Bash': action = 'Executed'; filePath = arg.split('\n')[0]; break;
+          case 'TodoWrite': action = 'Generated'; filePath = 'Todo List'; break;
+        }
+        try { if (action === 'Executed' && filePath) lastToolCommandRef.current = filePath.trim(); } catch {}
+        return <ToolResultItem action={action} filePath={filePath} content={cleanContent} />;
+      }
+      // Our older system line: "🔧 ToolName `arg`"
+      const m2 = /^🔧\s+([^`]+)\s*`([^`]+)`/.exec(txt);
+      if (m2) {
+        const arg = m2[2];
+        try { if (arg) lastToolCommandRef.current = String(arg).trim(); } catch {}
+        return <ToolResultItem action={'Executed'} filePath={arg} content={undefined} />;
+      }
+      return null;
+    } catch { return null; }
+  };
+
+  // Parse a lightweight "References" block from plain text
+  const parseReferencesBlock = (text) => {
+    try {
+      const lines = String(text || '').split('\n');
+      let idx = lines.findIndex(l => /^\s*References\s*$/i.test(l.trim()));
+      if (idx === -1) return null;
+      // capture until next blank line or end
+      let j = idx + 1;
+      const captured = [];
+      while (j < lines.length) {
+        const ln = lines[j];
+        if (!ln || /^\s*$/.test(ln)) break;
+        captured.push(ln);
+        j++;
+      }
+      // Extract file-like paths (with extension) and whether line indicates MODIFY
+      const pathRe = /([A-Za-z0-9_.-]+\/[A-Za-z0-9_./-]+\.[A-Za-z0-9]{1,6})/g;
+      const items = [];
+      for (const raw of captured) {
+        const modify = /\bMODIFY\b/i.test(raw);
+        const paths = Array.from(raw.matchAll(pathRe)).map(m => m[1]);
+        for (const p of paths) {
+          items.push({ path: p, modify });
+        }
+      }
+      const before = lines.slice(0, idx).join('\n');
+      const after = lines.slice(j).join('\n');
+      return { before, items, after };
+    } catch { return null; }
+  };
 
   // Collapsible for long plain text paragraphs
   const ShowMoreText = ({ text, maxLines = 14, maxChars = 1200 }) => {
@@ -559,11 +658,15 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
     autoGreetSentRef.current = false;
   }, [endSessionCore]);
 
-  // Expose controls to parent when session is active
-  // Temporarily disable external end-session binding to avoid accidental triggers
+  // Expose controls to parent (global header)
   useEffect(() => {
     if (typeof onBindControls !== 'function') return;
-    try { onBindControls(null); } catch {}
+    const controls = {
+      end: () => { try { endSessionUser(); } catch {} },
+      new: () => { try { endSessionUser(); } catch {}; setTimeout(() => startSession(), 200); }
+    };
+    try { onBindControls(controls); } catch {}
+    return () => { try { onBindControls(null); } catch {} };
   }, [onBindControls]);
 
   const restartSession = useCallback(() => {
@@ -585,6 +688,12 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
   const elapsedSec = useActivityTimer(
     activityLock || isSessionInitializing || isTyping || ['queued','busy','thinking','tool'].includes(typingStatus.mode)
   );
+
+  // Bubble activity to parent for layout intelligence
+  useEffect(() => {
+    const active = activityLock || isSessionInitializing || isTyping || ['queued','busy','thinking','tool'].includes(typingStatus.mode);
+    try { onActivityChange && onActivityChange(active); } catch {}
+  }, [activityLock, isSessionInitializing, isTyping, typingStatus, onActivityChange]);
 
   // Message handling (persistent, same behavior as Codex overlay)
   const addMessage = useCallback((newMessage) => {
@@ -741,6 +850,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
   const execStreamsRef = useRef(new Map()); // callId -> { id, buffer, lastTs }
   const processedMessagesRef = useRef(new Set()); // Track processed messages to prevent duplicates
   const lastToolLabelRef = useRef(null); // Deduplicate consecutive tool_use lines
+  const lastToolCommandRef = useRef(null); // Track last bash command to avoid duplicate fenced block
   
   // Process messages from WebSocket with cleaner formatting
   useEffect(() => {
@@ -833,9 +943,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
           setClaudeSessionActive(false);
           if (clientSessionId) setClientSessionId(null);
           // Suppress message when closure is due to options restart
-          if (!optionsRestartingRef.current) {
-            addMessage({ type: 'system', text: 'Claude session closed' });
-          }
+          // Keep UI clean on idle/transport closes — silently mark inactive
           optionsRestartingRef.current = false;
         }
         
@@ -1005,10 +1113,12 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
                       const lang = detectCodeLanguage(resultText);
                       const fenced = '```' + lang + '\n' + resultText.replace(/```/g, '\\u0060\\u0060\\u0060') + '\n```';
                       addMessage({ type: 'system', text: fenced });
-                    } else {
-                      // If no text, at least note completion
-                      addMessage({ type: 'system', text: 'Tool finished.' });
-                    }
+                  } else {
+                    // If no text, at least note completion
+                      if (!HIDE_OUTPUTS) {
+                        addMessage({ type: 'system', text: 'Tool finished.' });
+                      }
+                  }
                   } catch {
                     // Ignore parse errors, still end typing state
                   }
@@ -1332,6 +1442,28 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
     }
   }, [useSidebarWhenOpen, open, sidebarContainerRef]);
 
+  // Handle image file selection
+  const handleImageSelect = (files) => {
+    const validImages = Array.from(files).filter(file => 
+      file.type.startsWith('image/')
+    ).slice(0, 5); // Limit to 5 images
+    
+    validImages.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const newAttachment = {
+          id: Date.now() + Math.random(),
+          type: 'image',
+          url: e.target.result,
+          name: file.name,
+          size: file.size
+        };
+        setImageAttachments(prev => [...prev, newAttachment]);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
   // Shared chat panel content (can render inline or into a portal)
   const renderPanelContent = () => (
     <div className={`${embedded ? 'w-full h-full flex flex-col bg-background' : 'w-full max-h-[70vh] bg-background rounded-2xl flex flex-col overflow-hidden border border-border shadow-2xl'} relative`}>
@@ -1553,14 +1685,14 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
               : isSystem
               ? 'text-muted-foreground italic'
               : 'text-foreground'; // assistant: no background/padding, plain text
-            
+
             // Detect tool messages and extract inline command for copy
             const isToolMessage = !isError && isSystem && typeof m.text === 'string' && m.text.startsWith('🔧 ');
             const extractCommand = (txt) => {
               const match = /`([^`]+)`/.exec(txt || '');
               return match ? match[1] : '';
             };
-            
+
             // Spec Card heuristic (Plan/Observations/Spec)
             // Ensure m.text is always a string
             const textContent = typeof m.text === 'string' ? m.text : (m.text?.toString() || '');
@@ -1583,12 +1715,10 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
               body = body.replace(/^\s*Rule:.*\n?/i, '');
               if (ruleTags) body = body.replace(new RegExp(`^\s*${ruleTags.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\n?`), '');
               return (
-                <div className="rounded-xl border border-border/50 bg-card/40 px-3 py-3 shadow-sm">
+                <div className="px-0 py-0 bg-transparent border-0 shadow-none">
                   <div className="text-[11px] text-muted-foreground mb-1">
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-border/50">Rule: {ruleName}</span>
-                    {ruleTags && (
-                      <span className="ml-2 text-muted-foreground/80">{ruleTags}</span>
-                    )}
+                    {ruleTags && (<span className="ml-2 text-muted-foreground/80">{ruleTags}</span>)}
                   </div>
                   <div className="prose prose-sm dark:prose-invert max-w-none leading-relaxed prose-p:my-1 prose-li:my-1">
                     <ReactMarkdown components={markdownComponents}>{body}</ReactMarkdown>
@@ -1600,7 +1730,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
             const SpecWrapper = ({ children }) => {
               if (!looksLikeSpec) return <>{children}</>;
               return (
-                <div className="rounded-2xl border border-border/60 bg-muted/10 px-3 py-2 shadow-sm">
+                <div className="px-0 py-0 bg-transparent border-0 shadow-none">
                   <div className="mb-2 flex items-center gap-2 text-sm font-medium">
                     <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-green-600/80 text-white">✓</span>
                     <span>{specTitle}</span>
@@ -1609,6 +1739,9 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
                 </div>
               );
             };
+
+            // Compact assistant text: hide verbose narrative blocks without code
+            // Always show assistant responses; outputs are filtered separately
 
             // ExpandableMessage removed – always show full content
             return (
@@ -1638,14 +1771,20 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
                       </ul>
                     </div>
                   ) : (
-                    (isUser || isError)
-                      ? (
-                        <SpecWrapper>
-                        <div className={`prose prose-sm dark:prose-invert max-w-none leading-relaxed prose-p:my-1 prose-li:my-1 ${isUser ? 'text-foreground/80' : ''}`}>
+                    isUser ? (
+                      <div className="px-3 py-2 rounded-lg border border-border/50 bg-white/5 dark:bg-white/5 text-foreground shadow-sm">
+                        <div className="text-[11px] uppercase tracking-wide text-muted-foreground/70 mb-1">Você</div>
+                        <div className="prose prose-sm dark:prose-invert max-w-none leading-relaxed prose-p:my-1 prose-li:my-1">
                           <ReactMarkdown components={markdownComponents}>{textContent}</ReactMarkdown>
                         </div>
-                        </SpecWrapper>
-                      ) : isSystem ? (
+                      </div>
+                    ) : isError ? (
+                      <SpecWrapper>
+                        <div className={`prose prose-sm dark:prose-invert max-w-none leading-relaxed prose-p:my-1 prose-li:my-1 text-destructive`}>
+                          <ReactMarkdown components={markdownComponents}>{textContent}</ReactMarkdown>
+                        </div>
+                      </SpecWrapper>
+                    ) : isSystem ? (
                         <div className="bg-transparent relative">
                           {isToolMessage && (
                             <button
@@ -1658,20 +1797,85 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
                               Copy
                             </button>
                           )}
-                          {(/^Thinking…/.test(textContent)) ? (
-                            <ThinkingCollapsible text={textContent} />
-                          ) : isToolMessage && typingStatus.mode === 'tool' ? (
-                            <div className="inline-flex items-center gap-2 text-sm opacity-85">
-                              <span className="w-3 h-3 border-2 border-blue-500/40 border-t-blue-500 rounded-full animate-spin inline-block" />
-                              <span className="italic">
-                                <ReactMarkdown components={markdownComponents}>{textContent}</ReactMarkdown>
-                              </span>
-                            </div>
-                          ) : (
-                            <div className="max-w-none leading-relaxed prose prose-sm dark:prose-invert prose-pre:whitespace-pre-wrap prose-pre:break-words prose-pre:overflow-auto">
-                              <ReactMarkdown components={markdownComponents}>{textContent}</ReactMarkdown>
+                  {(() => {
+                    // Try to extract a References block for compact rendering
+                    const refs = parseReferencesBlock(textContent);
+                    if (refs && refs.items && refs.items.length) {
+                      const fileBadge = (p) => {
+                        const ext = (p.split('.').pop() || '').toLowerCase();
+                        const label = ext.toUpperCase();
+                        const style = (() => {
+                          if (ext === 'js' || ext === 'jsx') return 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20';
+                          if (ext === 'ts' || ext === 'tsx') return 'bg-blue-500/10 text-blue-500 border-blue-500/20';
+                          if (ext === 'md' || ext === 'markdown') return 'bg-purple-500/10 text-purple-400 border-purple-500/20';
+                          if (ext === 'json') return 'bg-orange-500/10 text-orange-500 border-orange-500/20';
+                          return 'bg-muted text-foreground/70 border-border/60';
+                        })();
+                        return (
+                          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] border ${style} mr-1`}>
+                            {label}
+                          </span>
+                        );
+                      };
+                      return (
+                        <div className="space-y-1">
+                          {refs.before && (
+                            <div className="prose prose-sm dark:prose-invert max-w-none leading-relaxed prose-p:my-1">
+                              <ReactMarkdown components={markdownComponents}>{refs.before}</ReactMarkdown>
                             </div>
                           )}
+                          <details className="group">
+                            <summary className="list-none cursor-pointer flex items-center gap-2 px-2 py-1 rounded-md hover:bg-accent/10 w-fit">
+                              <svg className="w-4 h-4 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                              <span className="font-medium">References</span>
+                            </summary>
+                            <div className="mt-1 space-y-1 ml-6">
+                              {refs.items.map((it, i) => (
+                                <div key={`ref-${i}`} className="flex items-center gap-2 text-sm">
+                                  {fileBadge(it.path)}
+                                  <span title={it.path} className="px-2 py-0.5 text-xs rounded bg-muted/70 text-foreground/80">
+                                    {(() => {
+                                      const parts = it.path.split('/').filter(Boolean);
+                                      return parts.length > 2 ? `…/${parts.slice(-2).join('/')}` : it.path;
+                                    })()}
+                                  </span>
+                                  {it.modify && (
+                                    <span className="ml-2 text-[10px] px-2 py-0.5 rounded bg-blue-500/10 text-blue-500 border border-blue-500/20">MODIFY</span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </details>
+                          {refs.after && (
+                            <div className="prose prose-sm dark:prose-invert max-w-none leading-relaxed prose-p:my-1">
+                              <ReactMarkdown components={markdownComponents}>{refs.after}</ReactMarkdown>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    }
+                    if (/^Thinking…/.test(textContent)) {
+                      return <ThinkingCollapsible text={textContent} />;
+                    }
+                    if (isToolUsageMessage(textContent)) {
+                      return <ToolMessage content={textContent} />;
+                    }
+                    if (isToolMessage && typingStatus.mode === 'tool') {
+                      return (
+                        <div className="inline-flex items-center gap-2 text-sm opacity-85">
+                          <span className="w-3 h-3 border-2 border-blue-500/40 border-t-blue-500 rounded-full animate-spin inline-block" />
+                          <span className="italic">
+                            <ReactMarkdown components={markdownComponentsSystem}>{textContent}</ReactMarkdown>
+                          </span>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div className="max-w-none leading-relaxed prose prose-sm dark:prose-invert prose-pre:whitespace-pre-wrap prose-pre:break-words prose-pre:overflow-auto">
+                        <ReactMarkdown components={markdownComponentsSystem}>{textContent}</ReactMarkdown>
+                      </div>
+                    );
+                  })()}
                         </div>
                       ) : (
                         <RuleCard>
@@ -1860,37 +2064,38 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
           )}
           {/* Resume chip hidden per request */}
           {/* Segmented controls row - moved above input */}
-          <div className="flex items-center justify-between text-muted-foreground text-xs px-2 mb-2">
-            <div className="flex items-center gap-3">
-              <button className="flex items-center gap-1.5 hover:text-foreground transition-colors h-6" title={activeProjectPath || 'Current directory'}>
-                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
-                <span className="max-w-[200px] truncate font-medium">{activeProjectPath ? activeProjectPath.split('/').pop() : 'STANDALONE_MODE'}</span>
+          <div className="flex items-center justify-between text-muted-foreground text-xs px-2 mb-2 overflow-hidden">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <button className="flex items-center gap-1.5 hover:text-foreground transition-colors h-6 min-w-0" title={activeProjectPath || 'Current directory'}>
+                <svg className="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+                <span className="max-w-[120px] sm:max-w-[150px] truncate font-medium">{activeProjectPath ? activeProjectPath.split('/').pop() : 'STANDALONE_MODE'}</span>
               </button>
               {chatProjectPath && projectPath && chatProjectPath !== projectPath && (
-                <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border border-border/50">
+                <span className="hidden sm:inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border border-border/50 whitespace-nowrap">
                   Pinned to {chatProjectPath.split('/').pop()} 
                   <button onClick={() => { setPendingProjectPath(projectPath); setShowProjectSwitchPrompt(true); }} className="underline hover:no-underline ml-1">switch</button>
                 </span>
               )}
-              {cliProvider === 'claude' && (
-                <div className="relative">
-                  <button 
-                    onClick={() => setShowModelMenu(v => !v)} 
-                    className="flex items-center gap-1.5 hover:text-foreground transition-colors h-6"
-                  >
-                    <span className="text-muted-foreground">Model:</span>
-                    <span className="font-medium">
-                      {selectedModel === 'default' ? 'Default' : 
-                       selectedModel === 'opus' ? 'Opus' :
-                       selectedModel === 'sonnet' ? 'Sonnet' :
-                       selectedModel === 'opus-plan' ? 'Opus Plan Mode' : 'Default'}
-                    </span>
-                    <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M6 9l6 6 6-6"/>
-                    </svg>
-                  </button>
+            </div>
+            {cliProvider === 'claude' && (
+              <div className="relative flex-shrink-0">
+                <button 
+                  onClick={() => setShowModelMenu(v => !v)} 
+                  className="flex items-center gap-1 hover:text-foreground transition-colors h-6 text-[11px] sm:text-xs"
+                >
+                  <span className="hidden sm:inline text-muted-foreground">Model:</span>
+                  <span className="font-medium">
+                    {selectedModel === 'default' ? 'Default' : 
+                     selectedModel === 'opus' ? 'Opus' :
+                     selectedModel === 'sonnet' ? 'Sonnet' :
+                     selectedModel === 'opus-plan' ? 'Plan' : 'Default'}
+                  </span>
+                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M6 9l6 6 6-6"/>
+                  </svg>
+                </button>
                   {showModelMenu && (
-                    <div className="absolute z-50 bottom-full mb-1 left-0 w-48 rounded-lg border border-border bg-popover shadow-xl overflow-hidden">
+                    <div className="absolute z-50 bottom-full mb-1 right-0 sm:left-0 w-48 rounded-lg border border-border bg-popover shadow-xl overflow-hidden">
                       <button 
                         onClick={() => { setSelectedModel('default'); setShowModelMenu(false); }}
                         className={`w-full text-left px-3 py-2 text-xs hover:bg-muted transition-colors ${selectedModel === 'default' ? 'text-foreground bg-muted/50' : 'text-muted-foreground'}`}
@@ -1963,9 +2168,6 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
                 </button>
               )}
             </div>
-            {/* right side near input intentionally left empty (controls moved to header) */}
-            <div />
-          </div>
           
           {/* Activity indicator moved to floating pill (top-right) */}
 
@@ -2016,26 +2218,6 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
       </div>
     </div>
   );
-
-  // Handle image file selection
-  const handleImageSelect = (files) => {
-    const validImages = Array.from(files).filter(file => 
-      file.type.startsWith('image/')
-    ).slice(0, 5); // Limit to 5 images
-    
-    validImages.forEach(file => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setImageAttachments(prev => [...prev, {
-          id: `img-${Date.now()}-${Math.random()}`,
-          dataUrl: e.target.result,
-          name: file.name,
-          size: file.size
-        }]);
-      };
-      reader.readAsDataURL(file);
-    });
-  };
 
   // Handle drag events
   const handleDragOver = (e) => {
@@ -2253,6 +2435,15 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
     return () => window.removeEventListener('storage', onStorage);
   }, [connect]);
 
+  // Keep WebSocket/CLI alive: lightweight ping every 25s while connected
+  useEffect(() => {
+    if (!isConnected) return;
+    let t = setInterval(() => {
+      try { sendMessage && sendMessage({ type: 'ping' }); } catch {}
+    }, 25000);
+    return () => { try { clearInterval(t); } catch {} };
+  }, [isConnected, sendMessage]);
+
   // Claude messages now come via WebSocket, not SSE stream
   // Process them in the wsMessages effect above
 
@@ -2305,15 +2496,96 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
   }, []);
 
   // Custom components for ReactMarkdown
+  // Small inline icon for language labels
+  const LangIcon = ({ lang }) => {
+    const l = String(lang || '').toLowerCase();
+    if (l === 'bash' || l === 'sh' || l === 'zsh' || l === 'shell') {
+      return (
+        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <rect x="3" y="4" width="18" height="16" rx="2"/>
+          <path d="M7 9l4 3-4 3"/>
+          <path d="M13 15h4"/>
+        </svg>
+      );
+    }
+    return (
+      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <rect x="4" y="5" width="16" height="14" rx="2"/>
+        <path d="M8 9h8M8 13h8"/>
+      </svg>
+    );
+  };
+
   const markdownComponents = {
+    pre({ children, ...props }) {
+      try {
+        const getText = (n) => typeof n === 'string' ? n : (Array.isArray(n) ? n.map(getText).join('') : (n?.props ? getText(n.props.children) : ''));
+        const text = getText(children).trim();
+        if (!text) return null; // drop empty <pre></pre>
+      } catch {}
+      return <pre {...props}>{children}</pre>;
+    },
     code({ node, inline, className, children, ...props }) {
-      const match = /language-(\w+)/.exec(className || '');
-      const language = match ? match[1] : '';
-      
-      if (!inline && language) {
-        return <CodeBlockCollapsible language={language} text={String(children)} />;
+      const match = /(?:language|lang)-(\w+)/.exec(className || '');
+      const language = match ? (match[1] || '').toLowerCase() : '';
+      const raw = String(children);
+
+      if (!inline) {
+        // Skip duplicate bash command if already emitted as Tool row
+        if (language === 'bash' && lastToolCommandRef.current) {
+          const first = raw.split('\n')[0].trim();
+          if (first && first === String(lastToolCommandRef.current)) {
+            return null;
+          }
+        }
+        // Auto-expand small blocks (<=6 lines) for better readability in assistant text
+        const lineCount = raw.split('\n').length;
+        const compactInline = (lineCount <= 1 && raw.length <= 48);
+        if (compactInline) {
+          // Render as inline chip to avoid breaking parentheses, etc.
+          return (
+            <code className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-border/50 bg-muted/40 text-foreground/90 font-mono text-[12px] align-middle">
+              {raw}
+            </code>
+          );
+        }
+        if (lineCount <= 6) {
+          const styleTheme = (theme === 'light') ? oneLight : vscDarkPlus;
+          return (
+            <SyntaxHighlighter
+              style={styleTheme}
+              language={language || 'text'}
+              PreTag="div"
+              customStyle={{
+                margin: '0.25rem 0',
+                borderRadius: '0.5rem',
+                fontSize: '0.85rem',
+                width: '100%',
+                overflowX: 'auto',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word'
+              }}
+            >
+              {raw.replace(/\n$/, '')}
+            </SyntaxHighlighter>
+          );
+        }
+        // Larger blocks remain collapsed with summary
+        return (
+          <details className="group my-1 not-prose bg-transparent">
+            <summary className="list-none cursor-pointer inline-flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground bg-transparent px-2 py-1 rounded-md border border-border/40">
+              <svg className="w-3.5 h-3.5 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+              <LangIcon lang={language} />
+              <span className="font-mono">{language || 'code'} • {lineCount} lines</span>
+            </summary>
+            <div className="mt-1">
+              <CodeBlockCollapsible language={language || 'text'} text={raw} />
+            </div>
+          </details>
+        );
       }
-      
+
+      // Inline code stays styled but minimal
       return (
         <code className="chat-inline-code" {...props}>
           {children}
@@ -2369,9 +2641,13 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
         ? children[0]
         : (typeof children === 'string' ? children : null);
       if (typeof asString === 'string') {
-        const s = asString.trim();
+        const s = shortenPath(asString.trim());
         if (/^(Thought for \d+s?|Read\b|Grepped\b|Searched\b|Listed\b|No linter errors found|Command cancelled)/i.test(s)) {
           return <div className="text-xs text-muted-foreground my-1" {...props}>{s}</div>;
+        }
+        // Drop lone tool headers like "Bash", "JS" which duplicate the summary below
+        if (/^(?:[\p{Emoji}\p{Extended_Pictographic}]\s*)?(Bash|JS|JavaScript|TS|TypeScript)\s*$/iu.test(s)) {
+          return null;
         }
         // Long text → collapsible
         if (s.length > 1200 || s.split('\n').length > 14) {
@@ -2387,7 +2663,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
       const unchecked = raw.startsWith('[ ] ') || raw.startsWith('[  ] ');
       const checked = raw.startsWith('[x] ') || raw.startsWith('[X] ');
       if (unchecked || checked) {
-        const label = raw.replace(/^\[[xX\s]\]\s+/, '');
+        const label = shortenPath(raw.replace(/^\[[xX\s]\]\s+/, ''));
         return (
           <li className="list-none my-1">
             <label className="inline-flex items-start gap-2">
@@ -2398,13 +2674,90 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
         );
       }
       if (typeof children === 'string') {
-        return <li className="my-1" {...props}>{renderContentBadges(children)}</li>;
+        return <li className="my-1" {...props}>{renderContentBadges(shortenPath(children))}</li>;
       }
       if (Array.isArray(children) && children.length === 1 && typeof children[0] === 'string') {
-        return <li className="my-1" {...props}>{renderContentBadges(children[0])}</li>;
+        return <li className="my-1" {...props}>{renderContentBadges(shortenPath(children[0]))}</li>;
       }
       return <li className="my-1" {...props}>{children}</li>;
     }
+  };
+
+  // Variant used for system/tool outputs: allow plain text fenced blocks with importance filter
+  const markdownComponentsSystem = {
+    ...markdownComponents,
+    pre({ children, ...props }) {
+      try {
+        const getText = (n) => typeof n === 'string' ? n : (Array.isArray(n) ? n.map(getText).join('') : (n?.props ? getText(n.props.children) : ''));
+        const text = getText(children).trim();
+        if (!text) return null; // drop empty <pre></pre>
+      } catch {}
+      return <pre {...props}>{children}</pre>;
+    },
+    p({ children, ...props }) {
+      const asString = Array.isArray(children) && children.length === 1 && typeof children[0] === 'string'
+        ? children[0] : (typeof children === 'string' ? children : null);
+      if (typeof asString === 'string') {
+        const s = asString.trim();
+        // Drop standalone tool headers like "Bash"/"JS" which duplicate the summary below
+        if (/^(?:[\p{Emoji}\p{Extended_Pictographic}]\s*)?(Bash|JS|JavaScript|TS|TypeScript)\s*$/iu.test(s)) {
+          return null;
+        }
+      }
+      return <p className="my-1" {...props}>{children}</p>;
+    },
+    code({ node, inline, className, children, ...props }) {
+      const match = /(?:language|lang)-(\w+)/.exec(className || '');
+      const language = match ? (match[1] || '').toLowerCase() : '';
+      const raw = String(children);
+
+      if (!inline) {
+        const lines = raw.split('\n');
+        const lineCount = lines.length;
+        const important = (() => {
+          const t = raw;
+          if (!t.trim()) return false;
+          // Hide noisy web-search dumps completely
+          if (/web\s*search\s*results\s*for\s*query/i.test(t) || /\bLinks:\s*\[/i.test(t)) return false;
+          if (lineCount <= 3) return true;
+          return /(error|failed|exception|traceback|TS\d{3,}|TypeError|ReferenceError|SyntaxError|Build failed|Compilation error)/i.test(t);
+        })();
+        // Hide long, non-important outputs
+        if (!important && lineCount > 10) return null;
+
+        // Plain text outputs → minimal summary
+        if (!language || ['text', 'txt', 'plain', 'plaintext'].includes(language)) {
+          return (
+            <details className="group my-1 not-prose" style={{ backgroundColor: 'transparent' }}>
+              <summary className="list-none cursor-pointer inline-flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded-md border border-border/40" style={{ backgroundColor: 'transparent' }}>
+                <svg className="w-3.5 h-3.5 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                <LangIcon lang="output" />
+                <span>Output • {lineCount} lines</span>
+              </summary>
+              <pre className="mt-1 text-sm font-mono whitespace-pre-wrap break-words text-foreground/90 bg-transparent p-0">{raw}</pre>
+            </details>
+          );
+        }
+        // Non-plain languages: collapse into summary
+        return (
+          <details className="group my-1 not-prose" style={{ backgroundColor: 'transparent' }}>
+            <summary className="list-none cursor-pointer inline-flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded-md border border-border/40" style={{ backgroundColor: 'transparent' }}>
+              <svg className="w-3.5 h-3.5 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+              <LangIcon lang={language} />
+              <span className="font-mono">{language} • {lineCount} lines</span>
+            </summary>
+            <div className="mt-1">
+              <CodeBlockCollapsible language={language} text={raw} />
+            </div>
+          </details>
+        );
+      }
+      return (
+        <code className="chat-inline-code" {...props}>
+          {children}
+        </code>
+      );
+    },
   };
 
   // Docked panel positioning handled via absolute CSS classes
