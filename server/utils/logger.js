@@ -112,8 +112,40 @@ function format(service, level, msg) {
   let output = `${timeColor}[${timeStr}]${COLORS.reset} `;
   
   if (service) {
-    // Service tag with color based on level
-    output += `${levelColor}[${service}]${COLORS.reset} `;
+    // Special colors for CLAUDE-CLI service
+    if (service === 'CLAUDE-CLI') {
+      // Use cyan for CLAUDE-CLI service tag
+      output += `${COLORS.brightCyan}[${service}]${COLORS.reset} `;
+      
+      // Apply special formatting for Claude messages
+      if (msg.includes('💬 Claude:')) {
+        // Assistant messages in bright blue
+        output += msg.replace('💬 Claude:', `${COLORS.brightBlue}${COLORS.bold}💬 Claude:${COLORS.reset}${COLORS.brightBlue}`);
+        output += COLORS.reset;
+        return output;
+      } else if (msg.includes('👤 Você:')) {
+        // User messages in bright green
+        output += msg.replace('👤 Você:', `${COLORS.brightGreen}${COLORS.bold}👤 Você:${COLORS.reset}${COLORS.green}`);
+        output += COLORS.reset;
+        return output;
+      } else if (msg.includes('🔧 Usando ferramenta:')) {
+        // Tool use in yellow
+        output += msg.replace('🔧 Usando ferramenta:', `${COLORS.yellow}🔧 Usando ferramenta:${COLORS.reset}${COLORS.yellow}`);
+        output += COLORS.reset;
+        return output;
+      } else if (msg.includes('✅ Resultado:')) {
+        // Tool results in green
+        output += msg.replace('✅ Resultado:', `${COLORS.green}✅ Resultado:${COLORS.reset}`);
+        return output;
+      } else if (msg.includes('━')) {
+        // Separator lines in dim gray
+        output += `${COLORS.dim}${msg}${COLORS.reset}`;
+        return output;
+      }
+    } else {
+      // Service tag with color based on level
+      output += `${levelColor}[${service}]${COLORS.reset} `;
+    }
   }
   
   // Add the message

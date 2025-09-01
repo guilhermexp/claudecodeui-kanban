@@ -14,7 +14,9 @@ function logClaudeEvent(ev) {
   try {
     const type = ev?.type || ev?.event_type || 'unknown';
     if (type === 'system' && ev.subtype === 'init') {
-      log.info('▶ init');
+      log.info('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      log.info('🚀 Iniciando sessão com Claude...');
+      log.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
       return;
     }
     if (type === 'assistant') {
@@ -27,40 +29,75 @@ function logClaudeEvent(ev) {
         else {
           // If no text, summarize blocks for readable logs
           const desc = content
-            .map(b => (b?.type === 'tool_use' ? `tool_use:${b.name || 'tool'}` : b?.type || 'block'))
+            .map(b => (b?.type === 'tool_use' ? `🔧 ${b.name || 'tool'}` : b?.type || 'block'))
             .slice(0, 3)
             .join(', ');
           txt = `[${desc}]`;
         }
       }
       if (!txt) return;
-      const snippet = String(txt).replace(/\s+/g, ' ').slice(0, 140);
-      if (STREAM_MODE === 'full') log.info(`assistant: ${snippet}`);
-      else if (STREAM_MODE === 'compact') log.info(`▸ assistant: ${snippet}`);
+      
+      // Format the assistant message with better spacing and visual hierarchy
+      const lines = String(txt).split('\n');
+      const maxLength = 100;
+      
+      log.info('\n💬 Claude:');
+      lines.forEach((line, i) => {
+        if (line.trim()) {
+          const formatted = line.length > maxLength 
+            ? line.substring(0, maxLength) + '...'
+            : line;
+          log.info(`   ${formatted}`);
+        }
+        // Limit to first 5 lines in compact mode
+        if (STREAM_MODE === 'compact' && i >= 4) {
+          if (lines.length > 5) log.info('   ...');
+          return false;
+        }
+      });
       return;
     }
     if (type === 'tool_use') {
       const name = ev.tool_name || ev.name || 'tool';
-      const id = ev.tool_use_id ? `#${ev.tool_use_id.slice(0, 6)}` : '';
-      log.info(`⚙︎ tool_use ${name}${id}`);
+      const id = ev.tool_use_id ? ` (${ev.tool_use_id.slice(0, 8)})` : '';
+      log.info(`\n🔧 Usando ferramenta: ${name}${id}`);
       return;
     }
     if (type === 'tool_result') {
       const txt = ev.text || ev.message?.text || '';
-      const snippet = txt ? `: ${String(txt).replace(/\s+/g, ' ').slice(0, 120)}` : '';
-      log.info(`✓ tool_result${snippet}`);
+      const snippet = txt ? String(txt).replace(/\s+/g, ' ').slice(0, 80) : 'concluído';
+      log.info(`   ✅ Resultado: ${snippet}`);
+      return;
+    }
+    if (type === 'user') {
+      const txt = ev.message?.text || ev.text || '';
+      if (txt) {
+        log.info('\n👤 Você:');
+        const lines = String(txt).split('\n');
+        lines.forEach((line, i) => {
+          if (line.trim() && i < 3) {
+            const formatted = line.length > 100 
+              ? line.substring(0, 100) + '...'
+              : line;
+            log.info(`   ${formatted}`);
+          }
+        });
+        if (lines.length > 3) log.info('   ...');
+      }
       return;
     }
     if (type === 'error') {
-      log.warn(`error: ${ev.error || ev.message || 'unknown'}`);
+      log.warn(`\n❌ Erro: ${ev.error || ev.message || 'desconhecido'}`);
       return;
     }
     if (type === 'result') {
-      log.success('done');
+      log.info('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      log.success('✨ Conversa concluída com sucesso!');
+      log.info('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
       return;
     }
     // Default fallback for unrecognized events (debug only)
-    log.debug(`event: ${type}`);
+    log.debug(`📍 Evento: ${type}`);
   } catch {}
 }
 
@@ -245,10 +282,10 @@ async function spawnClaude(command, options = {}, ws) {
     const nodeCommand = '/opt/homebrew/bin/node';
     const claudeScript = '/opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js';
     
-    log.info(`Starting Claude interactive mode`);
-    log.info(`Command: ${finalCommand || 'No command provided'}`);
-    log.info(`cmd: ${nodeCommand} ${claudeScript}`);
-    log.info(`args: ${args.join(' ')}`);
+    log.info(`\n🎯 Iniciando Claude no modo interativo`);
+    log.info(`📝 Comando: ${finalCommand || 'Nenhum comando fornecido'}`);
+    log.debug(`🔧 Executável: ${nodeCommand} ${claudeScript}`);
+    log.debug(`⚙️  Argumentos: ${args.join(' ')}`);
     log.info(`cwd: ${workingDir}`);
     log.info(`sessionId: ${sessionId || 'new session'}`);
     log.info(`resume: ${resume}`);
@@ -267,7 +304,8 @@ async function spawnClaude(command, options = {}, ws) {
     
     // Send command to stdin after process starts
     if (finalCommand) {
-      log.info(`📝 Sending command to stdin: ${finalCommand.substring(0, 100)}...`);
+      log.info(`\n📨 Enviando comando para Claude...`);
+      log.debug(`   ${finalCommand.substring(0, 100)}...`);
       claudeProcess.stdin.write(finalCommand + '\n');
       // Wait a bit then close stdin to signal end of input
       setTimeout(() => {
@@ -295,13 +333,13 @@ async function spawnClaude(command, options = {}, ws) {
     claudeProcess.stdout.on('data', (data) => {
       if (isFirstOutput) {
         isFirstOutput = false;
-        log.info('▶ First stdout received from Claude');
+        log.debug('📥 Primeira resposta recebida do Claude');
       }
       const rawOutput = data.toString();
-      log.info(`▸ Claude output (${rawOutput.length} chars): ${rawOutput.substring(0, 200)}`);
+      log.debug(`📦 Saída do Claude (${rawOutput.length} caracteres)`);
       
       const lines = rawOutput.split('\n').filter(line => line.trim());
-      log.info(`📦 Processing ${lines.length} line(s) from Claude`);
+      log.debug(`⚡ Processando ${lines.length} linha(s) do Claude`);
       
       for (const line of lines) {
         try {
