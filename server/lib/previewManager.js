@@ -139,19 +139,34 @@ export async function startPreview(projectName, repoPath, preferredPort = null) 
   // Check if this project should not have preview
   const blockedPaths = [
     '/Users/guilhermevarela/.claude',
-    '/Users/guilhermevarela/Documents',
+    '/.claude'
+  ];
+  
+  // These paths should be blocked only as exact matches, not subdirectories
+  const exactMatchOnlyPaths = [
     '/Users/guilhermevarela',
-    '/.claude',
-    '/Documents'
+    '/Users/guilhermevarela/Documents',
+    '/Users/guilhermevarela/Desktop',
+    '/Users/guilhermevarela/Downloads'
   ];
   
   const normalizedPath = path.resolve(repoPath);
+  
+  // Check if it's a blocked path (includes subdirectories)
   const isBlocked = blockedPaths.some(blocked => {
     const resolvedBlocked = path.resolve(blocked);
     return normalizedPath === resolvedBlocked || normalizedPath.startsWith(resolvedBlocked + '/');
   });
   
-  if (isBlocked) {
+  // Check if it's an exact match only path (no subdirectories)
+  const isExactBlocked = exactMatchOnlyPaths.some(blocked => {
+    const resolvedBlocked = path.resolve(blocked);
+    return normalizedPath === resolvedBlocked;
+  });
+  
+  const shouldBlock = isBlocked || isExactBlocked;
+  
+  if (shouldBlock) {
     console.log(`[Preview] Blocked preview for system/config directory: ${repoPath}`);
     broadcast({ 
       type: 'preview_error', 

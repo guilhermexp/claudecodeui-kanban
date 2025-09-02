@@ -103,7 +103,7 @@ const clog = createLogger('CLAUDE');
 const shlog = createLogger('SHELL');
 const xlog = createLogger('CODEX');
 
-import cleanupService from './cleanupService.js';
+// cleanupService removed with Vibe Kanban integration
 import { 
   apiRateLimit, 
   strictRateLimit, 
@@ -386,18 +386,7 @@ app.get('/api/health', async (req, res) => {
       healthStatus.status = 'degraded';
     }
 
-    // Check Vibe Kanban backend
-    try {
-      const vibeResponse = await fetch('http://localhost:6734/api/health', {
-        timeout: 2000
-      });
-      healthStatus.services.vibeKanban = vibeResponse.ok ? 'available' : 'error';
-    } catch (error) {
-      healthStatus.services.vibeKanban = 'unavailable';
-      if (healthStatus.status === 'healthy') {
-        healthStatus.status = 'degraded';
-      }
-    }
+    // Vibe Kanban backend check removed
 
     // Add system metrics
     const memUsage = process.memoryUsage();
@@ -518,14 +507,18 @@ app.use('/api/claude-stream', claudeStreamRoutes);
 app.get('/api/sounds/:soundFile', (req, res) => {
   try {
     const soundFile = req.params.soundFile;
-    const soundPath = path.join(__dirname, '../vibe-kanban/backend/sounds', soundFile);
-    
-    // Check if file exists and is within sounds directory
-    if (!fs.existsSync(soundPath)) {
+    const candidateDirs = [
+      path.join(__dirname, '../public/sounds'),
+      path.join(__dirname, '../server/assets/sounds'),
+    ];
+    let soundPath = null;
+    for (const dir of candidateDirs) {
+      const p = path.join(dir, soundFile);
+      if (fs.existsSync(p)) { soundPath = p; break; }
+    }
+    if (!soundPath) {
       return res.status(404).json({ error: 'Sound file not found' });
     }
-    
-    // Serve the sound file with proper MIME type
     const mimeType = mime.lookup(soundPath) || 'audio/wav';
     res.setHeader('Content-Type', mimeType);
     res.sendFile(path.resolve(soundPath));
@@ -535,29 +528,7 @@ app.get('/api/sounds/:soundFile', (req, res) => {
   }
 });
 
-// Vibe Kanban Cleanup API Routes
-app.get('/api/cleanup/status', authenticateToken, (req, res) => {
-  res.json(cleanupService.getStatus());
-});
-
-app.post('/api/cleanup/force', authenticateToken, async (req, res) => {
-  try {
-    await cleanupService.forceCleanup();
-    res.json({ success: true, message: 'Forced cleanup completed' });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-app.post('/api/cleanup/restart', authenticateToken, (req, res) => {
-  try {
-    cleanupService.stop();
-    cleanupService.start();
-    res.json({ success: true, message: 'Cleanup service restarted' });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
+// Cleanup API removed with Vibe integration
 
 // Wire preview WS broadcaster before mounting routes
 try { setPreviewBroadcasterFn(broadcastToAll); } catch {}
@@ -1782,26 +1753,17 @@ async function handleClaudeMessage(ws, data, sessions) {
 
   // Write into streaming stdin (fast path)
   try {
-    // If this message brings new images, restart stream to apply -i flags
-    const hasNewImages = Array.isArray(data.options?.images) && data.options.images.length > 0;
-    if (hasNewImages) {
-      try { sessions.claude.stream?.stop(); } catch {}
-      const options = data.options || {};
-      const projectPath = sessions.claude.projectPath;
-      const workingDir = projectPath;
-      const stream = spawnClaudeStream({ ...options, projectPath, cwd: workingDir, forceBypassPermissions: true }, ws, (sid) => {
-        try { sessions.claude.sessionId = sid; } catch {}
-      });
-      sessions.claude.stream = stream;
-    }
+    // Extract images from options if present
+    const imageData = data.options?.images || null;
+    
     const sid = data.sessionId || sessions.claude.sessionId || null;
-    const ok = sessions.claude.stream.writeMessage(data.message, sid);
+    const ok = sessions.claude.stream.writeMessage(data.message, sid, imageData);
     if (!ok) {
       // Fallback: re-spawn stream
       const options = data.options || {};
       const stream = spawnClaudeStream({ ...options, projectPath: sessions.claude.projectPath, cwd: sessions.claude.projectPath, sessionId: sid }, ws);
       sessions.claude.stream = stream;
-      stream.writeMessage(data.message, sid);
+      stream.writeMessage(data.message, sid, imageData);
     }
     // Mark session as materialized after first successful write
     if (!sessions.claude.hasSentMessage) {
@@ -2752,112 +2714,8 @@ app.post('/api/projects/:projectName/upload-images', authenticateToken, async (r
   }
 });
 
-// Optional Vibe Kanban proxy (disabled via DISABLE_VIBE)
-import VibeKanbanProxy from './lib/vibe-proxy.js';
-const VIBE_DISABLED = String(process.env.DISABLE_VIBE || process.env.VIBE_DISABLED || '').toLowerCase() === 'true';
-const vibeProxy = VIBE_DISABLED ? null : new VibeKanbanProxy({
-  baseUrl: 'http://localhost:6734',
-  timeout: 30000,
-  retries: 3,
-  retryDelay: 1000,
-  healthCheckInterval: 30000,
-  circuitBreakerThreshold: 5,
-  circuitBreakerTimeout: 60000
-});
-
-// Image upload endpoint for Vibe Kanban
-app.post('/api/vibe-kanban/upload-image', authenticateToken, async (req, res) => {
-  try {
-    const multer = (await import('multer')).default;
-    const path = (await import('path')).default;
-    const fs = (await import('fs')).promises;
-    const os = (await import('os')).default;
-    const crypto = (await import('crypto')).default;
-    
-    // Configure multer for image uploads
-    const storage = multer.diskStorage({
-      destination: async (req, file, cb) => {
-        const uploadDir = path.join(os.tmpdir(), 'vibe-kanban-uploads', String(req.user.id));
-        await fs.mkdir(uploadDir, { recursive: true });
-        cb(null, uploadDir);
-      },
-      filename: (req, file, cb) => {
-        const uniqueSuffix = crypto.randomBytes(6).toString('hex');
-        const ext = path.extname(file.originalname);
-        cb(null, `image-${Date.now()}-${uniqueSuffix}${ext}`);
-      }
-    });
-    
-    const upload = multer({
-      storage: storage,
-      limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
-      fileFilter: (req, file, cb) => {
-        if (file.mimetype.startsWith('image/')) {
-          cb(null, true);
-        } else {
-          cb(new Error('Only image files are allowed'));
-        }
-      }
-    }).single('image');
-    
-    upload(req, res, async (err) => {
-      if (err) {
-        slog.error(`Upload error: ${err?.message || err}`);
-        return res.status(400).json({ error: err.message });
-      }
-      
-      if (!req.file) {
-        return res.status(400).json({ error: 'No image file provided' });
-      }
-      
-      // Generate a URL that can be accessed by the client
-      // In production, you might want to upload to S3 or similar
-      // For now, we'll create a temporary URL endpoint
-      const imageId = path.basename(req.file.filename, path.extname(req.file.filename));
-      const imageUrl = `${req.protocol}://${req.get('host')}/api/vibe-kanban/images/${imageId}`;
-      
-      // Store file path in memory for retrieval (in production, use database)
-      if (!global.vibeKanbanImages) {
-        global.vibeKanbanImages = new Map();
-      }
-      global.vibeKanbanImages.set(imageId, {
-        path: req.file.path,
-        mimetype: req.file.mimetype,
-        userId: req.user.id,
-        uploadedAt: new Date()
-      });
-      
-      // Clean up old images after 1 hour
-      setTimeout(() => {
-        if (global.vibeKanbanImages.has(imageId)) {
-          const imageData = global.vibeKanbanImages.get(imageId);
-          fs.unlink(imageData.path).catch(err => slog.warn(`Failed to delete image: ${err?.message || err}`));
-          global.vibeKanbanImages.delete(imageId);
-        }
-      }, 60 * 60 * 1000);
-      
-      res.json({ url: imageUrl });
-    });
-  } catch (error) {
-    slog.error(`Error handling image upload: ${error.message}`);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// Serve uploaded images
-app.get('/api/vibe-kanban/images/:imageId', (req, res) => {
-  const imageId = req.params.imageId;
-  
-  if (!global.vibeKanbanImages || !global.vibeKanbanImages.has(imageId)) {
-    return res.status(404).json({ error: 'Image not found' });
-  }
-  
-  const imageData = global.vibeKanbanImages.get(imageId);
-  
-  // Send the image file
-  res.contentType(imageData.mimetype);
-  res.sendFile(imageData.path);
-});
+// Vibe Kanban integration removed
+// Vibe Kanban proxy and image upload endpoints removed
 
 // General image server for Shell/Chat uploads (public access for Claude)
 app.get('/api/images/:imageId', (req, res) => {
@@ -3055,95 +2913,7 @@ app.get('/api/preview-proxy', async (req, res) => {
   }
 });
 
-// Proxy VibeKanban API requests to Rust backend
-app.use('/api/vibe-kanban', express.json(), async (req, res) => {
-  if (!vibeProxy) {
-    return res.status(503).json({
-      success: false,
-      message: 'Vibe Kanban disabled on this server (DISABLE_VIBE)'
-    });
-  }
-  try {
-    const vibeKanbanPath = req.path.replace('/api/vibe-kanban', '');
-    const queryString = req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : '';
-    const fullPath = `${vibeKanbanPath}${queryString}`;
-    
-    
-    // Use the robust proxy
-    const response = await vibeProxy.makeRequest(fullPath, {
-      method: req.method,
-      headers: req.headers,
-      body: req.body
-    });
-    
-    // Set response headers - handle both raw() method and direct headers object
-    const headers = response.headers.raw ? response.headers.raw() : response.headers;
-    if (headers) {
-      // If headers is a Headers object, iterate properly
-      if (headers.forEach) {
-        headers.forEach((value, key) => {
-          if (key.toLowerCase() !== 'content-encoding') {
-            res.setHeader(key, value);
-          }
-        });
-      } else if (typeof headers === 'object') {
-        // Handle plain object
-        Object.entries(headers).forEach(([key, value]) => {
-          if (key.toLowerCase() !== 'content-encoding') {
-            res.setHeader(key, value);
-          }
-        });
-      }
-    }
-    
-    // Send response
-    res.status(response.status);
-    
-    if (typeof response.data === 'object') {
-      res.json(response.data);
-    } else {
-      res.send(response.data);
-    }
-  } catch (error) {
-    slog.error(`VibeKanban proxy error: ${error.message}`);
-    
-    // Handle specific error types
-    if (error.message.includes('Circuit breaker')) {
-      res.status(503).json({ 
-        success: false, 
-        message: 'Vibe Kanban service is temporarily unavailable due to repeated failures',
-        error: 'Service Unavailable',
-        details: 'The service will automatically retry in a few moments'
-      });
-    } else if (error.message.includes('not running')) {
-      res.status(503).json({ 
-        success: false, 
-        message: 'Vibe Kanban backend is not running. Please start it with "npm run vibe-backend" or "npm run dev"',
-        error: 'Service Unavailable',
-        details: 'The Vibe Kanban backend service (Rust) needs to be running on port 8081'
-      });
-    } else if (error.message.includes('timeout')) {
-      res.status(504).json({ 
-        success: false, 
-        message: 'Request to Vibe Kanban backend timed out',
-        error: 'Gateway Timeout'
-      });
-    } else if (error.statusCode) {
-      // Forward HTTP errors from Vibe Kanban
-      res.status(error.statusCode).json(error.data || {
-        success: false,
-        message: error.message,
-        error: `HTTP ${error.statusCode}`
-      });
-    } else {
-      res.status(502).json({ 
-        success: false, 
-        message: 'Error communicating with Vibe Kanban backend',
-        error: error.message || 'Bad Gateway'
-      });
-    }
-  }
-});
+// Vibe Kanban API proxy removed
 
 // General error handler middleware
 app.use((err, req, res, next) => {
@@ -3314,7 +3084,7 @@ async function startServer() {
       
       // Clear any pending logs and show beautiful banner
       console.log('');
-      printStartupBanner({ CLIENT: 5892, SERVER: PORT, VIBE: 6734 });
+      printStartupBanner({ CLIENT: 5892, SERVER: PORT });
       
       // Log ready status
       logReady('SERVER', PORT);
@@ -3337,8 +3107,7 @@ async function startServer() {
         // Memory optimization not available
       }
       
-      // Start Vibe Kanban cleanup service silently
-      cleanupService.start();
+      // Vibe Kanban cleanup service removed
     });
   } catch (error) {
     slog.error(`❌ Failed to start server: ${error.message}`);
@@ -3371,10 +3140,7 @@ async function gracefulShutdown(signal) {
     }
   });
   
-  // Stop Vibe Kanban proxy health checks
-  if (vibeProxy) {
-    vibeProxy.destroy();
-  }
+  // Vibe Kanban proxy removed
   
   // Shutdown all Claude processes via ProcessManager
   try {

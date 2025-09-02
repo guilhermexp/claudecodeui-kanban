@@ -150,7 +150,7 @@ const TECH_PATTERNS = {
   },
   vibe: {
     files: [],
-    patterns: [/vibe-kanban/, /vibe/],
+    patterns: [/vibe/],
     icon: '📋',
     lucideIcon: Trello,
     color: '#0079BF',
@@ -242,13 +242,11 @@ export const isVibeKanbanProject = (project) => {
   const projectName = project.name || '';
   
   return (
-    projectPath.includes('/vibe-kanban/') ||
-    projectPath.includes('\\vibe-kanban\\') ||
+    false ||
     projectName.startsWith('vk-') ||
     projectName.startsWith('VK-') ||
     projectName.toLowerCase().includes('vibe') ||
-    projectPath.includes('/T/vibe-kanban/') ||
-    projectPath.includes('\\T\\vibe-kanban\\') ||
+    false ||
     projectPath.includes('/vk-') ||
     projectPath.includes('\\vk-') ||
     projectPath.includes('/VK-') ||

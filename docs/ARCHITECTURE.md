@@ -104,7 +104,7 @@ server/
 
 **Directory Structure:**
 ```
-vibe-kanban/backend/
+ 
 ├── src/
 │   ├── main.rs      # Entry point
 │   ├── routes/      # HTTP routes

@@ -10,8 +10,7 @@ if (command === 'stop-all') {
     execSync("lsof -ti:5892 | xargs kill -9 2>/dev/null || true", { stdio: 'inherit' });
     // Kill backend
     execSync("lsof -ti:7347 | xargs kill -9 2>/dev/null || true", { stdio: 'inherit' });
-    // Kill Vibe Kanban
-    execSync("lsof -ti:6734 | xargs kill -9 2>/dev/null || true", { stdio: 'inherit' });
+    // Vibe Kanban removed
   } catch (error) {
   }
 } else if (command === 'detect') {
@@ -19,11 +18,10 @@ if (command === 'stop-all') {
   try {
     const frontend = execSync("lsof -ti:5892", { encoding: 'utf8' }).trim();
     const backend = execSync("lsof -ti:7347", { encoding: 'utf8' }).trim();
-    const vibe = execSync("lsof -ti:6734", { encoding: 'utf8' }).trim();
     
-    if (frontend && backend && vibe) {
-    } else if (backend && vibe && !frontend) {
-    } else if (frontend || backend || vibe) {
+    if (frontend && backend) {
+    } else if (backend && !frontend) {
+    } else if (frontend || backend) {
     } else {
     }
   } catch (error) {
@@ -38,7 +36,6 @@ if (command === 'stop-all') {
   try {
     const frontend = execSync("lsof -ti:5892", { encoding: 'utf8' }).trim();
     const backend = execSync("lsof -ti:7347", { encoding: 'utf8' }).trim();
-    const vibe = execSync("lsof -ti:6734", { encoding: 'utf8' }).trim();
     
   } catch (error) {
   }

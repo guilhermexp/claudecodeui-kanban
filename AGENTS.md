@@ -5,7 +5,7 @@
 - `server/`: Node/Express API + WebSocket gateway (`server/index.js`) and middleware, routes, database, config.
 - `public/`: Static assets served by Vite. `dist/`: production build output.
 - `scripts/`: Dev/HTTPS/port helpers (e.g., `scripts/dev.js`, `setup-https.sh`).
-- `vibe-kanban/` (optional): Rust companion backend; started in dev if present.
+- (Vibe Kanban removido): O backend Rust não faz parte deste repo.
 - `docs/`, `examples/`, `certs/`, `.env*`: documentation, samples, local HTTPS, environment.
 
 ## Build, Test, and Development Commands

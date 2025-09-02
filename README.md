@@ -69,7 +69,7 @@ OPENAI_API_KEY=sua_chave_openai_aqui
 # Portas
 PORT=8080
 VITE_PORT=9000
-VIBE_PORT=8081
+ 
 ```
 
 ### Autenticação

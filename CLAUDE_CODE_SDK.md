@@ -103,7 +103,7 @@ python examples/claude_code_sdk_demo.py [all|simple|analysis|tests|refactor|feat
    - Geração de código assistida por IA
    - Refatoração automática com preview
 
-3. **Vibe Kanban Integration** (`vibe-kanban/`)
+3. Vibe Kanban Integration: removed from this repository
    - Criar tasks automaticamente baseadas em análise de código
    - Sugerir melhorias como tasks
    - Auto-completar descrições de tasks

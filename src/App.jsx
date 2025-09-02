@@ -24,7 +24,6 @@ import { BrowserRouter as Router, Routes, Route, useNavigate, useParams } from '
 import MainContent from './components/MainContent';
 import MobileNav from './components/MobileNav';
 import ToolsSettings from './components/ToolsSettings';
-import VibeKanbanApp from './components/VibeKanbanApp';
 import SessionKeepAlive from './components/SessionKeepAlive';
 import { FloatingMicMenu } from './components/FloatingMicMenu';
 import SessionsView from './components/SessionsView';
@@ -715,7 +714,7 @@ function App() {
                 <Route path="/" element={<AppContent />} />
                 <Route path="/session/:sessionId" element={<AppContent />} />
                 <Route path="/project/:projectName/sessions" element={<AppContent />} />
-                <Route path="/vibe-kanban/*" element={<VibeKanbanApp />} />
+                { /* Vibe Kanban pages removed */ }
               </Routes>
             </Router>
           </ProtectedRoute>

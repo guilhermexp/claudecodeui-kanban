@@ -22,11 +22,9 @@ import ResourceMonitor from './ResourceMonitor';
 import ErrorBoundary from './ErrorBoundary';
 import { TextShimmer } from './ui/text-shimmer';
 import { createLogger } from '../utils/logger';
-import { ConfigProvider } from './vibe-kanban/config-provider';
 import ProjectsModal from './ProjectsModal';
-import KanbanModal from './KanbanModal';
 import DarkModeToggle from './DarkModeToggle';
-import { Folder, Kanban, Settings as SettingsIcon } from 'lucide-react';
+import { Folder, Settings as SettingsIcon } from 'lucide-react';
 import CtaButton from './ui/CtaButton';
 
 function MainContent({ 
@@ -79,7 +77,7 @@ function MainContent({
   
   // Modal states
   const [showProjectsModal, setShowProjectsModal] = useState(false);
-  const [showKanbanModal, setShowKanbanModal] = useState(false);
+  // const [showKanbanModal, setShowKanbanModal] = useState(false);
   const [showGitModal, setShowGitModal] = useState(false);
   const [toast, setToast] = useState(null);
   const [claudeOverlaySessionId, setClaudeOverlaySessionId] = useState(null);
@@ -383,16 +381,7 @@ function MainContent({
                 </span>
               </button>
               
-              {/* Kanban (mobile hidden) */}
-              <button
-                onClick={() => setShowKanbanModal(true)}
-                className={`hidden sm:inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 text-muted-foreground hover:text-foreground hover:bg-accent`}
-              >
-                <span className="flex items-center gap-1 sm:gap-1.5 leading-none">
-                  <Kanban className="w-3 sm:w-3.5 h-3 sm:h-3.5" />
-                  <span className="hidden sm:inline">Kanban</span>
-                </span>
-              </button>
+              { /* Kanban button removed */ }
 
               {/* Files (mobile hidden) */}
               <button
@@ -561,7 +550,6 @@ function MainContent({
         <div className={`min-h-0 flex flex-col transition-all duration-300 flex-1 bg-background`}>
           <div className="h-full overflow-hidden">
             {!isMobile && (
-              <ConfigProvider>
                 <Shell 
                   selectedProject={selectedProject} 
                   selectedSession={selectedSession}
@@ -581,7 +569,6 @@ function MainContent({
                     setActiveSidePanel(null);
                   }}
                 />
-              </ConfigProvider>
             )}
           </div>
         </div>
@@ -591,7 +578,7 @@ function MainContent({
         {/* Codex Chat panel integrated */}
         {!isMobile && (
           <div className={`transition-all duration-300 ease-in-out overflow-hidden ${
-            activeSidePanel === 'codex-chat' ? 'w-[260px] sm:w-[320px] md:w-[360px] lg:w-[420px] border-l border-border' : 'w-0'
+            activeSidePanel === 'codex-chat' ? 'w-[260px] sm:w-[320px] md:w-[360px] lg:w-[420px] border-l border-border bg-black' : 'w-0'
           }`}>
             {activeSidePanel === 'codex-chat' && (
               <OverlayChat 
@@ -612,7 +599,7 @@ function MainContent({
         {/* Claude Chat panel integrated */}
         {!isMobile && (
           <div className={`transition-all duration-300 ease-in-out overflow-hidden ${
-            activeSidePanel === 'claude-chat' ? 'w-[260px] sm:w-[320px] md:w-[360px] lg:w-[420px] border-l border-border' : 'w-0'
+            activeSidePanel === 'claude-chat' ? 'w-[260px] sm:w-[320px] md:w-[360px] lg:w-[420px] border-l border-border bg-black' : 'w-0'
           }`}>
             {activeSidePanel === 'claude-chat' && (
               <div style={{ height: '100%' }}>
@@ -690,13 +677,7 @@ function MainContent({
         onRefresh={onRefresh}
       />
       
-      {/* Kanban Modal */}
-      <KanbanModal
-        isOpen={showKanbanModal}
-        onClose={() => setShowKanbanModal(false)}
-        selectedProject={selectedProject}
-        isMobile={isMobile}
-      />
+      { /* Kanban Modal removed */ }
 
       {/* Git Modal */}
       {showGitModal && (

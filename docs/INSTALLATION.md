@@ -80,7 +80,6 @@ npm install --legacy-peer-deps
 
 ```bash
 # Navigate to Vibe Kanban backend
-cd vibe-kanban/backend
 
 # Build in release mode
 cargo build --release
@@ -135,7 +134,6 @@ The application will automatically create SQLite databases on first run:
 ```bash
 # Ensure directories exist
 mkdir -p data
-mkdir -p vibe-kanban/backend/data
 ```
 
 ### 6. Start Development Servers
@@ -166,7 +164,6 @@ Open your browser and navigate to:
 npm run build
 
 # Build Vibe Kanban
-cd vibe-kanban/backend
 cargo build --release
 cd ../..
 ```
@@ -313,7 +310,6 @@ server {
    rustup update
    
    # Clean and rebuild
-   cd vibe-kanban/backend
    cargo clean
    cargo build --release
    ```
@@ -358,7 +354,7 @@ git pull origin main
 npm install
 
 # Rebuild Vibe Kanban
-cd vibe-kanban/backend
+Note: Vibe Kanban companion backend has been removed from this repository. Instructions related to `vibe-kanban/*` are obsolete.
 cargo build --release
 cd ../..
 

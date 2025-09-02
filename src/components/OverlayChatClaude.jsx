@@ -1171,6 +1171,28 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
         // Optionally add a completion indicator
         if (cliProvider === 'claude') {
         }
+        try {
+          const audio = new Audio('/api/sounds/complete.wav');
+          audio.play().catch(async () => {
+            try {
+              const AudioCtx = window.AudioContext || window.webkitAudioContext;
+              if (!AudioCtx) return;
+              const ctx = new AudioCtx();
+              const osc = ctx.createOscillator();
+              const gain = ctx.createGain();
+              osc.type = 'sine';
+              osc.frequency.setValueAtTime(880, ctx.currentTime);
+              gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+              gain.gain.exponentialRampToValueAtTime(0.08, ctx.currentTime + 0.01);
+              gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.25);
+              osc.connect(gain);
+              gain.connect(ctx.destination);
+              osc.start();
+              osc.stop(ctx.currentTime + 0.3);
+              setTimeout(() => ctx.close && ctx.close().catch(() => {}), 400);
+            } catch {}
+          });
+        } catch {}
         return;
       }
       
@@ -2033,7 +2055,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
         <div 
           className={`${themeCodex 
             ? 'relative'
-            : `rounded-2xl border ${isDragging ? 'border-primary border-2' : 'border-border bg-muted'} shadow-sm transition-all duration-200 focus-within:border-primary/50 relative`}`}
+            : `rounded-2xl border ${isDragging ? 'border-primary border-2' : 'border-border'} shadow-sm transition-all duration-200 focus-within:border-primary/50 relative`}`}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
@@ -2285,34 +2307,26 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
       const blocks = attachments.map((att, idx) => `Selected ${att.tag} (${idx + 1}):\n\n\u0060\u0060\u0060html\n${att.html}\n\u0060\u0060\u0060`).join('\n\n');
       prefix = blocks + '\n\n';
     }
-    // Upload images to backend and get file paths for CLI consumption
-    let uploadedPaths = [];
+    // Prepare images for Claude API - send as base64 data, not file paths
+    let imageData = [];
     if (imageAttachments.length > 0) {
-      const uploadOne = (img) => new Promise((resolve) => {
-        const handlerId = `overlay-claude-upload-${Date.now()}-${Math.random()}`;
-        const timeout = setTimeout(() => { try { unsub && unsub(); } catch {}; resolve(null); }, 8000);
-        const unsub = registerMessageHandler(handlerId, (payload) => {
-          try {
-            if (payload.type === 'image-uploaded' && payload.fileName === img.name) {
-              clearTimeout(timeout);
-              try { unsub && unsub(); } catch {}
-              resolve(payload.path);
-            } else if (payload.type === 'image-upload-error') {
-              clearTimeout(timeout);
-              try { unsub && unsub(); } catch {}
-              resolve(null);
-            }
-          } catch {}
-        });
-        sendMessage({ type: 'upload-image', imageData: img.dataUrl, fileName: img.name });
-      });
       for (const img of imageAttachments) {
-        const p = await uploadOne(img);
-        if (p) uploadedPaths.push(p);
-      }
-      if (uploadedPaths.length > 0) {
-        const imageInfo = uploadedPaths.map((p, idx) => `Image ${idx + 1}: ${p}`).join('\n');
-        prefix += `Attached images (paths):\n${imageInfo}\n\n`;
+        // Extract base64 data and media type from data URL
+        const matches = img.url.match(/^data:(.+);base64,(.+)$/);
+        if (matches) {
+          const mediaType = matches[1];
+          const base64Data = matches[2];
+          
+          // Add image in Claude API format
+          imageData.push({
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: mediaType,
+              data: base64Data
+            }
+          });
+        }
       }
     }
     // Apply planner/model hints ONLY for Codex, not for Claude
@@ -2375,8 +2389,8 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
         sessionId: resumeSid || null,
         resume: !!shouldResume,
         model: modelMap[selectedModel],
-        // Pass real file paths to SDK/CLI
-        images: uploadedPaths
+        // Pass images as base64 data for Claude API
+        images: imageData
       };
       
       // Send via WebSocket using the same format as the backend expects

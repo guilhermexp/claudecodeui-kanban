@@ -204,7 +204,7 @@ export const detectProjectTypeFromName = (project) => {
     };
   }
   
-  if (/\b(vibe-kanban|vibe|kanban|task|todo)\b/.test(projectText)) {
+  if (/\b(vibe|kanban|task|todo)\b/.test(projectText)) {
     return { 
       type: 'vibe',
       confidence: 0.9,

@@ -23,24 +23,16 @@ src/components/overlay-claude/MarkdownConfig.jsx
 src/components/overlay-claude/MessageItem.jsx
 src/components/overlay-claude/MessageList.jsx
 src/components/Sidebar.jsx
-src/components/vibe-kanban/keyboard-shortcuts-demo.tsx
-src/components/vibe-kanban/logo.tsx
-src/components/vibe-kanban/projects/projects-page.tsx
-src/components/vibe-kanban/tasks/index.ts
-src/components/vibe-kanban/tasks/TaskDetailsPanelWrapper.tsx
-src/components/vibe-kanban/theme-toggle.tsx
-src/components/vibe-kanban/ui/scroll-area.tsx
-src/components/vibe-kanban/ui/separator.tsx
-src/components/vibe-kanban/ui/table.tsx
+// Vibe Kanban components removed from repo
 
 ## Utilities and Hooks (8 files)
 src/constants/theme.js
 src/hooks/useClaudeSession.js
 src/hooks/useClaudeStream.js
-src/hooks/vibe-kanban/use-system-info.ts
+// Vibe Kanban hooks removed
 src/lib/shellSessionManager.js
 src/utils/cleanUsageData.js
 src/utils/safe-local-storage.js
-src/utils/vibe-kanban/script-placeholders.ts
+// Vibe Kanban utils removed
 
 Total: 35 files to delete

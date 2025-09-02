@@ -57,7 +57,6 @@ Principais pontos:
 - Ícones específicos por ferramenta (edit/git/bash) e cores distintas.
 
 ## Referências
-- Vibe Kanban (Rust): lógica de normalização em `vibe-kanban/backend/src/executors/codex.rs`.
+ 
 - Codeui Frontend: `src/components/OverlayChat.jsx`.
 - Normalizador: `src/utils/codex-normalizer.js`.
-

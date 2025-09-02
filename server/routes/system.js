@@ -193,7 +193,8 @@ async function getActivePorts() {
                 processType = 'backend';
                 url = `http://${host}:${port}`;
               } else if (port === 6734) {
-                processType = 'vibe-kanban';
+                // formerly vibe-kanban; treated as generic dev server if present
+                processType = 'dev-server';
                 url = `http://${host}:${port}`;
               } else if (port >= 3000 && port <= 3999) {
                 // Common dev server range
