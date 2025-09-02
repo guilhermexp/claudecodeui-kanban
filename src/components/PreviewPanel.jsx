@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { refreshPreviewStatus as apiRefreshStatus, startPreview as apiStartPreview, stopPreview as apiStopPreview, fetchProjectFiles, fetchPreviewLogs } from '../utils/preview/api';
+import { refreshPreviewStatus as apiRefreshStatus, startPreview as apiStartPreview, stopPreview as apiStopPreview, fetchPreviewLogs } from '../utils/preview/api';
 import { useConsoleCapture } from '../hooks/preview/useConsoleCapture';
 import { useElementSelection } from '../hooks/preview/useElementSelection';
 import FileManagerSimple from './FileManagerSimple';
 import CtaButton from './ui/CtaButton';
 
-function PreviewPanel({ url, projectPath, projectName = null, onClose, onRefresh, onOpenExternal, isMobile, initialPaused = false, onBindControls = null }) {
+function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPaused = false, onBindControls = null }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [currentUrl, setCurrentUrl] = useState(url || '');
@@ -18,8 +18,7 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, onRefresh
   const [elementSelectionMode, setElementSelectionMode] = useState(false); // Direct element selection
   const [selectedElement, setSelectedElement] = useState(null); // Captured element data
   const [deviceMode, setDeviceMode] = useState('desktop'); // 'desktop' | 'mobile'
-  const [showFileTree, setShowFileTree] = useState(true);
-  const [fileTree, setFileTree] = useState([]);
+  const [showFileTree, setShowFileTree] = useState(false);
   const [showServerLogs, setShowServerLogs] = useState(false); // Server logs panel
   const [serverLogs, setServerLogs] = useState(''); // Server logs content
   
@@ -196,20 +195,7 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, onRefresh
     }
   }, [url]);
 
-  // Load project file tree when toggled open
-  useEffect(() => {
-    if (!showFileTree || !projectName || /standalone/i.test(projectName)) return;
-    let aborted = false;
-    (async () => {
-      try {
-        const data = await fetchProjectFiles(projectName);
-        if (!aborted) setFileTree(data);
-      } catch {}
-    })();
-    return () => { aborted = true; };
-  }, [showFileTree, projectName]);
-
-  // File content preview removed here; FileManagerSimple cuida da visualização/edição
+  // File content preview handled by FileManagerSimple on demand
 
   // Fetch server logs
   const fetchServerLogs = async () => {
@@ -423,7 +409,7 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, onRefresh
 
   if (!isValidPreviewUrl(currentUrl)) {
     return (
-      <div className="h-full flex flex-col bg-background">
+      <div className="h-full flex flex-col bg-card rounded-xl border border-border">
         <div className="flex items-center justify-between px-2 py-1.5 border-b border-border bg-card">
           <div className="flex items-center gap-1.5">
             <span className="text-sm font-medium text-foreground">Preview Panel</span>
@@ -456,7 +442,7 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, onRefresh
   }
 
   return (
-    <div className="h-full flex flex-col bg-background rounded-xl border border-border relative">
+    <div className="h-full flex flex-col bg-card rounded-xl border border-border relative">
       {/* Preview Toolbar */}
       <div className="flex items-center justify-between px-2 py-2 border-b border-border">
         <div className="flex items-center gap-1.5 flex-1 min-w-0">
@@ -617,7 +603,7 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, onRefresh
               </svg>
             </button>
             
-            {/* Microphone Permission Button - Hidden but functional */}
+            {/* Microphone Permission */}
             <button
               onClick={() => {
                 if (microphoneStatus === 'prompt' || microphoneStatus === 'denied') {
@@ -626,9 +612,23 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, onRefresh
                   requestMicrophonePermission();
                 }
               }}
-              className="hidden"
-              aria-hidden="true"
-            />
+              className={`p-1.5 rounded-md transition-colors ${
+                microphoneStatus === 'granted' 
+                  ? 'text-muted-foreground hover:bg-accent' 
+                  : 'text-yellow-500 hover:bg-accent'
+              }`}
+              title={
+                microphoneStatus === 'granted' 
+                  ? 'Microphone permission granted' 
+                  : microphoneStatus === 'denied' 
+                    ? 'Microphone permission denied — click for help' 
+                    : 'Microphone permission required — click to grant'
+              }
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14a3 3 0 003-3V7a3 3 0 10-6 0v4a3 3 0 003 3zm6-3a6 6 0 11-12 0m6 6v3m-4 0h8" />
+              </svg>
+            </button>
 
             {/* Pause/Play toggle removed */}
             <button
@@ -917,33 +917,16 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, onRefresh
 
         {/* Iframe principal - sempre mostra a aplicação */}
         {/* Optional side file panel */}
-        {showFileTree && projectName && projectPath && (
+        {showFileTree && projectName && projectPath && !(/standalone/i.test(String(projectName)) || String(projectPath) === 'STANDALONE_MODE') && (
           <div className="absolute inset-0 z-30 bg-background">
-            {/standalone/i.test(String(projectName)) || String(projectPath) === 'STANDALONE_MODE' ? (
-              <div className="w-full h-full flex items-center justify-center select-none">
-                <div className="flex flex-col items-center text-center gap-4">
-                  <div className="w-20 h-20 md:w-24 md:h-24 rounded-2xl overflow-hidden shadow-lg">
-                    <img
-                      src="/icons/claude-ai-icon.svg"
-                      alt="vibeclaude"
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                  <h1 className="text-3xl md:text-4xl font-bold text-foreground">vibeclaude</h1>
-                  <p className="text-sm md:text-base text-muted-foreground">Choose Your Project</p>
-                  <div className="w-20 h-0.5 bg-gradient-to-r from-primary to-accent" />
-                </div>
-              </div>
-            ) : (
-              <FileManagerSimple
-                selectedProject={{ name: projectName, path: projectPath }}
-                onClose={() => setShowFileTree(false)}
-              />
-            )}
+            <FileManagerSimple
+              selectedProject={{ name: projectName, path: projectPath }}
+              onClose={() => setShowFileTree(false)}
+            />
           </div>
         )}
 
-        <div className={`w-full h-full flex items-center justify-center bg-background`}>
+        <div className={`w-full h-full flex items-center justify-center bg-card`}>
           {previewBlocked ? (
             <div className="text-center text-foreground/90">
               <PreviewBlockedMessage reason={blockReason} />
@@ -1070,9 +1053,9 @@ export default React.memo(PreviewPanel);
 
 function ClaudableLoader({ starting, onStart }) {
   return (
-    <div className="text-center">
-      <RingLogo spinning={starting} />
-      <div className="mt-6">{!starting && (<CtaButton onClick={onStart}>Start Preview</CtaButton>)}</div>
+  <div className="text-center">
+    <RingLogo spinning={starting} />
+    <div className="mt-4">{!starting && (<CtaButton onClick={onStart} size="sm" className="justify-center">Start Preview</CtaButton>)}</div>
       <h2 className="text-3xl font-semibold mt-6">{starting ? 'Starting Preview…' : 'Preview Not Running'}</h2>
       <p className="text-sm text-white/60 mt-2">Start your development server to see live changes</p>
     </div>

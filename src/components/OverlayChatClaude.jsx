@@ -1657,7 +1657,8 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
                 disabled={isSessionInitializing || !isConnected}
                 icon={false}
                 variant="default"
-                className="w-32 sm:w-36 justify-center text-xs sm:text-sm"
+                size="sm"
+                className="justify-center"
               >
                 Start Claude
               </CtaButton>
@@ -1666,7 +1667,8 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
                 disabled={isSessionInitializing || !isConnected}
                 icon={false}
                 variant="default"
-                className="w-32 sm:w-36 justify-center text-xs sm:text-sm"
+                size="sm"
+                className="justify-center"
               >
                 Start Bypass
               </CtaButton>
@@ -2178,8 +2180,8 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
           
           {/* Activity indicator moved to floating pill (top-right) */}
 
-          {/* Single unified input container with dark background */}
-          <div className="space-y-4 rounded-2xl bg-muted border border-border py-8 px-6">
+          {/* Single unified input container with subtle glass background */}
+          <div className="space-y-4 rounded-2xl bg-white/5 backdrop-blur-md border border-white/10 py-8 px-6 shadow-sm">
             {/* Input area */}
             <div className="flex items-center gap-3">
               {/* plus */}

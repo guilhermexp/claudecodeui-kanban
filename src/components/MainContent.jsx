@@ -303,6 +303,25 @@ function MainContent({
                 <span className="text-xs font-medium">Projects</span>
               </button>
             )}
+
+            {/* Preview button - toggles preview panel (icon-only) */}
+              <button
+                onClick={() => {
+                  if (hasPreviewOpen) {
+                    try { window.__shellControls?.closePreview?.(); } catch {}
+                  } else {
+                    try { window.__shellControls?.openPreview?.(); } catch {}
+                  }
+                  setTimeout(() => setShellResizeTrigger(prev => prev + 1), 300);
+                }}
+                className={`hidden sm:inline-flex items-center p-2 rounded-md transition-all duration-200 ${
+                  hasPreviewOpen ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                }`}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+              </button>
             {/* Projects button (desktop) moved into centered tabs */}
             <div className="flex items-center gap-3 flex-1">
               <div className="min-w-0 flex-1">
@@ -364,9 +383,21 @@ function MainContent({
                 </span>
               </button>
               
+              {/* Kanban (mobile hidden) */}
+              <button
+                onClick={() => setShowKanbanModal(true)}
+                className={`hidden sm:inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 text-muted-foreground hover:text-foreground hover:bg-accent`}
+              >
+                <span className="flex items-center gap-1 sm:gap-1.5 leading-none">
+                  <Kanban className="w-3 sm:w-3.5 h-3 sm:h-3.5" />
+                  <span className="hidden sm:inline">Kanban</span>
+                </span>
+              </button>
+
+              {/* Files (mobile hidden) */}
               <button
                 onClick={() => {
-                  // Prefer Chat + Preview (two panels). If a chat is open, recede terminal by default.
+                  // Prefer Chat + Preview (two panels). If a chat é aberto, recede terminal por padrão.
                   if (activeSidePanel === 'claude-chat' || activeSidePanel === 'codex-chat') {
                     try { window.__shellControls?.hideTerminal?.(); } catch {}
                   }
@@ -376,9 +407,7 @@ function MainContent({
                   } catch {}
                   setTimeout(() => setShellResizeTrigger(prev => prev + 1), 350);
                 }}
-                className={`relative inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
-                  'text-muted-foreground hover:text-foreground hover:bg-accent'
-                }`}
+                className={`hidden sm:inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 text-muted-foreground hover:text-foreground hover:bg-accent`}
               >
                 <span className="flex items-center gap-1 sm:gap-1.5 leading-none">
                   <svg className="w-3 sm:w-3.5 h-3 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -388,16 +417,6 @@ function MainContent({
                 </span>
               </button>
               
-              {/* Kanban button - Opens modal */}
-              <button
-                onClick={() => setShowKanbanModal(true)}
-                className={`relative inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 text-muted-foreground hover:text-foreground hover:bg-accent`}
-              >
-                <span className="flex items-center gap-1 sm:gap-1.5 leading-none">
-                  <Kanban className="w-3 sm:w-3.5 h-3 sm:h-3.5" />
-                  <span className="hidden sm:inline">Kanban</span>
-                </span>
-              </button>
               
               <button
                 onClick={() => {
@@ -541,28 +560,29 @@ function MainContent({
         {/* Shell Area - main content flexes; assistant panel occupies width when open */}
         <div className={`min-h-0 flex flex-col transition-all duration-300 flex-1 bg-background`}>
           <div className="h-full overflow-hidden">
-            <ConfigProvider>
-              <Shell 
-                selectedProject={selectedProject} 
-                selectedSession={selectedSession}
-                isActive={true}
-                // onSessionCountChange removed - openShellSessions was never used
-                onConnectionChange={onShellConnectionChange}
-                onSessionStateChange={handleShellSessionStateChange}
-                isMobile={isMobile}
-                resizeTrigger={shellResizeTrigger}
-                activeSidePanel={activeSidePanel}
-                onPreviewStateChange={setHasPreviewOpen}
-                onBindControls={(controls) => { window.__shellControls = controls; }}
-                onTerminalVisibilityChange={setShellVisible}
-                onSidebarClose={() => {
-                  if (sidebarOpen && onSidebarOpen) {
-                    onSidebarOpen(); // This toggles the sidebar (closes it when open)
-                  }
-                setActiveSidePanel(null); // Close any active side panel
-              }}
-            />
-            </ConfigProvider>
+            {!isMobile && (
+              <ConfigProvider>
+                <Shell 
+                  selectedProject={selectedProject} 
+                  selectedSession={selectedSession}
+                  isActive={true}
+                  onConnectionChange={onShellConnectionChange}
+                  onSessionStateChange={handleShellSessionStateChange}
+                  isMobile={false}
+                  resizeTrigger={shellResizeTrigger}
+                  activeSidePanel={activeSidePanel}
+                  onPreviewStateChange={setHasPreviewOpen}
+                  onBindControls={(controls) => { window.__shellControls = controls; }}
+                  onTerminalVisibilityChange={setShellVisible}
+                  onSidebarClose={() => {
+                    if (sidebarOpen && onSidebarOpen) {
+                      onSidebarOpen();
+                    }
+                    setActiveSidePanel(null);
+                  }}
+                />
+              </ConfigProvider>
+            )}
           </div>
         </div>
 
@@ -571,7 +591,7 @@ function MainContent({
         {/* Codex Chat panel integrated */}
         {!isMobile && (
           <div className={`transition-all duration-300 ease-in-out overflow-hidden ${
-            activeSidePanel === 'codex-chat' ? 'w-[320px] sm:w-[380px] md:w-[420px] border-l border-border' : 'w-0'
+            activeSidePanel === 'codex-chat' ? 'w-[260px] sm:w-[320px] md:w-[360px] lg:w-[420px] border-l border-border' : 'w-0'
           }`}>
             {activeSidePanel === 'codex-chat' && (
               <OverlayChat 
@@ -592,7 +612,7 @@ function MainContent({
         {/* Claude Chat panel integrated */}
         {!isMobile && (
           <div className={`transition-all duration-300 ease-in-out overflow-hidden ${
-            activeSidePanel === 'claude-chat' ? 'w-[320px] sm:w-[380px] md:w-[420px] border-l border-border' : 'w-0'
+            activeSidePanel === 'claude-chat' ? 'w-[260px] sm:w-[320px] md:w-[360px] lg:w-[420px] border-l border-border' : 'w-0'
           }`}>
             {activeSidePanel === 'claude-chat' && (
               <div style={{ height: '100%' }}>
