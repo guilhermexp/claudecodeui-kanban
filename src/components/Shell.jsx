@@ -184,16 +184,21 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     if (isMobile) return;
     try {
       if (showPreview) {
-        const previewPct = activeSidePanel ? 65 : 70;
-        const shellPct = 100 - previewPct;
-        if (previewPanelHandleRef.current?.resize) previewPanelHandleRef.current.resize(previewPct);
-        if (terminalPanelHandleRef.current?.resize) terminalPanelHandleRef.current.resize(shellPct);
+        if (!showTerminal) {
+          if (previewPanelHandleRef.current?.resize) previewPanelHandleRef.current.resize(100);
+          if (terminalPanelHandleRef.current?.resize) terminalPanelHandleRef.current.resize(0);
+        } else {
+          const previewPct = activeSidePanel ? 65 : 70;
+          const shellPct = 100 - previewPct;
+          if (previewPanelHandleRef.current?.resize) previewPanelHandleRef.current.resize(previewPct);
+          if (terminalPanelHandleRef.current?.resize) terminalPanelHandleRef.current.resize(shellPct);
+        }
       } else {
         if (terminalPanelHandleRef.current?.resize) terminalPanelHandleRef.current.resize(100);
         if (previewPanelHandleRef.current?.resize) previewPanelHandleRef.current.resize(0);
       }
     } catch {}
-  }, [showPreview, activeSidePanel, isMobile]);
+  }, [showPreview, activeSidePanel, isMobile, showTerminal]);
   const [previewUrl, setPreviewUrl] = useState('');
   // (Removed global publish of preview URL; assistant now lives inside preview again)
   const [detectedUrls, setDetectedUrls] = useState(new Set());
@@ -1997,13 +2002,13 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       <Panel 
         ref={terminalPanelHandleRef}
         defaultSize={showPreview && !isMobile ? 30 : 100} 
-        minSize={20} 
+        minSize={0} 
         className="h-full"
         style={lockedTerminalWidth ? { flex: `0 0 ${lockedTerminalWidth}px` } : undefined}
       >
         <div 
           ref={terminalPanelRef}
-          className="h-full min-h-0 flex flex-col bg-card rounded-xl border border-border" 
+          className={`h-full min-h-0 flex flex-col bg-card ${showTerminal ? 'rounded-xl border border-border' : 'border-0'} `} 
           {...dropzoneProps}>
           <input {...inputProps} />
             {/* Header — standardized like Files */}
@@ -2105,7 +2110,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
 
                   {/* Close Shell panel */}
                   <button
-                    onClick={() => { setShowPreview(false); setPreviewUrl(''); setShowTerminal(false); }}
+                    onClick={() => { setShowTerminal(false); }}
                     className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition"
                     title="Close"
                   >

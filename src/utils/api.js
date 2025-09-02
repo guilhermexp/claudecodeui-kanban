@@ -1,30 +1,89 @@
 import { authPersistence } from './auth-persistence';
 
-// Utility function for authenticated API calls
-export const authenticatedFetch = (url, options = {}) => {
+// Store for refresh token promise to prevent multiple simultaneous refreshes
+let refreshPromise = null;
+
+// Function to refresh token
+const refreshToken = async () => {
   const token = authPersistence.getToken();
+  if (!token) return null;
   
-  const defaultHeaders = {};
-  
-  // Only set Content-Type if not dealing with FormData
-  if (!(options.body instanceof FormData)) {
-    defaultHeaders['Content-Type'] = 'application/json';
+  try {
+    const response = await fetch('/api/auth/refresh', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      authPersistence.saveToken(data.token);
+      return data.token;
+    }
+  } catch (error) {
+    console.error('Token refresh failed:', error);
   }
   
-  if (token) {
-    defaultHeaders['Authorization'] = `Bearer ${token}`;
+  return null;
+};
+
+// Utility function for authenticated API calls with automatic token refresh
+export const authenticatedFetch = async (url, options = {}) => {
+  const makeRequest = (token) => {
+    const defaultHeaders = {};
+    
+    // Only set Content-Type if not dealing with FormData
+    if (!(options.body instanceof FormData)) {
+      defaultHeaders['Content-Type'] = 'application/json';
+    }
+    
+    if (token) {
+      defaultHeaders['Authorization'] = `Bearer ${token}`;
+    }
+    
+    // Ensure URL is properly formatted
+    const fullUrl = url.startsWith('http') ? url : url;
+    
+    return fetch(fullUrl, {
+      ...options,
+      headers: {
+        ...defaultHeaders,
+        ...options.headers,
+      },
+    });
+  };
+  
+  let token = authPersistence.getToken();
+  let response = await makeRequest(token);
+  
+  // If we get a 401 with TOKEN_EXPIRED, try to refresh
+  if (response.status === 401 && token) {
+    try {
+      // Clone the response to read it without consuming the original
+      const clonedResponse = response.clone();
+      const data = await clonedResponse.json();
+      if (data.code === 'TOKEN_EXPIRED') {
+        // Only one refresh at a time
+        if (!refreshPromise) {
+          refreshPromise = refreshToken();
+        }
+        
+        const newToken = await refreshPromise;
+        refreshPromise = null;
+        
+        if (newToken) {
+          // Retry the request with new token
+          response = await makeRequest(newToken);
+        }
+      }
+    } catch (error) {
+      // If parsing fails, just return the original response
+    }
   }
   
-  // Ensure URL is properly formatted
-  const fullUrl = url.startsWith('http') ? url : url;
-  
-  return fetch(fullUrl, {
-    ...options,
-    headers: {
-      ...defaultHeaders,
-      ...options.headers,
-    },
-  });
+  return response;
 };
 
 // API endpoints
@@ -42,6 +101,7 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
     }),
+    refresh: () => refreshToken(),
     user: () => authenticatedFetch('/api/auth/user'),
     logout: () => authenticatedFetch('/api/auth/logout', { method: 'POST' }),
   },

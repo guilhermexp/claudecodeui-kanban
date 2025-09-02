@@ -2073,8 +2073,10 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
           )}
           {/* Resume chip hidden per request */}
           {/* Segmented controls row - moved above input */}
-          <div className="flex items-center justify-between text-muted-foreground text-xs px-2 mb-2 overflow-hidden">
-            <div className="flex items-center gap-2 min-w-0 flex-1">
+          {/* Unified glass wrapper around header + input */}
+          <div className="rounded-2xl overflow-hidden bg-white/[0.04] backdrop-blur-md border border-white/12 shadow-[0_4px_14px_rgba(0,0,0,0.18)]">
+          <div className="flex items-center justify-between text-muted-foreground text-[11px] px-3 py-1 min-h-[36px] mb-0 overflow-hidden flex-wrap gap-2 bg-white/8">
+            <div className="flex items-center gap-2 min-w-0 flex-1 flex-wrap">
               <button className="flex items-center gap-1.5 hover:text-foreground transition-colors h-6 min-w-0" title={activeProjectPath || 'Current directory'}>
                 <svg className="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
                 <span className="max-w-[120px] sm:max-w-[150px] truncate font-medium">{activeProjectPath ? activeProjectPath.split('/').pop() : 'STANDALONE_MODE'}</span>
@@ -2180,8 +2182,8 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
           
           {/* Activity indicator moved to floating pill (top-right) */}
 
-          {/* Single unified input container with subtle glass background */}
-          <div className="space-y-4 rounded-2xl bg-white/5 backdrop-blur-md border border-white/10 py-8 px-6 shadow-sm">
+          {/* Input container - transparent, only top divider to suggest separation */}
+          <div className="space-y-4 bg-transparent border-t border-white/10 py-6 px-6">
             {/* Input area */}
             <div className="flex items-center gap-3">
               {/* plus */}
@@ -2223,7 +2225,8 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
               </button>
             </div>
           </div>
-        </div>
+          </div>
+          </div>
       </div>
     </div>
   );

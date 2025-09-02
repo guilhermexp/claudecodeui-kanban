@@ -391,6 +391,20 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
     } catch {}
   }, [projectPath]);
 
+  // Auto-resume Codex session when panel reabre e há sessão salva
+  useEffect(() => {
+    try {
+      if (!isConnected || sessionActive || isSessionInitializing) return;
+      const s = loadLastSession(projectPath || process.cwd());
+      if (s?.rolloutPath) {
+        const options = { projectPath: projectPath || process.cwd(), cwd: projectPath || process.cwd(), resumeRolloutPath: s.rolloutPath };
+        sendMessage({ type: 'codex-start-session', options });
+        setIsSessionInitializing(true);
+      }
+    } catch {}
+    // only when connection or project changes
+  }, [isConnected, projectPath]);
+
   const execStreamsRef = useRef(new Map()); // callId -> { id, buffer, lastTs }
   
   // Process messages from WebSocket with cleaner formatting
@@ -725,17 +739,10 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
         <ImagePreviewList images={imageAttachments} onRemove={removeImageAttachment} />
         
         {/* Project path header and status strip - exactly like Claude */}
-        <div className="flex items-center justify-between text-muted-foreground text-xs px-2 mb-2 overflow-hidden">
-          <div className="flex items-center gap-2 min-w-0 flex-1">
-            <button className="flex items-center gap-1.5 hover:text-foreground transition-colors h-6 min-w-0" title={projectPath || 'Current directory'}>
-              <svg className="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
-              </svg>
-              <span className="max-w-[120px] sm:max-w-[150px] truncate font-medium">
-                {projectPath ? projectPath.split('/').pop() : 'STANDALONE_MODE'}
-              </span>
-            </button>
-            
+        {/* Unified glass wrapper */}
+        <div className="rounded-2xl overflow-hidden bg-white/[0.04] backdrop-blur-md border border-white/12 shadow-[0_4px_14px_rgba(0,0,0,0.18)]">
+        <div className="flex items-center justify-between text-muted-foreground text-[11px] px-3 py-1 min-h-[36px] mb-0 overflow-hidden flex-wrap gap-2 bg-white/8">
+          <div className="flex items-center gap-2 min-w-0 flex-1 flex-wrap">
             <StatusStrip
               projectPath={projectPath}
               plannerMode={plannerMode}
@@ -757,8 +764,8 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
           </div>
         </div>
         
-        {/* Single unified input container with dark background - identical to Claude */}
-        <div className="space-y-4 rounded-2xl bg-muted border border-border py-8 px-6">
+        {/* Input container - transparent with divider */}
+        <div className="space-y-4 bg-transparent border-t border-white/10 py-6 px-6">
           {/* Drag overlay */}
           {isDragging && (
             <div className="absolute inset-0 bg-primary/10 backdrop-blur-sm rounded-xl z-10 flex items-center justify-center">
@@ -817,6 +824,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
               <AttachmentsChips attachments={attachments} />
             </div>
           )}
+        </div>
         </div>
       </div>
     </div>
