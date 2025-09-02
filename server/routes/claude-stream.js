@@ -163,7 +163,7 @@ router.post('/message/:sessionId', authenticateToken, async (req, res) => {
             '-y',
             '@anthropic-ai/claude-code@latest',
             '-p',
-            '--dangerously-skip-permissions', 
+            '--dangerously-skip-permissions',
             '--verbose',
             '--output-format=stream-json'
         ];

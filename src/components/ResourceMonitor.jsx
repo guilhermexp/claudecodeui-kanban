@@ -47,7 +47,6 @@ function ResourceMonitor() {
       setSystemInfo(newSystemInfo);
       setError(null);
     } catch (error) {
-      console.error('[ResourceMonitor] Failed to fetch system info:', error);
       if (isMountedRef.current) {
         setSystemInfo({
           activePorts: [],

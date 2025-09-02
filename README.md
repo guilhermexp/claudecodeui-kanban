@@ -1,14 +1,24 @@
-Uma interface web moderna para o Claude Code CLI com gerenciamento de tarefas integrado.
+Uma interface web moderna para o Claude Code CLI - a ferramenta oficial da Anthropic para desenvolvimento com IA.
+
+## 📖 O que é Claude Code UI?
+
+Claude Code UI é uma interface web intuitiva que transforma o Claude Code CLI em uma experiência visual rica. Com três abas principais, você pode:
+
+- **Shell**: Interagir com Claude e executar comandos em um terminal integrado
+- **Files**: Navegar e editar arquivos do projeto com syntax highlighting
+- **Git**: Gerenciar controle de versão com interface visual
 
 ## 🚀 Recursos
 
-- 💬 **Interface de Chat**: Converse com Claude diretamente na interface web
-- 🖥️ **Terminal Integrado**: Execute comandos sem sair da aplicação
-- 📁 **Explorador de Arquivos**: Navegue e edite arquivos do projeto
-- 🔄 **Integração Git**: Gerencie branches e commits
-- 📊 **Dashboard de Uso**: Acompanhe estatísticas e custos de uso do Claude
-- 📋 **Vibe Kanban**: Sistema de gerenciamento de tarefas integrado
-- 🎙️ **Transcrição de Voz**: Use comandos de voz com OpenAI Whisper
+### Interface Principal
+- 🖥️ **Shell**: Terminal integrado com execução de comandos e chat com Claude
+- 📁 **Files**: Explorador de arquivos com editor de código integrado
+- 🔄 **Git**: Controle de versão com interface visual para branches e commits
+
+### Recursos Avançados
+- 💬 **Chat Integrado**: Converse com Claude diretamente no terminal
+- 🎙️ **Comandos de Voz**: Transcrição com OpenAI Whisper
+- 📊 **Dashboard de Uso**: Estatísticas e custos de uso do Claude
 - 🌙 **Modo Escuro**: Interface adaptável com tema claro/escuro
 - 📱 **Suporte Mobile**: Interface responsiva com PWA
 
@@ -17,14 +27,13 @@ Uma interface web moderna para o Claude Code CLI com gerenciamento de tarefas in
 - Node.js 18+
 - Claude Code CLI instalado (`npm install -g @anthropic-ai/claude-code`)
 - Token de autenticação Claude válido
-- (Opcional) Rust/Cargo para Vibe Kanban backend
 
 ## 🔧 Instalação
 
 ```bash
 # Clone o repositório
-git clone https://github.com/seu-usuario/claudecodeui.git
-cd claudecodeui
+git clone https://github.com/seu-usuario/claude-code-ui.git
+cd claude-code-ui
 
 # Instale as dependências
 npm install
@@ -40,17 +49,18 @@ cp .env.example .env
 ```bash
 npm run dev
 ```
-Acesse http://localhost:9000
+Acesse http://localhost:5892
 
-### Produção
+### Produção com Túnel Público
+```bash
+./start-background-prod.sh
+```
+Acesso público via https://claudecode.ngrok.app
+
+### Produção Local
 ```bash
 npm run build
 npm start
-```
-
-### Com acesso à rede
-```bash
-npm run dev:network
 ```
 
 ## ⚙️ Configuração
@@ -66,10 +76,9 @@ JWT_SECRET=seu_jwt_secret_aqui
 # OpenAI (para transcrição de voz)
 OPENAI_API_KEY=sua_chave_openai_aqui
 
-# Portas
-PORT=8080
-VITE_PORT=9000
- 
+# Portas (configuração automática)
+BACKEND_PORT=7347
+FRONTEND_PORT=5892
 ```
 
 ### Autenticação
@@ -80,38 +89,29 @@ VITE_PORT=9000
 
 ## 🏗️ Arquitetura
 
+Claude Code UI é uma aplicação web moderna com arquitetura cliente-servidor:
+
 ### Frontend (React + Vite)
-- **Port 9000**: Interface web
-- React 18 com hooks
-- Tailwind CSS para estilização
-- CodeMirror para edição de código
-- XTerm.js para terminal
+- **Port 5892**: Interface web responsiva
+- React 18 com hooks e context API
+- Tailwind CSS com sistema de temas
+- CodeMirror 6 para edição de código
+- XTerm.js para emulação de terminal
+- WebSocket para comunicação em tempo real
 
 ### Backend (Node.js + Express)
-- **Port 8080**: API e WebSocket
-- SQLite para persistência
-- JWT para autenticação
-- Integração com Claude Code CLI
-
-#### Integração Codex CLI (OpenAI)
-
-O backend também suporta o Codex CLI (OpenAI) via múltiplas estratégias de spawn. Para ambientes com caminhos não padrão, use variáveis de ambiente:
-
-- `CODEX_SCRIPT_PATH`: caminho absoluto para o script `codex.js` (ex.: `/opt/homebrew/lib/node_modules/@openai/codex/bin/codex.js`). Quando definido, o servidor roda `node <execPath> <codex.js> exec ...`.
-- `CODEX_BIN`: comando binário a ser usado (ex.: `codex` ou `npx @openai/codex`). Pode incluir argumentos adicionais antes; o servidor acrescenta `exec --json ...`.
-
-O servidor loga qual estratégia foi usada (bin, node+script ou shell+npx), o `cwd` e o `PATH` efetivo para facilitar diagnóstico de `ENOENT`.
-
-### Vibe Kanban (Rust + Actix)
-- **Port 8081**: Sistema de tarefas
-- SQLite compartilhado
-- Integração Git
+- **Port 7347**: API REST e servidor WebSocket
+- SQLite para persistência de dados
+- JWT para autenticação segura
+- Integração direta com Claude Code CLI
+- Sistema de proteção de portas automático
 
 ## 🔒 Segurança
 
-- Todas as ferramentas são desabilitadas por padrão
-- Configure permissões em Settings > Tools
+- Sistema de proteção de portas automático
+- Todas as ferramentas MCP desabilitadas por padrão
 - Tokens JWT com expiração configurável
+- Validação de entrada em todas as APIs
 - HTTPS recomendado para produção
 
 ## 📊 Dashboard de Uso
@@ -124,12 +124,47 @@ O Dashboard coleta dados reais do Claude CLI de `~/.claude/projects/`:
 
 ## 🛠️ Scripts Disponíveis
 
-- `npm run dev` - Inicia ambiente de desenvolvimento
+### Desenvolvimento
+- `npm run dev` - Ambiente de desenvolvimento completo (recomendado)
+- `npm run server` - Apenas backend (port 7347)
+- `npm run client` - Apenas frontend (port 5892)
+
+### Produção
 - `npm run build` - Compila para produção
-- `npm start` - Inicia servidor de produção
-- `npm run server` - Apenas servidor backend
-- `npm run client` - Apenas frontend
-- `npm run vibe-backend` - Apenas Vibe Kanban
+- `npm start` - Servidor de produção
+- `./start-background-prod.sh` - Produção com túnel público
+
+### Gerenciamento de Portas
+- `npm run port-status` - Verifica status das portas
+- `npm run stop-all` - Para todos os processos
+- `npm run switch-to-dev` - Muda para modo desenvolvimento
+- `npm run switch-to-prod` - Muda para modo produção
+
+### Claude Hooks (Notificações Sonoras)
+- `npm run hooks:enable` - Ativa notificações sonoras
+- `npm run hooks:disable` - Desativa notificações sonoras
+- `npm run hooks:status` - Verifica configuração atual
+- `npm run hooks:list` - Lista sons disponíveis
+- `npm run hooks:test <sound>` - Testa um som específico
+
+## 🔧 Solução de Problemas
+
+### Erro "Port already in use" (EADDRINUSE)
+```bash
+npm run port-status  # Verifica conflitos
+npm run stop-all     # Para todos os processos
+npm run dev          # Reinicia desenvolvimento
+```
+
+### Terminal não aceita entrada
+- Verifique se o WebSocket está conectado
+- Atualize a página
+- Reinicie o servidor de desenvolvimento
+
+### Dashboard sem dados
+- Verifique se o Claude Code CLI está configurado
+- Confirme que existe `~/.claude/projects/`
+- Verifique permissões de arquivo
 
 ## 📝 Licença
 

@@ -2,22 +2,22 @@
 
 ## System Architecture
 
-Claude Code UI follows a modern microservices architecture with three main components:
+Claude Code UI follows a modern client-server architecture with two main components:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                         Frontend                              │
 │                     React + Vite + PWA                        │
-│                        Port: 9000                             │
-└─────────────┬───────────────────────────┬───────────────────┘
-              │                           │
-              │ HTTP/WebSocket            │ HTTP
-              │                           │
-┌─────────────▼──────────────┐ ┌─────────▼──────────────────┐
-│     Node.js Backend         │ │    Vibe Kanban Backend      │
-│    Express + Socket.io      │ │      Rust + Actix-web       │
-│       Port: 8080           │ │        Port: 8081           │
-└─────────────┬──────────────┘ └─────────────────────────────┘
+│                        Port: 5892                             │
+└─────────────┬───────────────────────────────────────────────┘
+              │
+              │ HTTP/WebSocket
+              │
+┌─────────────▼──────────────┐
+│     Node.js Backend         │
+│    Express + WebSocket      │
+│       Port: 7347           │
+└─────────────┬──────────────┘
               │
               │ Process
               │
@@ -88,31 +88,6 @@ server/
 └── claude-cli.js   # Claude CLI wrapper
 ```
 
-### Vibe Kanban Backend
-
-**Technology Stack:**
-- Rust
-- Actix-web framework
-- SQLite database
-- Async/await patterns
-
-**Responsibilities:**
-- Task management
-- Kanban board operations
-- Git integration for tasks
-- Real-time synchronization
-
-**Directory Structure:**
-```
- 
-├── src/
-│   ├── main.rs      # Entry point
-│   ├── routes/      # HTTP routes
-│   ├── models/      # Data models
-│   ├── db/          # Database layer
-│   └── services/    # Business logic
-└── Cargo.toml       # Rust dependencies
-```
 
 ## Data Flow
 
@@ -131,10 +106,6 @@ Terminal Input → XTerm.js → WebSocket → Node.js → PTY Process → Output
 File Request → Frontend → HTTP API → Node.js → File System → Response → Frontend
 ```
 
-### 4. Task Management Flow
-```
-Task Action → Frontend → HTTP → Node.js Proxy → Vibe Kanban → Database → Response
-```
 
 ## Security Architecture
 
@@ -196,19 +167,6 @@ CREATE TABLE messages (
 );
 ```
 
-### SQLite Tables (Vibe Kanban)
-
-**tasks**
-```sql
-CREATE TABLE tasks (
-  id TEXT PRIMARY KEY,
-  title TEXT NOT NULL,
-  description TEXT,
-  status TEXT NOT NULL,
-  created_at TIMESTAMP,
-  updated_at TIMESTAMP
-);
-```
 
 ## State Management
 
@@ -264,17 +222,17 @@ CREATE TABLE tasks (
 ### Development
 ```
 npm run dev → Concurrent processes:
-  - Vite dev server (9000)
-  - Node.js server (8080)
-  - Rust server (8081)
+  - Vite dev server (5892)
+  - Node.js server (7347)
+  - Port protection service
 ```
 
 ### Production
 ```
 Build → Static files → Nginx → 
   - Node.js PM2 cluster
-  - Rust binary
   - SQLite databases
+  - Claude CLI processes
 ```
 
 ### Scaling Considerations

@@ -826,6 +826,19 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
                 style={{ minHeight: '60px', maxHeight: '280px', height: 'auto', overflowY: input.split('\n').length > 4 ? 'auto' : 'hidden' }}
               />
               
+              {/* voice (audio summary of selection) */}
+              <button
+                onClick={speakSelection}
+                title="Resumo em áudio (seleção)"
+                className="w-9 h-9 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-all"
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 1 0 6 0V6a3 3 0 0 0-3-3z"/>
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                  <path d="M12 19v2"/>
+                </svg>
+              </button>
+
               {/* send */}
               <button
                 onClick={handleSend}

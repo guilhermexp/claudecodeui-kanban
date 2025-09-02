@@ -23,7 +23,7 @@ const refreshToken = async () => {
       return data.token;
     }
   } catch (error) {
-    console.error('Token refresh failed:', error);
+    // Token refresh failed
   }
   
   return null;

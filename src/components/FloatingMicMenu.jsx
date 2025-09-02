@@ -106,7 +106,6 @@ export function FloatingMicMenu({ onTranscript }) {
             }
           }
         } catch (err) {
-          console.error('Transcription error in FloatingMicMenu:', err);
           // Check for API key error
           if (err.message && err.message.includes('API key')) {
             setError('OpenAI API key não configurada. Configure OPENAI_API_KEY no servidor.');

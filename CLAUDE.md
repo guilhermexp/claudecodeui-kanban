@@ -6,10 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### For Development (Local Testing)
 ```bash
-npm install          # Install all dependencies (Node.js + Rust)
+npm install          # Install all dependencies (Node.js)
 npm run dev         # Start development mode with port protection
 ```
-**Ports used:** Frontend(5892), Backend(7347), Vibe Kanban(6734)
+**Ports used:** Frontend(5892), Backend(7347)
 
 ### For Production (Public Access via Ngrok)
 ```bash
@@ -25,14 +25,12 @@ npm run switch-to-prod     # Safely switch from development to production
 npm run switch-to-dev      # Safely switch from production to development
 npm run stop-all          # Emergency stop of all Claude Code UI processes
 npm run protect-ports      # Run port protection service standalone
-npm run cleanup-status     # Check Vibe Kanban cleanup service status
-npm run cleanup-force      # Force cleanup of orphan processes
 ```
 
 ## 🏗️ **Architecture Overview**
 
 ### Complete System Architecture
-This is a **web-based UI for Claude Code CLI** with three integrated services:
+This is **Claude Code UI** - a web-based interface for Claude Code CLI with two core services:
 
 1. **Frontend (React/Vite)** - Port 5892 (dev only)
    - React 18 with modern hooks and context
@@ -43,23 +41,15 @@ This is a **web-based UI for Claude Code CLI** with three integrated services:
 
 2. **Backend (Node.js/Express)** - Port 7347 (dev + prod)
    - WebSocket server for real-time terminal/chat
-   - SQLite database for projects and usage analytics  
+   - SQLite database for projects and session management
    - JWT-based authentication system
    - Claude Code CLI integration and proxy
    - RESTful API for all frontend operations
 
-3. **Vibe Kanban (Rust/Actix)** - Port 6734 (dev + prod)
-   - Advanced task management system
-   - Git workflow integration
-   - Shared SQLite database with main backend
-   - High-performance Rust backend
-
 ### Key Navigation Tabs
 - **Shell** - Terminal emulation with Claude Code integration
 - **Files** - File browser with inline editing capabilities
-- **Source Control** - Git operations and branch management  
-- **Tasks** - Integrated Vibe Kanban task management panel
-- **Dashboard** - Usage analytics and cost tracking
+- **Git** - Git operations and branch management
 
 ## 🛡️ **Port Protection System (NEW)**
 
@@ -69,23 +59,6 @@ The application now includes **intelligent port protection** that prevents confl
 - **Continuous Monitoring:** Checks ports every 5 seconds
 - **Process Whitelisting:** Automatically authorizes legitimate Claude Code UI processes
 - **Automatic Termination:** Kills unauthorized processes trying to use protected ports
-
-## 🧹 **Vibe Kanban Cleanup System (NEW)**
-
-### Critical Feature: Orphan Process Management
-Automatic cleanup system for Vibe Kanban backend processes that prevents server overload:
-
-- **Process Monitoring:** Continuously monitors Vibe Kanban processes (port 6734)
-- **Orphan Detection:** Identifies stuck processes from server crashes
-- **Automatic Cleanup:** Terminates orphaned processes to prevent queue buildup
-- **Health Checks:** Validates process responsiveness before cleanup
-- **Resource Management:** Prevents memory exhaustion and server overload
-
-**Why This Matters:**
-- Prevents the cycle: Process crashes → Orphan processes → Server overload → More crashes
-- Maintains system stability during development
-- Automatic recovery from port conflicts and crashes
-- **Mode Detection:** Intelligently detects development vs production mode
 
 ### Why This Matters
 Previously, running `npm run dev` and then `./start-background-prod.sh` would cause:
@@ -112,16 +85,19 @@ npm run dev            # OR
 - `MainContent.jsx` - Main tab navigation and content routing
 - `Shell.jsx` - Terminal component with WebSocket connection
 - `Sidebar.jsx` - Project navigation and session management  
-- `FileTree.jsx` - File browser with editing capabilities
+- `FileManagerSimple.jsx` - File browser with editing capabilities
 - `GitPanel.jsx` - Git operations interface
-- `Dashboard.jsx` - Usage analytics and cost tracking
-- `VibeTaskPanel.jsx` - Task management quick access
+- `OverlayChatClaude.jsx` - Claude chat overlay interface
+- `FloatingMicMenu.jsx` - Voice input interface with TTS support
+- `ResourceMonitor.jsx` - System resource monitoring display
+- `PreviewPanel.jsx` - Code preview and documentation panel
+- `CodeEditor.jsx` - CodeMirror-based code editor component
 
 ### Backend Core (server/)
 - `index.js` - Main Express server with WebSocket support
 - `claude-cli.js` - Claude Code CLI integration and proxy
 - `projects.js` - Project management and session handling
-- `routes/` - API endpoints (auth, git, usage, mcp)
+- `routes/` - API endpoints (auth, git, files, tts, claude-hooks, claude-stream, usage, preview, system)
 - `database/` - SQLite database management
 
 ### Scripts (scripts/)
@@ -146,7 +122,6 @@ npm run dev           # Start all services with protection (RECOMMENDED)
 # Individual services (if needed for debugging)
 npm run server        # Backend only (port 7347)
 npm run client        # Frontend only (port 5892)
-npm run vibe-backend  # Vibe Kanban only (port 6734)
 ```
 
 ### Network Development
@@ -187,20 +162,12 @@ npm run stop-all     # Stop all processes
 - Refresh the page
 - Restart development server
 
-### Issue: Vibe Kanban Not Loading
-**Cause:** Rust backend not compiled or port conflicts
-**Solution:**
-```bash
- 
-cargo build --release
-npm run dev  # Restart full stack
-```
-
-### Issue: Dashboard Shows No Data
-**Cause:** Database not initialized or API errors
+### Issue: File Browser Not Loading
+**Cause:** Backend API errors or permission issues
 **Solution:**
 - Check browser network tab for API failures
-- Verify database permissions in `server/database/`
+- Verify file system permissions
+- Restart development server
 
 ### Issue: Git Operations Failing
 **Cause:** Not in a git repository or missing git credentials
@@ -213,14 +180,7 @@ npm run dev  # Restart full stack
 ### Main Database (SQLite)
 - `projects` - Project information and paths
 - `sessions` - Claude Code sessions and chat history
-- `usage_analytics` - Token usage and cost tracking
 - `auth` - User authentication data
-
-### Vibe Kanban Database (SQLite)  
-- `tasks` - Task information and status
-- `projects` - Project-specific task configuration
-- `task_attempts` - Execution attempts and results
-- `execution_processes` - Process monitoring data
 
 ## 🎨 **Frontend Architecture Details**
 
@@ -279,8 +239,10 @@ npm run dev  # Restart full stack
 POST /api/auth/login     - User authentication
 GET  /api/projects       - List projects
 POST /api/projects       - Create project
-GET  /api/usage/stats    - Usage analytics
 POST /api/git/commit     - Git operations
+GET  /api/files/*        - File system operations
+POST /api/tts/gemini-summarize - Generate audio from text with AI summarization
+GET  /api/audios/:id     - Retrieve generated audio files
 ```
 
 ### WebSocket Events
@@ -299,8 +261,6 @@ ping/pong  - Connection keepalive
 - [ ] Terminal accepts input and displays output
 - [ ] File browser allows editing and saving
 - [ ] Git operations complete successfully
-- [ ] Dashboard displays analytics data
-- [ ] Task panel CRUD operations work
 - [ ] Mobile layout adapts properly
 - [ ] Dark/light mode switching works
 
@@ -383,19 +343,13 @@ npm run build
 npm run server  # Production server only (no tunnel)
 ```
 
-## 📈 **Usage Analytics**
+## 📊 **Session Management**
 
-### Tracked Metrics
-- **Token Usage:** Input/output tokens per session
-- **Cost Tracking:** Estimated costs based on model pricing
+### Tracked Data
 - **Session Data:** Duration, message counts, error rates
 - **Performance Metrics:** Response times, success rates
-
-### Analytics Dashboard
-- **Real-time Stats:** Current session statistics
-- **Historical Data:** Usage trends over time
-- **Cost Analysis:** Spending analysis and projections
-- **Export Options:** Data export for external analysis
+- **Project Information:** Project paths and configurations
+- **Authentication:** User sessions and security tokens
 
 ---
 
@@ -407,7 +361,7 @@ npm run server  # Production server only (no tunnel)
 4. **Read error messages carefully** - port conflicts are now automatically resolved
 5. **Use the documentation** - refer to PORT-MANAGEMENT.md for conflicts
 6. **Test on mobile** - responsive design is critical
-7. Vibe Kanban: integração removida deste repositório.
+7. **Focus on core functionality** - Terminal, files, and git operations
 8. **Monitor WebSocket connections** - critical for terminal functionality
 9. **Use semantic CSS classes** - Never use hardcoded colors like `text-blue-500`, always use theme variables
 10. **Mobile-first development** - Test mobile layout and touch interactions
@@ -441,7 +395,7 @@ The system automatically detects available sounds:
 - **Custom Sounds**: Any `.wav` files in `/public/sounds/` directory
 
 ### UI Configuration
-1. Open **Settings** in Vibe Kanban interface
+1. Open **Settings** in the application interface
 2. Go to **Claude Hooks** tab  
 3. Toggle sound notifications on/off
 4. Test different sounds
@@ -478,8 +432,3 @@ The system automatically detects available sounds:
 - **Universal**: Same notification system works across all Claude Code interfaces
 - **Customizable**: Choose from various system sounds or add custom ones
 
-[byterover-mcp]
-
-# important 
-always use byterover-retrieve-knowledge tool to get the related context before any tasks 
-always use byterover-store-knowledge to store all the critical informations after sucessful tasks

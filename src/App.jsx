@@ -1,26 +1,7 @@
-/*
- * App.jsx - Main Application Component with Session Protection System
- * 
- * SESSION PROTECTION SYSTEM OVERVIEW:
- * ===================================
- * 
- * Problem: Automatic project updates from WebSocket would refresh the sidebar and clear chat messages
- * during active conversations, creating a poor user experience.
- * 
- * Solution: Track "active sessions" and pause project updates during conversations.
- * 
- * How it works:
- * 1. When user sends message → session marked as "active" 
- * 2. Project updates are skipped while session is active
- * 3. When conversation completes/aborts → session marked as "inactive"
- * 4. Project updates resume normally
- * 
- * Handles both existing sessions (with real IDs) and new sessions (with temporary IDs).
- */
+// App.jsx - Main Application Component with Session Protection System
 
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate, useParams } from 'react-router-dom';
-// Sidebar removed - using ProjectsModal instead
 import MainContent from './components/MainContent';
 import MobileNav from './components/MobileNav';
 import ToolsSettings from './components/ToolsSettings';
@@ -51,8 +32,6 @@ function AppContent() {
       chatState.timestamp && 
       (Date.now() - chatState.timestamp < 30 * 60 * 1000); // 30 minutes
     
-    // Sidebar removed
-    
     return {
       selectedProject: shouldRestoreSession ? savedState[appStatePersistence.KEYS.SELECTED_PROJECT] : null,
       selectedSession: shouldRestoreSession ? savedState[appStatePersistence.KEYS.SELECTED_SESSION] : null,
@@ -60,8 +39,7 @@ function AppContent() {
                   savedState[appStatePersistence.KEYS.ACTIVE_TAB] === 'files' || 
                   savedState[appStatePersistence.KEYS.ACTIVE_TAB] === 'git'
         ? savedState[appStatePersistence.KEYS.ACTIVE_TAB]
-        : 'shell',
-      // sidebarOpen removed
+        : 'shell'
     };
   };
 
@@ -70,36 +48,23 @@ function AppContent() {
   const [projects, setProjects] = useState([]);
   const [selectedProject, setSelectedProject] = useState(persistedState.selectedProject);
   const [selectedSession, setSelectedSession] = useState(persistedState.selectedSession);
-  const [activeTab, setActiveTab] = useState(persistedState.activeTab); // 'shell', 'files', 'git'
+  const [activeTab, setActiveTab] = useState(persistedState.activeTab);
   const [isMobile, setIsMobile] = useState(false);
-  // Sidebar removed - using ProjectsModal instead
-  // const [sidebarOpen, setSidebarOpen] = useState(persistedState.sidebarOpen);
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [isShellConnected, setIsShellConnected] = useState(false);
   const [showToolsSettings, setShowToolsSettings] = useState(false);
-  // Track active side panels to determine sidebar behavior (integrated vs overlay)
   const [activeSidePanel, setActiveSidePanel] = useState(null);
-  // Shell session protection - tracks when Claude is actively working
   const [shellHasActiveSession, setShellHasActiveSession] = useState(false);
-  // Session Protection System: Track sessions with active conversations to prevent
-  // automatic project updates from interrupting ongoing chats. When a user sends
-  // a message, the session is marked as "active" and project updates are paused
-  // until the conversation completes or is aborted.
-  const [activeSessions, setActiveSessions] = useState(new Set()); // Track sessions with active conversations
+  const [activeSessions, setActiveSessions] = useState(new Set());
   
-  // Sidebar removed - resizing states no longer needed
-  
-  // Get auth context to know when auth is ready
+
   const { isLoading: authLoading, user } = useAuth();
   const authReady = !authLoading && !!user;
   
   const { ws, sendMessage, messages, reconnect } = useWebSocket(authReady, '/claude');
 
-  // Determine if sidebar should use overlay mode (when side panels are active)
-  // Sidebar overlay mode no longer needed
 
-  // Monitor authentication changes and reconnect WebSocket
   useEffect(() => {
     const handleStorageChange = (e) => {
       if (e.key === 'auth-token') {

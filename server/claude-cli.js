@@ -151,7 +151,7 @@ async function spawnClaude(command, options = {}, ws) {
     const workingDir = (cwd && cwd !== 'STANDALONE_MODE') ? cwd : process.cwd();
     
     // Add basic flags - Claude Code uses stream-json format
-    // IMPORTANT: When using --print, --output-format=stream-json requires --verbose
+    // IMPORTANTE: --verbose é OBRIGATÓRIO com --output-format=stream-json
     args.push('--output-format', 'stream-json', '--verbose');
     
     // Add MCP config flag only if MCP servers are configured
@@ -538,7 +538,8 @@ function spawnClaudeStream(options = {}, ws, onSession) {
   } = options;
 
   const workingDir = (cwd && cwd !== 'STANDALONE_MODE') ? cwd : process.cwd();
-  // Persistent stream mode (no --print). Input and output via stream-json
+  // Persistent stream mode. Input and output via stream-json
+  // IMPORTANTE: --verbose é OBRIGATÓRIO com --output-format=stream-json no Claude CLI
   const args = ['--output-format','stream-json','--input-format','stream-json','--verbose'];
   // Default for overlay sessions: bypass permissions so tools podem executar sem prompts
   const skippingPermissions = options.forceBypassPermissions !== false;

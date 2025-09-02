@@ -41,15 +41,18 @@ import 'xterm/css/xterm.css';
   .xterm {
     width: 100% !important;
     height: 100% !important;
+    background-color: transparent !important; /* Let parent provide background */
   }
   
   .xterm .xterm-viewport {
     width: 100% !important;
     overflow-x: auto !important;
+    background-color: transparent !important;
   }
   
   .xterm .xterm-screen {
     width: 100% !important;
+    background-color: transparent !important;
   }
   
   /* Mobile optimizations */
@@ -100,6 +103,7 @@ import 'xterm/css/xterm.css';
   .xterm .xterm-rows {
     word-wrap: break-word;
     word-break: break-all;
+    background-color: transparent !important;
   }
 `;
 
@@ -917,7 +921,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     // Terminal theme configurations
     const themes = {
       dark: {
-        background: '#000000',
+        background: 'rgba(0,0,0,0)',
         foreground: '#f2f2f2',
         cursor: '#ffffff',
         cursorAccent: '#000000',
@@ -925,7 +929,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
         selectionForeground: '#ffffff',
       },
       light: {
-        background: '#ffffff',
+        background: 'rgba(0,0,0,0)',
         foreground: '#333333',
         cursor: '#333333',
         cursorAccent: '#ffffff',
@@ -933,7 +937,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
         selectionForeground: '#000000',
       },
       gray: {
-        background: '#2d2d2d',
+        background: 'rgba(0,0,0,0)',
         foreground: '#cccccc',
         cursor: '#ffffff',
         cursorAccent: '#2d2d2d',
@@ -950,7 +954,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       fontSize: isMobile ? 15 : 16,  // Increased font size for better readability
       fontFamily: 'Menlo, Monaco, "Courier New", monospace',
       allowProposedApi: true, // Required for clipboard addon
-      allowTransparency: false,
+      allowTransparency: true,
       convertEol: true,
       scrollback: isMobile ? 500 : 2000, // Further reduced for better input performance
       tabStopWidth: 4,
@@ -2130,7 +2134,9 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
         {/* Terminal area or Files (empty state of Shell) */}
         {showTerminal && (
           <div className={`flex-1 min-h-0 p-1 md:p-2 pb-1 md:pb-2 overflow-hidden relative`}>
-            {terminalContent}
+            <div className="h-full rounded-2xl border border-border bg-card overflow-hidden relative px-4 py-3 md:px-6 md:py-4">
+              {terminalContent}
+            </div>
           </div>
         )}
         {!showTerminal && !showPreview && (

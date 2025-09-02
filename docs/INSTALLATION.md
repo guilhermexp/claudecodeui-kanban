@@ -76,17 +76,6 @@ npm install
 npm install --legacy-peer-deps
 ```
 
-### 3. Build Vibe Kanban
-
-```bash
-# Navigate to Vibe Kanban backend
-
-# Build in release mode
-cargo build --release
-
-# Return to project root
-cd ../..
-```
 
 ### 4. Environment Configuration
 
@@ -104,9 +93,9 @@ Required environment variables:
 
 ```env
 # Server Configuration
-PORT=8080
-VITE_API_URL=http://localhost:8080
-VITE_WS_URL=ws://localhost:8080
+PORT=7347
+VITE_API_URL=http://localhost:7347
+VITE_WS_URL=ws://localhost:7347
 
 # Security (generate your own secrets)
 JWT_SECRET=your-super-secret-jwt-key-here
@@ -143,17 +132,15 @@ mkdir -p data
 npm run dev
 
 # Or start individually:
-npm run server       # Node.js backend (8080)
-npm run client       # React frontend (9000)
-npm run vibe-backend # Rust backend (8081)
+npm run server       # Node.js backend (7347)
+npm run client       # React frontend (5892)
 ```
 
 ### 7. Access the Application
 
 Open your browser and navigate to:
-- Frontend: http://localhost:9000
-- API: http://localhost:8080
-- Vibe Kanban: http://localhost:8081
+- Frontend: http://localhost:5892
+- API: http://localhost:7347
 
 ## Production Installation
 
@@ -163,9 +150,6 @@ Open your browser and navigate to:
 # Build frontend
 npm run build
 
-# Build Vibe Kanban
-cargo build --release
-cd ../..
 ```
 
 ### 2. Using Docker
@@ -175,7 +159,7 @@ cd ../..
 docker build -t claude-code-ui .
 
 # Run container
-docker run -p 8080:8080 -p 8081:8081 \
+docker run -p 7347:7347 -p 5892:5892 \
   -v $(pwd)/data:/app/data \
   -e JWT_SECRET=your-secret \
   -e SESSION_SECRET=your-secret \
@@ -211,7 +195,7 @@ server {
 
     # API proxy
     location /api {
-        proxy_pass http://localhost:8080;
+        proxy_pass http://localhost:7347;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -221,18 +205,12 @@ server {
 
     # WebSocket proxy
     location /ws {
-        proxy_pass http://localhost:8080;
+        proxy_pass http://localhost:7347;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
     }
 
-    # Vibe Kanban proxy
-    location /vibe {
-        proxy_pass http://localhost:8081;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-    }
 }
 ```
 
@@ -290,7 +268,7 @@ server {
 1. **Port already in use**
    ```bash
    # Find process using port
-   lsof -i :8080
+   lsof -i :7347
    
    # Kill process
    kill -9 <PID>
@@ -353,10 +331,6 @@ git pull origin main
 # Update dependencies
 npm install
 
-# Rebuild Vibe Kanban
-Note: Vibe Kanban companion backend has been removed from this repository. Instructions related to `vibe-kanban/*` are obsolete.
-cargo build --release
-cd ../..
 
 # Rebuild frontend
 npm run build

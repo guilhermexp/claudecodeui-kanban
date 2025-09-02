@@ -65,22 +65,22 @@ export default function ToolResultItem({ action = 'Executed', filePath = '', con
 
   return (
     <div className="mb-1">
-      <div className="flex h-6 items-center gap-1.5 text-sm cursor-pointer group" onClick={() => content && setIsExpanded(!isExpanded)}>
-        <div className="mr-1 flex items-center"><Icon /></div>
+      <div className="flex h-6 items-center gap-1 text-sm cursor-pointer group" onClick={() => content && setIsExpanded(!isExpanded)}>
+        {content && (
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`text-muted-foreground/60 transition-transform flex-shrink-0 ${isExpanded ? 'rotate-90' : ''}`}>
+            <polyline points="9 18 15 12 9 6"></polyline>
+          </svg>
+        )}
+        <div className="flex items-center flex-shrink-0"><Icon /></div>
         <span className="text-muted-foreground">{action}</span>
         {filePath && (
           <span className="max-w-xs truncate rounded-md bg-muted px-2 py-0 text-xs text-muted-foreground" title={filePath}>
             {filePath}
           </span>
         )}
-        {content && (
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`ml-1 text-muted-foreground transition-transform ${isExpanded ? 'rotate-90' : ''}`}>
-            <polyline points="9 18 15 12 9 6"></polyline>
-          </svg>
-        )}
       </div>
       {isExpanded && content && (
-        <div className="mt-1 ml-6 p-2 bg-muted rounded">
+        <div className="mt-1 ml-5 p-2 bg-muted rounded">
           <pre className="text-xs text-foreground/90 font-mono whitespace-pre-wrap break-words">{content}</pre>
         </div>
       )}
