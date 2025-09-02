@@ -1,10 +1,7 @@
 {
   "$schema": "https://unpkg.com/knip@5/schema.json",
   "entry": [
-    "src/main.jsx",
-    "server/index.js",
-    "scripts/dev.js",
-    
+    "src/main.jsx"
   ],
   "project": [
     "src/**/*.{js,jsx,ts,tsx}",
@@ -19,12 +16,6 @@
     "public/**",
     "examples/**"
   ],
-  "ignoreDependencies": [
-    "@vitejs/plugin-react",
-    "autoprefixer",
-    "postcss",
-    "tailwindcss",
-    "vite"
-  ],
+  "ignoreDependencies": [],
   "ignoreExportsUsedInFile": true
 }
