@@ -597,7 +597,9 @@ function MainContent({
           <div className={`transition-all duration-300 ease-in-out overflow-hidden ${
             activeSidePanel === 'codex-chat' ? 'w-[260px] sm:w-[320px] md:w-[360px] lg:w-[420px] border-l border-border bg-black' : 'w-0'
           }`}>
-            {activeSidePanel === 'codex-chat' && (
+            {/* Always mounted to preserve session state when switching panels */}
+            <div className={`${activeSidePanel === 'codex-chat' ? 'opacity-100' : 'opacity-0'} transition-opacity duration-200`}
+                 style={{ pointerEvents: activeSidePanel === 'codex-chat' ? 'auto' : 'none' }}>
               <OverlayChatClaude 
                 key="codex-chat-panel"
                 embedded={true}
@@ -612,7 +614,7 @@ function MainContent({
                 onActivityChange={(active) => setChatActivity(active)}
                 onPanelClosed={() => setActiveSidePanel(null)}
               />
-            )}
+            </div>
           </div>
         )}
         
@@ -621,24 +623,24 @@ function MainContent({
           <div className={`transition-all duration-300 ease-in-out overflow-hidden ${
             activeSidePanel === 'claude-chat' ? 'w-[260px] sm:w-[320px] md:w-[360px] lg:w-[420px] border-l border-border bg-black' : 'w-0'
           }`}>
-            {activeSidePanel === 'claude-chat' && (
-              <div style={{ height: '100%' }}>
-                <OverlayChatClaude 
-                  key="claude-chat-panel"
-                  embedded={true}
-                  disableInlinePanel={true}
-                  cliProviderFixed="claude"
-                  chatId="claude-instance"
-                  projectPath={selectedProject?.path}
-                  projects={projects}
-                  previewUrl={null}
-                  onSessionIdChange={setClaudeOverlaySessionId}
-                  onBindControls={setClaudeOverlayControls}
-                  onActivityChange={(active) => setChatActivity(active)}
-                  onPanelClosed={() => setActiveSidePanel(null)}
-                />
-              </div>
-            )}
+            {/* Always mounted to preserve session state when switching panels */}
+            <div className={`${activeSidePanel === 'claude-chat' ? 'opacity-100' : 'opacity-0'} transition-opacity duration-200`}
+                 style={{ pointerEvents: activeSidePanel === 'claude-chat' ? 'auto' : 'none', height: '100%' }}>
+              <OverlayChatClaude 
+                key="claude-chat-panel"
+                embedded={true}
+                disableInlinePanel={true}
+                cliProviderFixed="claude"
+                chatId="claude-instance"
+                projectPath={selectedProject?.path}
+                projects={projects}
+                previewUrl={null}
+                onSessionIdChange={setClaudeOverlaySessionId}
+                onBindControls={setClaudeOverlayControls}
+                onActivityChange={(active) => setChatActivity(active)}
+                onPanelClosed={() => setActiveSidePanel(null)}
+              />
+            </div>
           </div>
         )}
 
