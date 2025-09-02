@@ -11,13 +11,12 @@ export VITE_HOST=0.0.0.0
 
 # Prefer the smart dev orchestrator if available
 if npm run | grep -q " dev$"; then
-  NODE_OPTIONS="" VITE_NO_BROWSER=true VIBE_NO_BROWSER=true npm run dev:network
+  NODE_OPTIONS="" VITE_NO_BROWSER=true npm run dev:network
 else
-  # Fallback: start server, client and vibe-kanban in parallel
+  # Fallback: start server and client in parallel
   npx concurrently \
-    -n SERVER,CLIENT,VIBE \
-    -c green,cyan,magenta \
+    -n SERVER,CLIENT \
+    -c green,cyan \
     "npm:server:network" \
-    "npm:client:network" \
-    "npm:vibe-backend"
+    "npm:client:network"
 fi

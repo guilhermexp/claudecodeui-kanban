@@ -47,37 +47,7 @@ export default defineConfig(({ command, mode }) => {
         'localhost'
       ],
       proxy: {
-        // VibeKanban API routes - proxy to Rust backend (MUST BE FIRST!)
-        '/api/vibe-kanban': {
-          target: 'http://localhost:6734',
-          changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/api\/vibe-kanban/, '/api')
-        },
-        // VibeKanban SSE streams for real-time logs
-        '/api/vibe-kanban/projects/.+/execution-processes/.+/normalized-logs/stream': {
-          target: 'http://localhost:6734',
-          changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/api\/vibe-kanban/, '/api'),
-          configure: (proxy, options) => {
-            proxy.on('proxyReq', (proxyReq, req, res) => {
-              proxyReq.setHeader('Accept', 'text/event-stream');
-              proxyReq.setHeader('Cache-Control', 'no-cache');
-            });
-            proxy.on('proxyRes', (proxyRes, req, res) => {
-              proxyRes.headers['content-type'] = 'text/event-stream';
-              proxyRes.headers['cache-control'] = 'no-cache';
-              proxyRes.headers['connection'] = 'keep-alive';
-            });
-          }
-        },
-        // VibeKanban WebSocket for real-time updates
-        '/api/vibe-kanban/stream': {
-          target: 'ws://localhost:6734',
-          ws: true,
-          changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/api\/vibe-kanban/, '/api')
-        },
-        // Claude Code UI API routes (original)
+        // Claude Code UI API routes
         '/api': {
           target: 'http://localhost:7347',
           changeOrigin: true

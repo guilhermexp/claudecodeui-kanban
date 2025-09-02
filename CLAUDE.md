@@ -191,7 +191,7 @@ npm run stop-all     # Stop all processes
 **Cause:** Rust backend not compiled or port conflicts
 **Solution:**
 ```bash
-cd vibe-kanban/backend
+ 
 cargo build --release
 npm run dev  # Restart full stack
 ```
@@ -407,7 +407,7 @@ npm run server  # Production server only (no tunnel)
 4. **Read error messages carefully** - port conflicts are now automatically resolved
 5. **Use the documentation** - refer to PORT-MANAGEMENT.md for conflicts
 6. **Test on mobile** - responsive design is critical
-7. **Verify Vibe Kanban** - Rust backend must be compiled (`cd vibe-kanban && cargo build --release`)
+7. Vibe Kanban: integração removida deste repositório.
 8. **Monitor WebSocket connections** - critical for terminal functionality
 9. **Use semantic CSS classes** - Never use hardcoded colors like `text-blue-500`, always use theme variables
 10. **Mobile-first development** - Test mobile layout and touch interactions

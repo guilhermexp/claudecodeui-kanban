@@ -76,8 +76,7 @@ const client = spawn('npx', ['vite', '--host', '0.0.0.0', '--port', '5892'], {
 
 // Start Vibe backend
 const vibeBackend = spawn('cargo', ['run', '--release'], {
-  cwd: path.join(__dirname, '..', 'vibe-kanban'),
-  env: { ...env, PORT: '6734', VIBE_NO_BROWSER: 'true' },
+  // Vibe Kanban removed
   stdio: 'pipe'
 });
 

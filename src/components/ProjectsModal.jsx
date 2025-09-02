@@ -5,13 +5,13 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
-import { Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, ChevronUp, Edit3, Check, X, Trash2, FolderPlus, RefreshCw, Search, Star, Edit2, Loader2, FolderSearch, Filter, Eye } from 'lucide-react';
-import { ProjectIcon, isVibeKanbanProject as isVibeKanban } from '../utils/projectIcons.jsx';
+import { Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, ChevronUp, Edit3, Check, X, Trash2, RefreshCw, Search, Star, Edit2, Loader2, FolderSearch, Filter, Eye } from 'lucide-react';
+import { ProjectIcon } from '../utils/projectIcons.jsx';
 import { cn } from '../lib/utils';
 import ClaudeLogo from './ClaudeLogo';
 import { api } from '../utils/api';
 import { formatTimeAgo } from '../utils/time';
-import { FolderPicker } from './vibe-kanban/ui/folder-picker';
+// FolderPicker removed with Vibe Kanban integration
 
 function ProjectsModal({ 
   isOpen,
@@ -29,9 +29,9 @@ function ProjectsModal({
 }) {
   const navigate = useNavigate();
   const [editingProject, setEditingProject] = useState(null);
-  const [showFolderPicker, setShowFolderPicker] = useState(false);
+  // const [showFolderPicker, setShowFolderPicker] = useState(false);
   const [editingName, setEditingName] = useState('');
-  const [creatingProject, setCreatingProject] = useState(false);
+  // const [creatingProject, setCreatingProject] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [projectSortOrder, setProjectSortOrder] = useState('recent');
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -77,9 +77,7 @@ function ProjectsModal({
       if (!matchesSearch) return false;
     }
 
-    // Type filter
-    if (projectFilter === 'vibe-kanban' && !isVibeKanban(project)) return false;
-    if (projectFilter === 'regular' && isVibeKanban(project)) return false;
+    // Type filter simplified (Vibe Kanban removed). Keep only basic filter.
 
     return true;
   });
@@ -113,11 +111,7 @@ function ProjectsModal({
               <DialogTitle className="text-lg font-semibold text-foreground">Select Project</DialogTitle>
               <p className="text-xs text-muted-foreground mt-1">Choose from your recent projects</p>
             </div>
-            <div className="flex items-center gap-2 mr-4">
-              <Button variant="ghost" size="sm" onClick={() => setShowFolderPicker(true)} className="h-8 text-muted-foreground hover:text-foreground hover:bg-accent">
-                <FolderPlus className="w-4 h-4 mr-1" /> Browse
-              </Button>
-            </div>
+            <div className="flex items-center gap-2 mr-4" />
           </div>
 
           {/* Search */}
@@ -336,43 +330,7 @@ function ProjectsModal({
       </DialogContent>
     </Dialog>
 
-    {/* Folder Picker Dialog */}
-    <FolderPicker
-      open={showFolderPicker}
-      onClose={() => setShowFolderPicker(false)}
-      onSelect={async (path) => {
-        setShowFolderPicker(false);
-        if (!path.trim()) return;
-        
-        setCreatingProject(true);
-        try {
-          const response = await api.createProject(path);
-          if (onRefresh) {
-            await onRefresh();
-          }
-          // Select and focus the newly created project
-          if (response.name) {
-            // Wait for projects to refresh
-            setTimeout(() => {
-              const newProject = projects.find(p => p.name === response.name);
-              if (newProject) {
-                onProjectSelect(newProject);
-                // Scroll to top where new projects appear
-                const scrollArea = document.querySelector('.scroll-area-viewport');
-                if (scrollArea) scrollArea.scrollTop = 0;
-              }
-            }, 100);
-          }
-        } catch (error) {
-          console.error('Failed to create project:', error);
-        } finally {
-          setCreatingProject(false);
-        }
-      }}
-      value=""
-      title="Select Project Folder"
-      description="Choose a folder to create your Claude Code project"
-    />
+    { /* Folder Picker removed */ }
     </>
   );
 }

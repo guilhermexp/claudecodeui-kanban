@@ -16,18 +16,7 @@ nvm alias default 18
 ```
 
 #### Rust Compilation Fails
-**Problem**: `error: could not compile vibe-kanban`
-
-**Solution**:
-```bash
-# Update Rust
-rustup update
-
-# Clean and rebuild
-cd vibe-kanban/backend
-cargo clean
-cargo build --release
-```
+Note: Vibe Kanban is no longer part of this repository; Rust compilation errors related to it can be ignored.
 
 #### Permission Denied During Install
 **Problem**: `EACCES: permission denied`
@@ -293,9 +282,7 @@ echo "test" | claude
 # Test database
 sqlite3 data/claude-code.db "SELECT COUNT(*) FROM users;"
 
-# Test Rust backend
-cd vibe-kanban/backend
-cargo test
+# (Legacy) Rust backend tests were for Vibe Kanban, which has been removed from this repository.
 ```
 
 ## Getting Help

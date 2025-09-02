@@ -296,44 +296,9 @@ Resize:
 }
 ```
 
-### Vibe Kanban (Proxy)
+### Vibe Kanban
 
-All Vibe Kanban endpoints are proxied through `/api/vibe-kanban/*`.
-
-#### GET `/api/vibe-kanban/tasks`
-Get all tasks.
-
-**Response:**
-```json
-[
-  {
-    "id": "string",
-    "title": "string",
-    "description": "string",
-    "status": "todo|in_progress|completed",
-    "created_at": "timestamp",
-    "updated_at": "timestamp"
-  }
-]
-```
-
-#### POST `/api/vibe-kanban/tasks`
-Create a new task.
-
-**Request:**
-```json
-{
-  "title": "string",
-  "description": "string",
-  "status": "todo|in_progress|completed"
-}
-```
-
-#### PUT `/api/vibe-kanban/tasks/:id`
-Update a task.
-
-#### DELETE `/api/vibe-kanban/tasks/:id`
-Delete a task.
+Note: Vibe Kanban integration has been removed from this repository. Any `/api/vibe-kanban/*` references are obsolete.
 
 ### Whisper Transcription
 

@@ -4,7 +4,7 @@
     "src/main.jsx",
     "server/index.js",
     "scripts/dev.js",
-    "vibe-kanban/backend/src/**/*.rs"
+    
   ],
   "project": [
     "src/**/*.{js,jsx,ts,tsx}",
@@ -15,7 +15,7 @@
     "**/*.test.{js,jsx,ts,tsx}",
     "**/*.spec.{js,jsx,ts,tsx}",
     "**/tests/**",
-    "vibe-kanban/backend/bindings/**",
+    
     "public/**",
     "examples/**"
   ],

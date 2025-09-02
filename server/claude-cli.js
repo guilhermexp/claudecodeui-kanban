@@ -552,7 +552,10 @@ function spawnClaudeStream(options = {}, ws, onSession) {
   if (model) {
     args.push('--model', model);
   }
-  // Add images as CLI flags when provided
+  // Note: Images are now passed directly in the message content as base64 data
+  // The old -i flag approach is deprecated as it requires file paths
+  // If we ever need to support file paths again, uncomment this:
+  /*
   if (Array.isArray(images) && images.length) {
     for (const imgPath of images) {
       if (typeof imgPath === 'string' && imgPath.length) {
@@ -560,6 +563,7 @@ function spawnClaudeStream(options = {}, ws, onSession) {
       }
     }
   }
+  */
   // Permissions/tools flags similar to spawnClaude
   // Avoid redundant or conflicting flags: don't send --permission-mode when skipping permissions
   if (!skippingPermissions && permissionMode && permissionMode !== 'default') {
@@ -904,7 +908,7 @@ function spawnClaudeStream(options = {}, ws, onSession) {
     try { ws.send(JSON.stringify({ type: 'claude-error', error: error.message })); } catch {}
   });
 
-  const writeMessage = (text, sid = capturedId) => {
+  const writeMessage = (text, sid = capturedId, imageData = null) => {
     log.info(`✍️ Sending message to Claude: "${String(text).substring(0, 100)}..."`);
     if (!proc.stdin.writable) {
       log.error('❌ stdin not writable!');
@@ -914,9 +918,20 @@ function spawnClaudeStream(options = {}, ws, onSession) {
     // Update activity tracking
     processManager.updateActivity(streamProcessKey);
     
+    // Build content array with text and optional images
+    let content;
+    if (imageData && Array.isArray(imageData) && imageData.length > 0) {
+      // Create content array with images followed by text
+      content = [...imageData, { type: 'text', text: String(text) }];
+      log.info(`📸 Including ${imageData.length} image(s) in message`);
+    } else {
+      // Just text content for backward compatibility
+      content = String(text);
+    }
+    
     const msg = {
       type: 'user',
-      message: { role: 'user', content: String(text) },
+      message: { role: 'user', content: content },
       parent_tool_use_id: null,
       session_id: sid || 'default'
     };

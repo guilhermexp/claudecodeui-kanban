@@ -9,7 +9,6 @@ cd "$ROOT_DIR"
 
 # Configurações
 SERVER_PORT=7347
-VIBE_PORT=6734
 DOMAIN="claudecode.ngrok.app"
 
 # Localiza binário do ngrok
@@ -44,8 +43,7 @@ fi
 # Mata processos anteriores (método tradicional como backup)
 echo "🧹 Limpando processos anteriores..."
 pkill -f "node.*server/index.js" 2>/dev/null || true
-pkill -f "cargo.*vibe-kanban" 2>/dev/null || true
-pkill -f "vibe-kanban.*target/release" 2>/dev/null || true
+ 
 pkill -f "vite" 2>/dev/null || true
 pkill -f "ngrok" 2>/dev/null || true
 sleep 2
@@ -60,20 +58,7 @@ nohup npm run server > prod-server.log 2>&1 &
 SERVER_PID=$!
 echo "🟢 Server (Node) iniciado na porta ${SERVER_PORT} (PID: ${SERVER_PID})"
 
-# Inicia Vibe Kanban (Rust) em 6734 se existir
-if [ -d "vibe-kanban/backend" ]; then
-  echo "🦀 Iniciando Vibe Kanban (Rust) na porta ${VIBE_PORT}..."
-  (cd vibe-kanban/backend && BACKEND_PORT=${VIBE_PORT} VIBE_NO_BROWSER=true nohup cargo run --release > "${ROOT_DIR}/prod-vibe.log" 2>&1 & echo $! > "${ROOT_DIR}/.vibe.pid")
-  if [ -f .vibe.pid ]; then
-    VIBE_PID=$(cat .vibe.pid || true)
-    rm -f .vibe.pid || true
-    echo "🟣 Vibe Kanban iniciado (PID: ${VIBE_PID})"
-  else
-    echo "⚠️  Não foi possível capturar o PID do Vibe Kanban (verifique prod-vibe.log)"
-  fi
-else
-  echo "⚠️  Diretório 'vibe-kanban/backend' não encontrado. Pulando Vibe Kanban."
-fi
+# Vibe Kanban removido
 
 # Aguarda servidor ficar pronto (até 30s)
 echo "⏳ Aguardando server (health) ficar pronto..."
@@ -85,17 +70,7 @@ for i in {1..30}; do
   sleep 1
 done
 
-# Aguarda Vibe Kanban ficar pronto (até 30s)
-if [ -d "vibe-kanban/backend" ]; then
-  echo "⏳ Aguardando Vibe Kanban ficar pronto..."
-  for i in {1..30}; do
-    if curl -sf "http://localhost:${VIBE_PORT}/api/health" >/dev/null; then
-      echo "✅ Vibe Kanban OK"
-      break
-    fi
-    sleep 1
-  done
-fi
+ 
 
 # Inicia túnel ngrok para o servidor Node (7347) com verificação e retry
 echo "🔒 Iniciando túnel ngrok -> http://localhost:${SERVER_PORT}"
@@ -120,10 +95,10 @@ echo "🌍 Acesse globalmente em: https://${DOMAIN}/"
 echo ""
 echo "📜 Logs:"
 echo "  - Servidor: tail -f prod-server.log"
-echo "  - Vibe:     tail -f prod-vibe.log"
+ 
 echo "  - Ngrok:    tail -f prod-ngrok.log"
 echo ""
 echo "⏹️  Para parar tudo:"
-echo "  pkill -f 'node.*server' && pkill -f 'vibe-kanban' && pkill ngrok"
+echo "  pkill -f 'node.*server' && pkill ngrok"
 echo ""
 echo "ℹ️  Dica: use sempre a URL sem 'www': https://${DOMAIN}/"

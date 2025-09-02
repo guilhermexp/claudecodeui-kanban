@@ -2,675 +2,1006 @@ import { promises as fs } from 'fs';
 import fsSync from 'fs';
 import path from 'path';
 import readline from 'readline';
+import crypto from 'crypto';
 
-// Cache for extracted project directories with individual timestamps
-const projectDirectoryCache = new Map();
-const PROJECT_DIR_CACHE_DURATION = 2 * 60 * 60 * 1000; // 2 hours per directory
-
-// Cache for projects list to reduce memory usage
-const projectsCache = { data: null, timestamp: 0 };
-const PROJECTS_CACHE_DURATION = 60 * 60 * 1000; // 60 minutes - increased from 30 to reduce I/O operations
-
-// Clear cache when needed (called when project files change)
-function clearProjectDirectoryCache() {
-  projectDirectoryCache.clear();
-  projectsCache.data = null;
-  projectsCache.timestamp = 0;
-}
-
-// Load project configuration file
-async function loadProjectConfig() {
-  const configPath = path.join(process.env.HOME, '.claude', 'project-config.json');
-  try {
-    const configData = await fs.readFile(configPath, 'utf8');
-    return JSON.parse(configData);
-  } catch (error) {
-    // Return empty config if file doesn't exist
-    return {};
+// ===========================
+// Constants & Configuration
+// ===========================
+const CONFIG = {
+  CLAUDE_DIR: path.join(process.env.HOME || '', '.claude'),
+  PROJECTS_SUBDIR: 'projects',
+  CONFIG_FILE: 'project-config.json',
+  CACHE_DURATIONS: {
+    PROJECT_DIR: 2 * 60 * 60 * 1000,     // 2 hours
+    PROJECTS_LIST: 30 * 60 * 1000,       // 30 minutes (reduced from 60)
+    SESSIONS: 5 * 60 * 1000,              // 5 minutes
+  },
+  LIMITS: {
+    MAX_PROJECT_NAME_LENGTH: 255,
+    MAX_DISPLAY_NAME_LENGTH: 100,
+    MAX_PATH_LENGTH: 4096,
+    MAX_SESSIONS_PER_REQUEST: 100,
+    MAX_JSONL_LINE_LENGTH: 1024 * 1024,  // 1MB per line
+  },
+  PERFORMANCE: {
+    SESSION_BATCH_SIZE: 10,
+    PARALLEL_FILE_READS: 5,
   }
-}
+};
 
-// Save project configuration file
-async function saveProjectConfig(config) {
-  const configPath = path.join(process.env.HOME, '.claude', 'project-config.json');
-  await fs.writeFile(configPath, JSON.stringify(config, null, 2), 'utf8');
-}
+// ===========================
+// Cache Manager Class
+// ===========================
+class CacheManager {
+  constructor() {
+    this.caches = new Map();
+  }
 
-// Generate better display name from path
-async function generateDisplayName(projectName, actualProjectDir = null) {
-  // Use actual project directory if provided, otherwise decode from project name
-  let projectPath = actualProjectDir || projectName.replace(/-/g, '/');
-  
-  // Try to read package.json from the project path
-  try {
-    const packageJsonPath = path.join(projectPath, 'package.json');
-    const packageData = await fs.readFile(packageJsonPath, 'utf8');
-    const packageJson = JSON.parse(packageData);
+  get(cacheKey, itemKey) {
+    const cache = this.caches.get(cacheKey);
+    if (!cache) return null;
     
-    // Return the name from package.json if it exists
-    if (packageJson.name) {
-      return packageJson.name;
+    const item = cache.get(itemKey);
+    if (!item) return null;
+    
+    const now = Date.now();
+    if (item.expiresAt && now > item.expiresAt) {
+      cache.delete(itemKey);
+      return null;
     }
-  } catch (error) {
-    // Fall back to path-based naming if package.json doesn't exist or can't be read
+    
+    return item.value;
   }
-  
-  // If it starts with /, it's an absolute path
-  if (projectPath.startsWith('/')) {
-    const parts = projectPath.split('/').filter(Boolean);
-    if (parts.length > 3) {
-      // Show last 2 folders with ellipsis: "...projects/myapp"
-      return `.../${parts.slice(-2).join('/')}`;
+
+  set(cacheKey, itemKey, value, ttl = null) {
+    if (!this.caches.has(cacheKey)) {
+      this.caches.set(cacheKey, new Map());
+    }
+    
+    const cache = this.caches.get(cacheKey);
+    const expiresAt = ttl ? Date.now() + ttl : null;
+    
+    cache.set(itemKey, { value, expiresAt });
+  }
+
+  invalidate(cacheKey, itemKey = null) {
+    if (itemKey) {
+      const cache = this.caches.get(cacheKey);
+      if (cache) cache.delete(itemKey);
     } else {
-      // Show full path if short: "/home/user"
-      return projectPath;
+      this.caches.delete(cacheKey);
     }
   }
-  
-  return projectPath;
-}
 
-// Extract the actual project directory from JSONL sessions (with caching)
-async function extractProjectDirectory(projectName) {
-  // Check cache first with timestamp validation
-  const cached = projectDirectoryCache.get(projectName);
-  if (cached && (Date.now() - cached.timestamp) < PROJECT_DIR_CACHE_DURATION) {
-    return cached.value;
+  invalidateAll() {
+    this.caches.clear();
   }
-  
-  
-  const projectDir = path.join(process.env.HOME, '.claude', 'projects', projectName);
-  const cwdCounts = new Map();
-  let latestTimestamp = 0;
-  let latestCwd = null;
-  let extractedPath;
-  
-  try {
-    // Check if project directory exists first
-    try {
-      await fs.access(projectDir);
-    } catch (accessError) {
-      // Project directory doesn't exist, return fallback path silently
-      // Don't log as this happens frequently with old project references
-      return projectName.replace(/-/g, '/');
+
+  getStats() {
+    const stats = {};
+    for (const [key, cache] of this.caches.entries()) {
+      stats[key] = {
+        size: cache.size,
+        items: Array.from(cache.keys())
+      };
     }
-    
-    const files = await fs.readdir(projectDir);
-    const jsonlFiles = files.filter(file => file.endsWith('.jsonl'));
-    
-    if (jsonlFiles.length === 0) {
-      // Fall back to decoded project name if no sessions
-      extractedPath = projectName.replace(/-/g, '/');
-    } else {
-      // Process all JSONL files to collect cwd values
-      for (const file of jsonlFiles) {
-        const jsonlFile = path.join(projectDir, file);
-        const fileStream = fsSync.createReadStream(jsonlFile);
-        const rl = readline.createInterface({
-          input: fileStream,
-          crlfDelay: Infinity
-        });
-        
-        for await (const line of rl) {
-          if (line.trim()) {
-            try {
-              const entry = JSON.parse(line);
-              
-              if (entry.cwd) {
-                // Count occurrences of each cwd
-                cwdCounts.set(entry.cwd, (cwdCounts.get(entry.cwd) || 0) + 1);
-                
-                // Track the most recent cwd
-                const timestamp = new Date(entry.timestamp || 0).getTime();
-                if (timestamp > latestTimestamp) {
-                  latestTimestamp = timestamp;
-                  latestCwd = entry.cwd;
-                }
-              }
-            } catch (parseError) {
-              // Skip malformed lines
-            }
-          }
-        }
-      }
-      
-      // Determine the best cwd to use
-      if (cwdCounts.size === 0) {
-        // No cwd found, fall back to decoded project name
-        extractedPath = projectName.replace(/-/g, '/');
-      } else if (cwdCounts.size === 1) {
-        // Only one cwd, use it
-        extractedPath = Array.from(cwdCounts.keys())[0];
-      } else {
-        // Multiple cwd values - prefer the most recent one if it has reasonable usage
-        const mostRecentCount = cwdCounts.get(latestCwd) || 0;
-        const maxCount = Math.max(...cwdCounts.values());
-        
-        // Use most recent if it has at least 25% of the max count
-        if (mostRecentCount >= maxCount * 0.25) {
-          extractedPath = latestCwd;
-        } else {
-          // Otherwise use the most frequently used cwd
-          for (const [cwd, count] of cwdCounts.entries()) {
-            if (count === maxCount) {
-              extractedPath = cwd;
-              break;
-            }
-          }
-        }
-        
-        // Fallback (shouldn't reach here)
-        if (!extractedPath) {
-          extractedPath = latestCwd || projectName.replace(/-/g, '/');
-        }
-      }
-    }
-    
-    // Cache the result with timestamp
-    projectDirectoryCache.set(projectName, { value: extractedPath, timestamp: Date.now() });
-    
-    return extractedPath;
-    
-  } catch (error) {
-    console.error(`Error extracting project directory for ${projectName}:`, error);
-    // Fall back to decoded project name
-    extractedPath = projectName.replace(/-/g, '/');
-    
-    // Cache the fallback result too with timestamp
-    projectDirectoryCache.set(projectName, { value: extractedPath, timestamp: Date.now() });
-    
-    return extractedPath;
+    return stats;
   }
 }
 
-async function getProjects() {
-  // Return cached projects if still valid
-  if (projectsCache.data && (Date.now() - projectsCache.timestamp) < PROJECTS_CACHE_DURATION) {
-    return projectsCache.data;
+// ===========================
+// Input Validation Utilities
+// ===========================
+class Validator {
+  static sanitizeProjectName(name) {
+    if (typeof name !== 'string') {
+      throw new ValidationError('Project name must be a string');
+    }
+    
+    // Remove null bytes and control characters
+    let sanitized = name.replace(/[\x00-\x1F\x7F]/g, '');
+    
+    // Limit length
+    if (sanitized.length > CONFIG.LIMITS.MAX_PROJECT_NAME_LENGTH) {
+      sanitized = sanitized.substring(0, CONFIG.LIMITS.MAX_PROJECT_NAME_LENGTH);
+    }
+    
+    // Prevent directory traversal
+    if (sanitized.includes('..') || sanitized.includes('~')) {
+      throw new ValidationError('Invalid project name: contains forbidden characters');
+    }
+    
+    return sanitized;
   }
 
-  const claudeDir = path.join(process.env.HOME, '.claude', 'projects');
-  const config = await loadProjectConfig();
-  const projects = [];
-  const existingProjects = new Set();
-  
-  try {
-    // First, get existing projects from the file system
-    const entries = await fs.readdir(claudeDir, { withFileTypes: true });
+  static sanitizePath(inputPath) {
+    if (typeof inputPath !== 'string') {
+      throw new ValidationError('Path must be a string');
+    }
     
-    for (const entry of entries) {
-      if (entry.isDirectory()) {
-        existingProjects.add(entry.name);
-        const projectPath = path.join(claudeDir, entry.name);
-        
-        // Extract actual project directory from JSONL sessions (with caching)
-        let actualProjectDir;
-        try {
-          actualProjectDir = await extractProjectDirectory(entry.name);
-        } catch (err) {
-          // If extraction fails, use fallback path silently
-          actualProjectDir = entry.name.replace(/-/g, '/');
-        }
-        
-        // Get display name from config or generate one
-        const customName = config[entry.name]?.displayName;
-        const autoDisplayName = await generateDisplayName(entry.name, actualProjectDir);
-        const fullPath = actualProjectDir;
-        
-        const project = {
-          name: entry.name,
-          path: actualProjectDir,
-          displayName: customName || autoDisplayName,
-          fullPath: fullPath,
-          isCustomName: !!customName,
-          sessions: []
-        };
-        
-        // Skip loading sessions in the main projects list for performance
-        // Sessions will be loaded on-demand when a project is selected
-        project.sessions = [];
-        project.sessionMeta = {
-          hasMore: false,
-          total: 0,
-          notLoaded: true // Mark as not loaded to fetch later
-        };
-        
-        projects.push(project);
-      }
+    // Remove null bytes
+    let sanitized = inputPath.replace(/\x00/g, '');
+    
+    // Limit length
+    if (sanitized.length > CONFIG.LIMITS.MAX_PATH_LENGTH) {
+      throw new ValidationError('Path exceeds maximum length');
     }
-  } catch (error) {
-    console.error('Error reading projects directory:', error);
+    
+    // Resolve to absolute path and check it doesn't escape boundaries
+    const resolved = path.resolve(sanitized);
+    
+    return resolved;
   }
-  
-  // Add manually configured projects that don't exist as folders yet
-  for (const [projectName, projectConfig] of Object.entries(config)) {
-    if (!existingProjects.has(projectName) && projectConfig.manuallyAdded) {
-      // Use the original path if available, otherwise extract from potential sessions
-      let actualProjectDir = projectConfig.originalPath;
-      
-      if (!actualProjectDir) {
-        try {
-          actualProjectDir = await extractProjectDirectory(projectName);
-        } catch (error) {
-          // Fall back to decoded project name
-          actualProjectDir = projectName.replace(/-/g, '/');
-        }
-      }
-      
-              const project = {
-          name: projectName,
-          path: actualProjectDir,
-          displayName: projectConfig.displayName || await generateDisplayName(projectName, actualProjectDir),
-          fullPath: actualProjectDir,
-          isCustomName: !!projectConfig.displayName,
-          isManuallyAdded: true,
-          sessions: []
-        };
-      
-      projects.push(project);
+
+  static validateSessionId(sessionId) {
+    if (typeof sessionId !== 'string') {
+      throw new ValidationError('Session ID must be a string');
     }
+    
+    // Session IDs should be alphanumeric with hyphens
+    if (!/^[a-zA-Z0-9-_]+$/.test(sessionId)) {
+      throw new ValidationError('Invalid session ID format');
+    }
+    
+    return sessionId;
   }
-  
-  // Cache the results
-  projectsCache.data = projects;
-  projectsCache.timestamp = Date.now();
-  
-  return projects;
+
+  static validateLimit(limit) {
+    const num = parseInt(limit, 10);
+    if (isNaN(num) || num < 1) return 5;
+    return Math.min(num, CONFIG.LIMITS.MAX_SESSIONS_PER_REQUEST);
+  }
+
+  static validateOffset(offset) {
+    const num = parseInt(offset, 10);
+    if (isNaN(num) || num < 0) return 0;
+    return num;
+  }
 }
 
-async function getSessions(projectName, limit = 5, offset = 0) {
-  const projectDir = path.join(process.env.HOME, '.claude', 'projects', projectName);
-  
-  try {
-    const files = await fs.readdir(projectDir);
-    const jsonlFiles = files.filter(file => file.endsWith('.jsonl'));
-    // Remove debug logging - not needed in production
-    
-    if (jsonlFiles.length === 0) {
-      return { sessions: [], hasMore: false, total: 0 };
-    }
-    
-    // For performance, get file stats to sort by modification time
-    const filesWithStats = await Promise.all(
-      jsonlFiles.map(async (file) => {
-        const filePath = path.join(projectDir, file);
-        const stats = await fs.stat(filePath);
-        return { file, mtime: stats.mtime };
-      })
-    );
-    
-    // Sort files by modification time (newest first) for better performance
-    filesWithStats.sort((a, b) => b.mtime - a.mtime);
-    
-    const allSessions = new Map();
-    let processedCount = 0;
-    
-    // Process files in order of modification time
-    for (const { file } of filesWithStats) {
-      const jsonlFile = path.join(projectDir, file);
-      const sessions = await parseJsonlSessions(jsonlFile);
-      
-      // Merge sessions, avoiding duplicates by session ID
-      sessions.forEach(session => {
-        if (!allSessions.has(session.id)) {
-          allSessions.set(session.id, session);
-        }
-      });
-      
-      processedCount++;
-      
-      // More aggressive early exit - stop after first file if we have enough sessions
-      if (allSessions.size >= limit + offset && processedCount >= 1) {
-        break;
-      }
-    }
-    
-    // Convert to array and sort by last activity
-    const sortedSessions = Array.from(allSessions.values()).sort((a, b) => 
-      new Date(b.lastActivity) - new Date(a.lastActivity)
-    );
-    
-    const total = sortedSessions.length;
-    const paginatedSessions = sortedSessions.slice(offset, offset + limit);
-    const hasMore = offset + limit < total;
-    
-    // Ensure all sessions have proper date fields
-    const sessionsWithDates = paginatedSessions.map(session => ({
-      ...session,
-      updated_at: session.updated_at || session.lastActivity,
-      created_at: session.created_at || session.lastActivity
-    }));
-    
-    return {
-      sessions: sessionsWithDates,
-      hasMore,
-      total,
-      offset,
-      limit
+// ===========================
+// Custom Error Classes
+// ===========================
+class ProjectError extends Error {
+  constructor(message, code = 'PROJECT_ERROR') {
+    super(message);
+    this.name = 'ProjectError';
+    this.code = code;
+  }
+}
+
+class ValidationError extends ProjectError {
+  constructor(message) {
+    super(message, 'VALIDATION_ERROR');
+    this.name = 'ValidationError';
+  }
+}
+
+class NotFoundError extends ProjectError {
+  constructor(message) {
+    super(message, 'NOT_FOUND');
+    this.name = 'NotFoundError';
+  }
+}
+
+// ===========================
+// Logger
+// ===========================
+class Logger {
+  static log(level, message, meta = {}) {
+    const timestamp = new Date().toISOString();
+    const logEntry = {
+      timestamp,
+      level,
+      message,
+      ...meta
     };
-  } catch (error) {
-    console.error(`Error reading sessions for project ${projectName}:`, error);
-    return { sessions: [], hasMore: false, total: 0 };
+    
+    if (level === 'error') {
+      console.error(JSON.stringify(logEntry));
+    } else if (level === 'warn') {
+      console.warn(JSON.stringify(logEntry));
+    } else if (process.env.NODE_ENV !== 'production' || level === 'info') {
+      console.log(JSON.stringify(logEntry));
+    }
+  }
+
+  static error(message, error = null) {
+    this.log('error', message, { 
+      error: error ? {
+        message: error.message,
+        stack: error.stack,
+        code: error.code
+      } : undefined 
+    });
+  }
+
+  static warn(message, meta = {}) {
+    this.log('warn', message, meta);
+  }
+
+  static info(message, meta = {}) {
+    this.log('info', message, meta);
+  }
+
+  static debug(message, meta = {}) {
+    if (process.env.NODE_ENV !== 'production') {
+      this.log('debug', message, meta);
+    }
   }
 }
 
-async function parseJsonlSessions(filePath) {
-  const sessions = new Map();
-  
-  try {
+// ===========================
+// File System Utilities
+// ===========================
+class FileSystemUtils {
+  static async ensureDirectory(dirPath) {
+    try {
+      await fs.mkdir(dirPath, { recursive: true });
+    } catch (error) {
+      if (error.code !== 'EEXIST') {
+        throw new ProjectError(`Failed to create directory: ${error.message}`);
+      }
+    }
+  }
+
+  static async fileExists(filePath) {
+    try {
+      await fs.access(filePath);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  static async readJsonFile(filePath) {
+    try {
+      const content = await fs.readFile(filePath, 'utf8');
+      return JSON.parse(content);
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        return null;
+      }
+      throw new ProjectError(`Failed to read JSON file: ${error.message}`);
+    }
+  }
+
+  static async writeJsonFile(filePath, data) {
+    try {
+      const content = JSON.stringify(data, null, 2);
+      await fs.writeFile(filePath, content, 'utf8');
+    } catch (error) {
+      throw new ProjectError(`Failed to write JSON file: ${error.message}`);
+    }
+  }
+
+  static async* readJsonLines(filePath) {
     const fileStream = fsSync.createReadStream(filePath);
     const rl = readline.createInterface({
       input: fileStream,
       crlfDelay: Infinity
     });
-    
-    let lineCount = 0;
-    
+
     for await (const line of rl) {
-      if (line.trim()) {
-        lineCount++;
-        try {
-          const entry = JSON.parse(line);
-          
-          if (entry.sessionId) {
-            if (!sessions.has(entry.sessionId)) {
-              sessions.set(entry.sessionId, {
-                id: entry.sessionId,
-                summary: 'New Session',
-                messageCount: 0,
-                lastActivity: new Date(),
-                cwd: entry.cwd || ''
-              });
-            }
-            
-            const session = sessions.get(entry.sessionId);
-            
-            // Update summary if this is a summary entry
-            if (entry.type === 'summary' && entry.summary) {
-              session.summary = entry.summary;
-            } else if (entry.message?.role === 'user' && entry.message?.content && session.summary === 'New Session') {
-              // Use first user message as summary if no summary entry exists
-              const content = entry.message.content;
-              if (typeof content === 'string' && content.length > 0) {
-                // Skip command messages that start with <command-name>
-                if (!content.startsWith('<command-name>')) {
-                  session.summary = content.length > 30 ? content.substring(0, 30) + '...' : content;
-                }
-              }
-            }
-            
-            // Don't count every message, just track that messages exist
-            if (!session.hasMessages) {
-              session.hasMessages = true;
-              session.messageCount = 1;
-            }
-            
-            // Update last activity
-            if (entry.timestamp) {
-              session.lastActivity = new Date(entry.timestamp);
-            }
-          }
-        } catch (parseError) {
-        }
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      
+      // Security: limit line length
+      if (trimmed.length > CONFIG.LIMITS.MAX_JSONL_LINE_LENGTH) {
+        Logger.warn('Skipping oversized JSONL line', { 
+          filePath, 
+          lineLength: trimmed.length 
+        });
+        continue;
+      }
+
+      try {
+        yield JSON.parse(trimmed);
+      } catch (error) {
+        Logger.debug('Failed to parse JSONL line', { filePath, error: error.message });
       }
     }
-    
-  } catch (error) {
-    console.error('Error reading JSONL file:', error);
   }
-  
-  // Convert Map to Array, ensure dates are ISO strings, and sort by last activity
-  return Array.from(sessions.values()).map(session => ({
-    ...session,
-    lastActivity: session.lastActivity instanceof Date ? session.lastActivity.toISOString() : session.lastActivity,
-    updated_at: session.lastActivity instanceof Date ? session.lastActivity.toISOString() : session.lastActivity, // Add updated_at alias for compatibility
-    created_at: session.lastActivity instanceof Date ? session.lastActivity.toISOString() : session.lastActivity  // Add created_at as fallback
-  })).sort((a, b) => 
-    new Date(b.lastActivity) - new Date(a.lastActivity)
-  );
 }
 
-// Get messages for a specific session
-async function getSessionMessages(projectName, sessionId) {
-  const projectDir = path.join(process.env.HOME, '.claude', 'projects', projectName);
-  
-  try {
-    const files = await fs.readdir(projectDir);
-    const jsonlFiles = files.filter(file => file.endsWith('.jsonl'));
+// ===========================
+// Project Manager Class
+// ===========================
+class ProjectManager {
+  constructor() {
+    this.cache = new CacheManager();
+    this.configPath = path.join(CONFIG.CLAUDE_DIR, CONFIG.CONFIG_FILE);
+    this.projectsDir = path.join(CONFIG.CLAUDE_DIR, CONFIG.PROJECTS_SUBDIR);
+  }
+
+  // Configuration Management
+  async loadConfig() {
+    const cached = this.cache.get('config', 'main');
+    if (cached) return cached;
+
+    const config = await FileSystemUtils.readJsonFile(this.configPath) || {};
+    this.cache.set('config', 'main', config, CONFIG.CACHE_DURATIONS.PROJECTS_LIST);
+    return config;
+  }
+
+  async saveConfig(config) {
+    await FileSystemUtils.writeJsonFile(this.configPath, config);
+    this.cache.invalidate('config');
+    this.cache.invalidate('projects'); // Invalidate projects cache when config changes
+  }
+
+  // Display Name Generation
+  async generateDisplayName(projectName, projectPath = null) {
+    const actualPath = projectPath || projectName.replace(/-/g, '/');
     
-    if (jsonlFiles.length === 0) {
+    // Try package.json first
+    try {
+      const packageJsonPath = path.join(actualPath, 'package.json');
+      const packageJson = await FileSystemUtils.readJsonFile(packageJsonPath);
+      if (packageJson?.name) {
+        return packageJson.name;
+      }
+    } catch {
+      // Ignore and fall back to path-based naming
+    }
+
+    // Generate from path
+    if (actualPath.startsWith('/')) {
+      const parts = actualPath.split('/').filter(Boolean);
+      if (parts.length > 3) {
+        return `.../${parts.slice(-2).join('/')}`;
+      }
+      return actualPath;
+    }
+    
+    return actualPath;
+  }
+
+  // Project Directory Extraction
+  async extractProjectDirectory(projectName) {
+    const sanitizedName = Validator.sanitizeProjectName(projectName);
+    
+    // Check cache
+    const cached = this.cache.get('projectDirs', sanitizedName);
+    if (cached) return cached;
+
+    const projectDir = path.join(this.projectsDir, sanitizedName);
+    
+    // Check if directory exists
+    if (!await FileSystemUtils.fileExists(projectDir)) {
+      const fallback = sanitizedName.replace(/-/g, '/');
+      this.cache.set('projectDirs', sanitizedName, fallback, CONFIG.CACHE_DURATIONS.PROJECT_DIR);
+      return fallback;
+    }
+
+    try {
+      const files = await fs.readdir(projectDir);
+      const jsonlFiles = files.filter(f => f.endsWith('.jsonl'));
+      
+      if (jsonlFiles.length === 0) {
+        const fallback = sanitizedName.replace(/-/g, '/');
+        this.cache.set('projectDirs', sanitizedName, fallback, CONFIG.CACHE_DURATIONS.PROJECT_DIR);
+        return fallback;
+      }
+
+      // Analyze working directories from sessions
+      const cwdStats = new Map();
+      let latestCwd = null;
+      let latestTimestamp = 0;
+
+      for (const file of jsonlFiles.slice(0, CONFIG.PERFORMANCE.PARALLEL_FILE_READS)) {
+        const filePath = path.join(projectDir, file);
+        
+        for await (const entry of FileSystemUtils.readJsonLines(filePath)) {
+          if (entry.cwd) {
+            cwdStats.set(entry.cwd, (cwdStats.get(entry.cwd) || 0) + 1);
+            
+            const timestamp = new Date(entry.timestamp || 0).getTime();
+            if (timestamp > latestTimestamp) {
+              latestTimestamp = timestamp;
+              latestCwd = entry.cwd;
+            }
+          }
+        }
+      }
+
+      // Determine best working directory
+      let result;
+      if (cwdStats.size === 0) {
+        result = sanitizedName.replace(/-/g, '/');
+      } else if (cwdStats.size === 1) {
+        result = Array.from(cwdStats.keys())[0];
+      } else {
+        // Use most recent if it has reasonable usage
+        const maxCount = Math.max(...cwdStats.values());
+        const recentCount = cwdStats.get(latestCwd) || 0;
+        
+        if (recentCount >= maxCount * 0.25) {
+          result = latestCwd;
+        } else {
+          // Find most used
+          for (const [cwd, count] of cwdStats.entries()) {
+            if (count === maxCount) {
+              result = cwd;
+              break;
+            }
+          }
+        }
+      }
+
+      result = result || sanitizedName.replace(/-/g, '/');
+      this.cache.set('projectDirs', sanitizedName, result, CONFIG.CACHE_DURATIONS.PROJECT_DIR);
+      return result;
+
+    } catch (error) {
+      Logger.error(`Error extracting project directory for ${sanitizedName}`, error);
+      const fallback = sanitizedName.replace(/-/g, '/');
+      this.cache.set('projectDirs', sanitizedName, fallback, CONFIG.CACHE_DURATIONS.PROJECT_DIR);
+      return fallback;
+    }
+  }
+
+  // Get All Projects
+  async getProjects() {
+    // Check cache
+    const cached = this.cache.get('projects', 'list');
+    if (cached) return cached;
+
+    const config = await this.loadConfig();
+    const projects = [];
+    const existingProjects = new Set();
+
+    try {
+      // Ensure projects directory exists
+      await FileSystemUtils.ensureDirectory(this.projectsDir);
+      
+      // Read existing project directories
+      const entries = await fs.readdir(this.projectsDir, { withFileTypes: true });
+      
+      // Process directories in parallel batches
+      const directories = entries.filter(e => e.isDirectory());
+      const batchSize = CONFIG.PERFORMANCE.PARALLEL_FILE_READS;
+      
+      for (let i = 0; i < directories.length; i += batchSize) {
+        const batch = directories.slice(i, i + batchSize);
+        const batchPromises = batch.map(async (entry) => {
+          existingProjects.add(entry.name);
+          
+          try {
+            const actualDir = await this.extractProjectDirectory(entry.name);
+            const customName = config[entry.name]?.displayName;
+            const autoName = await this.generateDisplayName(entry.name, actualDir);
+            
+            const project = {
+              name: entry.name,
+              path: actualDir,
+              displayName: customName || autoName,
+              fullPath: actualDir,
+              isCustomName: !!customName,
+              sessions: [],
+              sessionMeta: { total: 0, hasMore: false }
+            };
+
+            // Load most recent session for sorting
+            try {
+              const sessions = await this.getSessions(entry.name, 1, 0);
+              if (sessions.sessions.length > 0) {
+                project.sessions = sessions.sessions;
+                project.sessionMeta = {
+                  total: sessions.total,
+                  hasMore: sessions.hasMore
+                };
+                project.lastActivity = sessions.sessions[0].updated_at;
+              }
+            } catch (error) {
+              Logger.debug(`Failed to load sessions for ${entry.name}`, { error: error.message });
+            }
+
+            return project;
+          } catch (error) {
+            Logger.error(`Error processing project ${entry.name}`, error);
+            return null;
+          }
+        });
+
+        const batchResults = await Promise.all(batchPromises);
+        projects.push(...batchResults.filter(p => p !== null));
+      }
+
+      // Add manually configured projects
+      for (const [projectName, projectConfig] of Object.entries(config)) {
+        if (!existingProjects.has(projectName) && projectConfig.manuallyAdded) {
+          const actualDir = projectConfig.originalPath || 
+                           await this.extractProjectDirectory(projectName);
+          
+          projects.push({
+            name: projectName,
+            path: actualDir,
+            displayName: projectConfig.displayName || 
+                        await this.generateDisplayName(projectName, actualDir),
+            fullPath: actualDir,
+            isCustomName: !!projectConfig.displayName,
+            isManuallyAdded: true,
+            sessions: [],
+            sessionMeta: { total: 0, hasMore: false }
+          });
+        }
+      }
+
+      // Sort by most recent activity
+      projects.sort((a, b) => {
+        const aTime = a.lastActivity || 0;
+        const bTime = b.lastActivity || 0;
+        return new Date(bTime) - new Date(aTime);
+      });
+
+      // Cache results
+      this.cache.set('projects', 'list', projects, CONFIG.CACHE_DURATIONS.PROJECTS_LIST);
+      return projects;
+
+    } catch (error) {
+      Logger.error('Error getting projects', error);
+      throw new ProjectError('Failed to retrieve projects');
+    }
+  }
+
+  // Get Sessions for a Project
+  async getSessions(projectName, limit = 5, offset = 0) {
+    const sanitizedName = Validator.sanitizeProjectName(projectName);
+    const validLimit = Validator.validateLimit(limit);
+    const validOffset = Validator.validateOffset(offset);
+    
+    const cacheKey = `sessions_${sanitizedName}_${validLimit}_${validOffset}`;
+    const cached = this.cache.get('sessions', cacheKey);
+    if (cached) return cached;
+
+    const projectDir = path.join(this.projectsDir, sanitizedName);
+
+    try {
+      if (!await FileSystemUtils.fileExists(projectDir)) {
+        return { sessions: [], hasMore: false, total: 0 };
+      }
+
+      const files = await fs.readdir(projectDir);
+      const jsonlFiles = files.filter(f => f.endsWith('.jsonl'));
+      
+      if (jsonlFiles.length === 0) {
+        return { sessions: [], hasMore: false, total: 0 };
+      }
+
+      // Get file stats for sorting
+      const filesWithStats = await Promise.all(
+        jsonlFiles.map(async (file) => {
+          const filePath = path.join(projectDir, file);
+          const stats = await fs.stat(filePath);
+          return { file, mtime: stats.mtime };
+        })
+      );
+
+      // Sort by modification time (newest first)
+      filesWithStats.sort((a, b) => b.mtime - a.mtime);
+
+      const allSessions = new Map();
+      
+      // Process files
+      for (const { file } of filesWithStats) {
+        const filePath = path.join(projectDir, file);
+        const sessions = await this.parseJsonlSessions(filePath);
+        
+        // Merge sessions
+        for (const session of sessions) {
+          if (!allSessions.has(session.id)) {
+            allSessions.set(session.id, session);
+          }
+        }
+
+        // Early exit if we have enough
+        if (allSessions.size >= validLimit + validOffset) {
+          break;
+        }
+      }
+
+      // Sort and paginate
+      const sortedSessions = Array.from(allSessions.values())
+        .sort((a, b) => new Date(b.lastActivity) - new Date(a.lastActivity));
+      
+      const total = sortedSessions.length;
+      const paginatedSessions = sortedSessions.slice(validOffset, validOffset + validLimit);
+      
+      const result = {
+        sessions: paginatedSessions.map(s => ({
+          ...s,
+          updated_at: s.updated_at || s.lastActivity,
+          created_at: s.created_at || s.lastActivity
+        })),
+        hasMore: validOffset + validLimit < total,
+        total,
+        offset: validOffset,
+        limit: validLimit
+      };
+
+      // Cache result
+      this.cache.set('sessions', cacheKey, result, CONFIG.CACHE_DURATIONS.SESSIONS);
+      return result;
+
+    } catch (error) {
+      Logger.error(`Error getting sessions for ${sanitizedName}`, error);
+      return { sessions: [], hasMore: false, total: 0 };
+    }
+  }
+
+  // Parse JSONL Sessions File
+  async parseJsonlSessions(filePath) {
+    const sessions = new Map();
+    
+    try {
+      for await (const entry of FileSystemUtils.readJsonLines(filePath)) {
+        if (!entry.sessionId) continue;
+
+        if (!sessions.has(entry.sessionId)) {
+          sessions.set(entry.sessionId, {
+            id: entry.sessionId,
+            summary: 'New Session',
+            messageCount: 0,
+            lastActivity: new Date(),
+            cwd: entry.cwd || ''
+          });
+        }
+
+        const session = sessions.get(entry.sessionId);
+
+        // Update summary
+        if (entry.type === 'summary' && entry.summary) {
+          session.summary = entry.summary;
+        } else if (entry.message?.role === 'user' && 
+                   entry.message?.content && 
+                   session.summary === 'New Session') {
+          const content = String(entry.message.content);
+          if (!content.startsWith('<command-name>')) {
+            session.summary = content.length > 50 
+              ? content.substring(0, 50) + '...' 
+              : content;
+          }
+        }
+
+        // Update activity
+        if (entry.timestamp) {
+          session.lastActivity = new Date(entry.timestamp);
+        }
+
+        // Track messages
+        if (!session.hasMessages && entry.message) {
+          session.hasMessages = true;
+          session.messageCount = 1;
+        }
+      }
+
+      return Array.from(sessions.values()).map(session => ({
+        ...session,
+        lastActivity: session.lastActivity.toISOString(),
+        updated_at: session.lastActivity.toISOString(),
+        created_at: session.lastActivity.toISOString()
+      }));
+
+    } catch (error) {
+      Logger.error(`Error parsing JSONL file ${filePath}`, error);
       return [];
     }
+  }
+
+  // Get Session Messages
+  async getSessionMessages(projectName, sessionId) {
+    const sanitizedName = Validator.sanitizeProjectName(projectName);
+    const validSessionId = Validator.validateSessionId(sessionId);
     
-    const messages = [];
+    const projectDir = path.join(this.projectsDir, sanitizedName);
     
-    // Process all JSONL files to find messages for this session
-    for (const file of jsonlFiles) {
-      const jsonlFile = path.join(projectDir, file);
-      const fileStream = fsSync.createReadStream(jsonlFile);
-      const rl = readline.createInterface({
-        input: fileStream,
-        crlfDelay: Infinity
-      });
+    try {
+      const files = await fs.readdir(projectDir);
+      const jsonlFiles = files.filter(f => f.endsWith('.jsonl'));
       
-      for await (const line of rl) {
-        if (line.trim()) {
-          try {
-            const entry = JSON.parse(line);
-            if (entry.sessionId === sessionId) {
-              messages.push(entry);
-            }
-          } catch (parseError) {
+      const messages = [];
+      
+      for (const file of jsonlFiles) {
+        const filePath = path.join(projectDir, file);
+        
+        for await (const entry of FileSystemUtils.readJsonLines(filePath)) {
+          if (entry.sessionId === validSessionId) {
+            messages.push(entry);
           }
         }
       }
+      
+      // Sort by timestamp
+      messages.sort((a, b) => 
+        new Date(a.timestamp || 0) - new Date(b.timestamp || 0)
+      );
+      
+      return messages;
+      
+    } catch (error) {
+      Logger.error(`Error getting messages for session ${validSessionId}`, error);
+      return [];
+    }
+  }
+
+  // Project Operations
+  async renameProject(projectName, newDisplayName) {
+    const sanitizedName = Validator.sanitizeProjectName(projectName);
+    
+    const config = await this.loadConfig();
+    
+    if (!newDisplayName || newDisplayName.trim() === '') {
+      delete config[sanitizedName];
+    } else {
+      const sanitizedDisplayName = newDisplayName.trim()
+        .substring(0, CONFIG.LIMITS.MAX_DISPLAY_NAME_LENGTH);
+      
+      if (!config[sanitizedName]) {
+        config[sanitizedName] = {};
+      }
+      
+      config[sanitizedName].displayName = sanitizedDisplayName;
     }
     
-    // Sort messages by timestamp
-    return messages.sort((a, b) => 
-      new Date(a.timestamp || 0) - new Date(b.timestamp || 0)
-    );
-  } catch (error) {
-    console.error(`Error reading messages for session ${sessionId}:`, error);
-    return [];
-  }
-}
-
-// Rename a project's display name
-async function renameProject(projectName, newDisplayName) {
-  const config = await loadProjectConfig();
-  
-  if (!newDisplayName || newDisplayName.trim() === '') {
-    // Remove custom name if empty, will fall back to auto-generated
-    delete config[projectName];
-  } else {
-    // Set custom display name
-    config[projectName] = {
-      displayName: newDisplayName.trim()
-    };
-  }
-  
-  await saveProjectConfig(config);
-  return true;
-}
-
-// Delete a session from a project
-async function deleteSession(projectName, sessionId) {
-  const projectDir = path.join(process.env.HOME, '.claude', 'projects', projectName);
-  
-  try {
-    const files = await fs.readdir(projectDir);
-    const jsonlFiles = files.filter(file => file.endsWith('.jsonl'));
+    await this.saveConfig(config);
+    this.cache.invalidate('projects');
     
-    if (jsonlFiles.length === 0) {
-      throw new Error('No session files found for this project');
-    }
+    return true;
+  }
+
+  async deleteSession(projectName, sessionId) {
+    const sanitizedName = Validator.sanitizeProjectName(projectName);
+    const validSessionId = Validator.validateSessionId(sessionId);
     
-    // Check all JSONL files to find which one contains the session
-    for (const file of jsonlFiles) {
-      const jsonlFile = path.join(projectDir, file);
-      const content = await fs.readFile(jsonlFile, 'utf8');
-      const lines = content.split('\n').filter(line => line.trim());
+    const projectDir = path.join(this.projectsDir, sanitizedName);
+    
+    try {
+      const files = await fs.readdir(projectDir);
+      const jsonlFiles = files.filter(f => f.endsWith('.jsonl'));
       
-      // Check if this file contains the session
-      const hasSession = lines.some(line => {
-        try {
-          const data = JSON.parse(line);
-          return data.sessionId === sessionId;
-        } catch {
-          return false;
-        }
-      });
+      if (jsonlFiles.length === 0) {
+        throw new NotFoundError('No session files found');
+      }
       
-      if (hasSession) {
-        // Filter out all entries for this session
-        const filteredLines = lines.filter(line => {
+      for (const file of jsonlFiles) {
+        const filePath = path.join(projectDir, file);
+        const content = await fs.readFile(filePath, 'utf8');
+        const lines = content.split('\n').filter(line => line.trim());
+        
+        const hasSession = lines.some(line => {
           try {
             const data = JSON.parse(line);
-            return data.sessionId !== sessionId;
+            return data.sessionId === validSessionId;
           } catch {
-            return true; // Keep malformed lines
+            return false;
           }
         });
         
-        // Write back the filtered content
-        await fs.writeFile(jsonlFile, filteredLines.join('\n') + (filteredLines.length > 0 ? '\n' : ''));
-        return true;
+        if (hasSession) {
+          const filteredLines = lines.filter(line => {
+            try {
+              const data = JSON.parse(line);
+              return data.sessionId !== validSessionId;
+            } catch {
+              return true; // Keep malformed lines
+            }
+          });
+          
+          await fs.writeFile(
+            filePath, 
+            filteredLines.join('\n') + (filteredLines.length > 0 ? '\n' : '')
+          );
+          
+          // Invalidate caches
+          this.cache.invalidate('sessions');
+          this.cache.invalidate('projects');
+          
+          return true;
+        }
       }
-    }
-    
-    throw new Error(`Session ${sessionId} not found in any files`);
-  } catch (error) {
-    console.error(`Error deleting session ${sessionId} from project ${projectName}:`, error);
-    throw error;
-  }
-}
-
-// Check if a project is empty (has no sessions)
-async function isProjectEmpty(projectName) {
-  try {
-    const sessionsResult = await getSessions(projectName, 1, 0);
-    return sessionsResult.total === 0;
-  } catch (error) {
-    console.error(`Error checking if project ${projectName} is empty:`, error);
-    return false;
-  }
-}
-
-// Delete an empty project
-async function deleteProject(projectName) {
-  const projectDir = path.join(process.env.HOME, '.claude', 'projects', projectName);
-  
-  try {
-    // First check if the project is empty
-    const isEmpty = await isProjectEmpty(projectName);
-    if (!isEmpty) {
-      throw new Error('Cannot delete project with existing sessions');
-    }
-    
-    // Remove the project directory
-    await fs.rm(projectDir, { recursive: true, force: true });
-    
-    // Remove from project config
-    const config = await loadProjectConfig();
-    delete config[projectName];
-    await saveProjectConfig(config);
-    
-    return true;
-  } catch (error) {
-    console.error(`Error deleting project ${projectName}:`, error);
-    throw error;
-  }
-}
-
-// Delete a project completely, including all sessions
-async function deleteProjectCompletely(projectName) {
-  const projectDir = path.join(process.env.HOME, '.claude', 'projects', projectName);
-  
-  try {
-    // Remove the entire project directory with all sessions
-    await fs.rm(projectDir, { recursive: true, force: true });
-    
-    // Remove from project config
-    const config = await loadProjectConfig();
-    delete config[projectName];
-    await saveProjectConfig(config);
-    
-    return true;
-  } catch (error) {
-    console.error(`Error deleting project completely ${projectName}:`, error);
-    throw error;
-  }
-}
-
-// Add a project manually to the config (without creating folders)
-async function addProjectManually(projectPath, displayName = null) {
-  const absolutePath = path.resolve(projectPath);
-  
-  try {
-    // Check if the path exists
-    await fs.access(absolutePath);
-  } catch (error) {
-    throw new Error(`Path does not exist: ${absolutePath}`);
-  }
-  
-  // Generate project name (encode path for use as directory name)
-  const projectName = absolutePath.replace(/\//g, '-');
-  
-  // Check if project already exists in config or as a folder
-  const config = await loadProjectConfig();
-  const projectDir = path.join(process.env.HOME, '.claude', 'projects', projectName);
-  
-  try {
-    await fs.access(projectDir);
-    throw new Error(`Project already exists for path: ${absolutePath}`);
-  } catch (error) {
-    if (error.code !== 'ENOENT') {
-      throw error;
+      
+      throw new NotFoundError(`Session ${validSessionId} not found`);
+      
+    } catch (error) {
+      if (error instanceof NotFoundError) throw error;
+      Logger.error(`Error deleting session ${validSessionId}`, error);
+      throw new ProjectError('Failed to delete session');
     }
   }
-  
-  if (config[projectName]) {
-    throw new Error(`Project already configured for path: ${absolutePath}`);
+
+  async isProjectEmpty(projectName) {
+    try {
+      const result = await this.getSessions(projectName, 1, 0);
+      return result.total === 0;
+    } catch {
+      return false;
+    }
   }
-  
-  // Add to config as manually added project
-  config[projectName] = {
-    manuallyAdded: true,
-    originalPath: absolutePath
-  };
-  
-  if (displayName) {
-    config[projectName].displayName = displayName;
+
+  async deleteProject(projectName) {
+    const sanitizedName = Validator.sanitizeProjectName(projectName);
+    const projectDir = path.join(this.projectsDir, sanitizedName);
+    
+    try {
+      const isEmpty = await this.isProjectEmpty(sanitizedName);
+      if (!isEmpty) {
+        throw new ValidationError('Cannot delete project with existing sessions');
+      }
+      
+      await fs.rm(projectDir, { recursive: true, force: true });
+      
+      const config = await this.loadConfig();
+      delete config[sanitizedName];
+      await this.saveConfig(config);
+      
+      // Invalidate all project-related caches
+      this.cache.invalidate('projects');
+      this.cache.invalidate('sessions');
+      this.cache.invalidate('projectDirs', sanitizedName);
+      
+      return true;
+      
+    } catch (error) {
+      if (error instanceof ValidationError) throw error;
+      Logger.error(`Error deleting project ${sanitizedName}`, error);
+      throw new ProjectError('Failed to delete project');
+    }
   }
-  
-  await saveProjectConfig(config);
-  
-  
-  return {
-    name: projectName,
-    path: absolutePath,
-    fullPath: absolutePath,
-    displayName: displayName || await generateDisplayName(projectName, absolutePath),
-    isManuallyAdded: true,
-    sessions: []
-  };
+
+  async deleteProjectCompletely(projectName) {
+    const sanitizedName = Validator.sanitizeProjectName(projectName);
+    const projectDir = path.join(this.projectsDir, sanitizedName);
+    
+    try {
+      await fs.rm(projectDir, { recursive: true, force: true });
+      
+      const config = await this.loadConfig();
+      delete config[sanitizedName];
+      await this.saveConfig(config);
+      
+      // Invalidate all project-related caches
+      this.cache.invalidate('projects');
+      this.cache.invalidate('sessions');
+      this.cache.invalidate('projectDirs', sanitizedName);
+      
+      return true;
+      
+    } catch (error) {
+      Logger.error(`Error deleting project completely ${sanitizedName}`, error);
+      throw new ProjectError('Failed to delete project');
+    }
+  }
+
+  async addProjectManually(projectPath, displayName = null) {
+    const absolutePath = Validator.sanitizePath(projectPath);
+    
+    if (!await FileSystemUtils.fileExists(absolutePath)) {
+      throw new NotFoundError(`Path does not exist: ${absolutePath}`);
+    }
+    
+    // Generate project name
+    const projectName = absolutePath.replace(/\//g, '-');
+    const sanitizedName = Validator.sanitizeProjectName(projectName);
+    
+    // Check if already exists
+    const config = await this.loadConfig();
+    const projectDir = path.join(this.projectsDir, sanitizedName);
+    
+    if (await FileSystemUtils.fileExists(projectDir)) {
+      throw new ValidationError(`Project already exists for path: ${absolutePath}`);
+    }
+    
+    if (config[sanitizedName]) {
+      throw new ValidationError(`Project already configured for path: ${absolutePath}`);
+    }
+    
+    // Add to config
+    config[sanitizedName] = {
+      manuallyAdded: true,
+      originalPath: absolutePath
+    };
+    
+    if (displayName) {
+      config[sanitizedName].displayName = displayName.trim()
+        .substring(0, CONFIG.LIMITS.MAX_DISPLAY_NAME_LENGTH);
+    }
+    
+    await this.saveConfig(config);
+    this.cache.invalidate('projects');
+    
+    return {
+      name: sanitizedName,
+      path: absolutePath,
+      fullPath: absolutePath,
+      displayName: displayName || await this.generateDisplayName(sanitizedName, absolutePath),
+      isManuallyAdded: true,
+      sessions: []
+    };
+  }
+
+  // Cache Management
+  clearCache() {
+    this.cache.invalidateAll();
+  }
+
+  getCacheStats() {
+    return this.cache.getStats();
+  }
 }
 
+// ===========================
+// Singleton Instance
+// ===========================
+let projectManagerInstance = null;
 
-export {
-  getProjects,
-  getSessions,
-  getSessionMessages,
-  parseJsonlSessions,
-  renameProject,
-  deleteSession,
-  isProjectEmpty,
-  deleteProject,
-  deleteProjectCompletely,
-  addProjectManually,
-  loadProjectConfig,
-  saveProjectConfig,
-  extractProjectDirectory,
-  clearProjectDirectoryCache
-};
+function getProjectManager() {
+  if (!projectManagerInstance) {
+    projectManagerInstance = new ProjectManager();
+  }
+  return projectManagerInstance;
+}
+
+// ===========================
+// Exported API (Backward Compatible)
+// ===========================
+const manager = getProjectManager();
+
+export async function getProjects() {
+  return manager.getProjects();
+}
+
+export async function getSessions(projectName, limit = 5, offset = 0) {
+  return manager.getSessions(projectName, limit, offset);
+}
+
+export async function getSessionMessages(projectName, sessionId) {
+  return manager.getSessionMessages(projectName, sessionId);
+}
+
+export async function parseJsonlSessions(filePath) {
+  return manager.parseJsonlSessions(filePath);
+}
+
+export async function renameProject(projectName, newDisplayName) {
+  return manager.renameProject(projectName, newDisplayName);
+}
+
+export async function deleteSession(projectName, sessionId) {
+  return manager.deleteSession(projectName, sessionId);
+}
+
+export async function isProjectEmpty(projectName) {
+  return manager.isProjectEmpty(projectName);
+}
+
+export async function deleteProject(projectName) {
+  return manager.deleteProject(projectName);
+}
+
+export async function deleteProjectCompletely(projectName) {
+  return manager.deleteProjectCompletely(projectName);
+}
+
+export async function addProjectManually(projectPath, displayName = null) {
+  return manager.addProjectManually(projectPath, displayName);
+}
+
+export async function loadProjectConfig() {
+  return manager.loadConfig();
+}
+
+export async function saveProjectConfig(config) {
+  return manager.saveConfig(config);
+}
+
+export async function extractProjectDirectory(projectName) {
+  return manager.extractProjectDirectory(projectName);
+}
+
+export function clearProjectDirectoryCache() {
+  manager.clearCache();
+}
+
+// Export manager for advanced usage
+export { getProjectManager, ProjectError, ValidationError, NotFoundError };

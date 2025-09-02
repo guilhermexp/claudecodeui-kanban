@@ -9,7 +9,6 @@ import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import PreviewPanel from './PreviewPanel';
 import FileManagerSimple from './FileManagerSimple';
 import CtaButton from './ui/CtaButton';
-import { useConfig } from './vibe-kanban/config-provider';
 import { detectBestPreviewUrl } from '../utils/detectPreviewUrl';
 import 'xterm/css/xterm.css';
 
@@ -210,20 +209,25 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   // Terminal theme state
   const [terminalTheme, setTerminalTheme] = useState('dark');
   
-  // Config for sound notifications (same as Vibe Kanban)
-  const configContext = useConfig();
-  const config = configContext?.config;
-  
-  // Sound notification function (same as SettingsModal)
+  // Sound notification function (Web Audio API)
   const playCompletionSound = async () => {
-    if (config?.sound_alerts && config?.sound_file) {
-      const audio = new Audio(`/api/sounds/${config.sound_file}.wav`);
-      try {
-        await audio.play();
-      } catch (err) {
-        console.error('Failed to play completion sound:', err);
-      }
-    }
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, ctx.currentTime); // A5
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.08, ctx.currentTime + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.25);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.3);
+      setTimeout(() => ctx.close && ctx.close().catch(() => {}), 400);
+    } catch {}
   };
   
   // Heartbeat interval reference
@@ -1733,8 +1737,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
           } else if (data.type === 'pong') {
             // Server responded to our ping - connection is alive
           } else if (data.type === 'claude-complete') {
-            // Claude finished a task - play completion sound
-            playCompletionSound();
+            // Claude finished a task - no sound in Shell per design
           }
         } catch (error) {
         }
@@ -1859,7 +1862,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       
       {/* Connect button when not connected */}
       {isInitialized && !isConnected && !isConnecting && (
-        <div className="absolute inset-0 flex items-center justify-center bg-card p-4">
+        <div className="absolute inset-0 flex items-center justify-center bg-card/95 backdrop-blur-sm">
           <div className="flex flex-col items-center gap-3 text-center">
             <div className="text-sm text-muted-foreground">Shell disconnected</div>
             <CtaButton onClick={connectToShell} size="sm" className="justify-center" icon={false}>
@@ -1871,7 +1874,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       
       {/* Connecting state */}
       {isConnecting && (
-        <div className="absolute inset-0 flex items-center justify-center bg-background bg-opacity-90 p-3 sm:p-4">
+        <div className="absolute inset-0 flex items-center justify-center bg-card/95 backdrop-blur-sm">
           <div className="text-center max-w-sm w-full">
             <div className="flex items-center justify-center space-x-2 sm:space-x-3 text-warning">
               <div className="w-5 h-5 sm:w-6 sm:h-6 animate-spin rounded-full border-2 border-warning border-t-transparent"></div>
@@ -2008,7 +2011,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       >
         <div 
           ref={terminalPanelRef}
-          className={`h-full min-h-0 flex flex-col bg-card ${showTerminal ? 'rounded-xl border border-border' : 'border-0'} `} 
+          className={`h-full min-h-0 flex flex-col ${showTerminal ? 'rounded-xl border border-border' : 'border-0'} `} 
           {...dropzoneProps}>
           <input {...inputProps} />
             {/* Header — standardized like Files */}
@@ -2125,17 +2128,18 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
           
 
         {/* Terminal area or Files (empty state of Shell) */}
-        <div className={`flex-1 min-h-0 p-1 md:p-2 pb-1 md:pb-2 overflow-hidden relative`}>
-          {showTerminal ? (
-            terminalContent
-          ) : (
-            !showPreview && (
-              <div className="h-full rounded-2xl border border-border bg-card flex items-center justify-center">
-                <span className="text-xs text-muted-foreground">Terminal hidden</span>
-              </div>
-            )
-          )}
-        </div>
+        {showTerminal && (
+          <div className={`flex-1 min-h-0 p-1 md:p-2 pb-1 md:pb-2 overflow-hidden relative`}>
+            {terminalContent}
+          </div>
+        )}
+        {!showTerminal && !showPreview && (
+          <div className={`flex-1 min-h-0 p-1 md:p-2 pb-1 md:pb-2 overflow-hidden relative`}>
+            <div className="h-full rounded-2xl border border-border bg-card flex items-center justify-center">
+              <span className="text-xs text-muted-foreground">Terminal hidden</span>
+            </div>
+          </div>
+        )}
         </div>
     </Panel>
     

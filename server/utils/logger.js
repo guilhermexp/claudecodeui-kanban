@@ -203,7 +203,9 @@ export function createLogger(service) {
 export const logger = base();
 
 export function printStartupBanner(ports = {}) {
-  const { CLIENT = 5892, SERVER = 7347, VIBE = 6734 } = ports;
+  const { CLIENT = 5892, SERVER = 7347 } = ports;
+  const hasVibe = Object.prototype.hasOwnProperty.call(ports, 'VIBE');
+  const VIBE = hasVibe ? ports.VIBE : null;
   
   // Clear line and print beautiful startup banner
   console.log('');
@@ -216,7 +218,9 @@ export function printStartupBanner(ports = {}) {
   console.log(`${COLORS.brightCyan}│${COLORS.reset}                                                                      ${COLORS.brightCyan}│${COLORS.reset}`);
   console.log(`${COLORS.brightCyan}│${COLORS.reset}    ${COLORS.green}Web:${COLORS.reset}       ${COLORS.brightGreen}http://localhost:${CLIENT}${COLORS.reset}                              ${COLORS.brightCyan}│${COLORS.reset}`);
   console.log(`${COLORS.brightCyan}│${COLORS.reset}    ${COLORS.blue}API:${COLORS.reset}       ${COLORS.brightBlue}http://localhost:${SERVER}${COLORS.reset}                              ${COLORS.brightCyan}│${COLORS.reset}`);
-  console.log(`${COLORS.brightCyan}│${COLORS.reset}    ${COLORS.magenta}Vibe:${COLORS.reset}      ${COLORS.brightMagenta}http://localhost:${VIBE}${COLORS.reset}                              ${COLORS.brightCyan}│${COLORS.reset}`);
+  if (hasVibe && VIBE) {
+    console.log(`${COLORS.brightCyan}│${COLORS.reset}    ${COLORS.magenta}Vibe:${COLORS.reset}      ${COLORS.brightMagenta}http://localhost:${VIBE}${COLORS.reset}                              ${COLORS.brightCyan}│${COLORS.reset}`);
+  }
   console.log(`${COLORS.brightCyan}│${COLORS.reset}                                                                      ${COLORS.brightCyan}│${COLORS.reset}`);
   console.log(`${COLORS.brightCyan}╰──────────────────────────────────────────────────────────────────────╯${COLORS.reset}`);
   console.log('');

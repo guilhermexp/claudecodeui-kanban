@@ -16,8 +16,7 @@ const rootDir = join(__dirname, '..');
 // Define ports directly
 const PORTS = {
   CLIENT: 5892,
-  SERVER: 7347,
-  VIBE_BACKEND: 6734
+  SERVER: 7347
 };
 
 // Enhanced colors for beautiful output
@@ -172,19 +171,7 @@ async function killPortProcesses(ports) {
   }
 }
 
-// Check if vibe-kanban directory exists
-function checkVibeKanban() {
-  const vibeKanbanPath = join(rootDir, 'vibe-kanban');
-  if (DISABLE_VIBE) {
-    log('INFO', 'Vibe Kanban disabled via DISABLE_VIBE', colors.yellow);
-    return false;
-  }
-  if (!existsSync(vibeKanbanPath)) {
-    log('WARNING', 'vibe-kanban directory not found. Skipping Rust backend.', colors.yellow);
-    return false;
-  }
-  return true;
-}
+// Vibe Kanban removed
 
 // Spawn a service with smart restart logic
 function spawnService(name, command, args, options = {}) {
@@ -318,7 +305,7 @@ async function main() {
   // log('INIT', '🛡️ Initializing Port Protection Service', colors.cyan);
   
   // Cleanup existing processes first
-  await killPortProcesses([PORTS.CLIENT, PORTS.SERVER, PORTS.VIBE_BACKEND]);
+  await killPortProcesses([PORTS.CLIENT, PORTS.SERVER]);
   
   // Wait a bit for cleanup
   await new Promise(resolve => setTimeout(resolve, 1000));
@@ -333,7 +320,7 @@ async function main() {
       ['--expose-gc', '--max-old-space-size=2048', 'server/index.js'],
       {
         color: colors.brightGreen,
-        env: { PORT: PORTS.SERVER, VITE_PORT: PORTS.CLIENT, VIBE_PORT: PORTS.VIBE_BACKEND },
+        env: { PORT: PORTS.SERVER, VITE_PORT: PORTS.CLIENT },
         registerCallback: (pid) => {} // portProtector.registerAllowedProcess('SERVER', pid)
       }
     );
@@ -403,31 +390,7 @@ async function main() {
   //   }
   // }, 1000);
 
-  // Start Vibe-Kanban Backend (if exists)
-  if (checkVibeKanban()) {
-    const vibeService = spawnService(
-      'VIBE-BACKEND',
-      'cargo',
-      ['run', '--release'],
-      {
-        color: colors.brightMagenta,
-        cwd: join(rootDir, 'vibe-kanban/backend'),
-        env: { 
-          PORT: PORTS.VIBE_BACKEND,
-          VIBE_NO_BROWSER: 'true'  // Prevent auto browser opening
-        },
-        registerCallback: (pid) => {} // portProtector.registerAllowedProcess('VIBE_BACKEND', pid)
-      }
-    );
-    services.push(vibeService);
-    
-    // Register vibe process as authorized
-    // setTimeout(() => {
-    //   if (vibeService.process && vibeService.process.pid) {
-    //     portProtector.registerAllowedProcess('VIBE_BACKEND', vibeService.process.pid);
-    //   }
-    // }, 2000); // Rust takes longer to start
-  }
+  // Vibe-Kanban Backend removed
 
   // Graceful shutdown
   process.on('SIGINT', () => {
@@ -470,12 +433,10 @@ async function main() {
     // Custom banner already includes an endpoints panel when provided
     log('READY', `Development server running at http://localhost:${PORTS.CLIENT}`, colors.green);
     log('READY', `Backend API available at http://localhost:${PORTS.SERVER}`, colors.green);
-    if (!DISABLE_VIBE && checkVibeKanban()) {
-      log('READY', `Vibe Kanban backend at http://localhost:${PORTS.VIBE_BACKEND}`, colors.green);
-    }
+    // Vibe backend removed
   }, 2000);
 }
-const DISABLE_VIBE = String(process.env.DISABLE_VIBE || process.env.VIBE_DISABLED || '').toLowerCase() === 'true';
+// DISABLE_VIBE no longer used
 
 main().catch(console.error);
 

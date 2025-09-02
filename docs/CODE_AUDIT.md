@@ -7,7 +7,7 @@ Este documento resume a análise de lógica e estrutura do projeto, apontando re
 - `src/`: UI em React (componentes, contexts, hooks, utils). Entradas: `src/main.jsx` e `src/App.jsx`.
 - `server/`: API Express + WebSocket (`server/index.js`), rotas em `server/routes/*`, utilitários em `server/lib/*` e `server/utils/logger.js`.
 - `scripts/`: orquestração do dev (`scripts/dev.js`), HTTPS, rede e manutenção.
-- `vibe-kanban/` (opcional): backend Rust e UI TSX própria.
+- Removido: `vibe-kanban/` (backend Rust e UI TSX).
 - `public/`, `dist/`, `docs/`, `examples/`, `certs/`, `.env*`.
 
 ## Refatorações Prioritárias
@@ -19,8 +19,7 @@ Este documento resume a análise de lógica e estrutura do projeto, apontando re
 
 ## Duplicidades e Convergências
 - Overlays Codex/Claude: `MessageList.jsx`, `MessageItem.jsx`, `MarkdownConfig.jsx`, `CodeBlockCollapsible.jsx` existem em `overlay-codex/` e `overlay-claude/`. Avaliar extrair primitives compartilhadas para `src/components/overlay-shared/` mantendo variações por provider.
-- Util `cn()` duplicado: `src/lib/utils.js` (JS) e `src/lib/vibe-kanban/utils.ts` (TS). Unificar na versão TS tipada e exportar façade JS se necessário.
-- `scroll-area` duplicado em `src/components/ui/scroll-area.jsx` e `src/components/vibe-kanban/ui/scroll-area.tsx`. Consolidar estilo/API.
+- Referências ao Vibe removidas; manter somente utilitários locais.
 
 ## Possíveis Obsolescências / Não Usados
 - Componentes: `src/components/ProjectsModalNew.jsx` (não referenciado).
@@ -78,7 +77,7 @@ Este documento resume a análise de lógica e estrutura do projeto, apontando re
                      │                               │ (OpenAI/CLI/etc.)     
 ┌────────────────────▼───────────────────────────────┴───────────────────────┐
 │                     Vibe Kanban Backend (opcional, 6734)                   │
-│  vibe-kanban/backend (Rust) – integrado via `vibe-proxy`                   │
+│  (Vibe removido)                                                          │
 └────────────────────────────────────────────────────────────────────────────┘
 ```
 

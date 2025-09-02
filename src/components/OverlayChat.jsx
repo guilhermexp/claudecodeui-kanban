@@ -411,6 +411,31 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
   useEffect(() => {
     if (wsMessages && wsMessages.length > 0) {
       const lastMsg = wsMessages[wsMessages.length - 1];
+      const playChatCompleteSound = async () => {
+        try {
+          // Try to play a bundled sound if available
+          const audio = new Audio('/api/sounds/complete.wav');
+          await audio.play();
+        } catch (e) {
+          try {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (!AudioCtx) return;
+            const ctx = new AudioCtx();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(880, ctx.currentTime);
+            gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.08, ctx.currentTime + 0.01);
+            gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.25);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start();
+            osc.stop(ctx.currentTime + 0.3);
+            setTimeout(() => ctx.close && ctx.close().catch(() => {}), 400);
+          } catch {}
+        }
+      };
       
       // Normalize Codex events (ported from Vibe Kanban patterns)
       if (lastMsg.type === 'codex-session-started') {
@@ -501,6 +526,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, previewUrl, e
         setTypingStart(null);
         setElapsedSec(0);
         setActivityLock(false);
+        playChatCompleteSound();
         return;
       }
       if (lastMsg.type === 'codex-error') {

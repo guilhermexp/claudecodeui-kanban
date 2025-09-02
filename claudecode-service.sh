@@ -55,7 +55,7 @@ case "$1" in
         launchctl stop "$PLIST_NAME"
         pkill -f "node.*server/index.js"
         pkill -f "vite"
-        pkill -f "cargo.*vibe-kanban"
+        # Vibe Kanban removed
         pkill -f "ngrok"
         echo "✅ Serviço parado!"
         ;;
@@ -65,8 +65,7 @@ case "$1" in
         # Unload + load garante reexecução do script de inicialização
         launchctl unload "$LAUNCH_AGENTS_DIR/$PLIST_NAME.plist" 2>/dev/null || true
         pkill -f "node.*server/index.js" 2>/dev/null || true
-        pkill -f "cargo.*vibe-kanban" 2>/dev/null || true
-        pkill -f "vibe-kanban.*target/release" 2>/dev/null || true
+        # Vibe Kanban removed
         pkill -f "ngrok" 2>/dev/null || true
         sleep 1
         launchctl load "$LAUNCH_AGENTS_DIR/$PLIST_NAME.plist"
@@ -79,7 +78,7 @@ case "$1" in
         launchctl list | grep "$PLIST_NAME" || echo "Serviço não está rodando"
         echo ""
         echo "🔍 Processos ativos:"
-        ps aux | grep -E "(node.*server|vite|ngrok|vibe-kanban)" | grep -v grep || echo "Nenhum processo encontrado"
+        ps aux | grep -E "(node.*server|vite|ngrok)" | grep -v grep || echo "Nenhum processo encontrado"
         ;;
         
     logs)

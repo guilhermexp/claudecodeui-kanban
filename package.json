@@ -14,7 +14,7 @@
     "server:network": "HOST=0.0.0.0 node --expose-gc --max-old-space-size=2048 server/index.js",
     "client": "vite --host",
     "client:network": "vite --host 0.0.0.0",
-    "vibe-backend": "cd vibe-kanban && PORT=6734 cargo run --release",
+    
     "build": "vite build",
     "preview": "vite build && vite preview",
     "start": "npm run build && npm run server",
@@ -23,8 +23,7 @@
     "switch-to-prod": "node scripts/port-management.js switch-to-prod",
     "switch-to-dev": "node scripts/port-management.js switch-to-dev",
     "stop-all": "node scripts/port-management.js stop-all",
-    "cleanup-status": "curl -s http://localhost:7347/api/cleanup/status | jq",
-    "cleanup-force": "curl -X POST http://localhost:7347/api/cleanup/force",
+    
     "ngrok": "echo 'Deprecated. Use ./start-background-prod.sh'",
     "hooks:enable": "node scripts/claude-hooks-cli.js enable",
     "hooks:disable": "node scripts/claude-hooks-cli.js disable",
@@ -103,6 +102,7 @@
     "@types/react-dom": "^18.2.17",
     "@vitejs/plugin-react": "^4.6.0",
     "autoprefixer": "^10.4.16",
+    "chalk": "^5.6.0",
     "node-fetch": "^2.7.0",
     "postcss": "^8.4.32",
     "tailwindcss": "^3.4.0",
