@@ -599,7 +599,7 @@ function MainContent({
           }`}>
             {/* Always mounted to preserve session state when switching panels */}
             <div className={`${activeSidePanel === 'codex-chat' ? 'opacity-100' : 'opacity-0'} transition-opacity duration-200`}
-                 style={{ pointerEvents: activeSidePanel === 'codex-chat' ? 'auto' : 'none' }}>
+                 style={{ pointerEvents: activeSidePanel === 'codex-chat' ? 'auto' : 'none', height: '100%' }}>
               <OverlayChatClaude 
                 key="codex-chat-panel"
                 embedded={true}
