@@ -1690,16 +1690,18 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
                   className="w-full justify-center px-3 py-1.5 text-xs rounded-2xl"
                   title="Start new session"
                 >
-                  Start
+                  {cliProvider === 'claude' ? 'Start' : 'Start Codex'}
                 </CtaButton>
-                <CtaButton
-                  onClick={startSessionBypass}
-                  variant="default"
-                  className="w-full justify-center px-3 py-1.5 text-xs rounded-2xl"
-                  title="Start with full permissions (bypass)"
-                >
-                  Bypass
-                </CtaButton>
+                {cliProvider === 'claude' && (
+                  <CtaButton
+                    onClick={startSessionBypass}
+                    variant="default"
+                    className="w-full justify-center px-3 py-1.5 text-xs rounded-2xl"
+                    title="Start with full permissions (bypass)"
+                  >
+                    Bypass
+                  </CtaButton>
+                )}
                 {/* Resume removed from header; use the Resume chip above input */}
               </div>
             </div>
@@ -1776,21 +1778,23 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
                 size="sm"
                 className="justify-center"
               >
-                Start Claude
+                {cliProvider === 'claude' ? 'Start Claude' : 'Start Codex'}
               </CtaButton>
-              <CtaButton
-                onClick={startSessionBypass}
-                disabled={isSessionInitializing || !isConnected}
-                icon={false}
-                variant="default"
-                size="sm"
-                className="justify-center"
-              >
-                Start Bypass
-              </CtaButton>
+              {cliProvider === 'claude' && (
+                <CtaButton
+                  onClick={startSessionBypass}
+                  disabled={isSessionInitializing || !isConnected}
+                  icon={false}
+                  variant="default"
+                  size="sm"
+                  className="justify-center"
+                >
+                  Start Bypass
+                </CtaButton>
+              )}
             </div>
             <div className="text-center select-none">
-              <div className="text-sm sm:text-base font-semibold text-foreground/90">Start a new Claude session</div>
+              <div className="text-sm sm:text-base font-semibold text-foreground/90">{cliProvider === 'claude' ? 'Start a new Claude session' : 'Start a new Codex session'}</div>
               <div className="text-muted-foreground text-xs">Arraste imagens ou pressione ⌘V para adicionar ao chat</div>
             </div>
           </div>
