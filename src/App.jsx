@@ -9,7 +9,8 @@ import SessionKeepAlive from './components/SessionKeepAlive';
 import { FloatingMicMenu } from './components/FloatingMicMenu';
 import SessionsView from './components/SessionsView';
 
-import { useWebSocket } from './utils/websocket';
+// WebSocket is managed by ClaudeWebSocketProvider; avoid duplicate connections
+import { useClaudeWebSocket } from './contexts/ClaudeWebSocketContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ClaudeWebSocketProvider } from './contexts/ClaudeWebSocketContext';
@@ -62,22 +63,16 @@ function AppContent() {
   const { isLoading: authLoading, user } = useAuth();
   const authReady = !authLoading && !!user;
   
-  const { ws, sendMessage, messages, reconnect } = useWebSocket(authReady, '/claude');
+  // Use the unified Claude WebSocket from context (single connection)
+  const { isConnected, registerMessageHandler, connect } = useClaudeWebSocket();
 
 
+  // Ensure socket connects once auth is ready
   useEffect(() => {
-    const handleStorageChange = (e) => {
-      if (e.key === 'auth-token') {
-        if (e.newValue) {
-          // Token was added, reconnect WebSocket
-          reconnect();
-        }
-      }
-    };
-    
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
-  }, [reconnect]);
+    if (authReady && !isConnected) {
+      try { connect(); } catch {}
+    }
+  }, [authReady, isConnected, connect]);
 
   // Persist state changes
   useEffect(() => {
@@ -224,10 +219,9 @@ function AppContent() {
     return sessionUnchanged;
   };
 
-  // Handle WebSocket messages for real-time project updates
+  // Handle WebSocket messages for real-time project updates (single provider socket)
   useEffect(() => {
-    if (messages.length > 0) {
-      const latestMessage = messages[messages.length - 1];
+    const unsubscribe = registerMessageHandler('app-projects', (latestMessage) => {
       
       // Handle session not found error (when resuming external Claude CLI sessions)
       if (latestMessage.type === 'session-not-found') {
@@ -295,8 +289,9 @@ function AppContent() {
           }
         }
       }
-    }
-  }, [messages, selectedProject, selectedSession, activeSessions]);
+    });
+    return () => { try { unsubscribe && unsubscribe(); } catch {} };
+  }, [registerMessageHandler, selectedProject, selectedSession, activeSessions, projects]);
 
   const fetchProjects = async () => {
     try {
@@ -590,9 +585,7 @@ function AppContent() {
             selectedSession={selectedSession}
           activeTab={activeTab}
           setActiveTab={setActiveTab}
-          ws={ws}
-          sendMessage={sendMessage}
-          messages={messages}
+          // WebSocket handled via ClaudeWebSocketContext; no direct props needed
           isMobile={isMobile}
           onMenuClick={() => {}} // No longer needed
           onSidebarOpen={() => {}} // No longer needed

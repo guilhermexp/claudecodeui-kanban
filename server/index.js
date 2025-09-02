@@ -85,6 +85,8 @@ import filesRoutes from './routes/files.js';
 import claudeHooksRoutes from './routes/claude-hooks.js';
 import claudeStreamRoutes from './routes/claude-stream.js';
 import ttsRoutes from './routes/tts.js';
+import aiRoutes from './routes/ai.js';
+import indexerRoutes from './routes/indexer.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 import { 
@@ -328,7 +330,9 @@ app.use((req, res, next) => {
 app.use(resourceMonitor);
 app.use(speedLimiter);
 app.use(cors());
-app.use(express.json());
+// Increase JSON payload limit to handle large text for AI processing
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // DEPRECATED: Temporary logo endpoint to handle cached browser requests
 app.get('/api/projects/:projectName/logo', (req, res) => {
@@ -504,6 +508,8 @@ app.use('/api/files', filesRoutes);
 app.use('/api/claude-hooks', authenticateToken, claudeHooksRoutes);
 app.use('/api/claude-stream', claudeStreamRoutes);
 app.use('/api/tts', ttsRoutes);
+app.use('/api/ai', authenticateToken, aiRoutes);
+app.use('/api/indexer', indexerRoutes);
 
 // Sound files API route for Vibe Kanban sound notifications
 app.get('/api/sounds/:soundFile', (req, res) => {
@@ -1624,16 +1630,10 @@ function handleUnifiedClaudeConnection(ws, request) {
   
   ws.on('close', () => {
     clog.info('[CLAUDE WS] Connection closed');
-    // Cleanup all sessions
-    if (sessions.shell?.process) {
-      sessions.shell.process.kill();
-    }
-    if (sessions.claude?.sessionId) {
-      abortClaudeSession(sessions.claude.sessionId);
-    }
-    if (codexCurrentProcess) {
-      codexCurrentProcess.kill();
-    }
+    // Do NOT forcibly kill long-running jobs on socket close.
+    // Allow Codex/Claude processes to finish to improve stability during brief disconnects.
+    // Shell remains tied to its own /shell endpoint lifecycle.
+    try { /* keep running jobs detached */ } catch {}
     connectedClients.delete(ws);
   });
 }

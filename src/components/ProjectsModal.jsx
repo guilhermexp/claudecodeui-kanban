@@ -9,6 +9,7 @@ import { Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, ChevronU
 import { ProjectIcon } from '../utils/projectIcons.jsx';
 import { cn } from '../lib/utils';
 import ClaudeLogo from './ClaudeLogo';
+// duplicate import removed
 import { api } from '../utils/api';
 import { formatTimeAgo } from '../utils/time';
 // FolderPicker removed with Vibe Kanban integration
@@ -37,6 +38,8 @@ function ProjectsModal({
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [projectFilter, setProjectFilter] = useState('all');
+  const [toast, setToast] = useState(null);
+  const [indexing, setIndexing] = useState(null); // project name currently indexing
 
   // Time update interval
   useEffect(() => {
@@ -234,15 +237,43 @@ function ProjectsModal({
                         <div className="text-[10px] sm:text-[11px] text-muted-foreground">
                           {latestSession ? `Updated ${formatTimeAgo(latestSession.updated_at, currentTime)}` : 'No sessions yet'}
                         </div>
-                        <div className="flex flex-wrap gap-1">
+                      <div className="flex flex-wrap gap-1">
                           <button
                             className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] rounded border border-border/60 bg-background/40 hover:bg-accent/20 text-foreground"
-                            onClick={(e) => { e.stopPropagation(); onNewSession?.(project); onClose(); }}
+                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onNewSession?.(project); onClose(); }}
                             title="New session"
                           >
                             <Plus className="w-3 h-3" />
                             <span className="hidden sm:inline">New session</span>
                             <span className="sm:hidden">New</span>
+                          </button>
+                          {/* Index repo */}
+                          <button
+                            className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] rounded border border-border/60 bg-background/40 hover:bg-accent/20 text-foreground disabled:opacity-50"
+                            disabled={!!indexing}
+                            onClick={async (e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setIndexing(project.name);
+                              try {
+                                await api.indexer.create(project.fullPath || project.path, project.name);
+                                setToast({ type: 'success', message: 'Repository indexed successfully' });
+                                setTimeout(() => setToast(null), 2000);
+                              } catch (err) {
+                                setToast({ type: 'error', message: 'Failed to index repository' });
+                                setTimeout(() => setToast(null), 2500);
+                              } finally {
+                                setIndexing(null);
+                              }
+                            }}
+                            title="Index repository for AI context"
+                          >
+                            {indexing === project.name ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <FolderSearch className="w-3 h-3" />
+                            )}
+                            Index repo
                           </button>
                           {latestSession && (
                             <button
@@ -331,6 +362,13 @@ function ProjectsModal({
     </Dialog>
 
     { /* Folder Picker removed */ }
+    {toast && (
+      <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50">
+        <div className={`px-3 py-2 text-xs border rounded-md shadow-sm ${toast.type==='success' ? 'bg-success/15 text-success border-success/30' : 'bg-destructive/15 text-destructive border-destructive/30'}`}>
+          {toast.message}
+        </div>
+      </div>
+    )}
     </>
   );
 }

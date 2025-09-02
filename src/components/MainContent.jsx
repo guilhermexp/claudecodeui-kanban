@@ -16,9 +16,9 @@ import FileManagerSimple from './FileManagerSimple';
 import CodeEditor from './CodeEditor';
 import Shell from './Shell';
 import GitPanel from './GitPanel';
-import OverlayChat from './OverlayChat';
 import OverlayChatClaude from './OverlayChatClaude';
 import ResourceMonitor from './ResourceMonitor';
+import PromptsModal from './PromptsModal';
 import ErrorBoundary from './ErrorBoundary';
 import { TextShimmer } from './ui/text-shimmer';
 import { createLogger } from '../utils/logger';
@@ -70,7 +70,7 @@ function MainContent({
   const [contextWindowPercentage, setContextWindowPercentage] = useState(null);
   const [shellResizeTrigger, setShellResizeTrigger] = useState(0);
   // Panel states - only one can be open at a time
-  const [activeSidePanel, setActiveSidePanel] = useState(null); // 'files' | 'git' | 'chat' | null
+  const [activeSidePanel, setActiveSidePanel] = useState(null); // 'codex-chat' | 'claude-chat'
   const [hasPreviewOpen, setHasPreviewOpen] = useState(false); // Track if preview is open
   const [shellVisible, setShellVisible] = useState(true); // Terminal visibility for header dynamics
   // Shell terminals state removed - single terminal mode only
@@ -79,6 +79,7 @@ function MainContent({
   const [showProjectsModal, setShowProjectsModal] = useState(false);
   // const [showKanbanModal, setShowKanbanModal] = useState(false);
   const [showGitModal, setShowGitModal] = useState(false);
+  const [showPromptsModal, setShowPromptsModal] = useState(false);
   const [toast, setToast] = useState(null);
   const [claudeOverlaySessionId, setClaudeOverlaySessionId] = useState(null);
   const [claudeOverlayControls, setClaudeOverlayControls] = useState(null);
@@ -405,6 +406,22 @@ function MainContent({
                   <span className="hidden sm:inline">Files</span>
                 </span>
               </button>
+
+              {/* Prompts Hub button (opens modal) */}
+              <button
+                onClick={() => setShowPromptsModal(true)}
+                className={`relative inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
+                  'text-muted-foreground hover:text-foreground hover:bg-accent'
+                }`}
+                title="Open Prompts Hub"
+              >
+                <span className="flex items-center gap-1 sm:gap-1.5 leading-none">
+                  <svg className="w-3 sm:w-3.5 h-3 sm:h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 15a4 4 0 0 1-4 4H7l-4 4V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8z" />
+                  </svg>
+                  <span className="hidden sm:inline">Prompts</span>
+                </span>
+              </button>
               
               
               <button
@@ -575,22 +592,25 @@ function MainContent({
 
         {/* Removed empty-state overlay when shell is hidden to avoid duplication */}
 
-        {/* Codex Chat panel integrated */}
+        {/* Codex Chat panel integrated (uses unified Claude overlay for consistent UI) */}
         {!isMobile && (
           <div className={`transition-all duration-300 ease-in-out overflow-hidden ${
             activeSidePanel === 'codex-chat' ? 'w-[260px] sm:w-[320px] md:w-[360px] lg:w-[420px] border-l border-border bg-black' : 'w-0'
           }`}>
             {activeSidePanel === 'codex-chat' && (
-              <OverlayChat 
+              <OverlayChatClaude 
+                key="codex-chat-panel"
                 embedded={true}
                 disableInlinePanel={true}
-                projectPath={selectedProject?.path}
-                previewUrl={null}
-                onPanelClosed={() => setActiveSidePanel(null)}
                 cliProviderFixed="codex"
                 chatId="codex-instance"
+                projectPath={selectedProject?.path}
+                projects={projects}
+                previewUrl={null}
+                onSessionIdChange={() => {}}
                 onBindControls={setCodexOverlayControls}
                 onActivityChange={(active) => setChatActivity(active)}
+                onPanelClosed={() => setActiveSidePanel(null)}
               />
             )}
           </div>
@@ -694,6 +714,9 @@ function MainContent({
           </div>
         </div>
       )}
+
+      {/* Prompts Modal */}
+      <PromptsModal isOpen={showPromptsModal} onClose={() => setShowPromptsModal(false)} />
 
 
       {/* Toast - discrete top-center notice */}
