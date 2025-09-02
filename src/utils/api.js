@@ -161,4 +161,7 @@ export const api = {
     search: (id, query) => authenticatedFetch('/api/indexer/search', { method: 'POST', body: JSON.stringify({ id, query }) }),
     github: (url, name, branch) => authenticatedFetch('/api/indexer/github', { method: 'POST', body: JSON.stringify({ url, name, branch }) }),
   },
+  system: {
+    pickFolder: () => authenticatedFetch('/api/system/pick-folder', { method: 'POST' }),
+  },
 };

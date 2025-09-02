@@ -4,6 +4,7 @@ import { useConsoleCapture } from '../hooks/preview/useConsoleCapture';
 import { useElementSelection } from '../hooks/preview/useElementSelection';
 import FileManagerSimple from './FileManagerSimple';
 import CtaButton from './ui/CtaButton';
+import { useClaudeWebSocket } from '../contexts/ClaudeWebSocketContext';
 
 function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPaused = false, onBindControls = null }) {
   const [isLoading, setIsLoading] = useState(true);
@@ -42,6 +43,7 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
   const [stopping, setStopping] = useState(false);
   const [previewBlocked, setPreviewBlocked] = useState(false);
   const [blockReason, setBlockReason] = useState('');
+  const [startHint, setStartHint] = useState('');
   const pingTimerRef = useRef(null);
   const pingAttemptsRef = useRef(0);
 
@@ -50,14 +52,10 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
     const { running, url: detectedUrl } = await apiRefreshStatus(projectName);
     setPreviewRunning(running);
     if (running && !userEditedUrl && !isPaused) {
-      // If we have a detected URL, use it directly for the iframe
-      if (detectedUrl) {
-        setCurrentUrl(detectedUrl);
-        setUiUrl(detectedUrl);
-      } else {
-        // Fall back to proxy route only if no direct URL available
-        setCurrentUrl(`/preview/${encodeURIComponent(projectName)}/`);
-      }
+      // Prefer same-origin proxy route for full features (element selection, console capture)
+      setCurrentUrl(`/preview/${encodeURIComponent(projectName)}/`);
+      // Show the actual URL in the input for external open
+      if (detectedUrl) setUiUrl(detectedUrl);
     }
   };
 
@@ -86,6 +84,7 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
   const startBackendPreview = async () => {
     if (!projectName || starting) return;
     setStarting(true);
+    setStartHint('');
     setShowFileTree(false);
     try {
       const result = await apiStartPreview(projectName);
@@ -103,11 +102,13 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
       
       const { url: detectedUrl } = result;
       setPreviewRunning(true);
+      // Always use the proxy path in the iframe for same-origin behavior
+      setCurrentUrl(`/preview/${encodeURIComponent(projectName)}/`);
       if (detectedUrl) {
-        // Use the actual URL for the iframe
-        setCurrentUrl(detectedUrl);
+        // Keep the actual URL in the input for external open
         setUiUrl(detectedUrl);
         setUserEditedUrl(false);
+        // Ping the real server URL to detect readiness, then refresh the proxy iframe
         waitForServer(detectedUrl);
       }
     } catch (err) {
@@ -187,8 +188,14 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
   useEffect(() => {
     // Only update from props if user hasn't edited the URL
     if (!userEditedUrl && !isPaused && url) {
-      setCurrentUrl(url);
-      setUiUrl(url); // Also set the UI URL for external open
+      // If a direct URL was provided by Shell, prefer same-origin proxy in iframe
+      if (projectName && /^https?:\/\//.test(url)) {
+        setCurrentUrl(`/preview/${encodeURIComponent(projectName)}/`);
+        setUiUrl(url);
+      } else {
+        setCurrentUrl(url);
+        setUiUrl(url); // Also set the UI URL for external open
+      }
       setIsLoading(true);
       setError(null);
       setLogs([]);
@@ -278,6 +285,72 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
     }
   };
   
+  // Live preview updates via WebSocket events from server
+  const { registerMessageHandler } = useClaudeWebSocket();
+  useEffect(() => {
+    if (!projectName || typeof registerMessageHandler !== 'function') return undefined;
+    const id = `preview-panel-${projectName}`;
+    return registerMessageHandler(id, (msg) => {
+      try {
+        if (!msg || !msg.type) return;
+        if (msg.project && msg.project !== projectName) return;
+        switch (msg.type) {
+          case 'preview_starting': {
+            setStarting(true);
+            setPreviewRunning(false);
+            setPreviewBlocked(false);
+            setBlockReason('');
+            setStartHint('');
+            setCurrentUrl(`/preview/${encodeURIComponent(projectName)}/`);
+            if (msg.url) setUiUrl(msg.url);
+            break;
+          }
+          case 'preview_success': {
+            setStarting(false);
+            setPreviewRunning(true);
+            setPreviewBlocked(false);
+            setBlockReason('');
+            setStartHint('');
+            if (msg.url) setUiUrl(msg.url);
+            setCurrentUrl(`/preview/${encodeURIComponent(projectName)}/`);
+            if (!isPaused) {
+              try { handleRefresh(); } catch {}
+            }
+            break;
+          }
+          case 'preview_error': {
+            const err = String(msg.error || '').toLowerCase();
+            if (err.includes('not available') || err.includes('no package.json') || err.includes('system or configuration')) {
+              setStarting(false);
+              setPreviewRunning(false);
+              setPreviewBlocked(true);
+              setBlockReason(msg.error || 'Preview not available for this project');
+              setStartHint('');
+            } else if (err.includes('retrying') && err.includes('port')) {
+              // Keep starting state while preview manager retries
+              setStarting(true);
+              setStartHint(msg.error || 'Port in use, retrying with next available port...');
+            } else {
+              setStarting(false);
+              setError(msg.error || 'Preview error');
+              setStartHint('');
+            }
+            break;
+          }
+          case 'preview_stopped': {
+            setStarting(false);
+            setPreviewRunning(false);
+            setCurrentUrl('');
+            setStartHint('');
+            break;
+          }
+          default:
+            break;
+        }
+      } catch {}
+    });
+  }, [projectName, registerMessageHandler, isPaused]);
+
   // Expose refresh function to global scope for MainContent
   useEffect(() => {
     window.refreshPreview = handleRefresh;
@@ -905,12 +978,23 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
               </div>
               <h3 className="text-lg font-semibold text-foreground mb-2">Unable to Load Preview</h3>
               <p className="text-sm text-muted-foreground mb-4">{error}</p>
-              <button
-                onClick={handleRefresh}
-                className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
-              >
-                Try Again
-              </button>
+              <div className="flex items-center justify-center gap-2">
+                <button
+                  onClick={handleRefresh}
+                  className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+                >
+                  Try Again
+                </button>
+                {projectName && (
+                  <button
+                    onClick={() => setShowServerLogs(true)}
+                    className="px-3 py-2 bg-muted text-foreground rounded-md hover:bg-accent transition-colors"
+                    title="View server logs"
+                  >
+                    View Server Logs
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -933,7 +1017,7 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
             </div>
           ) : (starting || !previewRunning || !currentUrl) ? (
             <div className="text-center text-foreground/90">
-              <ClaudableLoader starting={starting} onStart={startBackendPreview} />
+              <ClaudableLoader starting={starting} onStart={startBackendPreview} hint={startHint} />
             </div>
           ) : (
             <div className={`${deviceMode==='mobile' ? 'w-[375px] h-[667px] rounded-[20px] border-8 border-neutral-800 shadow-2xl overflow-hidden' : 'w-full h-full'} bg-background`}>
@@ -1051,13 +1135,16 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
 
 export default React.memo(PreviewPanel);
 
-function ClaudableLoader({ starting, onStart }) {
+function ClaudableLoader({ starting, onStart, hint = '' }) {
   return (
   <div className="text-center">
     <RingLogo spinning={starting} />
     <div className="mt-4">{!starting && (<CtaButton onClick={onStart} size="sm" className="justify-center">Start Preview</CtaButton>)}</div>
       <h2 className="text-3xl font-semibold mt-6">{starting ? 'Starting Preview…' : 'Preview Not Running'}</h2>
       <p className="text-sm text-white/60 mt-2">Start your development server to see live changes</p>
+      {starting && hint && (
+        <p className="text-xs text-muted-foreground mt-2">{hint}</p>
+      )}
     </div>
   );
 }

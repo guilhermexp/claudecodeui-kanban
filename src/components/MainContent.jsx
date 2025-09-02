@@ -24,6 +24,7 @@ import { TextShimmer } from './ui/text-shimmer';
 import { createLogger } from '../utils/logger';
 import ProjectsModal from './ProjectsModal';
 import DarkModeToggle from './DarkModeToggle';
+import PromptEnhancer from './PromptEnhancer';
 import { Folder, Settings as SettingsIcon } from 'lucide-react';
 import CtaButton from './ui/CtaButton';
 
@@ -81,6 +82,7 @@ function MainContent({
   const [showGitModal, setShowGitModal] = useState(false);
   const [showPromptsModal, setShowPromptsModal] = useState(false);
   const [toast, setToast] = useState(null);
+  const [showPromptEnhancer, setShowPromptEnhancer] = useState(false);
   const [claudeOverlaySessionId, setClaudeOverlaySessionId] = useState(null);
   const [claudeOverlayControls, setClaudeOverlayControls] = useState(null);
   const [codexOverlayControls, setCodexOverlayControls] = useState(null);
@@ -132,6 +134,37 @@ function MainContent({
     if (onShellSessionStateChange) {
       onShellSessionStateChange(isActive);
     }
+  };
+
+  // Helpers to ensure chat panels are open before sending from Prompt Enhancer
+  const waitFor = (check, { timeout = 2000, interval = 50 } = {}) => new Promise((resolve) => {
+    const start = Date.now();
+    const tick = () => {
+      if (check()) return resolve(true);
+      if (Date.now() - start >= timeout) return resolve(false);
+      setTimeout(tick, interval);
+    };
+    tick();
+  });
+
+  const ensureClaudeOpen = async () => {
+    if (activeSidePanel !== 'claude-chat') setActiveSidePanel('claude-chat');
+    const ok = await waitFor(() => !!claudeOverlayControls && typeof claudeOverlayControls.insert === 'function');
+    if (!ok) {
+      setToast({ message: 'Abra o painel do Claude para enviar o texto' });
+      setTimeout(() => setToast(null), 2200);
+    }
+    return ok;
+  };
+
+  const ensureCodexOpen = async () => {
+    if (activeSidePanel !== 'codex-chat') setActiveSidePanel('codex-chat');
+    const ok = await waitFor(() => !!codexOverlayControls && typeof codexOverlayControls.insert === 'function');
+    if (!ok) {
+      setToast({ message: 'Abra o painel do Codex para enviar o texto' });
+      setTimeout(() => setToast(null), 2200);
+    }
+    return ok;
   };
   if (isLoading) {
     return (
@@ -353,8 +386,8 @@ function MainContent({
         </div>
 
         {/* Centered tabs container across the header */}
-        <div className="pointer-events-auto hidden sm:flex absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 z-40">
-          <div className="flex items-center bg-muted rounded-lg p-1 gap-1 shadow-sm">
+          <div className="pointer-events-auto hidden sm:flex absolute left-1/2 -translate-x-1/2 top-1/2 -translate-y-1/2 z-40">
+          <div className="flex items-center rounded-[22px] bg-muted border border-border p-1 gap-1.5 shadow-inner">
               {/* Projects */}
               {!shellVisible && (
               <button
@@ -373,7 +406,7 @@ function MainContent({
 
               <button
                 onClick={() => setShowProjectsModal(true)}
-                className="relative inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 text-muted-foreground hover:text-foreground hover:bg-accent"
+                className="relative inline-flex items-center gap-1 px-3 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-[12px] border transition text-muted-foreground hover:text-foreground border-transparent"
                 title="Open Projects"
               >
                 <span className="flex items-center gap-1 sm:gap-1.5 leading-none">
@@ -387,17 +420,23 @@ function MainContent({
               {/* Files (desktop hidden if mobile). Opens preview + file tree */}
               <button
                 onClick={() => {
-                  if (activeSidePanel === 'claude-chat' || activeSidePanel === 'codex-chat') {
-                    try { window.__shellControls?.hideTerminal?.(); } catch {}
+                  if (!selectedProject || selectedProject?.isStandalone || selectedProject?.path === 'STANDALONE_MODE') {
+                    setShowProjectsModal(true);
+                    setToast({ message: 'Select a project to browse files' });
+                    setTimeout(() => setToast(null), 1800);
+                    return;
                   }
                   try {
-                    // Show files first so it becomes the primary view, then ensure preview is open
-                    window.__shellControls?.showFiles?.();
-                    window.__shellControls?.openPreview?.();
+                    if (window.__shellControls?.openFilesPrimary) {
+                      window.__shellControls.openFilesPrimary();
+                    } else {
+                      window.__shellControls?.openPreview?.();
+                      setTimeout(() => window.__shellControls?.showFiles?.(), 80);
+                    }
                   } catch {}
                   setTimeout(() => setShellResizeTrigger(prev => prev + 1), 350);
                 }}
-                className={`hidden sm:inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 text-muted-foreground hover:text-foreground hover:bg-accent`}
+                className={`hidden sm:inline-flex items-center gap-1 px-3 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-[12px] border transition ${'text-muted-foreground hover:text-foreground border-transparent'}`}
               >
                 <span className="flex items-center gap-1 sm:gap-1.5 leading-none">
                   <svg className="w-3 sm:w-3.5 h-3 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -410,9 +449,7 @@ function MainContent({
               {/* Prompts Hub button (opens modal) */}
               <button
                 onClick={() => setShowPromptsModal(true)}
-                className={`relative inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
-                  'text-muted-foreground hover:text-foreground hover:bg-accent'
-                }`}
+                className={`relative inline-flex items-center gap-1 px-3 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-[12px] border transition text-muted-foreground hover:text-foreground border-transparent`}
                 title="Open Prompts Hub"
               >
                 <span className="flex items-center gap-1 sm:gap-1.5 leading-none">
@@ -433,7 +470,7 @@ function MainContent({
                   }
                   setShowGitModal(true);
                 }}
-                className="relative inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 text-muted-foreground hover:text-foreground hover:bg-accent"
+                className="relative inline-flex items-center gap-1 px-3 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-[12px] border transition text-muted-foreground hover:text-foreground border-transparent"
               >
                 <span className="flex items-center gap-1 sm:gap-1.5 leading-none">
                   <svg className="w-3 sm:w-3.5 h-3 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -461,10 +498,10 @@ function MainContent({
                   }
                   setTimeout(() => setShellResizeTrigger(prev => prev + 1), 350);
                 }}
-                className={`relative inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
+                className={`relative inline-flex items-center gap-1 px-3 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-[12px] border transition ${
                   activeSidePanel === 'codex-chat'
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                    ? 'bg-background text-foreground border-border shadow'
+                    : 'text-muted-foreground hover:text-foreground border-transparent'
                 }`}
                 title="Open Codex AI Assistant"
               >
@@ -495,10 +532,10 @@ function MainContent({
                   }
                   setTimeout(() => setShellResizeTrigger(prev => prev + 1), 350);
                 }}
-                className={`relative inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
+                className={`relative inline-flex items-center gap-1 px-3 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-[12px] border transition ${
                   activeSidePanel === 'claude-chat'
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                    ? 'bg-background text-foreground border-border shadow'
+                    : 'text-muted-foreground hover:text-foreground border-transparent'
                 }`}
                 title="Open Claude Code Assistant"
               >
@@ -516,9 +553,21 @@ function MainContent({
           
           {/* Right-side controls group - Settings, Dark Mode, System */}
           <div className="flex absolute right-4 top-1/2 -translate-y-1/2 z-40">
-            <div className="flex items-center bg-muted rounded-lg p-1 gap-1 shadow-sm">
+            <div className="flex items-center rounded-[22px] bg-muted border border-border p-1 gap-1.5 shadow-inner">
+              {/* Prompt Enhancer small button */}
+              <button
+                onClick={() => setShowPromptEnhancer(true)}
+                className="px-2 h-7 rounded-[12px] text-[11px] border text-muted-foreground bg-background/80 border-border hover:bg-accent hover:text-foreground inline-flex items-center gap-1"
+                title="Open Prompt Enhancer"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
+                  <path d="M5 8l6 6"/>
+                  <path d="M4 14l7-7 3 3-7 7H4v-3z"/>
+                </svg>
+                <span className="hidden sm:inline">Enhance</span>
+              </button>
               {claudeOverlaySessionId && !String(claudeOverlaySessionId).startsWith('temp-') && (
-                <span className="hidden sm:inline-flex items-center h-7 px-2 rounded-md bg-background/80 text-[11px] text-muted-foreground border border-border/40 mr-1" title="Claude session active">
+                <span className="hidden sm:inline-flex items-center h-7 px-2 rounded-[12px] bg-accent/30 text-[11px] text-muted-foreground border border-border mr-1" title="Claude session active">
                   Active
                 </span>
               )}
@@ -533,21 +582,21 @@ function MainContent({
                       }, 500);
                     } catch {} 
                   }}
-                  className="px-2 h-7 rounded-md text-[11px] bg-background/80 border border-border/40 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                  className="px-2 h-7 rounded-[12px] text-[11px] border text-muted-foreground bg-background/80 border-border hover:bg-accent hover:text-red-500"
                   title="End Claude session and close panel"
                 >End</button>
               )}
               {(activeSidePanel === 'claude-chat' ? claudeOverlayControls?.new : codexOverlayControls?.new) && (
                 <button
                   onClick={() => { try { (activeSidePanel === 'claude-chat' ? claudeOverlayControls.new : codexOverlayControls.new)(); } catch {}; if (!activeSidePanel) setActiveSidePanel('claude-chat'); }}
-                  className="px-2 h-7 rounded-md text-[11px] bg-background/80 border border-border/40 text-muted-foreground hover:text-foreground hover:bg-accent/20"
+                  className="px-2 h-7 rounded-[12px] text-[11px] border text-muted-foreground bg-background/80 border-border hover:bg-accent hover:text-foreground"
                   title="Start new Claude session"
                 >New</button>
               )}
               {/* Settings */}
               <button
                 onClick={onShowSettings}
-                className="p-1.5 text-muted-foreground hover:text-foreground rounded-md hover:bg-accent transition-colors"
+                className="p-1.5 text-muted-foreground hover:text-foreground rounded-[10px] hover:bg-accent transition-colors"
                 title="Tools Settings"
               >
                 <SettingsIcon className="w-4 h-4" />
@@ -719,6 +768,30 @@ function MainContent({
 
       {/* Prompts Modal */}
       <PromptsModal isOpen={showPromptsModal} onClose={() => setShowPromptsModal(false)} />
+
+      {/* Prompt Enhancer Modal */}
+      <PromptEnhancer
+        open={showPromptEnhancer}
+        onClose={() => setShowPromptEnhancer(false)}
+        onSendToClaude={async (text, opts = { send: false }) => {
+          const ready = await ensureClaudeOpen();
+          if (!ready) return;
+          try {
+            claudeOverlayControls.insert?.(text, { mode: 'replace' });
+            claudeOverlayControls.focus?.();
+            if (opts.send) claudeOverlayControls.send?.();
+          } catch {}
+        }}
+        onSendToCodex={async (text, opts = { send: false }) => {
+          const ready = await ensureCodexOpen();
+          if (!ready) return;
+          try {
+            codexOverlayControls.insert?.(text, { mode: 'replace' });
+            codexOverlayControls.focus?.();
+            if (opts.send) codexOverlayControls.send?.();
+          } catch {}
+        }}
+      />
 
 
       {/* Toast - discrete top-center notice */}
