@@ -57,8 +57,9 @@ function FileManagerSimple({ selectedProject, onClose }) {
     return () => ro.disconnect();
   }, []);
 
-  const compact = containerWidth > 0 && containerWidth < 360;
-  const tight = containerWidth > 0 && containerWidth < 300;
+  // Make the panel more responsive and reduce inner paddings when narrow
+  const compact = containerWidth > 0 && containerWidth < 420;
+  const tight = containerWidth > 0 && containerWidth < 340;
   
   // Fetch files from server
   const fetchFiles = useCallback(async () => {
@@ -570,7 +571,7 @@ function FileManagerSimple({ selectedProject, onClose }) {
         </div>
         
         {/* Search Bar */}
-        <div className={`${tight ? 'px-1 py-1' : compact ? 'px-1.5 py-1.5' : 'px-2 py-2'} border-b border-border`}>
+        <div className={`${tight ? 'px-0.5 py-0.5' : compact ? 'px-1 py-1' : 'px-2 py-1.5'} border-b border-border`}> 
           <div className="relative">
             <Search className={`absolute left-2 top-1/2 -translate-y-1/2 ${tight ? 'w-3 h-3' : compact ? 'w-3.5 h-3.5' : 'w-4 h-4'} text-muted-foreground`} />
             <input
@@ -578,7 +579,7 @@ function FileManagerSimple({ selectedProject, onClose }) {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search files..."
-              className={`w-full ${tight ? 'pl-6 pr-6 py-1 text-[12px]' : compact ? 'pl-7 pr-7 py-1 text-[13px]' : 'pl-8 pr-8 py-1 text-sm'} bg-background border rounded focus:outline-none focus:ring-1 focus:ring-primary`}
+              className={`w-full ${tight ? 'pl-5 pr-5 py-1 text-[12px]' : compact ? 'pl-6 pr-6 py-1 text-[13px]' : 'pl-7 pr-7 py-1 text-sm'} bg-background border rounded focus:outline-none focus:ring-1 focus:ring-primary`}
             />
             {searchQuery && (
               <button
@@ -628,7 +629,7 @@ function FileManagerSimple({ selectedProject, onClose }) {
         {selectedFile && (
           <div className="h-full flex flex-col">
             {/* File Header */}
-            <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-muted/30">
+            <div className={`${tight ? 'px-2 py-1.5' : compact ? 'px-3 py-1.5' : 'px-4 py-2'} border-b border-border bg-muted/30 flex items-center justify-between`}> 
               <div className="flex items-center gap-2 min-w-0">
                 {/* Back button for mobile */}
                 <button
@@ -793,7 +794,7 @@ function FileManagerSimple({ selectedProject, onClose }) {
         {selectedImage && (
           <div className="h-full flex flex-col">
             {/* Image Header */}
-            <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-muted/30">
+            <div className={`${tight ? 'px-2 py-1.5' : compact ? 'px-3 py-1.5' : 'px-4 py-2'} border-b border-border bg-muted/30 flex items-center justify-between`}> 
               <div className="flex items-center gap-2 min-w-0">
                 {/* Back button for mobile */}
                 <button

@@ -355,7 +355,21 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
         toggleTerminal: () => setShowTerminal(v => !v),
         toggleFiles: () => previewControlsRef.current?.toggleFiles?.(),
         showFiles: () => previewControlsRef.current?.showFiles?.(),
-        hideFiles: () => previewControlsRef.current?.hideFiles?.()
+        hideFiles: () => previewControlsRef.current?.hideFiles?.(),
+        // Ensure Files overlay opens reliably: open preview, then wait until child binds
+        openFilesPrimary: () => {
+          setShowPreview(true);
+          let tries = 0;
+          const t = setInterval(() => {
+            tries += 1;
+            try { previewControlsRef.current?.showFiles?.(); } catch {}
+            if (previewControlsRef.current?.showFiles || tries > 40) {
+              // one last call to be safe then stop
+              try { previewControlsRef.current?.showFiles?.(); } catch {}
+              clearInterval(t);
+            }
+          }, 50);
+        }
       };
       onBindControls(controls);
       return () => {

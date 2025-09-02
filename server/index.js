@@ -86,6 +86,7 @@ import claudeHooksRoutes from './routes/claude-hooks.js';
 import claudeStreamRoutes from './routes/claude-stream.js';
 import ttsRoutes from './routes/tts.js';
 import aiRoutes from './routes/ai.js';
+import promptEnhancerRoutes from './routes/prompt-enhancer.js';
 import indexerRoutes from './routes/indexer.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
@@ -509,6 +510,7 @@ app.use('/api/claude-hooks', authenticateToken, claudeHooksRoutes);
 app.use('/api/claude-stream', claudeStreamRoutes);
 app.use('/api/tts', ttsRoutes);
 app.use('/api/ai', authenticateToken, aiRoutes);
+app.use('/api/prompt-enhancer', authenticateToken, promptEnhancerRoutes);
 app.use('/api/indexer', indexerRoutes);
 
 // Sound files API route for Vibe Kanban sound notifications

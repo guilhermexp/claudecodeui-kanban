@@ -78,6 +78,23 @@ router.post('/ports', async (req, res) => {
   }
 });
 
+// macOS-only: Show native folder picker via AppleScript and return POSIX path
+router.post('/pick-folder', async (req, res) => {
+  try {
+    if (process.platform !== 'darwin') {
+      return res.status(400).json({ error: 'Folder picker supported only on macOS' });
+    }
+    const script = `set theFolder to POSIX path of (choose folder with prompt "Select project folder")\nreturn theFolder`;
+    const { stdout } = await execAsync(`osascript -e '${script.replace(/\n/g, ' ')}'`);
+    const path = (stdout || '').trim();
+    if (!path) return res.status(400).json({ error: 'No folder selected' });
+    return res.json({ path });
+  } catch (e) {
+    log.error(`pick-folder error: ${e.message}`);
+    return res.status(500).json({ error: 'failed_to_pick_folder' });
+  }
+});
+
 // Helper functions
 async function getActivePorts() {
   try {

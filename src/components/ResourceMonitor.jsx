@@ -157,10 +157,10 @@ function ResourceMonitor() {
 
       {/* Dropdown Panel */}
       {isOpen && (
-        <div className="absolute top-full right-0 mt-2 w-80 bg-background border border-border rounded-lg shadow-xl z-50 max-h-96 overflow-hidden">
+        <div className="absolute top-full right-0 mt-2 w-80 rounded-[18px] border border-border bg-card/95 dark:bg-[#141414]/95 dark:border-white/10 shadow-2xl z-50 max-h-[70vh] overflow-hidden backdrop-blur-sm">
           {/* Header */}
-          <div className="flex items-center justify-between p-3 border-b border-border">
-            <h3 className="font-semibold text-sm">System Monitor</h3>
+          <div className="flex items-center justify-between px-3 py-2 border-b border-border dark:border-white/10 bg-gradient-to-b from-[#f6f6f6] to-white dark:from-[#171717] dark:to-[#141414]">
+            <h3 className="font-semibold text-sm text-foreground">System Monitor</h3>
             <button
               onClick={() => {
                 setIsOpen(false);
@@ -173,11 +173,11 @@ function ResourceMonitor() {
             </button>
           </div>
 
-          <div className="max-h-80 overflow-y-auto">
+          <div className="max-h-[62vh] overflow-y-auto">
             {/* System Stats */}
-            <div className="p-3 border-b border-border">
+            <div className="p-3 border-b border-border dark:border-white/10">
               {error && (
-                <div className="mb-2 text-xs text-destructive">{error}</div>
+                <div className="mb-2 text-xs text-red-400">{error}</div>
               )}
               <div className="flex justify-between items-center mb-2">
                 <span className="text-sm text-muted-foreground">Memory Usage</span>
@@ -195,14 +195,14 @@ function ResourceMonitor() {
 
             {/* High Resource Usage Warning */}
             {(systemInfo.memoryUsage >= 85 || systemInfo.cpuUsage >= 80) && (
-              <div className="p-3 border-b border-border">
-                <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+              <div className="p-3 border-b border-border dark:border-white/10">
+                <div className="flex items-center gap-2 text-amber-600 dark:text-yellow-400">
                   <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
                       d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5C2.962 18.333 3.924 20 5.464 20z" 
                     />
                   </svg>
-                  <span className="text-sm font-medium">
+                  <span className="text-sm font-medium text-foreground">
                     High resource usage detected. Consider closing unused terminals.
                   </span>
                 </div>
@@ -212,25 +212,25 @@ function ResourceMonitor() {
             {/* Active Ports */}
             <div className="p-3">
               <div className="flex items-center justify-between mb-3">
-                <span className="text-sm font-medium">Active Ports ({systemInfo.activePorts?.length || 0})</span>
+                <span className="text-sm font-medium text-foreground">Active Ports ({systemInfo.activePorts?.length || 0})</span>
                 {isLoading && (
-                  <div className="w-4 h-4 border-2 border-muted border-t-primary rounded-full animate-spin" />
+                  <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
                 )}
               </div>
               
               {systemInfo.activePorts?.length > 0 ? (
-                <div className="space-y-2">
+                  <div className="space-y-2">
                   {systemInfo.activePorts?.map((port, index) => (
-                    <div key={index} className="flex items-center justify-between text-sm">
+                    <div key={index} className="flex items-center justify-between text-sm text-foreground">
                       <div className="flex items-center gap-2">
-                        <span className="font-mono font-medium">:{port.port}</span>
+                        <span className="font-mono font-medium text-foreground">:{port.port}</span>
                         <span className="text-muted-foreground">{port.process || 'node'}</span>
                       </div>
                       <div className="flex items-center gap-1">
                         {port.url && (
                           <button
                             onClick={() => window.open(port.url, '_blank')}
-                            className="w-6 h-6 flex items-center justify-center text-muted-foreground hover:text-primary rounded transition-colors"
+                            className="w-6 h-6 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent rounded transition-colors"
                             title="Open in browser"
                           >
                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -242,7 +242,7 @@ function ResourceMonitor() {
                         )}
                         <button
                           onClick={() => handlePortAction(port.port, 'kill')}
-                          className="w-6 h-6 flex items-center justify-center text-muted-foreground hover:text-destructive rounded transition-colors"
+                          className="w-6 h-6 flex items-center justify-center text-muted-foreground hover:text-red-500 hover:bg-accent rounded transition-colors"
                           title="Kill process"
                         >
                           <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">

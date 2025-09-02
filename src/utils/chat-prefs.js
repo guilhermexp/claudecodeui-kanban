@@ -4,8 +4,9 @@ const PROVIDER_KEY = 'chat-cli-provider';
 
 export function loadPlannerMode() {
   try {
-    return localStorage.getItem(MODE_KEY) || 'Auto';
-  } catch { return 'Auto'; }
+    // Default to 'Off' to avoid planner/auto prefix
+    return localStorage.getItem(MODE_KEY) || 'Off';
+  } catch { return 'Off'; }
 }
 
 export function savePlannerMode(mode) {

@@ -191,8 +191,10 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
   const [dangerousMode, setDangerousMode] = useState(() => {
     try {
       const key = projectPath ? `codex-dangerous-${projectPath}` : 'codex-dangerous-global';
-      return localStorage.getItem(key) === '1';
-    } catch { return false; }
+      const v = localStorage.getItem(key);
+      // Default to ON when not set
+      return v === null ? true : v === '1';
+    } catch { return true; }
   });
   
   // Auth-aware WebSocket (connect only once token is available)
@@ -229,8 +231,9 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
   useEffect(() => {
     try {
       if (activeProjectPath) {
-        const v = localStorage.getItem(`codex-dangerous-${activeProjectPath}`) === '1';
-        setDangerousMode(v);
+        const key = `codex-dangerous-${activeProjectPath}`;
+        const stored = localStorage.getItem(key);
+        setDangerousMode(stored === null ? true : stored === '1');
       }
     } catch {}
   }, [activeProjectPath]);
@@ -737,12 +740,23 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
     autoGreetSentRef.current = false;
   }, [endSessionCore]);
 
-  // Expose controls to parent (global header)
+  // Expose basic controls to parent (global header)
   useEffect(() => {
     if (typeof onBindControls !== 'function') return;
     const controls = {
       end: () => { try { endSessionUser(); } catch {} },
-      new: () => { try { endSessionUser(); } catch {}; setTimeout(() => startSession(), 200); }
+      new: () => { try { endSessionUser(); } catch {}; setTimeout(() => startSession(), 200); },
+      insert: (text, { mode = 'replace' } = {}) => {
+        try {
+          if (mode === 'append') {
+            setInput((prev) => (prev ? `${prev}\n${text}` : String(text || '')));
+          } else {
+            setInput(String(text || ''));
+          }
+          try { trayInputRef.current?.focus(); } catch {}
+        } catch {}
+      },
+      focus: () => { try { trayInputRef.current?.focus(); } catch {} }
     };
     try { onBindControls(controls); } catch {}
     return () => { try { onBindControls(null); } catch {} };
@@ -2421,6 +2435,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
               </button>
               {/* textarea */}
               <textarea
+                ref={trayInputRef}
                 value={input}
                 onChange={e => {
                   const value = e.target.value;
@@ -2688,13 +2703,11 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
     let modelHint = '';
     
     if (cliProvider === 'codex') {
-      // Only add planner mode for Codex
+      // Only add planner prefix when explicitly set to Planner; default Off
       if (plannerMode === 'Planer') {
         controlPrefix = 'You are in Planner mode. First, outline a short plan (bulleted), then execute only what is necessary. Keep outputs concise.\n\n';
-      } else if (plannerMode === 'Auto') {
-        controlPrefix = 'You may decide between planning or direct answer depending on user input.\n\n';
       }
-      // Only add model hint for Codex
+      // Add model hint for Codex
       modelHint = modelLabel ? `(model: ${modelLabel})\n\n` : '';
     }
     
@@ -2826,6 +2839,8 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
       handleSend();
     }
   };
+
+  // Extend controls after handleSend is defined to include send()
 
   // Optional: if page reloaded/disconnected and chat is empty but we have history, offer a subtle toast-like prompt
   useEffect(() => {

@@ -40,6 +40,8 @@ function ProjectsModal({
   const [projectFilter, setProjectFilter] = useState('all');
   const [toast, setToast] = useState(null);
   const [indexing, setIndexing] = useState(null); // project name currently indexing
+  const [highlightProject, setHighlightProject] = useState(null);
+  const prevProjectNamesRef = React.useRef([]);
 
   // Time update interval
   useEffect(() => {
@@ -69,6 +71,24 @@ function ProjectsModal({
     }
   };
 
+  // Detect newly created project to highlight and pin first
+  useEffect(() => {
+    const names = (projects || []).map(p => p.name);
+    const prev = prevProjectNamesRef.current || [];
+    const added = names.find(n => !prev.includes(n));
+    if (added && names.length > prev.length) {
+      setHighlightProject(added);
+    }
+    prevProjectNamesRef.current = names;
+  }, [projects]);
+
+  // Clear highlight when modal closes
+  useEffect(() => {
+    if (!isOpen && highlightProject) {
+      setHighlightProject(null);
+    }
+  }, [isOpen]);
+
   // Filter and sort projects
   const filteredProjects = projects.filter(project => {
     // Search filter
@@ -86,7 +106,7 @@ function ProjectsModal({
   });
 
   // Sort projects - newest first by default
-  const sortedProjects = [...filteredProjects].sort((a, b) => {
+  let sortedProjects = [...filteredProjects].sort((a, b) => {
     switch (projectSortOrder) {
       case 'name':
         return a.name.localeCompare(b.name);
@@ -104,6 +124,15 @@ function ProjectsModal({
     }
   });
 
+  // If a project was just created, pin it to the front once
+  if (highlightProject) {
+    const idx = sortedProjects.findIndex(p => p.name === highlightProject);
+    if (idx > 0) {
+      const [item] = sortedProjects.splice(idx, 1);
+      sortedProjects = [item, ...sortedProjects];
+    }
+  }
+
   return (
     <>
       <Dialog open={isOpen} onOpenChange={onClose}>
@@ -114,7 +143,41 @@ function ProjectsModal({
               <DialogTitle className="text-lg font-semibold text-foreground">Select Project</DialogTitle>
               <p className="text-xs text-muted-foreground mt-1">Choose from your recent projects</p>
             </div>
-            <div className="flex items-center gap-2 mr-4" />
+            <div className="flex items-center gap-2 mr-4">
+              <button
+                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-border bg-background hover:bg-accent text-sm"
+                onClick={async () => {
+                  try {
+                    const r = await api.system.pickFolder();
+                    if (!r.ok) {
+                      const d = await r.json().catch(()=>({}));
+                      alert(d?.error || 'Folder picker not available. Paste a path instead.');
+                      return;
+                    }
+                    const data = await r.json();
+                    const pickedPath = data?.path;
+                    if (!pickedPath) return;
+                    const create = await api.createProject(pickedPath);
+                    if (create.ok) {
+                      const created = await create.json();
+                      // Ensure we refresh and highlight new project
+                      setHighlightProject(created?.project?.name);
+                      onRefresh?.();
+                    } else {
+                      const err = await create.text();
+                      alert('Failed to create project: ' + err);
+                    }
+                  } catch (e) {
+                    alert('Failed to pick folder');
+                  }
+                }}
+                title="Add project from folder"
+              >
+                <Folder className="w-4 h-4" />
+                <span className="hidden sm:inline">Add Project</span>
+                <span className="sm:hidden">Add</span>
+              </button>
+            </div>
           </div>
 
           {/* Search */}
@@ -146,18 +209,20 @@ function ProjectsModal({
                 : 'No projects yet. Click "New Project" to create one.'}
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
+            <div className="grid gap-2 sm:gap-3 [grid-template-columns:repeat(auto-fill,minmax(260px,1fr))]">
               {sortedProjects.map((project, index) => {
                 const projectSessions = project.sessions || [];
                 const latestSession = projectSessions[0]; // Pega apenas a última sessão
                 const totalSessions = project.sessionMeta?.total || projectSessions.length; // Usa o total real se disponível
+                const isHighlighted = highlightProject && project.name === highlightProject;
 
                 return (
                   <div 
                     key={project.name || `project-${index}`} 
                     className={cn(
                       "relative group rounded-lg border border-border bg-muted/20 hover:bg-muted/30 transition-colors flex flex-col min-h-[100px] sm:min-h-[110px]",
-                      selectedProject?.name === project.name && "ring-1 ring-border"
+                      selectedProject?.name === project.name && "ring-1 ring-border",
+                      isHighlighted && "ring-1 ring-primary border-primary/60 shadow-md"
                     )}
                   >
                     {/* Card Content */}
@@ -217,12 +282,15 @@ function ProjectsModal({
                             </div>
                           ) : (
                             <>
-                              <h3 className="text-xs sm:text-sm font-semibold text-foreground leading-tight truncate">
+                              <h3 className="text-xs sm:text-sm font-semibold text-foreground leading-tight truncate flex items-center gap-1">
                                 {(() => {
                                   const pathSegments = project.path.split('/').filter(seg => seg);
                                   const lastTwo = pathSegments.slice(-2).join('/');
                                   return lastTwo || project.name;
                                 })()}
+                                {isHighlighted && (
+                                  <span className="text-[10px] ml-1 px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/30">New</span>
+                                )}
                               </h3>
                               <div className="text-[9px] sm:text-[10px] text-muted-foreground mt-1 whitespace-normal break-words break-all leading-snug" title={project.path}>
                                 {project.path}
