@@ -33,18 +33,18 @@ source ~/.bashrc
 ### Runtime Issues
 
 #### Port Already in Use
-**Problem**: `Error: listen EADDRINUSE: address already in use :::8080`
+**Problem**: `Error: listen EADDRINUSE: address already in use :::7347`
 
 **Solution**:
 ```bash
 # Find process using port
-lsof -i :8080
+lsof -i :7347
 
 # Kill the process
 kill -9 <PID>
 
 # Or use different ports
-PORT=8090 npm run server
+PORT=7357 npm run server
 ```
 
 #### Database Locked
@@ -61,15 +61,15 @@ npm run dev
 ```
 
 #### WebSocket Connection Failed
-**Problem**: `WebSocket connection to 'ws://localhost:8080' failed`
+**Problem**: `WebSocket connection to 'ws://localhost:7347' failed`
 
 **Solution**:
-1. Check if backend is running: `curl http://localhost:8080/api/health`
+1. Check if backend is running: `curl http://localhost:7347/api/health`
 2. Check firewall settings
 3. Ensure `.env` has correct URLs:
    ```env
-   VITE_API_URL=http://localhost:8080
-   VITE_WS_URL=ws://localhost:8080
+   VITE_API_URL=http://localhost:7347
+   VITE_WS_URL=ws://localhost:7347
    ```
 
 ### Terminal Issues

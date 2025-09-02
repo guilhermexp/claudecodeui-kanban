@@ -2,13 +2,13 @@
 
 ## Overview
 
-Claude Code UI provides a RESTful API for interaction between the frontend and backend services. The API is built on Express.js and communicates with both the Claude CLI and Vibe Kanban backend.
+Claude Code UI provides a RESTful API for interaction between the frontend and backend services. The API is built on Express.js and communicates with the Claude CLI.
 
 ## Base URLs
 
-- **Development**: `http://localhost:8080/api`
+- **Development**: `http://localhost:7347/api`
 - **Production**: `https://your-domain.com/api`
-- **WebSocket**: `ws://localhost:8080` (or `wss://` for production)
+- **WebSocket**: `ws://localhost:7347` (or `wss://` for production)
 
 ## Authentication
 
@@ -262,7 +262,7 @@ Terminal shell connection.
 
 **Connection:**
 ```javascript
-const ws = new WebSocket('ws://localhost:8080/shell?token=<jwt_token>');
+const ws = new WebSocket('ws://localhost:7347/shell?token=<jwt_token>');
 ```
 
 **Messages:**
@@ -296,9 +296,37 @@ Resize:
 }
 ```
 
-### Vibe Kanban
 
-Note: Vibe Kanban integration has been removed from this repository. Any `/api/vibe-kanban/*` references are obsolete.
+### Text-to-Speech (TTS)
+
+#### POST `/api/tts/gemini-summarize`
+Generate audio from text using Google Gemini AI with summarization.
+
+**Request:**
+```json
+{
+  "text": "string",
+  "voiceName": "string (optional, default: Zephyr)",
+  "maxSeconds": "number (optional, default: 30)"
+}
+```
+
+**Response:**
+```json
+{
+  "url": "/api/audios/<audio-id>"
+}
+```
+
+**Requirements:**
+- Requires `GEMINI_API_KEY` or `GOOGLE_API_KEY` environment variable
+- Python 3 with `google-genai` package installed
+
+#### GET `/api/audios/:id`
+Retrieve generated audio file.
+
+**Response:**
+Binary audio file (audio/wav)
 
 ### Whisper Transcription
 

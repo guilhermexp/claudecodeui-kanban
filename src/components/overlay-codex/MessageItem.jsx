@@ -35,6 +35,18 @@ export default function MessageItem({ m, markdownComponents }) {
     );
   };
 
+  // Audio attachment renderer
+  if (m.audioUrl) {
+    return (
+      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }} transition={{ duration: 0.25 }} className={`w-full ${isUser ? 'flex justify-end' : ''}`}>
+        <div className={`px-3 py-2 rounded-xl border border-border/50 bg-muted/20 ${isUser ? 'max-w-[85%]' : 'w-full max-w-none pr-2'}`}>
+          <div className="text-xs mb-1 text-muted-foreground">Audio summary</div>
+          <audio src={m.audioUrl} controls preload="metadata" className="w-full" />
+        </div>
+      </motion.div>
+    );
+  }
+
   return (
     <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }} transition={{ duration: 0.25 }} className={`w-full ${isUser ? 'flex justify-end' : ''}`}>
       <div className={`${containerClass} ${isUser ? 'max-w-[85%]' : 'w-full max-w-none pr-2'}`}>

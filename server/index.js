@@ -84,6 +84,7 @@ import systemRoutes from './routes/system.js';
 import filesRoutes from './routes/files.js';
 import claudeHooksRoutes from './routes/claude-hooks.js';
 import claudeStreamRoutes from './routes/claude-stream.js';
+import ttsRoutes from './routes/tts.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 import { 
@@ -502,6 +503,7 @@ app.use('/api/system', authenticateToken, systemRoutes);
 app.use('/api/files', filesRoutes);
 app.use('/api/claude-hooks', authenticateToken, claudeHooksRoutes);
 app.use('/api/claude-stream', claudeStreamRoutes);
+app.use('/api/tts', ttsRoutes);
 
 // Sound files API route for Vibe Kanban sound notifications
 app.get('/api/sounds/:soundFile', (req, res) => {
@@ -2730,6 +2732,21 @@ app.get('/api/images/:imageId', (req, res) => {
   // Send the image file (no auth required for Claude to access)
   res.contentType(imageData.mimetype);
   res.sendFile(imageData.path);
+});
+
+// Serve generated audios
+app.get('/api/audios/:audioId', (req, res) => {
+  try {
+    const id = req.params.audioId;
+    if (!global.generatedAudios || !global.generatedAudios.has(id)) {
+      return res.status(404).json({ error: 'Audio not found' });
+    }
+    const meta = global.generatedAudios.get(id);
+    res.setHeader('Content-Type', meta.mimetype || 'audio/wav');
+    res.sendFile(meta.path);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // Initialize global image storage

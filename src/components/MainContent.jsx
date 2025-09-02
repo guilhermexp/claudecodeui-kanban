@@ -383,16 +383,16 @@ function MainContent({
               
               { /* Kanban button removed */ }
 
-              {/* Files (mobile hidden) */}
+              {/* Files (desktop hidden if mobile). Opens preview + file tree */}
               <button
                 onClick={() => {
-                  // Prefer Chat + Preview (two panels). If a chat é aberto, recede terminal por padrão.
                   if (activeSidePanel === 'claude-chat' || activeSidePanel === 'codex-chat') {
                     try { window.__shellControls?.hideTerminal?.(); } catch {}
                   }
                   try {
-                    window.__shellControls?.openPreview?.();
+                    // Show files first so it becomes the primary view, then ensure preview is open
                     window.__shellControls?.showFiles?.();
+                    window.__shellControls?.openPreview?.();
                   } catch {}
                   setTimeout(() => setShellResizeTrigger(prev => prev + 1), 350);
                 }}
@@ -610,6 +610,7 @@ function MainContent({
                   cliProviderFixed="claude"
                   chatId="claude-instance"
                   projectPath={selectedProject?.path}
+                  projects={projects}
                   previewUrl={null}
                   onSessionIdChange={setClaudeOverlaySessionId}
                   onBindControls={setClaudeOverlayControls}
@@ -693,6 +694,7 @@ function MainContent({
           </div>
         </div>
       )}
+
 
       {/* Toast - discrete top-center notice */}
       {toast && (

@@ -228,7 +228,6 @@ export const detectProjectTechnology = async (project) => {
     // Default fallback
     return null;
   } catch (error) {
-    console.error('Error detecting project technology:', error);
     return null;
   }
 };
@@ -254,9 +253,6 @@ export const isVibeKanbanProject = (project) => {
   );
 };
 
-/**
- * Get project icon with fallback
- */
 // Cache for project icons to prevent excessive API calls
 const iconCache = new Map();
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
@@ -312,7 +308,6 @@ export const getProjectIcon = async (project, isExpanded = false) => {
     iconCache.set(cacheKey, { data: result, timestamp: Date.now() });
     return result;
   } catch (error) {
-    console.error('Error getting project icon:', error);
     const result = {
       type: 'lucide',
       lucideIcon: isExpanded ? FolderOpen : Folder,
