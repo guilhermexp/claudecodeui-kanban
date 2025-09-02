@@ -46,7 +46,17 @@ const authenticateToken = async (req, res, next) => {
     req.user = user;
     next();
   } catch (error) {
-    console.error('Token verification error:', error);
+    // Check if token is expired
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({ 
+        error: 'Token expired',
+        code: 'TOKEN_EXPIRED'
+      });
+    }
+    // Log only non-expired token errors
+    if (error.name !== 'TokenExpiredError') {
+      console.error('Token verification error:', error);
+    }
     return res.status(403).json({ error: 'Invalid token' });
   }
 };

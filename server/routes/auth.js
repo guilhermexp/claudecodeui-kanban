@@ -1,5 +1,6 @@
 import express from 'express';
 import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
 import { userDb, db } from '../database/db.js';
 import { createLogger } from '../utils/logger.js';
 import { generateToken, authenticateToken } from '../middleware/auth.js';
@@ -135,6 +136,46 @@ router.get('/user', authenticateToken, (req, res) => {
   res.json({
     user: req.user
   });
+});
+
+// Refresh token endpoint
+router.post('/refresh', async (req, res) => {
+  try {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+    
+    // Decode token without verification to get user info
+    const decoded = jwt.decode(token);
+    if (!decoded || !decoded.userId) {
+      return res.status(401).json({ error: 'Invalid token format' });
+    }
+    
+    // Get user from database
+    const user = userDb.getUserById(decoded.userId);
+    if (!user) {
+      return res.status(401).json({ error: 'User not found' });
+    }
+    
+    // Generate new token
+    const newToken = generateToken(user);
+    
+    // Update last login
+    userDb.updateLastLogin(user.id);
+    
+    res.json({
+      success: true,
+      user: { id: user.id, username: user.username },
+      token: newToken
+    });
+    
+  } catch (error) {
+    log.error(`Token refresh error: ${error.message}`);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // Logout (client-side token removal, but this endpoint can be used for logging)
