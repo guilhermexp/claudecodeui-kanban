@@ -191,11 +191,13 @@ export const ClaudeWebSocketProvider = ({ children }) => {
           handler({ isConnected: false, isConnecting: false });
         });
         
-        // Attempt reconnection if we still have a token
-        if (token && reconnectAttempts.current < 5) {
+        // Attempt reconnection indefinitely (exponential backoff with jitter)
+        if (token) {
           reconnectAttempts.current++;
-          const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 10000);
-          
+          const base = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 15000);
+          const jitter = Math.floor(Math.random() * 500);
+          const delay = base + jitter;
+
           reconnectTimeout.current = setTimeout(() => {
             connect();
           }, delay);

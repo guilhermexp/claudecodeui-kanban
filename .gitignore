@@ -115,6 +115,16 @@ temp/
 *.db-shm
 *.db-wal
 
+# Secrets and env variants
+.env.*
+
+# Do not commit local indexes or source mirrors
+server/database/repo-indexes/
+server/database/repo-sources/
+
+# Local Playwright data
+.playwright-mcp/
+
 # Test and documentation obsolescence prevention
 test-results/
 *backup*/

@@ -151,4 +151,14 @@ export const api = {
       // Don't override headers completely - authenticatedFetch will handle Authorization
       // and browser will set Content-Type for FormData automatically
     }),
+  // Repo indexer
+  indexer: {
+    list: () => authenticatedFetch('/api/indexer'),
+    create: (absPath, name) => authenticatedFetch('/api/indexer/create', { method: 'POST', body: JSON.stringify({ path: absPath, name }) }),
+    get: (id) => authenticatedFetch(`/api/indexer/${id}`),
+    bundle: (id) => authenticatedFetch(`/api/indexer/${id}/bundle`),
+    remove: (id) => authenticatedFetch(`/api/indexer/${id}`, { method: 'DELETE' }),
+    search: (id, query) => authenticatedFetch('/api/indexer/search', { method: 'POST', body: JSON.stringify({ id, query }) }),
+    github: (url, name, branch) => authenticatedFetch('/api/indexer/github', { method: 'POST', body: JSON.stringify({ url, name, branch }) }),
+  },
 };

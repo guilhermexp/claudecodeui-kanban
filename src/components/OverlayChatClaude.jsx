@@ -1795,7 +1795,6 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
             </div>
           </div>
         )}
-        {/* Hide any empty pre blocks that slip through Markdown renderers */}
         <style>{`.prose pre:empty{display:none}`}</style>
         <AnimatePresence initial={false}>
           {messages.map((m) => {
@@ -1811,22 +1810,18 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
               ? 'text-muted-foreground italic'
               : 'text-foreground';
 
-            // Detect tool messages and extract inline command for copy
             const isToolMessage = !isError && isSystem && typeof m.text === 'string' && m.text.startsWith('🔧 ');
             const extractCommand = (txt) => {
               const match = /`([^`]+)`/.exec(txt || '');
               return match ? match[1] : '';
             };
 
-            // Spec Card heuristic (Plan/Observations/Spec)
-            // Ensure m.text is always a string
             const textContent = typeof m.text === 'string' ? m.text : (m.text?.toString() || '');
             const rawText = textContent.trim();
             const firstLine = rawText.split('\n')[0] || '';
             const looksLikeSpec = !isUser && !isError && !isSystem && /^(plan|observations|spec|plano|observa|especifica)/i.test(firstLine);
             const specTitle = looksLikeSpec ? (firstLine.length > 2 ? firstLine : 'Plan Specification') : null;
 
-            // Rule Card heuristic ("Rule: <name>" then optional tags line)
             const linesAll = textContent.split('\n');
             const nonEmpty = linesAll.filter(l => l.trim().length > 0);
             const ruleMatch = !isUser && !isError && !isSystem && /^rule:\s*/i.test((nonEmpty[0] || ''));
@@ -1835,7 +1830,6 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
 
             const RuleCard = ({ children }) => {
               if (!ruleMatch) return <>{children}</>;
-              // Build trimmed markdown excluding header lines
               let body = textContent;
               body = body.replace(/^\s*Rule:.*\n?/i, '');
               if (ruleTags) body = body.replace(new RegExp(`^\s*${ruleTags.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\n?`), '');
@@ -1864,9 +1858,6 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
                 </div>
               );
             };
-
-            // Compact assistant text: hide verbose narrative blocks without code
-            // Always show assistant responses; outputs are filtered separately
 
             return (
               <motion.div 
