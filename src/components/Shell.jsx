@@ -179,29 +179,21 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     }
   }, [activeSidePanel, showPreview, wasPreviewOpen]);
 
-  // Ensure preview opens at 70% and terminal at 30% when toggled
+  // Responsive layout when preview/chat panels are open
   useEffect(() => {
     if (isMobile) return;
     try {
       if (showPreview) {
-        if (previewPanelHandleRef.current && previewPanelHandleRef.current.resize) {
-          previewPanelHandleRef.current.resize(70);
-        }
-        if (terminalPanelHandleRef.current && terminalPanelHandleRef.current.resize) {
-          terminalPanelHandleRef.current.resize(30);
-        }
+        const previewPct = activeSidePanel ? 65 : 70;
+        const shellPct = 100 - previewPct;
+        if (previewPanelHandleRef.current?.resize) previewPanelHandleRef.current.resize(previewPct);
+        if (terminalPanelHandleRef.current?.resize) terminalPanelHandleRef.current.resize(shellPct);
       } else {
-        if (terminalPanelHandleRef.current && terminalPanelHandleRef.current.resize) {
-          terminalPanelHandleRef.current.resize(100);
-        }
-        if (previewPanelHandleRef.current && previewPanelHandleRef.current.resize) {
-          previewPanelHandleRef.current.resize(0);
-        }
+        if (terminalPanelHandleRef.current?.resize) terminalPanelHandleRef.current.resize(100);
+        if (previewPanelHandleRef.current?.resize) previewPanelHandleRef.current.resize(0);
       }
-    } catch (e) {
-      // Non-fatal: fall back to library defaults if imperative resize fails
-    }
-  }, [showPreview, isMobile]);
+    } catch {}
+  }, [showPreview, activeSidePanel, isMobile]);
   const [previewUrl, setPreviewUrl] = useState('');
   // (Removed global publish of preview URL; assistant now lives inside preview again)
   const [detectedUrls, setDetectedUrls] = useState(new Set());
@@ -1862,32 +1854,12 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       
       {/* Connect button when not connected */}
       {isInitialized && !isConnected && !isConnecting && (
-        <div className="absolute inset-0 flex items-center justify-center bg-background/95 p-6">
-          <div className="text-center max-w-lg w-full">
-            <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-muted flex items-center justify-center">
-              <svg className="w-10 h-10 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z" />
-              </svg>
-            </div>
-            <h3 className="text-xl font-semibold mb-2 text-foreground">Shell disconnected</h3>
-            <p className="text-muted-foreground text-sm sm:text-base mb-4 px-2">
-              Click “Continue in Shell” to start or resume the session.
-            </p>
-            <div className="inline-flex items-center gap-2 bg-muted/60 border border-border rounded-xl px-4 py-3 mb-5">
-              <span className="text-foreground/80 font-medium">Tip:</span>
-              <span className="text-muted-foreground text-sm">Use</span>
-              <code className="px-2 py-1 rounded-md bg-background border border-border text-xs">Ctrl/⌘ + K</code>
-              <span className="text-muted-foreground text-sm">to clear the terminal.</span>
-            </div>
-            <CtaButton onClick={connectToShell} className="w-full justify-center">Continue in Shell</CtaButton>
-            {isBypassingPermissions && (
-              <p className="text-warning text-xs mt-2 px-2 flex items-center justify-center gap-1">
-                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
-                </svg>
-                Bypass permissions enabled
-              </p>
-            )}
+        <div className="absolute inset-0 flex items-center justify-center bg-card p-4">
+          <div className="flex flex-col items-center gap-3 text-center">
+            <div className="text-sm text-muted-foreground">Shell disconnected</div>
+            <CtaButton onClick={connectToShell} size="sm" className="justify-center" icon={false}>
+              Continue
+            </CtaButton>
           </div>
         </div>
       )}
@@ -2025,26 +1997,34 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       <Panel 
         ref={terminalPanelHandleRef}
         defaultSize={showPreview && !isMobile ? 30 : 100} 
-        minSize={30} 
+        minSize={20} 
         className="h-full"
         style={lockedTerminalWidth ? { flex: `0 0 ${lockedTerminalWidth}px` } : undefined}
       >
         <div 
           ref={terminalPanelRef}
-          className="h-full min-h-0 flex flex-col bg-background rounded-xl border border-border" 
+          className="h-full min-h-0 flex flex-col bg-card rounded-xl border border-border" 
           {...dropzoneProps}>
           <input {...inputProps} />
-            {/* Header — compact style to match Source Control */}
-            <div className="flex-shrink-0 border-b border-border px-3 py-2">
-              <div className="flex items-center justify-between">
-                {/* Left: icon + chevron (decorative) */}
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <svg className="w-4 h-4 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 7v6a3 3 0 106 0V7m0 0a3 3 0 106 0m-6 0a3 3 0 10-6 0" />
-                  </svg>
-                  <svg className="w-3 h-3 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 9l6 6 6-6" />
-                  </svg>
+            {/* Header — standardized like Files */}
+            <div className="hidden sm:block flex-shrink-0 border-b border-border px-3 py-2">
+              <div className="flex items-center justify-between gap-2">
+                {/* Left: preview toggle + title + path */}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <h3 className="text-foreground font-medium truncate text-base">Shell</h3>
+                    {selectedProject?.path && (
+                      <span
+                        className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 text-[11px] rounded-md bg-muted text-muted-foreground border border-border truncate max-w-[40ch]"
+                        title={selectedProject.path}
+                      >
+                        <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-5l-2-2H5a2 2 0 00-2 2z" />
+                        </svg>
+                        <span className="truncate">{selectedProject.displayName || selectedProject.path}</span>
+                      </span>
+                    )}
+                  </div>
                 </div>
                 {/* Right controls (all) */}
                 <div className="flex items-center gap-1">
@@ -2096,33 +2076,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
                     </svg>
                   </button>
 
-                  {/* Preview toggle (desktop) */}
-                  {!isMobile && (
-                    <button
-                      onClick={() => {
-                        if (showPreview) {
-                          setShowPreview(false);
-                          setPreviewUrl('');
-                        } else {
-                          const urls = detectUrlsInTerminal() || new Set();
-                          let firstUrl = 'http://localhost:5892';
-                          if (urls.size > 0) {
-                            firstUrl = Array.from(urls)[0];
-                          } else {
-                            detectBestPreviewUrl().then(url => setPreviewUrl(url)).catch(() => {});
-                          }
-                          setPreviewUrl(firstUrl);
-                          setShowPreview(true);
-                        }
-                      }}
-                      className={`p-1 sm:p-1.5 text-xs rounded transition ${showPreview ? 'text-blue-500 hover:text-blue-600 bg-blue-500/10 hover:bg-blue-500/20' : 'text-muted-foreground hover:text-foreground hover:bg-accent'}`}
-                      title={showPreview ? 'Close preview panel' : 'Open preview panel'}
-                    >
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
-                      </svg>
-                    </button>
-                  )}
+                  {/* Preview toggle removed from Shell header; handled by top header */}
 
                   {/* Disconnect */}
                   {isConnected && (
