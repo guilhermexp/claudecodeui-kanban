@@ -41,7 +41,7 @@ export default function PromptsCreateModal({ isOpen, onClose, onSave }) {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="w-full max-w-3xl max-h-[80vh] p-0 bg-card border border-border mx-2 sm:mx-auto overflow-hidden rounded-2xl">
+      <DialogContent className="w-full max-w-[95vw] sm:max-w-3xl max-h-[80vh] p-0 bg-card border border-border mx-2 sm:mx-auto overflow-hidden rounded-2xl">
         <DialogHeader className="px-5 pt-4 pb-3 border-b border-border bg-card/95 backdrop-blur">
           <DialogTitle className="text-lg font-semibold">New Item from Paste</DialogTitle>
         </DialogHeader>
@@ -60,7 +60,7 @@ export default function PromptsCreateModal({ isOpen, onClose, onSave }) {
             <span className="text-[11px] text-muted-foreground">Sem digitar: cole, analise, salve.</span>
           </div>
           {preview && (
-            <div className="grid grid-cols-3 gap-3 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
               <div className="rounded border border-border p-2 bg-muted/10">
                 <div className="font-semibold mb-1">Prompts</div>
                 {preview.prompts.length ? preview.prompts.map((p,i)=>(
@@ -83,8 +83,8 @@ export default function PromptsCreateModal({ isOpen, onClose, onSave }) {
                 <div className="font-semibold mb-1">Env</div>
                 {preview.env.length ? preview.env.map((e,i)=>(
                   <div key={i} className="mb-1 flex justify-between gap-2">
-                    <span className="font-medium">{e.key}</span>
-                    <span className="text-muted-foreground truncate">{e.value}</span>
+                    <span className="font-medium break-all">{e.key}</span>
+                    <span className="text-muted-foreground truncate" title={e.value}>{e.value}</span>
                   </div>
                 )) : <div className="text-muted-foreground">—</div>}
               </div>

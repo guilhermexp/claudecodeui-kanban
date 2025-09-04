@@ -916,11 +916,30 @@ body {
     overflow-wrap: break-word;
   }
 
-  /* Prevent horizontal scroll in chat area */
-  .chat-message * {
-    max-width: 100%;
-    box-sizing: border-box;
-  }
+/* Prevent horizontal scroll in chat area */
+.chat-message * {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* Force text selection in chat area on desktop and touch devices */
+.chat-selectable, .chat-selectable * {
+  -webkit-user-select: text !important;
+  user-select: text !important;
+  -webkit-touch-callout: default !important;
+}
+
+/* Ensure markdown content itself is fully selectable */
+.chat-selectable .prose, .chat-selectable .prose * {
+  -webkit-user-select: text !important;
+  user-select: text !important;
+}
+
+/* Avoid selection loss when clicking collapsible summary elements */
+.chat-selectable summary {
+  -webkit-user-select: text !important;
+  user-select: text !important;
+}
 }
 
 /* Hide markdown backticks in prose content */
@@ -1214,3 +1233,134 @@ body {
     pointer-events: auto !important;
   }
 }
+
+/* --- Shell terminal frosted background --- */
+.terminal-glass {
+  /* Match the app's card background exactly to avoid tone mismatch */
+  background: hsl(var(--card));
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: none;
+  box-shadow: none;
+  position: relative;
+}
+
+.terminal-glass::before { content: none; }
+
+/* --- Preview URL pill (frosted rounded search-style) --- */
+.url-pill {
+  border-radius: 9999px;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.02)),
+    rgba(24,24,24,0.45);
+  backdrop-filter: blur(10px) saturate(120%);
+  -webkit-backdrop-filter: blur(10px) saturate(120%);
+  border: 1px solid rgba(255,255,255,0.10);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -1px 0 rgba(0,0,0,0.25);
+}
+
+.url-pill::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: radial-gradient(100% 100% at 50% 0%, rgba(255,255,255,0.06), transparent 60%);
+}
+
+.url-pill-input {
+  background: transparent;
+  border: none;
+  outline: none;
+  color: inherit;
+  height: 34px;
+  line-height: 34px;
+  appearance: none;
+  -webkit-appearance: none;
+  box-shadow: none !important;
+  background-clip: padding-box;
+  caret-color: hsl(var(--foreground));
+}
+.url-pill-input:focus { outline: none !important; box-shadow: none !important; }
+
+/* Small circular frosted icon pills */
+.icon-pill {
+  width: 32px;
+  height: 32px;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.02)),
+    rgba(24,24,24,0.45);
+  backdrop-filter: blur(10px) saturate(120%);
+  -webkit-backdrop-filter: blur(10px) saturate(120%);
+  border: 1px solid rgba(255,255,255,0.1);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -1px 0 rgba(0,0,0,0.25);
+  color: inherit;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+.icon-pill:hover {
+  border-color: rgba(255,255,255,0.18);
+}
+
+/* Smaller variant for header actions */
+.icon-pill-sm {
+  width: 26px;
+  height: 26px;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.02)),
+    rgba(24,24,24,0.45);
+  backdrop-filter: blur(10px) saturate(120%);
+  -webkit-backdrop-filter: blur(10px) saturate(120%);
+  border: 1px solid rgba(255,255,255,0.10);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -1px 0 rgba(0,0,0,0.25);
+  color: inherit;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+.icon-pill-sm:hover { border-color: rgba(255,255,255,0.18); }
+
+/* Hide xterm scrollbars (invisible) */
+.xterm .xterm-viewport::-webkit-scrollbar { width: 0 !important; height: 0 !important; }
+.xterm .xterm-viewport { scrollbar-width: none !important; }
+/* Keep equal horizontal gutter to avoid asymmetry when scrollbars are hidden */
+.xterm .xterm-viewport { scrollbar-gutter: stable both-edges; }
+/* Symmetric inner padding so ascii boxes look centered */
+.xterm .xterm-viewport { padding-left: 10px; padding-right: 10px; box-sizing: border-box; }
+@media (max-width: 640px) {
+  .xterm .xterm-viewport { padding-left: 8px; padding-right: 8px; }
+}
+
+/* Hide cursor when terminal not focused or when Shell overlay active */
+.xterm .xterm-rows:not(.xterm-focus) .xterm-cursor { opacity: 0 !important; }
+.shell-cursor-hidden .xterm-rows .xterm-cursor { opacity: 0 !important; }
+
+/* Toolbar glass group (multiple icons inside) */
+.toolbar-pill {
+  border-radius: 9999px;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.02)),
+    rgba(24,24,24,0.45);
+  backdrop-filter: blur(10px) saturate(120%);
+  -webkit-backdrop-filter: blur(10px) saturate(120%);
+  border: 1px solid rgba(255,255,255,0.10);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -1px 0 rgba(0,0,0,0.25);
+}
+
+.toolbar-action {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: inherit;
+  background: transparent;
+  transition: color 120ms ease, background-color 120ms ease;
+}
+.toolbar-action:hover { color: hsl(var(--foreground)); background: rgba(255,255,255,0.04); }

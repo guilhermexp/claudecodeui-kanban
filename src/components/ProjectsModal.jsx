@@ -9,10 +9,9 @@ import { Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, ChevronU
 import { ProjectIcon } from '../utils/projectIcons.jsx';
 import { cn } from '../lib/utils';
 import ClaudeLogo from './ClaudeLogo';
-// duplicate import removed
+import FolderPicker from './FolderPicker';
 import { api } from '../utils/api';
 import { formatTimeAgo } from '../utils/time';
-// FolderPicker removed with Vibe Kanban integration
 
 function ProjectsModal({ 
   isOpen,
@@ -30,7 +29,9 @@ function ProjectsModal({
 }) {
   const navigate = useNavigate();
   const [editingProject, setEditingProject] = useState(null);
-  // const [showFolderPicker, setShowFolderPicker] = useState(false);
+  const [showFolderPicker, setShowFolderPicker] = useState(false);
+  const [showManualInput, setShowManualInput] = useState(false);
+  const [manualPath, setManualPath] = useState('');
   const [editingName, setEditingName] = useState('');
   // const [creatingProject, setCreatingProject] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -136,7 +137,7 @@ function ProjectsModal({
   return (
     <>
       <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="w-full max-w-5xl max-h-[70vh] sm:max-h-[75vh] p-0 bg-card border border-border mx-2 sm:mx-auto" onOpenChange={onClose}>
+      <DialogContent className="w-full max-w-5xl h-[62vh] min-h-[420px] p-0 bg-card border border-border mx-2 sm:mx-auto" onOpenChange={onClose}>
         <DialogHeader className="px-3 sm:px-5 pr-10 pt-3 pb-2 sm:pt-4 sm:pb-3 border-b border-border bg-card">
           <div className="flex items-center justify-between">
             <div>
@@ -145,43 +146,110 @@ function ProjectsModal({
             </div>
             <div className="flex items-center gap-2 mr-4">
               <button
-                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-border bg-background hover:bg-accent text-sm"
-                onClick={async () => {
-                  try {
-                    const r = await api.system.pickFolder();
-                    if (!r.ok) {
-                      const d = await r.json().catch(()=>({}));
-                      alert(d?.error || 'Folder picker not available. Paste a path instead.');
-                      return;
-                    }
-                    const data = await r.json();
-                    const pickedPath = data?.path;
-                    if (!pickedPath) return;
-                    const create = await api.createProject(pickedPath);
-                    if (create.ok) {
-                      const created = await create.json();
-                      // Ensure we refresh and highlight new project
-                      setHighlightProject(created?.project?.name);
-                      onRefresh?.();
-                    } else {
-                      const err = await create.text();
-                      alert('Failed to create project: ' + err);
-                    }
-                  } catch (e) {
-                    alert('Failed to pick folder');
-                  }
-                }}
-                title="Add project from folder"
+                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-border bg-background hover:bg-accent text-sm transition-colors"
+                onClick={() => setShowFolderPicker(true)}
+                title="Browse and select a folder to create a new project"
               >
-                <Folder className="w-4 h-4" />
-                <span className="hidden sm:inline">Add Project</span>
-                <span className="sm:hidden">Add</span>
+                <FolderSearch className="w-4 h-4" />
+                <span className="hidden sm:inline">Browse Folder</span>
+                <span className="sm:hidden">Browse</span>
+              </button>
+              
+              <button
+                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-border bg-background hover:bg-accent text-sm transition-colors"
+                onClick={() => setShowManualInput(!showManualInput)}
+                title="Manually enter a folder path"
+              >
+                <Plus className="w-4 h-4" />
+                <span className="hidden sm:inline">Add Manually</span>
+                <span className="sm:hidden">Manual</span>
               </button>
             </div>
           </div>
 
-          {/* Search */}
-          <div className="mt-2 sm:mt-3">
+          {/* Search and Manual Input */}
+          <div className="mt-2 sm:mt-3 space-y-2">
+            {showManualInput && (
+              <div className="flex gap-2">
+                <Input
+                  type="text"
+                  placeholder="Enter folder path (e.g. /Users/name/projects/myapp)"
+                  value={manualPath}
+                  onChange={(e) => setManualPath(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && manualPath.trim()) {
+                      e.preventDefault();
+                      // Create project with manual path
+                      setToast({ type: 'info', message: 'Creating project...' });
+                      api.createProject(manualPath.trim())
+                        .then(async (res) => {
+                          if (res.ok) {
+                            const created = await res.json();
+                            setHighlightProject(created?.project?.name);
+                            onRefresh?.();
+                            setToast({ type: 'success', message: 'Project created!' });
+                            setManualPath('');
+                            setShowManualInput(false);
+                            setTimeout(() => setToast(null), 2000);
+                          } else {
+                            const err = await res.text();
+                            setToast({ type: 'error', message: err });
+                            setTimeout(() => setToast(null), 3000);
+                          }
+                        })
+                        .catch((e) => {
+                          setToast({ type: 'error', message: 'Failed to create project' });
+                          setTimeout(() => setToast(null), 3000);
+                        });
+                    } else if (e.key === 'Escape') {
+                      setManualPath('');
+                      setShowManualInput(false);
+                    }
+                  }}
+                  className="flex-1 h-8 sm:h-9 bg-background border-border text-foreground rounded-lg"
+                  autoFocus
+                />
+                <button
+                  className="px-3 h-8 sm:h-9 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 text-sm"
+                  onClick={() => {
+                    if (manualPath.trim()) {
+                      setToast({ type: 'info', message: 'Creating project...' });
+                      api.createProject(manualPath.trim())
+                        .then(async (res) => {
+                          if (res.ok) {
+                            const created = await res.json();
+                            setHighlightProject(created?.project?.name);
+                            onRefresh?.();
+                            setToast({ type: 'success', message: 'Project created!' });
+                            setManualPath('');
+                            setShowManualInput(false);
+                            setTimeout(() => setToast(null), 2000);
+                          } else {
+                            const err = await res.text();
+                            setToast({ type: 'error', message: err });
+                            setTimeout(() => setToast(null), 3000);
+                          }
+                        })
+                        .catch((e) => {
+                          setToast({ type: 'error', message: 'Failed to create project' });
+                          setTimeout(() => setToast(null), 3000);
+                        });
+                    }
+                  }}
+                >
+                  Create
+                </button>
+                <button
+                  className="px-3 h-8 sm:h-9 rounded-md border border-border hover:bg-accent text-sm"
+                  onClick={() => {
+                    setManualPath('');
+                    setShowManualInput(false);
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
@@ -195,7 +263,7 @@ function ProjectsModal({
           </div>
         </DialogHeader>
 
-        <ScrollArea className="h-[calc(70vh-120px)] sm:h-[calc(75vh-140px)] bg-card">
+        <ScrollArea className="h-[calc(62vh-120px)] bg-card">
           <div className="p-3 sm:p-4">
           {/* Projects List */}
           {isLoading ? (
@@ -429,10 +497,60 @@ function ProjectsModal({
       </DialogContent>
     </Dialog>
 
-    { /* Folder Picker removed */ }
+    {/* Folder Picker Dialog */}
+    <FolderPicker
+      isOpen={showFolderPicker}
+      onClose={() => setShowFolderPicker(false)}
+      onSelect={async (folderPath) => {
+        console.log('Selected folder:', folderPath);
+        setShowFolderPicker(false);
+        
+        // Show loading state
+        setToast({ 
+          type: 'info', 
+          message: 'Creating project...' 
+        });
+        
+        try {
+          const create = await api.createProject(folderPath);
+          if (create.ok) {
+            const created = await create.json();
+            // Ensure we refresh and highlight new project
+            setHighlightProject(created?.project?.name);
+            onRefresh?.();
+            setToast({ 
+              type: 'success', 
+              message: 'Project created successfully!' 
+            });
+            setTimeout(() => setToast(null), 2000);
+          } else {
+            const err = await create.text();
+            setToast({ 
+              type: 'error', 
+              message: `Failed to create project: ${err}` 
+            });
+            setTimeout(() => setToast(null), 3000);
+          }
+        } catch (e) {
+          console.error('Create project error:', e);
+          setToast({ 
+            type: 'error', 
+            message: 'Failed to create project: ' + e.message 
+          });
+          setTimeout(() => setToast(null), 3000);
+        }
+      }}
+    />
+
     {toast && (
       <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50">
-        <div className={`px-3 py-2 text-xs border rounded-md shadow-sm ${toast.type==='success' ? 'bg-success/15 text-success border-success/30' : 'bg-destructive/15 text-destructive border-destructive/30'}`}>
+        <div className={`px-3 py-2 text-xs border rounded-md shadow-sm ${
+          toast.type === 'success' 
+            ? 'bg-success/15 text-success border-success/30' 
+            : toast.type === 'info'
+            ? 'bg-primary/15 text-primary border-primary/30'
+            : 'bg-destructive/15 text-destructive border-destructive/30'
+        }`}>
           {toast.message}
         </div>
       </div>

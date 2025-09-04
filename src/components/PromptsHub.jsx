@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
+import { loadHistory, groupByProject, sumDuration, humanize, filterByDay, filterByWeek, clearHistory } from '../utils/timer-history';
 import { loadPromptsHubState, savePromptsHubState, upsertItem, deleteItem, detectTemplateVariables } from '../utils/prompts-hub';
 import PromptsCreateModal from './PromptsCreateModal';
 
@@ -39,14 +40,97 @@ function ListItem({ active, title, description, onClick, onDelete }) {
   );
 }
 
-export default function PromptsHub({ onClose }) {
+export default function PromptsHub({ onClose, onExecutePrompt }) {
   const [state, setState] = useState(loadPromptsHubState());
-  const [tab, setTab] = useState('prompts'); // 'prompts' | 'snippets' | 'env' | 'indexes'
+  const [tab, setTab] = useState('prompts'); // 'prompts' | 'snippets' | 'env' | 'indexes' | 'time'
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState(null);
   const [varValues, setVarValues] = useState({});
+  const [enhancing, setEnhancing] = useState(false);
+  const [enhanceMode, setEnhanceMode] = useState('implementacao');
+  const [syncing, setSyncing] = useState(false);
+  const [lastSync, setLastSync] = useState(null);
 
-  useEffect(() => { savePromptsHubState(state); }, [state]);
+  useEffect(() => { 
+    savePromptsHubState(state);
+    // Auto-sync to server every 5 seconds if there are changes
+    const syncTimer = setTimeout(() => {
+      syncToServer(state, false); // Silent sync
+    }, 5000);
+    return () => clearTimeout(syncTimer);
+  }, [state]);
+
+  // Load from server on mount
+  useEffect(() => {
+    loadFromServer();
+  }, []);
+
+  // Load prompts from server
+  const loadFromServer = async () => {
+    try {
+      const response = await authenticatedFetch('/api/prompts');
+      if (response.ok) {
+        const serverData = await response.json();
+        // Merge with local data (local takes precedence for recent changes)
+        const localData = loadPromptsHubState();
+        const merged = mergePromptsData(localData, serverData);
+        setState(merged);
+        setLastSync(new Date());
+      }
+    } catch (error) {
+      console.error('Failed to load from server:', error);
+    }
+  };
+
+  // Sync to server
+  const syncToServer = async (data, showNotification = true) => {
+    if (syncing) return;
+    setSyncing(true);
+    try {
+      const response = await authenticatedFetch('/api/prompts/sync', {
+        method: 'POST',
+        body: JSON.stringify(data)
+      });
+      if (response.ok) {
+        const result = await response.json();
+        setState(result.data);
+        setLastSync(new Date());
+        if (showNotification) {
+          alert('Prompts sincronizados com sucesso!');
+        }
+      } else {
+        if (showNotification) {
+          alert('Erro ao sincronizar prompts');
+        }
+      }
+    } catch (error) {
+      console.error('Sync error:', error);
+      if (showNotification) {
+        alert('Erro ao sincronizar prompts');
+      }
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  // Merge function for prompts data
+  const mergePromptsData = (local, server) => {
+    const merged = {
+      prompts: mergeByKey(local.prompts || [], server.prompts || [], 'id'),
+      snippets: mergeByKey(local.snippets || [], server.snippets || [], 'id'),
+      env: mergeByKey(local.env || [], server.env || [], 'key'),
+      version: 1,
+      updatedAt: Date.now()
+    };
+    return merged;
+  };
+
+  const mergeByKey = (localArray, serverArray, keyField) => {
+    const map = new Map();
+    serverArray.forEach(item => map.set(item[keyField], item));
+    localArray.forEach(item => map.set(item[keyField], item)); // Local takes precedence
+    return Array.from(map.values());
+  };
 
   const list = tab === 'prompts' ? state.prompts : tab === 'snippets' ? state.snippets : tab === 'env' ? state.env : [];
 
@@ -96,6 +180,52 @@ export default function PromptsHub({ onClose }) {
     try { await navigator.clipboard.writeText(text); } catch {}
   };
 
+  const handleUseAgent = async (prompt) => {
+    const finalPrompt = buildPreview(prompt, varValues);
+    if (onExecutePrompt) {
+      onExecutePrompt(finalPrompt);
+      onClose?.();
+    } else {
+      // Fallback: copy to clipboard and show alert
+      await handleCopy(finalPrompt);
+      alert('Prompt copiado! Cole no Shell ou Claude para executar.');
+    }
+  };
+
+  const handleEnhancePrompt = async () => {
+    if (!selected || enhancing) return;
+    setEnhancing(true);
+    try {
+      const response = await authenticatedFetch('/api/prompt-enhancer/enhance', {
+        method: 'POST',
+        body: JSON.stringify({
+          input: buildPreview(selected, varValues),
+          format: 'text',
+          mode: enhanceMode
+        })
+      });
+      if (response.ok) {
+        const data = await response.json();
+        const enhanced = {
+          ...selected,
+          title: selected.title + ' (Enhanced)',
+          template: data.output,
+          tags: [...(selected.tags || []), 'enhanced', enhanceMode]
+        };
+        updatePrompt(enhanced);
+        alert('Prompt aprimorado com sucesso!');
+      } else {
+        const error = await response.json();
+        alert(`Erro ao aprimorar: ${error.error || 'Falha desconhecida'}`);
+      }
+    } catch (e) {
+      console.error('Enhance error:', e);
+      alert('Erro ao aprimorar prompt');
+    } finally {
+      setEnhancing(false);
+    }
+  };
+
   // Renderers
   const renderEditor = () => {
     if (!selected) return <div className="text-sm text-muted-foreground p-3">Select an item to edit</div>;
@@ -118,8 +248,8 @@ export default function PromptsHub({ onClose }) {
   return (
     <div className="h-full flex flex-col bg-card text-foreground">
       {/* Top tabs + search */}
-      <div className="h-12 flex items-center justify-between px-4 border-b border-border">
-        <div className="flex items-center gap-1 bg-muted p-1 rounded-lg">
+      <div className="min-h-12 flex flex-wrap items-center justify-between gap-2 px-4 border-b border-border py-2">
+        <div className="flex items-center gap-1 bg-muted p-1 rounded-lg overflow-x-auto max-w-full">
           <ToolbarButton onClick={() => setTab('prompts')} active={tab==='prompts'} title="Prompts">
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a4 4 0 0 1-4 4H7l-4 4V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8z"/></svg>
             <span>Prompts</span>
@@ -136,19 +266,36 @@ export default function PromptsHub({ onClose }) {
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
             <span>Indexes</span>
           </ToolbarButton>
+          <ToolbarButton onClick={() => setTab('time')} active={tab==='time'} title="Time Tracking">
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+            <span>Time</span>
+          </ToolbarButton>
         </div>
-        <div className="flex items-center gap-2">
-          <input value={query} onChange={(e)=>setQuery(e.target.value)} placeholder="Search" className="h-8 bg-background text-xs px-3 rounded-md border border-border focus:outline-none w-56" />
-          <button onClick={handleNew} className="h-8 px-3 rounded-md bg-primary text-primary-foreground text-xs">New</button>
-          <button onClick={onClose} className="h-8 px-3 rounded-md text-muted-foreground hover:bg-accent text-xs">Close</button>
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <input value={query} onChange={(e)=>setQuery(e.target.value)} placeholder="Search" className="h-8 bg-background text-xs px-3 rounded-md border border-border focus:outline-none w-full sm:w-56" />
+          <button onClick={handleNew} className="h-8 px-3 rounded-md bg-primary text-primary-foreground text-xs whitespace-nowrap">New</button>
+          <button 
+            onClick={() => syncToServer(state, true)} 
+            disabled={syncing}
+            className="h-8 px-3 rounded-md bg-background border border-border text-xs whitespace-nowrap flex items-center gap-1 disabled:opacity-50"
+          >
+            {syncing && <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin inline-block" />}
+            <span>Sync</span>
+          </button>
+          <button onClick={onClose} className="h-8 px-3 rounded-md text-muted-foreground hover:bg-accent text-xs whitespace-nowrap">Close</button>
+          {lastSync && (
+            <span className="text-[10px] text-muted-foreground">
+              Último sync: {lastSync.toLocaleTimeString()}
+            </span>
+          )}
         </div>
       </div>
 
       {/* Body: two-column layout inside modal */}
       {tab === 'prompts' ? (
-        <div className="flex-1 min-h-0 grid grid-cols-12">
+        <div className="flex-1 min-h-0 grid grid-cols-12 md:grid-cols-12">
           {/* Left: Library */}
-          <div className="col-span-5 border-r border-border h-full flex flex-col">
+          <div className="col-span-12 md:col-span-5 border-b md:border-b-0 md:border-r border-border h-full flex flex-col">
             {/* Tag chips */}
             <div className="px-3 py-2 border-b border-border flex items-center gap-2 overflow-x-auto">
               <button className={`text-[11px] px-2 py-1 rounded-full border ${!activeTag?'bg-background text-foreground border-border':'text-muted-foreground hover:text-foreground'}`} onClick={()=>setActiveTag(null)}>All</button>
@@ -160,17 +307,17 @@ export default function PromptsHub({ onClose }) {
             <div className="flex-1 overflow-auto p-3 space-y-3">
               {filtered.map((p) => (
                 <div key={p.id}
-                  className={`rounded-xl border ${selectedId===p.id?'border-primary/60 bg-muted/30':'border-border bg-muted/10 hover:bg-muted/20'} p-3 transition-colors cursor-pointer`}
+                  className={`rounded-xl border ${selectedId===p.id?'border-primary/60 bg-muted/30':'border-border bg-muted/10 hover:bg-muted/20'} p-3 transition-colors cursor-pointer min-w-0`}
                   onClick={()=>setSelectedId(p.id)}
                 >
-                  <div className="text-base font-semibold mb-1">{p.title}</div>
-                  {p.description && <div className="text-xs text-muted-foreground mb-2">{p.description}</div>}
-                  <div className="flex items-center justify-between">
-                    <div className="flex flex-wrap gap-1">
+                  <div className="text-sm sm:text-base font-semibold mb-1 break-words">{p.title}</div>
+                  {p.description && <div className="text-xs text-muted-foreground mb-2 break-words">{p.description}</div>}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex flex-wrap gap-1 min-w-0">
                       {(p.tags||[]).map(t => <span key={t} className="text-[10px] px-1.5 py-0.5 rounded bg-background border border-border text-muted-foreground">{t}</span>)}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <button className="text-[11px] px-2 py-1 rounded border border-border hover:bg-accent" onClick={(e)=>{e.stopPropagation(); setSelectedId(p.id);}}>Use agent</button>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button className="text-[11px] px-2 py-1 rounded border border-border hover:bg-accent" onClick={(e)=>{e.stopPropagation(); handleUseAgent(p);}}>Use agent</button>
                     </div>
                   </div>
                 </div>
@@ -182,18 +329,19 @@ export default function PromptsHub({ onClose }) {
           </div>
 
           {/* Right: Agent details */}
-          <div className="col-span-7 h-full overflow-auto p-3 space-y-3">
+          <div className="col-span-12 md:col-span-7 h-full overflow-auto p-3 space-y-3">
             {selected ? (
               <>
                 {/* Agent header */}
                 <div className="rounded-xl border border-border bg-muted/10 p-3">
                   <div className="flex items-center justify-between">
                     <div>
-                      <div className="text-lg font-semibold">{selected.title}</div>
-                      {selected.description && <div className="text-xs text-muted-foreground mt-1 max-w-prose">{selected.description}</div>}
+                      <div className="text-base sm:text-lg font-semibold break-words">{selected.title}</div>
+                      {selected.description && <div className="text-xs text-muted-foreground mt-1 max-w-prose break-words">{selected.description}</div>}
                     </div>
                     <div className="flex items-center gap-2">
-                      <button className="text-xs px-2 py-1 rounded bg-primary text-primary-foreground" onClick={()=>handleCopy(buildPreview(selected, varValues))}>Copy Preview</button>
+                      <button className="text-xs px-2 py-1 rounded bg-primary text-primary-foreground" onClick={()=>handleUseAgent(selected)}>Use Agent</button>
+                      <button className="text-xs px-2 py-1 rounded bg-background border border-border" onClick={()=>handleCopy(buildPreview(selected, varValues))}>Copy Preview</button>
                       <button className="text-xs px-2 py-1 rounded bg-background border border-border" onClick={()=>handleCopy(selected.template || '')}>Copy Template</button>
                     </div>
                   </div>
@@ -205,7 +353,7 @@ export default function PromptsHub({ onClose }) {
                     <div className="text-sm font-semibold">Variables</div>
                     <button className="text-[11px] px-2 py-1 rounded border border-border hover:bg-accent" onClick={()=>insertMissingVarsFromTemplate(selected, updatePrompt)}>Sync with template</button>
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {(selected.variables||[]).map((v, idx)=> (
                       <div key={v.name} className="space-y-1">
                         <div className="text-[11px] text-muted-foreground">{v.name}</div>
@@ -220,6 +368,24 @@ export default function PromptsHub({ onClose }) {
                   <div className="flex items-center justify-between mb-2">
                     <div className="text-sm font-semibold">Prompt</div>
                     <div className="flex items-center gap-2">
+                      <select
+                        value={enhanceMode}
+                        onChange={(e) => setEnhanceMode(e.target.value)}
+                        className="text-[11px] px-2 py-1 rounded border border-border bg-background"
+                      >
+                        <option value="implementacao">Implementação</option>
+                        <option value="bugs">Correção de Bugs</option>
+                        <option value="refatoracao">Refatoração</option>
+                        <option value="standard">Padrão</option>
+                      </select>
+                      <button
+                        className={`text-[11px] px-2 py-1 rounded border border-border hover:bg-accent inline-flex items-center gap-1 ${enhancing ? 'opacity-50' : ''}`}
+                        onClick={handleEnhancePrompt}
+                        disabled={enhancing}
+                      >
+                        {enhancing && <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin inline-block" />}
+                        <span>Enhance with AI</span>
+                      </button>
                       <button className="text-[11px] px-2 py-1 rounded border border-border hover:bg-accent" onClick={()=>updatePrompt({...selected, template: (selected.template||'') + '{' + ((selected.variables?.[0]?.name)||'var') + '}'})}>Insert var</button>
                     </div>
                   </div>
@@ -244,6 +410,8 @@ export default function PromptsHub({ onClose }) {
         </div>
       ) : tab === 'indexes' ? (
         <IndexesView onClose={onClose} />
+      ) : tab === 'time' ? (
+        <TimeHistoryView />
       ) : (
         // Snippets and Env — padronizados em cards
         <div className="flex-1 min-h-0 grid grid-cols-12">
@@ -470,8 +638,74 @@ function mergeEnv(existing, added) {
   return Array.from(map.values());
 }
 
-// Indexes view
-import { useEffect as useEffectReact, useState as useStateReact } from 'react';
+// Time history view (from TimerChip sessions)
+function TimeHistoryView() {
+  const [items, setItems] = useState(loadHistory());
+  useEffect(() => {
+    const onStorage = (e) => { if (e.key === 'vibe_timer_history_v1') setItems(loadHistory()); };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
+
+  const totalAll = sumDuration(items);
+  const today = sumDuration(filterByDay(items, new Date()));
+  const week = sumDuration(filterByWeek(items, new Date()));
+  const groups = groupByProject(items).sort((a,b)=>sumDuration(b.sessions)-sumDuration(a.sessions));
+
+  return (
+    <div className="flex-1 min-h-0 overflow-auto p-3 space-y-3">
+      {/* Summary cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="rounded-xl border border-border bg-muted/10 p-3">
+          <div className="text-xs text-muted-foreground">Today</div>
+          <div className="text-lg font-semibold">{humanize(today)}</div>
+        </div>
+        <div className="rounded-xl border border-border bg-muted/10 p-3">
+          <div className="text-xs text-muted-foreground">This week</div>
+          <div className="text-lg font-semibold">{humanize(week)}</div>
+        </div>
+        <div className="rounded-xl border border-border bg-muted/10 p-3 flex items-center justify-between">
+          <div>
+            <div className="text-xs text-muted-foreground">All time</div>
+            <div className="text-lg font-semibold">{humanize(totalAll)}</div>
+          </div>
+          {items.length>0 && (
+            <button className="text-[11px] px-2 py-1 rounded border border-border hover:bg-accent" onClick={()=>{ if (confirm('Clear time history?')) { clearHistory(); setItems([]); } }}>Clear</button>
+          )}
+        </div>
+      </div>
+
+      {/* Per-project list */}
+      <div className="grid grid-cols-12 md:grid-cols-12 gap-3">
+        <div className="col-span-12 md:col-span-5 space-y-2">
+          {groups.map(g => (
+            <div key={g.project} className="rounded-xl border border-border bg-muted/10 p-3">
+              <div className="flex items-center justify-between mb-1">
+                <div className="text-sm font-semibold truncate">{g.project}</div>
+                <div className="text-xs text-muted-foreground">{humanize(sumDuration(g.sessions))}</div>
+              </div>
+              <div className="text-[11px] text-muted-foreground">{g.sessions.length} session(s)</div>
+            </div>
+          ))}
+          {groups.length===0 && <div className="text-xs text-muted-foreground">No sessions yet. Start a timer and let it complete or reset to log.</div>}
+        </div>
+        <div className="col-span-12 md:col-span-7 space-y-2">
+          {items.slice().reverse().map(it => (
+            <div key={it.id} className="rounded-xl border border-border bg-muted/10 p-3">
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-semibold">{it.project} <span className="text-xs text-muted-foreground font-normal">{it.label || ''}</span></div>
+                <div className="text-xs">{humanize(it.durationMs)}</div>
+              </div>
+              <div className="text-[11px] text-muted-foreground">{new Date(it.start).toLocaleString()} → {new Date(it.end).toLocaleTimeString()}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Additional imports for IndexesView component
 import { authenticatedFetch, api } from '../utils/api';
 
 function IndexesView() {

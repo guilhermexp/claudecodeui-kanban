@@ -24,6 +24,7 @@ function FileManagerSimple({ selectedProject, onClose }) {
   const [selectedImage, setSelectedImage] = useState(null);
   const [showFilePanel, setShowFilePanel] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showSearch, setShowSearch] = useState(false);
   const [showHiddenFiles, setShowHiddenFiles] = useState(false);
   const [showMarkdownPreview, setShowMarkdownPreview] = useState(false);
   const codeEditorRef = useRef(null);
@@ -516,6 +517,14 @@ function FileManagerSimple({ selectedProject, onClose }) {
               )}
             </div>
             <div className={`flex items-center ${compact ? 'gap-0.5' : 'gap-1'} flex-shrink-0`}>
+              {/* Search toggle */}
+              <button
+                onClick={() => setShowSearch(v => !v)}
+                className={`hover:bg-accent rounded-md transition-colors ${(compact || tight) ? 'p-0.5' : 'p-1'}`}
+                title="Search"
+              >
+                <Search className={`${tight ? 'w-3 h-3' : compact ? 'w-3.5 h-3.5' : 'w-4 h-4'} text-muted-foreground`} />
+              </button>
               <button
                onClick={() => setShowHiddenFiles(!showHiddenFiles)}
               className={cn("hover:bg-accent rounded-md transition-colors", (compact || tight) ? 'p-0.5' : 'p-1', showHiddenFiles && "bg-accent")}
@@ -570,27 +579,31 @@ function FileManagerSimple({ selectedProject, onClose }) {
           </div>
         </div>
         
-        {/* Search Bar */}
-        <div className={`${tight ? 'px-0.5 py-0.5' : compact ? 'px-1 py-1' : 'px-2 py-1.5'} border-b border-border`}> 
-          <div className="relative">
-            <Search className={`absolute left-2 top-1/2 -translate-y-1/2 ${tight ? 'w-3 h-3' : compact ? 'w-3.5 h-3.5' : 'w-4 h-4'} text-muted-foreground`} />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search files..."
-              className={`w-full ${tight ? 'pl-5 pr-5 py-1 text-[12px]' : compact ? 'pl-6 pr-6 py-1 text-[13px]' : 'pl-7 pr-7 py-1 text-sm'} bg-background border rounded focus:outline-none focus:ring-1 focus:ring-primary`}
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className={`absolute right-2 top-1/2 -translate-y-1/2 ${tight ? 'p-0.5' : 'p-0.5'} hover:bg-accent rounded`}
-              >
-                <X className={`${tight ? 'w-3 h-3' : 'w-3 h-3'}`} />
-              </button>
-            )}
+        {/* Search Bar (compact, only when toggled) */}
+        {showSearch && (
+          <div className={`${tight ? 'px-0.5 py-0.5' : compact ? 'px-1 py-1' : 'px-2 py-1.5'} border-b border-border`}> 
+            <div className="relative max-w-sm ml-auto">
+              <Search className={`absolute left-2 top-1/2 -translate-y-1/2 ${tight ? 'w-3 h-3' : compact ? 'w-3.5 h-3.5' : 'w-4 h-4'} text-muted-foreground`} />
+              <input
+                id="fm-search-input"
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search files..."
+                className={`w-full ${tight ? 'pl-5 pr-5 py-1 text-[12px]' : compact ? 'pl-6 pr-6 py-1 text-[13px]' : 'pl-7 pr-7 py-1 text-sm'} bg-background border rounded focus:outline-none focus:ring-1 focus:ring-primary`}
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className={`absolute right-2 top-1/2 -translate-y-1/2 ${tight ? 'p-0.5' : 'p-0.5'} hover:bg-accent rounded`}
+                  title="Clear"
+                >
+                  <X className={`${tight ? 'w-3 h-3' : 'w-3 h-3'}`} />
+                </button>
+              )}
+            </div>
           </div>
-        </div>
+        )}
         
         {/* File Tree */}
         <ScrollArea className={`flex-1 ${compact ? 'pl-2 pr-1 py-2' : 'pl-3 pr-2 py-3'}`}>

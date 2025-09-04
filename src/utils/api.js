@@ -88,6 +88,8 @@ export const authenticatedFetch = async (url, options = {}) => {
 
 // API endpoints
 export const api = {
+  // Export authenticatedFetch for direct use
+  authenticatedFetch,
   // Auth endpoints (no token required)
   auth: {
     status: () => fetch('/api/auth/status'),
@@ -130,6 +132,17 @@ export const api = {
     authenticatedFetch(`/api/projects/${projectName}/force`, {
       method: 'DELETE',
     }),
+  codex: {
+    lastSession: (projectPath = null) => authenticatedFetch(`/api/codex/last-session${projectPath ? `?projectPath=${encodeURIComponent(projectPath)}` : ''}`),
+    rolloutRead: (rolloutPath) => authenticatedFetch(`/api/codex/rollout-read?path=${encodeURIComponent(rolloutPath)}`)
+  },
+  images: {
+    uploadData: (dataUrl, fileName) => authenticatedFetch('/api/images/upload-data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dataUrl, fileName })
+    })
+  },
   createProject: (path) =>
     authenticatedFetch('/api/projects/create', {
       method: 'POST',

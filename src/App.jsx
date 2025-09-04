@@ -74,6 +74,12 @@ function AppContent() {
     }
   }, [authReady, isConnected, connect]);
 
+  // Enable compact UI globally (minimal spacing/buttons)
+  useEffect(() => {
+    try { document.body.classList.add('compact-ui'); } catch {}
+    return () => { try { document.body.classList.remove('compact-ui'); } catch {} };
+  }, []);
+
   // Persist state changes
   useEffect(() => {
     // Only save sidebar state for desktop to avoid mobile overlay issues
