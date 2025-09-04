@@ -1304,13 +1304,72 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
             setIsTyping(false);
             setTypingStatus({ mode: 'idle', label: '' });
           } else if (data.type === 'tool_use') {
-            // Tool usage notification (no noisy system message)
+            // Tool usage notification with parameters
             const idRaw = data.tool_use_id || data.toolUseId || data.id || '';
             const shortId = idRaw ? String(idRaw).slice(0, 6) : null;
             const toolNameRaw = data.name || data.tool || '';
             const isMcp = /mcp/i.test(toolNameRaw) || /mcp/i.test(idRaw || '');
             const toolName = toolNameRaw || (isMcp ? 'MCP tool' : 'Tool');
             const label = `${toolName}${shortId ? ` #${shortId}` : ''}`;
+            
+            // Extract and format tool parameters for display
+            const input = data.input || data.parameters || {};
+            
+            // Debug to see what we're receiving
+            console.log('Tool use event:', { name: toolNameRaw, input, fullData: data });
+            
+            let toolMessage = `**${toolNameRaw}**`;
+            
+            // Format parameters based on tool type
+            if (toolNameRaw.includes('mcp__')) {
+              // MCP tool - extract meaningful parameters
+              if (input.query) {
+                toolMessage += ` \`${input.query}\``;
+              } else if (input.url) {
+                toolMessage += ` \`${input.url}\``;
+              } else if (input.path || input.file_path) {
+                toolMessage += ` \`${input.path || input.file_path}\``;
+              } else if (input.command) {
+                toolMessage += ` \`${input.command}\``;
+              } else if (input.pattern) {
+                toolMessage += ` \`${input.pattern}\``;
+              } else if (input.libraryName) {
+                toolMessage += ` \`${input.libraryName}\``;
+              } else if (input.graphql_query) {
+                const query = String(input.graphql_query).replace(/\n/g, ' ').slice(0, 50);
+                toolMessage += ` \`${query}...\``;
+              } else if (Object.keys(input).length > 0) {
+                // Show first meaningful parameter
+                const firstKey = Object.keys(input)[0];
+                const value = String(input[firstKey]).slice(0, 50);
+                toolMessage += ` \`${value}${String(input[firstKey]).length > 50 ? '...' : ''}\``;
+              }
+            } else {
+              // Standard tool - show main parameter
+              if (input.file_path) {
+                toolMessage += ` \`${input.file_path}\``;
+              } else if (input.command) {
+                toolMessage += ` \`${input.command}\``;
+              } else if (input.pattern) {
+                toolMessage += ` \`${input.pattern}\``;
+              } else if (input.old_string) {
+                const snippet = String(input.old_string).slice(0, 30);
+                toolMessage += ` \`${snippet}${input.old_string.length > 30 ? '...' : ''}\``;
+              } else if (input.content && toolNameRaw === 'Write') {
+                toolMessage += ` \`${input.file_path || 'new file'}\``;
+              } else if (input.todos) {
+                toolMessage += ` \`updating todo list\``;
+              } else if (Object.keys(input).length > 0) {
+                // Generic fallback for any tool
+                const firstKey = Object.keys(input)[0];
+                const value = String(input[firstKey]).slice(0, 50);
+                toolMessage += ` \`${value}${String(input[firstKey]).length > 50 ? '...' : ''}\``;
+              }
+            }
+            
+            // Always show the formatted tool message
+            addMessage({ type: 'system', text: toolMessage });
+            
             setIsTyping(true);
             setTypingStatus({ mode: 'tool', label });
             lastToolLabelRef.current = label;
