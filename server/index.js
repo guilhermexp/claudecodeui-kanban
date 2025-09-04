@@ -63,7 +63,15 @@ import http from 'http';
 import cors from 'cors';
 import { promises as fsPromises } from 'fs';
 import os from 'os';
-import pty from 'node-pty';
+// node-pty is native and may be missing or ABI-mismatched in some environments.
+// Load it lazily and keep server alive even if it fails.
+let pty = null;
+try {
+  const mod = await import('node-pty');
+  pty = mod?.default || mod;
+} catch (e) {
+  console.warn('[SERVER] node-pty unavailable, Shell features disabled:', e?.message || e);
+}
 import fetch from 'node-fetch';
 import mime from 'mime-types';
 import v8 from 'v8';
@@ -88,6 +96,7 @@ import ttsRoutes from './routes/tts.js';
 import aiRoutes from './routes/ai.js';
 import promptEnhancerRoutes from './routes/prompt-enhancer.js';
 import indexerRoutes from './routes/indexer.js';
+import promptsRoutes from './routes/prompts.js';
 import { initializeDatabase } from './database/db.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 import { 
@@ -512,6 +521,7 @@ app.use('/api/tts', ttsRoutes);
 app.use('/api/ai', authenticateToken, aiRoutes);
 app.use('/api/prompt-enhancer', authenticateToken, promptEnhancerRoutes);
 app.use('/api/indexer', indexerRoutes);
+app.use('/api/prompts', promptsRoutes);
 
 // Sound files API route for Vibe Kanban sound notifications
 app.get('/api/sounds/:soundFile', (req, res) => {
@@ -1137,6 +1147,152 @@ app.get('/api/files/read', authenticateToken, async (req, res) => {
   }
 });
 
+// Lightweight helper: return latest Codex session (rollout path) from ~/.codex/sessions
+app.get('/api/codex/last-session', authenticateToken, async (req, res) => {
+  try {
+    const projectPath = (req.query && req.query.projectPath) ? String(req.query.projectPath) : null;
+    if (projectPath) {
+      const map = loadCodexSessionsMap();
+      const entry = map[projectPath];
+      if (entry && entry.sessionId && entry.rolloutPath) {
+        return res.json({ ok: true, found: true, sessionId: entry.sessionId, rolloutPath: entry.rolloutPath, source: 'map' });
+      }
+    }
+    const home = os.homedir ? os.homedir() : process.env.HOME || process.cwd();
+    const sessionsDir = path.join(home, '.codex', 'sessions');
+    try { await fsPromises.access(sessionsDir); } catch { return res.json({ ok: true, found: false }); }
+
+    async function walk(dir) {
+      const out = [];
+      const entries = await fsPromises.readdir(dir, { withFileTypes: true }).catch(() => []);
+      for (const ent of entries) {
+        const full = path.join(dir, ent.name);
+        if (ent.isDirectory()) {
+          out.push(...await walk(full));
+        } else if (ent.isFile() && ent.name.startsWith('rollout-') && ent.name.endsWith('.jsonl')) {
+          try { const stat = await fsPromises.stat(full); out.push({ file: full, mtime: stat.mtimeMs }); } catch {}
+        }
+      }
+      return out;
+    }
+
+    const files = await walk(sessionsDir);
+    if (!files.length) return res.json({ ok: true, found: false });
+    files.sort((a, b) => b.mtime - a.mtime);
+
+    // Try to pick by projectPath using a quick scan of each file's header
+    let candidate = null;
+    if (projectPath) {
+      for (const f of files) {
+        try {
+          const fh = await fsPromises.open(f.file, 'r');
+          const { buffer } = await fh.read(Buffer.alloc(65536), 0, 65536, 0).catch(() => ({ buffer: Buffer.alloc(0) }));
+          await fh.close();
+          const txt = buffer.toString('utf8');
+          // Heuristic: look for cwd matching the projectPath
+          if (txt.includes(`"cwd":"${projectPath}`) || txt.includes(projectPath)) {
+            candidate = f.file;
+            break;
+          }
+        } catch {}
+      }
+    }
+    const latest = candidate || files[0].file;
+
+    // Try to extract session id from filename or file content
+    let sessionId = null;
+    try {
+      const base = path.basename(latest, '.jsonl');
+      const mFile = base.match(/[0-9a-fA-F-]{8,}/);
+      if (mFile) sessionId = mFile[0];
+    } catch {}
+    if (!sessionId) {
+      try {
+        const fh = await fsPromises.open(latest, 'r');
+        const { buffer } = await fh.read(Buffer.alloc(8192), 0, 8192, 0).catch(() => ({ buffer: Buffer.alloc(0) }));
+        await fh.close();
+        const text = buffer.toString('utf8');
+        const m = text.match(/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/);
+        if (m) sessionId = m[0];
+      } catch {}
+    }
+
+    return res.json({ ok: true, found: true, sessionId: sessionId || null, rolloutPath: latest, source: 'scan' });
+  } catch (e) {
+    slog.error(`Error in /api/codex/last-session: ${e.message}`);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// Read and normalize a Codex rollout JSONL file into a lightweight transcript
+app.get('/api/codex/rollout-read', authenticateToken, async (req, res) => {
+  try {
+    const rolloutPath = req.query.path;
+    if (!rolloutPath || !path.isAbsolute(rolloutPath)) {
+      return res.status(400).json({ ok: false, error: 'Absolute rollout path required' });
+    }
+    try { await fsPromises.access(rolloutPath); } catch { return res.status(404).json({ ok: false, error: 'File not found' }); }
+
+    const home = os.homedir ? os.homedir() : process.env.HOME || '';
+    const codexDir = path.join(home, '.codex', 'sessions');
+    // Soft sandbox: warn if outside known directory but still allow in dev
+    if (!String(rolloutPath).startsWith(codexDir)) {
+      xlog.warn(`[CODEX] rollout-read outside ~/.codex/sessions: ${rolloutPath}`);
+    }
+
+    const raw = await fsPromises.readFile(rolloutPath, 'utf8');
+    const lines = raw.split(/\r?\n/).filter(Boolean);
+    const out = [];
+
+    const clean = (text) => {
+      try {
+        let t = String(text || '');
+        // Normalize bullets to markdown '- ' and collapse excessive blank lines
+        t = t.replace(/^\s*[•\*]\s+/gm, '- ');
+        t = t.replace(/\n{3,}/g, '\n\n');
+        // Trim trailing whitespace per line
+        t = t.replace(/[\t ]+$/gm, '');
+        return t.trim();
+      } catch { return String(text || ''); }
+    };
+    for (const line of lines) {
+      let json;
+      try { json = JSON.parse(line); } catch { continue; }
+      // Normalize a few common shapes emitted by codex exec --json
+      if (json.msg && json.msg.type === 'agent_message' && json.msg.message) {
+        out.push({ type: 'assistant', text: clean(json.msg.message) });
+        continue;
+      }
+      if (json.msg && json.msg.type === 'exec_command_begin') {
+        const cmd = Array.isArray(json.msg.command) ? json.msg.command.join(' ') : json.msg.command;
+        out.push({ type: 'system', text: `🔧 bash\n\n\`${cmd}\`` });
+        continue;
+      }
+      if (json.msg && json.msg.type === 'exec_command_end') {
+        const ec = json.msg.exit_code;
+        const stdout = json.msg.stdout || '';
+        const stderr = json.msg.stderr || '';
+        const block = [stdout && `stdout:\n\n\`\`\`\n${clean(stdout)}\n\`\`\``, stderr && `stderr:\n\n\`\`\`\n${clean(stderr)}\n\`\`\``].filter(Boolean).join('\n\n');
+        const suffix = (typeof ec === 'number') ? `\n\nExit code: ${ec}` : '';
+        if (block) out.push({ type: 'system', text: `${block}${suffix}` });
+        continue;
+      }
+      if (json.type === 'text' && json.text) {
+        out.push({ type: 'assistant', text: clean(json.text) });
+        continue;
+      }
+      if (json.content) {
+        out.push({ type: 'assistant', text: clean(String(json.content)) });
+        continue;
+      }
+    }
+    res.json({ ok: true, messages: out });
+  } catch (e) {
+    xlog.error(`rollout-read error: ${e.message}`);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // Rename a file or folder within a project
 app.post('/api/files/rename', authenticateToken, async (req, res) => {
   try {
@@ -1383,7 +1539,14 @@ function handleUnifiedClaudeConnection(ws, request) {
       } catch {}
       try { ws.send(JSON.stringify({ type: 'codex-busy', queueLength: codexQueue.length })); } catch {}
       codexCurrentProcess = null;
-      await spawnCodex(task.command, { ...task.options, onProcess: (p) => { codexCurrentProcess = p; } }, ws);
+      await spawnCodex(task.command, { 
+        ...task.options, 
+        onProcess: (p) => { codexCurrentProcess = p; },
+        onSession: (sessionId, rolloutPath) => {
+          try { codexSession = { sessionId, rolloutPath }; } catch {}
+          try { if (task.options?.projectPath) saveCodexSessionForProject(task.options.projectPath, sessionId, rolloutPath); } catch {}
+        }
+      }, ws);
       try { 
         xlog.info(`[CODEX] Message processing completed`);
       } catch {}
@@ -2186,6 +2349,15 @@ function handleShellConnection(ws, request) {
             shlog.info('Spawning Claude shell');
             shlog.debug(JSON.stringify({ shell: userShell, command: shellCommand, cwd: projectPath, cols: data.cols || 80, rows: data.rows || 24 }));
             
+            // If node-pty is not available, inform client and skip spawning
+            if (!pty || !pty.spawn) {
+              ws.send(JSON.stringify({
+                type: 'output',
+                data: '\u001b[31mShell is unavailable on this server (node-pty missing).\u001b[0m\r\n'
+              }));
+              ws.send(JSON.stringify({ type: 'exit', code: 1, signal: null }));
+              return;
+            }
             // Start shell with the command directly
             shellProcess = pty.spawn(userShell, ['-lc', shellCommand], {
               name: 'xterm-256color',
@@ -2756,6 +2928,29 @@ if (!global.uploadedImages) {
   global.uploadedImages = new Map();
 }
 
+// Upload image from data URL and return absolute path (for Codex usage)
+app.post('/api/images/upload-data', authenticateToken, express.json({ limit: '25mb' }), async (req, res) => {
+  try {
+    const { dataUrl, fileName } = req.body || {};
+    if (!dataUrl || typeof dataUrl !== 'string') return res.status(400).json({ error: 'dataUrl required' });
+    const m = /^data:([A-Za-z0-9+\-_.\/]+);base64,(.+)$/.exec(dataUrl);
+    if (!m) return res.status(400).json({ error: 'Invalid dataUrl' });
+    const mimeType = m[1];
+    const b64 = m[2];
+    const buffer = Buffer.from(b64, 'base64');
+    const ext = (fileName && fileName.includes('.')) ? fileName.split('.').pop() : (mimeType.split('/')[1] || 'png');
+    const dir = path.join(os.tmpdir(), 'codex-ui-images');
+    await fsPromises.mkdir(dir, { recursive: true });
+    const base = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const imgPath = path.join(dir, base);
+    await fsPromises.writeFile(imgPath, buffer, { mode: 0o644 });
+    return res.json({ ok: true, path: imgPath, mimeType });
+  } catch (e) {
+    slog.error(`upload-data error: ${e.message}`);
+    res.status(500).json({ error: 'Failed to save image' });
+  }
+});
+
 // Preview Proxy - Isolates preview content to prevent WebSocket interference
 app.get('/api/preview-proxy', async (req, res) => {
   const targetUrl = req.query.url;
@@ -3212,3 +3407,26 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 // MCP cleanup removed - can interfere with normal Claude MCP usage
+// Simple persistence for mapping projectPath -> last Codex session
+const codexSessionsPath = path.join(__dirname, 'database', 'codex-sessions.json');
+function loadCodexSessionsMap() {
+  try {
+    if (fs.existsSync(codexSessionsPath)) {
+      const raw = fs.readFileSync(codexSessionsPath, 'utf8');
+      return JSON.parse(raw) || {};
+    }
+  } catch {}
+  return {};
+}
+function saveCodexSessionForProject(projectPath, sessionId, rolloutPath) {
+  try {
+    const map = loadCodexSessionsMap();
+    map[projectPath] = { sessionId, rolloutPath, ts: Date.now() };
+    fs.mkdirSync(path.dirname(codexSessionsPath), { recursive: true });
+    fs.writeFileSync(codexSessionsPath, JSON.stringify(map, null, 2));
+    return true;
+  } catch (e) {
+    xlog.warn(`Failed to persist Codex session map: ${e.message}`);
+    return false;
+  }
+}

@@ -3,6 +3,7 @@ import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
 import { promises as fs } from 'fs';
+import fetch from 'node-fetch';
 import { extractProjectDirectory } from '../projects.js';
 import { createLogger } from '../utils/logger.js';
 
@@ -479,69 +480,115 @@ router.post('/generate-commit-message', async (req, res) => {
   }
 });
 
-// Enhanced commit message generator using Claude CLI
+// Enhanced commit message generator using Gemini 2.0 Flash
 async function generateSmartCommitMessage(files, diff, projectPath) {
   try {
-    // Create a prompt for Claude to generate a commit message
-    const prompt = `Based on the following git diff, generate a concise and descriptive commit message following conventional commit format (type: description).
+    // Get API key
+    const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+    
+    if (!apiKey) {
+      log.warn('No Gemini API key found, using simple commit message generator');
+      return generateSimpleCommitMessage(files, diff);
+    }
 
-Files changed:
+    // Use Gemini 2.0 Flash for fast, quality commit messages
+    const model = 'gemini-2.0-flash-exp';
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+    // Create a prompt for Gemini to generate a commit message
+    const prompt = `Sua tarefa é criar uma mensagem de commit em português (pt-BR) a partir de um diff de git.
+
+Siga estritamente estas regras:
+1.  **Formato Conventional Commit:** A mensagem DEVE seguir o formato: \`tipo(escopo): emoji descrição\`.
+2.  **Tipo:** Use um dos seguintes tipos:
+    *   \`feat\`: para novas funcionalidades.
+    *   \`fix\`: para correções de bugs.
+    *   \`refactor\`: para reestruturações de código que não alteram a funcionalidade.
+    *   \`style\`: para mudanças de formatação e estilo de código.
+    *   \`docs\`: para atualizações na documentação.
+    *   \`test\`: para adição ou correção de testes.
+    *   \`chore\`: para tarefas de manutenção e build.
+    *   \`perf\`: para melhorias de performance.
+3.  **Escopo (Opcional):** Se aplicável, infira um escopo a partir dos arquivos modificados (ex: \`api\`, \`ui\`, \`auth\`, \`git-panel\`).
+4.  **Emoji:** Adicione um emoji correspondente ao tipo:
+    *   \`feat\`: ✨
+    *   \`fix\`: 🐛
+    *   \`refactor\`: ♻️
+    *   \`style\`: 🎨
+    *   \`docs\`: 📚
+    *   \`test\`: 🧪
+    *   \`chore\`: 🧹
+    *   \`perf\`: ⚡️
+5.  **Descrição:**
+    *   Escreva uma descrição curta e impactante.
+    *   Use o modo imperativo (ex: "adiciona", "corrige", "remove").
+    *   Comece com letra minúscula.
+6.  **Tamanho:** A linha de assunto inteira (tudo) NÃO PODE exceder 72 caracteres.
+7.  **Saída:** Retorne APENAS a mensagem de commit formatada, sem nenhuma explicação ou texto adicional.
+
+**Exemplo de Saída:**
+feat(auth): ✨ adiciona sistema de autenticação com JWT
+
+**Arquivos Modificados:**
 ${files.join('\n')}
 
-Diff:
-${diff.substring(0, 4000)} ${diff.length > 4000 ? '... (truncated)' : ''}
+**Diff das Mudanças (truncado em 4000 caracteres):**
+${diff.substring(0, 4000)} ${diff.length > 4000 ? '... (truncado)' : ''}`
 
-Generate a single-line commit message that:
-1. Starts with a type (feat, fix, refactor, style, docs, test, chore, perf)
-2. Has a concise description of what changed
-3. Is no longer than 72 characters
-4. Uses present tense ("add" not "added")
-
-Return ONLY the commit message, nothing else.`;
-
-    // Use Claude CLI to generate the message
-    return new Promise((resolve) => {
-      const claudeProcess = spawn('claude', ['--print', prompt], {
-        cwd: projectPath,
-        env: { ...process.env }
-      });
-
-      let output = '';
-      let error = '';
-
-      claudeProcess.stdout.on('data', (data) => {
-        output += data.toString();
-      });
-
-      claudeProcess.stderr.on('data', (data) => {
-        error += data.toString();
-      });
-
-      claudeProcess.on('close', (code) => {
-        if (code === 0 && output) {
-          // Extract just the commit message from the output
-          const lines = output.trim().split('\n');
-          // Look for a line that looks like a commit message
-          const commitMessage = lines.find(line => 
-            line.match(/^(feat|fix|refactor|style|docs|test|chore|perf):/i) ||
-            line.match(/^(Add|Update|Fix|Remove|Refactor|Enhance)/i)
-          ) || lines[lines.length - 1]; // Use last line if no pattern found
-          
-          resolve(commitMessage.trim());
-        } else {
-          // Fallback to simple message generator
-          resolve(generateSimpleCommitMessage(files, diff));
+    const requestBody = {
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            {
+              text: prompt
+            }
+          ]
         }
-      });
+      ],
+      generationConfig: {
+        temperature: 0.3,
+        maxOutputTokens: 100,
+        topP: 0.8,
+        topK: 40
+      }
+    };
 
-      // Timeout after 5 seconds and use fallback
-      setTimeout(() => {
-        claudeProcess.kill();
-        resolve(generateSimpleCommitMessage(files, diff));
-      }, 5000);
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody)
     });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      log.error(`Gemini API error: ${response.status} - ${errorText}`);
+      return generateSimpleCommitMessage(files, diff);
+    }
+
+    const data = await response.json();
+    const commitMessage = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+
+    if (commitMessage) {
+      // Validate that it looks like a proper commit message
+      const lines = commitMessage.split('\n');
+      // New format is `type(scope): emoji description`
+      const validMessage = lines.find(line => 
+        line.match(/^(feat|fix|refactor|style|docs|test|chore|perf)(\(.*\))?:\s.+/i)
+      ) || lines[0];
+      
+      // Ensure it's not too long
+      const finalMessage = validMessage.substring(0, 72).trim();
+      log.info(`Generated commit message with Gemini: ${finalMessage}`);
+      return finalMessage;
+    } else {
+      log.warn('No valid commit message from Gemini, using fallback');
+      return generateSimpleCommitMessage(files, diff);
+    }
   } catch (error) {
-    log.error(`Smart commit message error: ${error.message}`);
+    log.error(`Gemini commit message error: ${error.message}`);
     // Fallback to simple message generator
     return generateSimpleCommitMessage(files, diff);
   }

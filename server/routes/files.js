@@ -20,6 +20,85 @@ const upload = multer({
   }
 });
 
+// List directories in a path
+router.get('/list-dirs', authenticateToken, async (req, res) => {
+  try {
+    const { path: dirPath = '/' } = req.query;
+    
+    // Resolve path (handle ~ for home directory)
+    let resolvedPath = dirPath;
+    if (dirPath.startsWith('~')) {
+      resolvedPath = dirPath.replace('~', os.homedir());
+    }
+    
+    // Ensure absolute path
+    if (!path.isAbsolute(resolvedPath)) {
+      resolvedPath = path.resolve(resolvedPath);
+    }
+    
+    // Check if path exists and is a directory
+    try {
+      const stats = await fsPromises.stat(resolvedPath);
+      if (!stats.isDirectory()) {
+        return res.status(400).json({ error: 'Path is not a directory' });
+      }
+    } catch (err) {
+      return res.status(404).json({ error: 'Directory not found' });
+    }
+    
+    // Read directory contents
+    const items = await fsPromises.readdir(resolvedPath, { withFileTypes: true });
+    
+    // Check if we're in a user's home directory
+    const homeDir = os.homedir();
+    const isInUserHome = resolvedPath === homeDir || resolvedPath === `/Users/${path.basename(homeDir)}`;
+    
+    // Filter and map directories
+    const directories = await Promise.all(
+      items
+        .filter(item => item.isDirectory())
+        .filter(item => !item.name.startsWith('.')) // Skip hidden folders
+        .filter(item => {
+          // If we're in user home, only show Documents and Downloads
+          if (isInUserHome) {
+            return item.name === 'Documents' || item.name === 'Downloads';
+          }
+          return true; // Show all folders in other directories
+        })
+        .map(async (item) => {
+          const itemPath = path.join(resolvedPath, item.name);
+          try {
+            const stats = await fsPromises.stat(itemPath);
+            return {
+              name: item.name,
+              path: itemPath,
+              type: 'directory',
+              size: stats.size,
+              modified: stats.mtime
+            };
+          } catch (err) {
+            // Skip items we can't access
+            return null;
+          }
+        })
+    );
+    
+    // Filter out nulls and sort by name
+    const validDirs = directories
+      .filter(dir => dir !== null)
+      .sort((a, b) => a.name.localeCompare(b.name));
+    
+    res.json({
+      path: resolvedPath,
+      files: validDirs
+    });
+    
+  } catch (error) {
+    log.error(`Error listing directories: ${error.message}`);
+    res.status(500).json({ error: 'Failed to list directories' });
+  }
+});
+
 // Rename file or folder
 router.post('/rename', authenticateToken, async (req, res) => {
   try {

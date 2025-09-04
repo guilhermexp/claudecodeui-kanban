@@ -118,7 +118,7 @@ if (typeof document !== 'undefined') {
 // Global store for shell sessions to persist across tab switches AND project switches
 const shellSessions = new Map();
 
-function Shell({ selectedProject, selectedSession, isActive, onConnectionChange, onSessionStateChange, isMobile, resizeTrigger, onSidebarClose, activeSidePanel, onPreviewStateChange, onBindControls = null, onTerminalVisibilityChange = null }) {
+function Shell({ selectedProject, selectedSession, isActive, onConnectionChange, onSessionStateChange, isMobile, resizeTrigger, onSidebarClose, activeSidePanel, onPreviewStateChange, onBindControls = null, onTerminalVisibilityChange = null, disablePreview = false }) {
   const terminalRef = useRef(null);
   const terminal = useRef(null);
   const fitAddon = useRef(null);
@@ -130,6 +130,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   const [isConnecting, setIsConnecting] = useState(false);
   const [isBypassingPermissions, setIsBypassingPermissions] = useState(false);
   const [isManualDisconnect, setIsManualDisconnect] = useState(false);
+  const [toast, setToast] = useState(null);
   const isAuthenticatedRef = useRef(false);
   
   // Command history state
@@ -159,6 +160,9 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   useEffect(() => {
     try { onTerminalVisibilityChange && onTerminalVisibilityChange(showTerminal); } catch {}
   }, [showTerminal, onTerminalVisibilityChange]);
+
+  // Overlay active when loading/connecting/disconnected (used to hide cursor/artifacts)
+  const overlayActive = !isInitialized || (!isConnected || isConnecting);
 
   // Notify parent when preview state changes
   useEffect(() => {
@@ -212,6 +216,49 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   
   // Terminal theme state
   const [terminalTheme, setTerminalTheme] = useState('dark');
+
+  // MCP output formatter: fix single-char-per-line blocks and truncate extra-long lines
+  const formatMcpOutput = useCallback((raw) => {
+    try {
+      if (!raw || (typeof raw !== 'string')) return raw;
+      if (!(/\(MCP\)/.test(raw) || /microsoft-|playwright|tool use|Tool use/i.test(raw))) {
+        // Not an MCP-styled chunk; apply only safe truncation
+        return raw.split(/\r?\n/).map((ln) => (ln.length > 240 ? ln.slice(0, 240) + ' …' : ln)).join('\n');
+      }
+
+      const lines = raw.split(/\r?\n/);
+      const out = [];
+      let buf = '';
+      let singles = 0;
+
+      const flushSingles = () => {
+        if (singles >= 4) {
+          // Join accumulated single-char lines into one
+          out.push(buf);
+        } else if (singles > 0) {
+          // Keep as-is if short (avoids breaking ascii art)
+          for (const ch of buf.split('')) out.push(ch);
+        }
+        buf = '';
+        singles = 0;
+      };
+
+      for (let i = 0; i < lines.length; i++) {
+        const ln = lines[i];
+        if (ln && ln.trim().length === 1) {
+          buf += ln.trim();
+          singles++;
+          continue;
+        }
+        flushSingles();
+        out.push(ln.length > 240 ? ln.slice(0, 240) + ' …' : ln);
+      }
+      flushSingles();
+      return out.join('\n');
+    } catch {
+      return raw;
+    }
+  }, []);
   
   // Sound notification function (Web Audio API)
   const playCompletionSound = async () => {
@@ -356,6 +403,10 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
         toggleFiles: () => previewControlsRef.current?.toggleFiles?.(),
         showFiles: () => previewControlsRef.current?.showFiles?.(),
         hideFiles: () => previewControlsRef.current?.hideFiles?.(),
+        // Shell actions exposed for header buttons
+        toggleBypass: () => toggleBypassPermissions(),
+        restart: () => restartShell(),
+        disconnect: () => disconnectFromShell(true, true),
         // Ensure Files overlay opens reliably: open preview, then wait until child binds
         openFilesPrimary: () => {
           setShowPreview(true);
@@ -531,13 +582,23 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
 
   // Toggle bypass permissions
   const toggleBypassPermissions = () => {
-    setIsBypassingPermissions(!isBypassingPermissions);
+    const newState = !isBypassingPermissions;
+    setIsBypassingPermissions(newState);
+    
+    // Show toast notification
+    setToast({
+      type: newState ? 'warning' : 'info',
+      message: newState ? 'Bypass permissions enabled' : 'Bypass permissions disabled'
+    });
+    
+    // Auto-hide toast after 3 seconds
+    setTimeout(() => setToast(null), 3000);
     
     // Send message to server if connected
     if (ws.current && ws.current.readyState === WebSocket.OPEN) {
       ws.current.send(JSON.stringify({
         type: 'bypassPermissions',
-        enabled: !isBypassingPermissions
+        enabled: newState
       }));
     }
   };
@@ -1214,16 +1275,21 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     requestAnimationFrame(() => {
       if (fitAddon.current) {
         fitAddon.current.fit();
-        // Send terminal size to backend after fitting
-        setTimeout(() => {
+        // Send terminal size to backend after fitting (multiple pings for reliability)
+        const sendResize = () => {
           if (terminal.current && ws.current && ws.current.readyState === WebSocket.OPEN) {
-            ws.current.send(JSON.stringify({
-              type: 'resize',
-              cols: terminal.current.cols,
-              rows: terminal.current.rows
-            }));
+            try {
+              ws.current.send(JSON.stringify({
+                type: 'resize',
+                cols: terminal.current.cols,
+                rows: terminal.current.rows
+              }));
+            } catch {}
           }
-        }, 50);
+        };
+        setTimeout(sendResize, 50);
+        setTimeout(sendResize, 200);
+        setTimeout(sendResize, 700);
       }
     });
     
@@ -1729,8 +1795,9 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
             // Removed URL regex processing here for better performance
             // URLs are already handled by WebLinksAddon
             
-            // Write output directly to terminal (preserving ANSI colors)
-            terminal.current.write(data.data);
+            // Format MCP chunks and truncate overlong lines visually
+            const payload = formatMcpOutput(data.data);
+            terminal.current.write(payload);
           } else if (data.type === 'image-uploaded') {
             // Handle successful image upload
             const { path, fileName } = data;
@@ -1847,11 +1914,13 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   // Create the terminal content once to be reused in both layouts
   const terminalContent = (
     <>
-      <div 
-        ref={terminalRef} 
-        className="h-full w-full focus:outline-none" 
-        style={{ outline: 'none' }} 
-      />
+      <div className="h-full w-full relative">
+        <div 
+          ref={terminalRef} 
+          className="h-full w-full focus:outline-none" 
+          style={{ outline: 'none' }} 
+        />
+      
       
       {/* Drag overlay for images */}
       {(isDragActive || isDraggedImageOver) && (
@@ -1873,26 +1942,34 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       
       {/* Loading state */}
       {!isInitialized && (
-        <div className="absolute inset-0 flex items-center justify-center bg-background bg-opacity-90">
-          <div className="text-white text-sm sm:text-base">Loading terminal...</div>
+        <div className="absolute inset-0 flex items-center justify-center bg-transparent">
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            <span className="text-xs sm:text-sm text-white/90">Loading terminal…</span>
+          </div>
         </div>
       )}
       
       {/* Connect button when not connected */}
       {isInitialized && !isConnected && !isConnecting && (
-        <div className="absolute inset-0 flex items-center justify-center bg-card/95 backdrop-blur-sm">
-          <div className="flex flex-col items-center gap-3 text-center">
-            <div className="text-sm text-muted-foreground">Shell disconnected</div>
-            <CtaButton onClick={connectToShell} size="sm" className="justify-center" icon={false}>
-              Continue
-            </CtaButton>
+        <div className="absolute inset-0 flex items-center justify-center bg-transparent">
+          <div className="flex flex-col items-center gap-3 text-center" style={{ marginTop: '-200px' }}>
+            {/* Button row (aligns with chats) */}
+            <div className="flex items-center gap-2 h-7">
+              <button onClick={connectToShell} className="h-7 px-3 rounded-[10px] border border-border bg-background text-[12px] text-foreground/90 hover:bg-accent">Connect</button>
+            </div>
+            {/* Subtitle block (same hierarchy used nos chats) */}
+            <div className="text-center select-none">
+              <div className="text-sm sm:text-base font-semibold text-foreground/90">Start Shell session</div>
+              <div className="text-muted-foreground text-xs">Open a terminal connection for this project</div>
+            </div>
           </div>
         </div>
       )}
       
       {/* Connecting state */}
       {isConnecting && (
-        <div className="absolute inset-0 flex items-center justify-center bg-card/95 backdrop-blur-sm">
+        <div className="absolute inset-0 flex items-center justify-center bg-transparent">
           <div className="text-center max-w-sm w-full">
             <div className="flex items-center justify-center space-x-2 sm:space-x-3 text-warning">
               <div className="w-5 h-5 sm:w-6 sm:h-6 animate-spin rounded-full border-2 border-warning border-t-transparent"></div>
@@ -1990,6 +2067,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
         </div>
       )}
 
+      </div>
       {/* Scroll to Bottom Button */}
       {showScrollToBottom && isConnected && (
         <button
@@ -2029,132 +2107,81 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       >
         <div 
           ref={terminalPanelRef}
-          className={`h-full min-h-0 flex flex-col ${showTerminal ? 'rounded-xl border border-border' : 'border-0'} `} 
+          className={`h-full min-h-0 flex flex-col relative ${showTerminal ? `${showPreview ? 'border border-r-0' : 'border'} border-border bg-card` : 'border-0'} ${overlayActive ? 'shell-cursor-hidden' : ''}`} 
           {...dropzoneProps}>
+          {/* Shell controls in local header (top-right) */}
+          <div className="absolute top-2 right-2 z-20 flex items-center gap-1.5">
+            <button
+              onClick={toggleBypassPermissions}
+              className={`w-8 h-8 rounded-full border ${isBypassingPermissions ? 'bg-amber-500/20 text-amber-600 border-amber-500/50' : 'bg-background/60 text-foreground/80 border-border/70'} flex items-center justify-center hover:bg-accent/40 transition`}
+              title={isBypassingPermissions ? 'Bypass permissions: ON' : 'Bypass permissions: OFF'}
+            >
+              {isBypassingPermissions ? (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+              )}
+            </button>
+            <button
+              onClick={restartShell}
+              disabled={isRestarting || isConnected}
+              className="w-8 h-8 rounded-full border bg-background/60 text-foreground/80 border-border/70 flex items-center justify-center hover:bg-accent/40 transition disabled:opacity-50"
+              title="Restart shell"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 2v6h-6"/>
+                <path d="M3 12a9 9 0 1 0 3-6.7L3 8"/>
+              </svg>
+            </button>
+            <button
+              onClick={() => disconnectFromShell(true, true)}
+              className="w-8 h-8 rounded-full border bg-background/60 text-foreground/80 border-border/70 flex items-center justify-center hover:bg-accent/40 transition"
+              title="Disconnect shell"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
           <input {...inputProps} />
-            {/* Header — standardized like Files */}
-            <div className="hidden sm:block flex-shrink-0 border-b border-border px-3 py-2">
-              <div className="flex items-center justify-between gap-2">
-                {/* Left: preview toggle + title + path */}
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <h3 className="text-foreground font-medium truncate text-base">Shell</h3>
-                    {selectedProject?.path && (
-                      <span
-                        className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 text-[11px] rounded-md bg-muted text-muted-foreground border border-border truncate max-w-[40ch]"
-                        title={selectedProject.path}
-                      >
-                        <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-5l-2-2H5a2 2 0 00-2 2z" />
-                        </svg>
-                        <span className="truncate">{selectedProject.displayName || selectedProject.path}</span>
-                      </span>
-                    )}
-                  </div>
-                </div>
-                {/* Right controls (all) */}
-                <div className="flex items-center gap-1">
-                  {/* Theme */}
-                  <button
-                    onClick={cycleTerminalTheme}
-                    className="p-1 sm:p-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent rounded transition"
-                    title={`Terminal theme: ${terminalTheme} (click to change)`}
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                        d={terminalTheme === 'light' 
-                          ? "M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"
-                          : terminalTheme === 'dark'
-                          ? "M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21c2.185 0 4.188-.779 5.75-2.078l.203-.206A9.003 9.003 0 0020 12a8.965 8.965 0 00-.646-3.354z"
-                          : "M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
-                        }
-                      />
-                    </svg>
-                  </button>
-
-                  {/* Bypass permissions */}
-                  <button
-                    onClick={toggleBypassPermissions}
-                    className={`p-1.5 rounded-md transition ${
-                      isBypassingPermissions 
-                        ? 'bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30' 
-                        : 'hover:bg-accent text-muted-foreground hover:text-foreground'
-                    }`}
-                    title={isBypassingPermissions ? 'Bypass permissions enabled (sudo mode)' : 'Enable bypass permissions (sudo mode)'}
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                        d={isBypassingPermissions 
-                          ? 'M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z'
-                          : 'M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z'}
-                      />
-                    </svg>
-                  </button>
-
-                  {/* Show/Hide terminal */}
-                  <button
-                    onClick={() => setShowTerminal(v => !v)}
-                    className={`p-1.5 rounded-md transition ${showTerminal ? 'text-muted-foreground hover:text-foreground hover:bg-accent' : 'text-blue-500 hover:text-blue-600 bg-blue-500/10 hover:bg-blue-500/20'}`}
-                    title={showTerminal ? 'Hide terminal' : 'Show terminal'}
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4h18v12H3zM7 20h10M9 8l2 2-2 2m4 0h4" />
-                    </svg>
-                  </button>
-
-                  {/* Preview toggle removed from Shell header; handled by top header */}
-
-                  {/* Disconnect */}
-                  {isConnected && (
-                    <button
-                      onClick={disconnectFromShell}
-                      className="p-1.5 rounded-md bg-red-500/20 text-red-400 hover:bg-red-500/30 transition"
-                      title="Disconnect from shell"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  )}
-
-                  {/* Restart */}
-                  <button
-                    onClick={restartShell}
-                    disabled={isRestarting || isConnected}
-                    className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition disabled:opacity-50"
-                    title="Restart shell"
-                  >
-                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                  </button>
-
-                  {/* Close Shell panel */}
-                  <button
-                    onClick={() => { setShowTerminal(false); }}
-                    className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition"
-                    title="Close"
-                  >
-                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
+          
+          {/* Toast notification */}
+          {toast && (
+            <div className="absolute top-14 left-1/2 -translate-x-1/2 z-30 animate-fade-in">
+              <div className={`px-4 py-2 rounded-lg shadow-lg border flex items-center gap-2 ${
+                toast.type === 'warning' 
+                  ? 'bg-amber-500/10 border-amber-500/30 text-amber-600' 
+                  : 'bg-accent/50 border-border text-foreground'
+              }`}>
+                {toast.type === 'warning' ? (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                ) : (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                )}
+                <span className="text-sm font-medium">{toast.message}</span>
               </div>
             </div>
-            {/* End compact header */}
-          
+          )}
 
         {/* Terminal area or Files (empty state of Shell) */}
         {showTerminal && (
-          <div className={`flex-1 min-h-0 p-1 md:p-2 pb-1 md:pb-2 overflow-hidden relative`}>
-            <div className="h-full rounded-2xl border border-border bg-card overflow-hidden relative px-4 py-3 md:px-6 md:py-4">
+          // When preview is open, remove all outer padding to sit flush with resizer and header
+          <div className={`flex-1 min-h-0 ${showPreview ? 'p-0' : 'p-1 md:p-2'} overflow-hidden relative`}>
+            <div className="h-full overflow-hidden relative p-0 bg-transparent">
               {terminalContent}
             </div>
           </div>
         )}
         {!showTerminal && !showPreview && (
-          <div className={`flex-1 min-h-0 p-1 md:p-2 pb-1 md:pb-2 overflow-hidden relative`}>
+          <div className={`flex-1 min-h-0 ${showPreview ? 'p-0' : 'p-1 md:p-2'} overflow-hidden relative`}>
             <div className="h-full rounded-2xl border border-border bg-card flex items-center justify-center">
               <span className="text-xs text-muted-foreground">Terminal hidden</span>
             </div>
@@ -2167,20 +2194,22 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     {!isMobile && (
       <>
         {/* Resize Handle - only interactive when preview shown */}
-        <PanelResizeHandle 
-          className={showPreview ? "w-1 bg-transparent hover:bg-accent/30 transition-colors cursor-col-resize" : "w-0 pointer-events-none"} 
-          disabled={!showPreview}
-        />
+        {!disablePreview && (
+          <PanelResizeHandle 
+            className={showPreview ? "w-px bg-border transition-colors cursor-col-resize" : "w-0 pointer-events-none"} 
+            disabled={!showPreview}
+          />
+        )}
         
         {/* Preview Panel - hidden when not in use */}
         <Panel 
           ref={previewPanelHandleRef}
-          defaultSize={showPreview ? 70 : 0} 
-          minSize={showPreview ? 30 : 0}
-          maxSize={showPreview ? 100 : 0}
-          className={showPreview ? "h-full" : "h-full hidden"}
+          defaultSize={disablePreview ? 0 : (showPreview ? 70 : 0)} 
+          minSize={disablePreview ? 0 : (showPreview ? 30 : 0)}
+          maxSize={disablePreview ? 0 : (showPreview ? 100 : 0)}
+          className={disablePreview || !showPreview ? "h-full hidden" : "h-full"}
         >
-          {showPreview && (
+          {!disablePreview && showPreview && (
             <PreviewPanel
               url={initialPreviewPaused ? '' : previewUrl}
               projectPath={selectedProject?.path}
@@ -2189,6 +2218,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
               onRefresh={() => detectUrlsInTerminal()}
               isMobile={false}
               initialPaused={initialPreviewPaused}
+              tightEdgeLeft={true}
               onBindControls={(controls) => { previewControlsRef.current = controls; }}
             />
           )}

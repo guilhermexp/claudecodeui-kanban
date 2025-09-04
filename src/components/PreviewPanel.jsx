@@ -6,7 +6,7 @@ import FileManagerSimple from './FileManagerSimple';
 import CtaButton from './ui/CtaButton';
 import { useClaudeWebSocket } from '../contexts/ClaudeWebSocketContext';
 
-function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPaused = false, onBindControls = null }) {
+function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPaused = false, onBindControls = null, tightEdgeLeft = false }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [currentUrl, setCurrentUrl] = useState(url || '');
@@ -482,7 +482,7 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
 
   if (!isValidPreviewUrl(currentUrl)) {
     return (
-      <div className="h-full flex flex-col bg-card rounded-xl border border-border">
+      <div className={`h-full flex flex-col bg-card ${tightEdgeLeft ? 'rounded-none border-t border-r border-b border-l-0' : 'rounded-xl border'} border-border`}>
         <div className="flex items-center justify-between px-2 py-1.5 border-b border-border bg-card">
           <div className="flex items-center gap-1.5">
             <span className="text-sm font-medium text-foreground">Preview Panel</span>
@@ -515,74 +515,137 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
   }
 
   return (
-    <div className="h-full flex flex-col bg-card rounded-xl border border-border relative">
+    <div className={`h-full flex flex-col bg-card ${tightEdgeLeft ? 'rounded-none border-r border-b' : 'rounded-xl border'} border-border relative`}>
       {/* Preview Toolbar */}
-      <div className="flex items-center justify-between px-2 py-2 border-b border-border">
-        <div className="flex items-center gap-1.5 flex-1 min-w-0">
+      <div className="flex items-center justify-between px-2 py-1.5">
+        <div className="flex items-center gap-1 flex-1 min-w-0">
           {/* URL Display */}
           <div className="flex items-center gap-2 flex-1 min-w-0">
-            <div 
-              className={`w-2 h-2 rounded-full ${previewRunning ? 'bg-green-500 animate-pulse' : 'bg-gray-500'}`} 
-              title={previewRunning ? 'Running' : 'Stopped'} 
-            />
-            <input
-              type="text"
-              value={uiUrl || currentUrl}
-              onChange={(e) => {
-                setUserEditedUrl(true);
-                setUiUrl(e.target.value);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  // Map typed URL to proxy path for same-origin features
-                  try {
-                    let newUi = (uiUrl || '').trim();
-                    if (!newUi) return;
-                    if (newUi.startsWith('/preview/')) {
-                      setCurrentUrl(newUi);
-                      setUserEditedUrl(false);
-                      handleRefresh();
-                      return;
-                    }
-                    if (newUi.startsWith('http')) {
-                      const u = new URL(newUi);
-                      const proxy = `/preview/${encodeURIComponent(projectName)}${u.pathname}${u.search}${u.hash}`;
+            <div className="relative flex-1 url-pill px-3">
+              {/* Status dot inside the URL pill */}
+              <span
+                className={`absolute left-2 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full ${previewRunning ? 'bg-green-500 animate-pulse' : 'bg-gray-500'}`}
+                title={previewRunning ? 'Running' : 'Stopped'}
+              />
+              <input
+                type="text"
+                value={uiUrl || currentUrl}
+                onChange={(e) => {
+                  setUserEditedUrl(true);
+                  setUiUrl(e.target.value);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    // Map typed URL to proxy path for same-origin features
+                    try {
+                      let newUi = (uiUrl || '').trim();
+                      if (!newUi) return;
+                      if (newUi.startsWith('/preview/')) {
+                        setCurrentUrl(newUi);
+                        setUserEditedUrl(false);
+                        handleRefresh();
+                        return;
+                      }
+                      if (newUi.startsWith('http')) {
+                        const u = new URL(newUi);
+                        const proxy = `/preview/${encodeURIComponent(projectName)}${u.pathname}${u.search}${u.hash}`;
+                        setCurrentUrl(proxy);
+                        setUiUrl(newUi);
+                        setUserEditedUrl(false);
+                        handleRefresh();
+                        return;
+                      }
+                      // Relative path -> mount under proxy root
+                      if (newUi.startsWith('/')) {
+                        const proxy = `/preview/${encodeURIComponent(projectName)}${newUi}`;
+                        setCurrentUrl(proxy);
+                        setUserEditedUrl(false);
+                        handleRefresh();
+                        return;
+                      }
+                      // Fallback: treat as host without protocol
+                      const proxy = `/preview/${encodeURIComponent(projectName)}/`;
                       setCurrentUrl(proxy);
-                      setUiUrl(newUi);
                       setUserEditedUrl(false);
                       handleRefresh();
-                      return;
-                    }
-                    // Relative path -> mount under proxy root
-                    if (newUi.startsWith('/')) {
-                      const proxy = `/preview/${encodeURIComponent(projectName)}${newUi}`;
-                      setCurrentUrl(proxy);
-                      setUserEditedUrl(false);
+                    } catch {
                       handleRefresh();
-                      return;
                     }
-                    // Fallback: treat as host without protocol
-                    const proxy = `/preview/${encodeURIComponent(projectName)}/`;
-                    setCurrentUrl(proxy);
-                    setUserEditedUrl(false);
-                    handleRefresh();
-                  } catch {
-                    handleRefresh();
                   }
-                }
-              }}
-              className="flex-1 px-2 py-1 text-sm bg-muted rounded-md border border-border focus:outline-none focus:ring-1 focus:ring-ring"
-              placeholder="http://localhost:3000"
-            />
+                }}
+                className="url-pill-input w-full text-sm placeholder:text-[#999999] pr-36 pl-6"
+                placeholder="http://localhost:3000"
+              />
+              {/* Trailing actions inside the URL pill */}
+              <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-2 text-muted-foreground/80">
+                {projectName && (
+                  <button
+                    onClick={() => setShowFileTree(v => !v)}
+                    className="p-1 hover:text-foreground"
+                    title={showFileTree ? 'Hide project files' : 'Show project files'}
+                    aria-label="Toggle files"
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M3 7h5l2 2h11v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/>
+                    </svg>
+                  </button>
+                )}
+                {projectName && (previewRunning ? (
+                  <button
+                    onClick={stopBackendPreview}
+                    disabled={stopping}
+                    className={`p-1 hover:text-foreground ${stopping ? 'opacity-60' : ''}`}
+                    title="Stop preview"
+                    aria-label="Stop preview"
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="8" y="8" width="8" height="8"/>
+                    </svg>
+                  </button>
+                ) : (
+                  <button
+                    onClick={startBackendPreview}
+                    disabled={starting}
+                    className={`p-1 hover:text-foreground ${starting ? 'opacity-60' : ''}`}
+                    title="Start preview"
+                    aria-label="Start preview"
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M8 5v14l11-7z"/>
+                    </svg>
+                  </button>
+                ))}
+                <button
+                  onClick={handleRefresh}
+                  className="p-1 hover:text-foreground"
+                  title="Refresh preview"
+                  aria-label="Refresh"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                </button>
+                <button
+                  onClick={onClose}
+                  className="p-1 hover:text-foreground"
+                  title="Close preview"
+                  aria-label="Close"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
           </div>
 
           {/* Action Buttons */}
-          <div className="flex items-center gap-1">
+          {false && (<div className="flex items-center gap-1.5">
             {/* File tree toggle */}
             {projectName && (
               <button
                 onClick={() => setShowFileTree(v => !v)}
-                className={`p-1.5 rounded-md hover:bg-accent transition-colors ${showFileTree ? 'opacity-100' : 'opacity-80'}`}
+                className={`icon-pill ${showFileTree ? '' : ''}`}
                 title={showFileTree ? 'Hide project files' : 'Show project files'}
               >
                 {/* Folder icon */}
@@ -591,11 +654,12 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
                 </svg>
               </button>
             )}
-            {/* Device mode */}
-            <div className="hidden md:flex items-center gap-1">
+            {/* Device mode (hidden for minimal toolbar) */}
+            {false && (
+            <div className="flex items-center gap-1">
               <button
                 onClick={() => setDeviceMode('desktop')}
-                className={`p-1.5 rounded-md hover:bg-accent transition-colors ${deviceMode==='desktop' ? 'opacity-100' : 'opacity-70'}`}
+                className={`p-1 rounded-md hover:bg-accent transition-colors ${deviceMode==='desktop' ? 'opacity-100' : 'opacity-70'}`}
                 title="Desktop preview"
               >
                 {/* Monitor icon */}
@@ -606,7 +670,7 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
               </button>
               <button
                 onClick={() => setDeviceMode('mobile')}
-                className={`p-1.5 rounded-md hover:bg-accent transition-colors ${deviceMode==='mobile' ? 'opacity-100' : 'opacity-70'}`}
+                className={`p-1 rounded-md hover:bg-accent transition-colors ${deviceMode==='mobile' ? 'opacity-100' : 'opacity-70'}`}
                 title="Mobile preview"
               >
                 {/* Mobile icon */}
@@ -616,13 +680,14 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
                 </svg>
               </button>
             </div>
+            )}
             {/* Backend preview lifecycle */}
             {projectName && (
               previewRunning ? (
                 <button
                   onClick={stopBackendPreview}
                   disabled={stopping}
-                  className={`p-1.5 rounded-md hover:bg-accent transition-colors ${stopping ? 'opacity-50' : ''}`}
+                  className={`icon-pill ${stopping ? 'opacity-60' : ''}`}
                   title="Stop preview"
                 >
                   {/* Stop icon */}
@@ -634,7 +699,7 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
                 <button
                   onClick={startBackendPreview}
                   disabled={starting}
-                  className={`p-1.5 rounded-md hover:bg-accent transition-colors ${starting ? 'opacity-50' : ''}`}
+                  className={`icon-pill ${starting ? 'opacity-60' : ''}`}
                   title="Start preview"
                 >
                   {/* Play icon */}
@@ -645,7 +710,8 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
               )
             )}
             
-            {/* Element Selection Toggle */}
+            {/* Element Selection Toggle (hidden) */}
+            {false && (
             <button
               onClick={() => {
                 // Element selection only works with same-origin content (proxy route)
@@ -655,7 +721,7 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
                 }
                 setElementSelectionMode(!elementSelectionMode);
               }}
-              className={`p-1.5 rounded-md transition-colors ${
+              className={`p-1 rounded-md transition-colors ${
                 elementSelectionMode 
                   ? 'bg-blue-500/20 text-blue-600 dark:text-blue-400 hover:bg-blue-500/30' 
                   : currentUrl && !currentUrl.startsWith('/preview/') 
@@ -675,8 +741,10 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2z" />
               </svg>
             </button>
+            )}
             
-            {/* Microphone Permission */}
+            {/* Microphone Permission (hidden) */}
+            {false && (
             <button
               onClick={() => {
                 if (microphoneStatus === 'prompt' || microphoneStatus === 'denied') {
@@ -685,7 +753,7 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
                   requestMicrophonePermission();
                 }
               }}
-              className={`p-1.5 rounded-md transition-colors ${
+              className={`p-1 rounded-md transition-colors ${
                 microphoneStatus === 'granted' 
                   ? 'text-muted-foreground hover:bg-accent' 
                   : 'text-yellow-500 hover:bg-accent'
@@ -702,11 +770,12 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14a3 3 0 003-3V7a3 3 0 10-6 0v4a3 3 0 003 3zm6-3a6 6 0 11-12 0m6 6v3m-4 0h8" />
               </svg>
             </button>
+            )}
 
             {/* Pause/Play toggle removed */}
             <button
               onClick={handleRefresh}
-              className="p-1.5 hover:bg-accent rounded-md transition-colors"
+              className="icon-pill"
               title="Refresh preview"
               
             >
@@ -716,7 +785,7 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
             </button>
             
             {/* Error Console Button - Only highlight if there are errors */}
-            <div className="relative" ref={logsRef}>
+            {false && (<div className="relative" ref={logsRef}>
               <button
                 onClick={() => setShowLogs(!showLogs)}
                 className={`p-1.5 hover:bg-accent rounded-md transition-colors relative ${
@@ -830,10 +899,9 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
                   </div>
                 </div>
               )}
-            </div>
+            </div>)}
             
-            {/* Server Logs Button */}
-            <button
+            {false && (<button
               onClick={() => setShowServerLogs(!showServerLogs)}
               className={`p-1.5 rounded-md transition-colors ${
                 showServerLogs 
@@ -845,9 +913,8 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
-            </button>
-            
-            <button
+            </button>)}
+            {false && (<button
               onClick={handleOpenExternal}
               className="p-1.5 hover:bg-accent rounded-md transition-colors"
               title="Open in new tab"
@@ -855,17 +922,17 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
               </svg>
-            </button>
+            </button>)}
             <button
               onClick={onClose}
-              className="p-1.5 hover:bg-accent rounded-md transition-colors"
+              className="icon-pill"
               title="Close preview"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
-          </div>
+          </div>)}
         </div>
       </div>
 

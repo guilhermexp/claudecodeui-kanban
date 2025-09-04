@@ -21,7 +21,7 @@ const CONFIG = {
     MAX_DISPLAY_NAME_LENGTH: 100,
     MAX_PATH_LENGTH: 4096,
     MAX_SESSIONS_PER_REQUEST: 100,
-    MAX_JSONL_LINE_LENGTH: 1024 * 1024,  // 1MB per line
+    MAX_JSONL_LINE_LENGTH: 5 * 1024 * 1024,  // 5MB per line (was 1MB)
   },
   PERFORMANCE: {
     SESSION_BATCH_SIZE: 10,
@@ -288,7 +288,8 @@ class FileSystemUtils {
       
       // Security: limit line length
       if (trimmed.length > CONFIG.LIMITS.MAX_JSONL_LINE_LENGTH) {
-        Logger.warn('Skipping oversized JSONL line', { 
+        // Reduce noise: log as debug instead of warn
+        Logger.debug('Skipping oversized JSONL line', { 
           filePath, 
           lineLength: trimmed.length 
         });

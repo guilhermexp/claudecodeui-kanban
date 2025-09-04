@@ -236,13 +236,14 @@ export async function startPreview(projectName, repoPath, preferredPort = null) 
   let args = ['run', 'dev'];
   let isNextJs = false;
   let isVite = false;
+  let packageJson = null;
   
   try {
     // Check if package.json exists and what scripts are available
     const packageJsonPath = path.join(repoPath, 'package.json');
     const fs = await import('fs').then(m => m.promises);
     const packageContent = await fs.readFile(packageJsonPath, 'utf8');
-    const packageJson = JSON.parse(packageContent);
+    packageJson = JSON.parse(packageContent);
     
     // Detect framework
     if (packageJson.dependencies) {
@@ -273,7 +274,16 @@ export async function startPreview(projectName, repoPath, preferredPort = null) 
 
   // Append port argument based on framework
   let fullArgs;
-  if (isNextJs) {
+  
+  // First check if the script already contains a port specification
+  const scriptHasPort = packageJson?.scripts?.[args[1]]?.includes(' -p ') || 
+                        packageJson?.scripts?.[args[1]]?.includes('--port');
+  
+  if (scriptHasPort) {
+    // Script already specifies port, don't override
+    console.log(`[Preview] Script already contains port configuration, using as-is`);
+    fullArgs = [...args];
+  } else if (isNextJs) {
     // Next.js uses -p PORT directly (no --)
     fullArgs = [...args, '-p', String(port)];
   } else if (isVite) {

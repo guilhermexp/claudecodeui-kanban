@@ -2,19 +2,35 @@ import { promises as fs } from 'fs';
 import fsSync from 'fs';
 import path from 'path';
 import os from 'os';
-import Database from 'better-sqlite3';
+// Optional native DB; fall back to in-memory when not available
+let Database = null;
+try {
+  const mod = await import('better-sqlite3');
+  Database = mod?.default || mod;
+} catch (e) {
+  console.warn('[USAGE] better-sqlite3 unavailable; using in-memory store');
+}
 
 class UsageTracker {
   constructor() {
-    const dbDir = path.join(os.homedir(), '.claudecodeui');
-    // Create directory if it doesn't exist
-    if (!fsSync.existsSync(dbDir)) {
-      fsSync.mkdirSync(dbDir, { recursive: true });
+    this.memory = !Database;
+    if (!this.memory) {
+      try {
+        const dbDir = path.join(os.homedir(), '.claudecodeui');
+        if (!fsSync.existsSync(dbDir)) {
+          fsSync.mkdirSync(dbDir, { recursive: true });
+        }
+        const dbPath = path.join(dbDir, 'usage.db');
+        this.db = new Database(dbPath);
+        this.initDatabase();
+      } catch (e) {
+        console.warn('[USAGE] Failed to init better-sqlite3, switching to memory:', e?.message || e);
+        this.memory = true;
+        this.mem = { usage_logs: [], session_durations: [] };
+      }
+    } else {
+      this.mem = { usage_logs: [], session_durations: [] };
     }
-    
-    const dbPath = path.join(dbDir, 'usage.db');
-    this.db = new Database(dbPath);
-    this.initDatabase();
     this.claudeProjectsPath = path.join(os.homedir(), '.claude', 'projects');
   }
 
@@ -110,6 +126,26 @@ class UsageTracker {
     const cost = this.calculateCost(model, inputTokens, outputTokens, cacheWriteTokens, cacheReadTokens);
 
     try {
+      if (this.memory) {
+        const item = {
+          timestamp: timestamp || new Date().toISOString(),
+          project_path: projectPath,
+          session_id: sessionId,
+          model,
+          input_tokens: inputTokens,
+          output_tokens: outputTokens,
+          cache_write_tokens: cacheWriteTokens,
+          cache_read_tokens: cacheReadTokens,
+          cost,
+          request_id: requestId,
+          message_id: messageId
+        };
+        if (messageId && this.mem.usage_logs.some(u => u.message_id === messageId)) {
+          return { cost: 0, totalTokens: 0 };
+        }
+        this.mem.usage_logs.push(item);
+        return { cost, totalTokens: inputTokens + outputTokens };
+      }
       const stmt = this.db.prepare(`
         INSERT OR IGNORE INTO usage_logs (
           timestamp, project_path, session_id, model,
@@ -137,6 +173,11 @@ class UsageTracker {
 
   clearAllData() {
     try {
+      if (this.memory) {
+        this.mem.usage_logs = [];
+        this.mem.session_durations = [];
+        return { success: true, message: 'All data cleared (memory)' };
+      }
       this.db.exec('DELETE FROM usage_logs');
       this.db.exec('DELETE FROM session_durations');
       return { success: true, message: 'All data cleared' };
@@ -155,7 +196,11 @@ class UsageTracker {
       }
 
       // Clear existing data before importing
-      this.db.exec('DELETE FROM usage_logs');
+      if (this.memory) {
+        this.mem.usage_logs = [];
+      } else {
+        this.db.exec('DELETE FROM usage_logs');
+      }
 
       // Read all project directories
       const projects = await fs.readdir(this.claudeProjectsPath);
@@ -295,6 +340,22 @@ class UsageTracker {
   }
 
   getUsageStats(startDate = null, endDate = null) {
+    if (this.memory) {
+      // Lightweight aggregation for memory mode
+      const data = [];
+      return {
+        total_cost: 0,
+        total_tokens: 0,
+        total_input_tokens: 0,
+        total_output_tokens: 0,
+        total_cache_creation_tokens: 0,
+        total_cache_read_tokens: 0,
+        total_sessions: 0,
+        by_model: [],
+        by_date: [],
+        by_project: []
+      };
+    }
     let dateFilter = '';
     const params = [];
 
@@ -383,11 +444,11 @@ class UsageTracker {
   }
 
   storeSessionDurations(sessionTimestamps, messageCountBySession = {}) {
-    const stmt = this.db.prepare(`
+    const stmt = !this.memory ? this.db.prepare(`
       INSERT OR REPLACE INTO session_durations (
         project_path, session_id, start_time, end_time, duration_minutes
       ) VALUES (?, ?, ?, ?, ?)
-    `);
+    `) : null;
     
     for (const [key, data] of Object.entries(sessionTimestamps)) {
       const startTime = new Date(data.first);
@@ -430,17 +491,36 @@ class UsageTracker {
         durationMinutes = Math.min(messageCount * 1.5, 240); // At least 1.5 min per message
       }
       
-      stmt.run(
-        data.projectPath,
-        data.sessionId,
-        data.first,
-        data.last,
-        durationMinutes
-      );
+      if (this.memory) {
+        const existingIdx = this.mem.session_durations.findIndex(r => r.project_path === data.projectPath && r.session_id === data.sessionId);
+        const row = { project_path: data.projectPath, session_id: data.sessionId, start_time: data.first, end_time: data.last, duration_minutes: durationMinutes };
+        if (existingIdx >= 0) this.mem.session_durations[existingIdx] = row; else this.mem.session_durations.push(row);
+      } else {
+        stmt.run(
+          data.projectPath,
+          data.sessionId,
+          data.first,
+          data.last,
+          durationMinutes
+        );
+      }
     }
   }
 
   getUsageTime(startDate = null, endDate = null) {
+    if (this.memory) {
+      return {
+        total_minutes: 0,
+        total_hours: 0,
+        total_sessions: 0,
+        days_used: 0,
+        avg_session_minutes: 0,
+        min_session_minutes: 0,
+        max_session_minutes: 0,
+        by_date: [],
+        by_project: []
+      };
+    }
     let dateFilter = '';
     const params = [];
 
@@ -513,6 +593,9 @@ class UsageTracker {
   }
 
   getSessionStats(startDate = null, endDate = null) {
+    if (this.memory) {
+      return [];
+    }
     let dateFilter = '';
     const params = [];
 
