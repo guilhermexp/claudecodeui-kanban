@@ -140,3 +140,4 @@ push-to-github.sh
 start-vibe-backend.sh
 *-old.sh
 *-backup.sh certs/
+tmp-chatterbox/

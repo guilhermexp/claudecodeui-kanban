@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
+// Minimal tool output block: header row + collapsible raw text
 
-export default function ToolResultItem({ action = 'Executed', filePath = '', content, icon, details }) {
+export default function ToolResultItem({ action = 'Executed', filePath = '', content, icon, details, language = 'bash' }) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   const shortenTail = (path, keep = 2) => {
@@ -20,77 +21,43 @@ export default function ToolResultItem({ action = 'Executed', filePath = '', con
     return shortenTail(filePath, 2);
   })();
 
-  const Icon = () => {
-    switch (action) {
-      case 'Edited':
-      case 'Created':
-        return (
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4 text-muted-foreground" fill="currentColor">
-            <path d="M14 20h7v-2.59l-5.7-5.7-4.12 4.12L14 20Zm-3.41-3.41 4.12-4.12-2.3-2.3-4.12 4.12 2.3 2.3ZM3 21V3h12l6 6v3h-2V9h-5V4H5v15h6v2H3Z"/>
-          </svg>
-        );
-      case 'Read':
-        return (
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4 text-muted-foreground" fill="currentColor">
-            <path d="M6 4h7l5 5v11H6V4Zm7 1.5V9h3.5L13 5.5Z"/>
-          </svg>
-        );
-      case 'Deleted':
-        return (
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4 text-muted-foreground" fill="currentColor">
-            <path d="M6 7h12v12a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V7Zm3 3v8h2v-8H9Zm4 0v8h2v-8h-2ZM9 4h6v2H9V4Z"/>
-          </svg>
-        );
-      case 'Generated':
-        return (
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4 text-muted-foreground" fill="currentColor">
-            <path d="M12 2a10 10 0 1 0 10 10h-2A8 8 0 1 1 12 4V2Zm-1 5h2v6h-2V7Zm0 8h2v2h-2v-2Z"/>
-          </svg>
-        );
-      case 'Searched':
-        return (
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4 text-muted-foreground" fill="currentColor">
-            <path d="M10 2a8 8 0 1 1 0 16 8 8 0 0 1 0-16Zm8.32 14.9 3.39 3.4-1.41 1.4-3.4-3.39 1.42-1.41Z"/>
-          </svg>
-        );
-      case 'Executed':
-      default:
-        return (
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4 text-muted-foreground" fill="currentColor">
-            <path d="M3 5h18v14H3V5Zm2 2v10h14V7H5Zm3 8-2-2 3-3-3-3 2-2 5 5-5 5Zm6 0v-2h4v2h-4Z"/>
-          </svg>
-        );
-    }
-  };
+  // Minimal monochrome doc/code symbol
+  const Icon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-4 w-4 text-muted-foreground" fill="currentColor">
+      <path d="M4 4h12l4 4v12H4V4Zm12 1.5V9h3.5L16 5.5Z"/>
+    </svg>
+  );
+
+  const lineCount = useMemo(() => {
+    const src = typeof content === 'string' ? content : '';
+    if (!src) return 0;
+    return src.split('\n').length;
+  }, [content]);
 
   return (
     <div className="mb-1">
-      <div className="flex items-start gap-2 text-sm bg-accent/10 dark:bg-accent/5 border-l-2 border-primary/30 pl-3 pr-2 py-1.5 rounded-r cursor-pointer" onClick={() => content && setIsExpanded(!isExpanded)}>
-        {content && (
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`text-muted-foreground/60 transition-transform flex-shrink-0 mt-0.5 ${isExpanded ? 'rotate-90' : ''}`}>
+      <div className="flex items-center gap-2 text-sm bg-transparent border-l-2 border-border pl-3 pr-2 py-1.5 rounded-r cursor-pointer hover:bg-accent/10" onClick={() => content && setIsExpanded(!isExpanded)}>
+        {content && String(content).length > 0 && (
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`text-muted-foreground/60 transition-transform flex-shrink-0 ${isExpanded ? 'rotate-90' : ''}`}>
             <polyline points="9 18 15 12 9 6"></polyline>
           </svg>
         )}
-        {icon ? (
-          <span className="text-base mt-[-2px] flex-shrink-0" style={{ filter: 'grayscale(100%)' }}>{icon}</span>
-        ) : (
-          <div className="flex items-center flex-shrink-0"><Icon /></div>
-        )}
-        <div className="flex-1">
-          <span className="font-medium text-foreground/90">{action}</span>
+        <div className="flex items-center gap-2 min-w-0">
+          <Icon />
+          <span className="font-semibold italic text-foreground/90">{action}</span>
           {filePath && (
-            <span className="ml-2 font-mono text-xs text-muted-foreground" title={filePath}>
+            <span className="px-2 py-0.5 rounded bg-muted/60 border border-border/50 text-xs text-foreground/80 font-mono truncate max-w-[320px]" title={filePath}>
               {displayLabel}
             </span>
           )}
-          {details && (
-            <span className="ml-2 text-xs text-muted-foreground">• {details}</span>
+          {(details || lineCount > 0) && (
+            <span className="text-xs text-muted-foreground">• {details || `${lineCount} lines`}</span>
           )}
         </div>
       </div>
-      {isExpanded && content && (
-        <div className="mt-1 ml-5 p-2 bg-muted rounded">
-          <pre className="text-xs text-foreground/90 font-mono whitespace-pre-wrap break-words">{content}</pre>
+      {isExpanded && typeof content === 'string' && (
+        <div className="mt-1 ml-6 border border-border rounded-xl bg-card p-3">
+          <pre className="text-xs text-foreground/90 font-mono whitespace-pre-wrap break-words">{content.replace(/```/g, '```')}</pre>
         </div>
       )}
     </div>
