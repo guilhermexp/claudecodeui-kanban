@@ -15,7 +15,12 @@ export function savePlannerMode(mode) {
 
 export function loadModelLabel() {
   try {
-    return localStorage.getItem(MODEL_KEY) || 'Full Access';
+    let v = localStorage.getItem(MODEL_KEY);
+    if (!v) return 'gpt-high';
+    const norm = String(v).trim().toLowerCase();
+    // Normalize common variants to the canonical label
+    if (norm === 'gpt-high' || norm === 'gpt high' || norm === 'gpt hag') return 'gpt-high';
+    return v;
   } catch { return 'Full Access'; }
 }
 

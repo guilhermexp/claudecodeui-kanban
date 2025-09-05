@@ -90,7 +90,7 @@
     "xterm-addon-fit": "^0.8.0"
   },
   "devDependencies": {
-    "@anthropic-ai/claude-code": "^1.0.100",
+    "@anthropic-ai/claude-code": "^1.0.105",
     "@types/react": "^18.2.43",
     "@types/react-dom": "^18.2.17",
     "@vitejs/plugin-react": "^4.6.0",

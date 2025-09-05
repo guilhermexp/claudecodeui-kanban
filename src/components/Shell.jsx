@@ -37,11 +37,12 @@ import 'xterm/css/xterm.css';
     outline: none !important;
   }
   
-  /* Make terminal responsive */
+  /* Make terminal responsive with proper spacing */
   .xterm {
     width: 100% !important;
     height: 100% !important;
     background-color: transparent !important; /* Let parent provide background */
+    padding: 0.25rem 0.5rem !important; /* Add minimal padding to prevent text from touching edges */
   }
   
   .xterm .xterm-viewport {
@@ -51,7 +52,7 @@ import 'xterm/css/xterm.css';
   }
   
   .xterm .xterm-screen {
-    width: 100% !important;
+    width: calc(100% - 1rem) !important; /* Account for padding */
     background-color: transparent !important;
   }
   
@@ -59,6 +60,7 @@ import 'xterm/css/xterm.css';
   @media (max-width: 640px) {
     .xterm {
       font-size: 11px !important;
+      padding: 0.375rem 0.625rem !important; /* Slightly more padding on mobile for touch */
     }
     
     .xterm .xterm-viewport {
@@ -87,10 +89,22 @@ import 'xterm/css/xterm.css';
     }
   }
   
+  /* Tablet and small screens - ensure adequate spacing */
+  @media (max-width: 1024px) {
+    .xterm {
+      padding: 0.375rem 0.5rem !important; /* Consistent padding on smaller screens */
+    }
+    
+    .xterm .xterm-screen {
+      width: calc(100% - 1rem) !important;
+    }
+  }
+  
   /* Mobile scroll optimization */
   @media (max-width: 768px) {
     .xterm {
       overscroll-behavior: contain;
+      padding: 0.5rem 0.625rem !important; /* More generous padding for mobile */
     }
     
     .xterm .xterm-viewport {
@@ -118,7 +132,7 @@ if (typeof document !== 'undefined') {
 // Global store for shell sessions to persist across tab switches AND project switches
 const shellSessions = new Map();
 
-function Shell({ selectedProject, selectedSession, isActive, onConnectionChange, onSessionStateChange, isMobile, resizeTrigger, onSidebarClose, activeSidePanel, onPreviewStateChange, onBindControls = null, onTerminalVisibilityChange = null, disablePreview = false }) {
+function Shell({ selectedProject, selectedSession, isActive, onConnectionChange, onSessionStateChange, isMobile, resizeTrigger, onSidebarClose, activeSidePanel, onPreviewStateChange, onBindControls = null, onTerminalVisibilityChange = null, disablePreview = false, flushRight = false }) {
   const terminalRef = useRef(null);
   const terminal = useRef(null);
   const fitAddon = useRef(null);
@@ -584,15 +598,10 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   const toggleBypassPermissions = () => {
     const newState = !isBypassingPermissions;
     setIsBypassingPermissions(newState);
-    
-    // Show toast notification
-    setToast({
-      type: newState ? 'warning' : 'info',
-      message: newState ? 'Bypass permissions enabled' : 'Bypass permissions disabled'
-    });
-    
-    // Auto-hide toast after 3 seconds
-    setTimeout(() => setToast(null), 3000);
+
+    // Replace transient toast with persistent visual indicator elsewhere.
+    // Keep toast state clear to avoid showing the floating banner in the wrong place.
+    setToast(null);
     
     // Send message to server if connected
     if (ws.current && ws.current.readyState === WebSocket.OPEN) {
@@ -1962,6 +1971,15 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
             <div className="text-center select-none">
               <div className="text-sm sm:text-base font-semibold text-foreground/90">Start Shell session</div>
               <div className="text-muted-foreground text-xs">Open a terminal connection for this project</div>
+              {/* Persistent bypass status directly under the subtitle */}
+              {isBypassingPermissions && (
+                <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-lg border shadow-sm bg-amber-500/10 border-amber-500/30 text-amber-600">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  <span className="text-[11px] font-medium">Bypass permissions enabled</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -2107,21 +2125,21 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       >
         <div 
           ref={terminalPanelRef}
-          className={`h-full min-h-0 flex flex-col relative ${showTerminal ? `${showPreview ? 'border border-r-0' : 'border'} border-border bg-card` : 'border-0'} ${overlayActive ? 'shell-cursor-hidden' : ''}`} 
+          className={`h-full min-h-0 flex flex-col relative ${showTerminal ? `${(showPreview || flushRight) ? 'border border-r-0 rounded-l-lg' : 'border rounded-lg'} border-border bg-card overflow-hidden` : 'border-0'} ${overlayActive ? 'shell-cursor-hidden' : ''}`} 
           {...dropzoneProps}>
           {/* Shell controls in local header (top-right) */}
           <div className="absolute top-2 right-2 z-20 flex items-center gap-1.5">
             <button
               onClick={toggleBypassPermissions}
-              className={`w-8 h-8 rounded-full border ${isBypassingPermissions ? 'bg-amber-500/20 text-amber-600 border-amber-500/50' : 'bg-background/60 text-foreground/80 border-border/70'} flex items-center justify-center hover:bg-accent/40 transition`}
+              className={`icon-pill-sm ${isBypassingPermissions ? 'text-amber-400' : 'text-muted-foreground'}`}
               title={isBypassingPermissions ? 'Bypass permissions: ON' : 'Bypass permissions: OFF'}
             >
               {isBypassingPermissions ? (
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
               ) : (
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                 </svg>
               )}
@@ -2129,59 +2147,39 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
             <button
               onClick={restartShell}
               disabled={isRestarting || isConnected}
-              className="w-8 h-8 rounded-full border bg-background/60 text-foreground/80 border-border/70 flex items-center justify-center hover:bg-accent/40 transition disabled:opacity-50"
+              className="icon-pill-sm text-muted-foreground disabled:opacity-50"
               title="Restart shell"
             >
-              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 2v6h-6"/>
                 <path d="M3 12a9 9 0 1 0 3-6.7L3 8"/>
               </svg>
             </button>
             <button
               onClick={() => disconnectFromShell(true, true)}
-              className="w-8 h-8 rounded-full border bg-background/60 text-foreground/80 border-border/70 flex items-center justify-center hover:bg-accent/40 transition"
+              className="icon-pill-sm text-muted-foreground"
               title="Disconnect shell"
             >
-              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
           </div>
           <input {...inputProps} />
           
-          {/* Toast notification */}
-          {toast && (
-            <div className="absolute top-14 left-1/2 -translate-x-1/2 z-30 animate-fade-in">
-              <div className={`px-4 py-2 rounded-lg shadow-lg border flex items-center gap-2 ${
-                toast.type === 'warning' 
-                  ? 'bg-amber-500/10 border-amber-500/30 text-amber-600' 
-                  : 'bg-accent/50 border-border text-foreground'
-              }`}>
-                {toast.type === 'warning' ? (
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                ) : (
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                )}
-                <span className="text-sm font-medium">{toast.message}</span>
-              </div>
-            </div>
-          )}
+          {/* Removed floating toast; bypass status now persists under subtitle when relevant */}
 
         {/* Terminal area or Files (empty state of Shell) */}
         {showTerminal && (
-          // When preview is open, remove all outer padding to sit flush with resizer and header
-          <div className={`flex-1 min-h-0 ${showPreview ? 'p-0' : 'p-1 md:p-2'} overflow-hidden relative`}>
+          // Maintain minimal padding when preview is open for better readability
+          <div className={`flex-1 min-h-0 ${showPreview ? 'px-1 py-0.5 sm:px-2 sm:py-1' : 'p-1 md:p-2'} overflow-hidden relative`}>
             <div className="h-full overflow-hidden relative p-0 bg-transparent">
               {terminalContent}
             </div>
           </div>
         )}
         {!showTerminal && !showPreview && (
-          <div className={`flex-1 min-h-0 ${showPreview ? 'p-0' : 'p-1 md:p-2'} overflow-hidden relative`}>
+          <div className={`flex-1 min-h-0 ${showPreview ? 'px-1 py-0.5 sm:px-2 sm:py-1' : 'p-1 md:p-2'} overflow-hidden relative`}>
             <div className="h-full rounded-2xl border border-border bg-card flex items-center justify-center">
               <span className="text-xs text-muted-foreground">Terminal hidden</span>
             </div>
@@ -2212,7 +2210,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
           {!disablePreview && showPreview && (
             <PreviewPanel
               url={initialPreviewPaused ? '' : previewUrl}
-              projectPath={selectedProject?.path}
+              projectPath={selectedProject?.fullPath || selectedProject?.path}
               projectName={selectedProject?.name}
               onClose={() => setShowPreview(false)}
               onRefresh={() => detectUrlsInTerminal()}

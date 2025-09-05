@@ -2,6 +2,8 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { loadHistory, groupByProject, sumDuration, humanize, filterByDay, filterByWeek, clearHistory } from '../utils/timer-history';
 import { loadPromptsHubState, savePromptsHubState, upsertItem, deleteItem, detectTemplateVariables } from '../utils/prompts-hub';
 import PromptsCreateModal from './PromptsCreateModal';
+// Local aliases used by nested view components
+const { useState: useStateReact, useEffect: useEffectReact } = React;
 
 function ToolbarButton({ onClick, active, title, children }) {
   return (
@@ -246,13 +248,13 @@ export default function PromptsHub({ onClose, onExecutePrompt }) {
   }
 
   return (
-    <div className="h-full flex flex-col bg-card text-foreground">
+    <div className="h-full min-h-0 flex flex-col overflow-hidden bg-card text-foreground">
       {/* Top tabs + search */}
       <div className="min-h-12 flex flex-wrap items-center justify-between gap-2 px-4 border-b border-border py-2">
         <div className="flex items-center gap-1 bg-muted p-1 rounded-lg overflow-x-auto max-w-full">
-          <ToolbarButton onClick={() => setTab('prompts')} active={tab==='prompts'} title="Prompts">
+          <ToolbarButton onClick={() => setTab('prompts')} active={tab==='prompts'} title="Hub">
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a4 4 0 0 1-4 4H7l-4 4V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8z"/></svg>
-            <span>Prompts</span>
+            <span>Hub</span>
           </ToolbarButton>
           <ToolbarButton onClick={() => setTab('snippets')} active={tab==='snippets'} title="Snippets">
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></svg>
@@ -328,11 +330,10 @@ export default function PromptsHub({ onClose, onExecutePrompt }) {
             </div>
           </div>
 
-          {/* Right: Agent details */}
+          {/* Right: Simplified details */}
           <div className="col-span-12 md:col-span-7 h-full overflow-auto p-3 space-y-3">
             {selected ? (
               <>
-                {/* Agent header */}
                 <div className="rounded-xl border border-border bg-muted/10 p-3">
                   <div className="flex items-center justify-between">
                     <div>
@@ -340,67 +341,13 @@ export default function PromptsHub({ onClose, onExecutePrompt }) {
                       {selected.description && <div className="text-xs text-muted-foreground mt-1 max-w-prose break-words">{selected.description}</div>}
                     </div>
                     <div className="flex items-center gap-2">
-                      <button className="text-xs px-2 py-1 rounded bg-primary text-primary-foreground" onClick={()=>handleUseAgent(selected)}>Use Agent</button>
-                      <button className="text-xs px-2 py-1 rounded bg-background border border-border" onClick={()=>handleCopy(buildPreview(selected, varValues))}>Copy Preview</button>
-                      <button className="text-xs px-2 py-1 rounded bg-background border border-border" onClick={()=>handleCopy(selected.template || '')}>Copy Template</button>
+                      <button className="text-xs px-2 py-1 rounded bg-primary text-primary-foreground" onClick={()=>handleUseAgent(selected)}>Use</button>
+                      <button className="text-xs px-2 py-1 rounded bg-background border border-border" onClick={()=>handleCopy(selected.template || '')}>Copy</button>
                     </div>
                   </div>
                 </div>
-
-                {/* Variables */}
                 <div className="rounded-xl border border-border bg-muted/10 p-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="text-sm font-semibold">Variables</div>
-                    <button className="text-[11px] px-2 py-1 rounded border border-border hover:bg-accent" onClick={()=>insertMissingVarsFromTemplate(selected, updatePrompt)}>Sync with template</button>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {(selected.variables||[]).map((v, idx)=> (
-                      <div key={v.name} className="space-y-1">
-                        <div className="text-[11px] text-muted-foreground">{v.name}</div>
-                        <input className="w-full bg-background px-2 py-1 rounded border border-border text-sm" value={varValues[v.name] || ''} placeholder={v.example || 'value'} onChange={(e)=>setVarValues({...varValues, [v.name]: e.target.value})} />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Prompt editor */}
-                <div className="rounded-xl border border-border bg-muted/10 p-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="text-sm font-semibold">Prompt</div>
-                    <div className="flex items-center gap-2">
-                      <select
-                        value={enhanceMode}
-                        onChange={(e) => setEnhanceMode(e.target.value)}
-                        className="text-[11px] px-2 py-1 rounded border border-border bg-background"
-                      >
-                        <option value="implementacao">Implementação</option>
-                        <option value="bugs">Correção de Bugs</option>
-                        <option value="refatoracao">Refatoração</option>
-                        <option value="standard">Padrão</option>
-                      </select>
-                      <button
-                        className={`text-[11px] px-2 py-1 rounded border border-border hover:bg-accent inline-flex items-center gap-1 ${enhancing ? 'opacity-50' : ''}`}
-                        onClick={handleEnhancePrompt}
-                        disabled={enhancing}
-                      >
-                        {enhancing && <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin inline-block" />}
-                        <span>Enhance with AI</span>
-                      </button>
-                      <button className="text-[11px] px-2 py-1 rounded border border-border hover:bg-accent" onClick={()=>updatePrompt({...selected, template: (selected.template||'') + '{' + ((selected.variables?.[0]?.name)||'var') + '}'})}>Insert var</button>
-                    </div>
-                  </div>
-                  <textarea
-                    value={selected.template || ''}
-                    onChange={(e)=>updatePrompt({ ...selected, template: e.target.value })}
-                    rows={10}
-                    className="w-full bg-black/60 px-3 py-2 rounded-lg border border-border text-sm font-mono"
-                  />
-                </div>
-
-                {/* Preview */}
-                <div className="rounded-xl border border-border bg-muted/10 p-3">
-                  <div className="text-sm font-semibold mb-2">Preview</div>
-                  <pre className="text-xs whitespace-pre-wrap p-3 bg-black/60 rounded-lg border border-border">{buildPreview(selected, varValues)}</pre>
+                  <pre className="text-xs whitespace-pre-wrap p-3 bg-black/60 rounded-lg border border-border">{selected.template || ''}</pre>
                 </div>
               </>
             ) : (
@@ -732,6 +679,15 @@ function IndexesView() {
     try { const r = await authenticatedFetch(`/api/indexer/${id}/bundle`); if (r.ok) setBundle(await r.text()); else setBundle(''); } catch { setBundle(''); }
   };
 
+  // Friendly labels for indexes: prefer server name -> repo basename -> id
+  const [labels, setLabels] = useStateReact(() => {
+    try { return JSON.parse(localStorage.getItem('index_labels_v1') || '{}'); } catch { return {}; }
+  });
+  useEffectReact(() => { try { localStorage.setItem('index_labels_v1', JSON.stringify(labels)); } catch {} }, [labels]);
+
+  const getBaseName = (p) => (p || '').split(/[\\/]/).filter(Boolean).pop() || '';
+  const getLabel = (i) => labels[i.id] || i.name || getBaseName(i.repoPath) || i.id;
+
   return (
     <div className="flex-1 min-h-0 flex relative">
       {/* Floating status toast */}
@@ -768,24 +724,45 @@ function IndexesView() {
             </div>
           )}
         </div>
-        {items.map(i => (
+        {items.map(i => {
+          // Estimate tokens using 4 chars per token (~0.75 word). Use totalBytes if present.
+          const bytes = i.totalBytes || i.meta?.totalBytes || 0;
+          const chars = bytes; // rough
+          const estTokens = chars ? Math.ceil(chars / 4) : null;
+          return (
           <div key={i.id}
             className={`rounded-xl border ${selected?.id===i.id?'border-primary/60 bg-muted/30':'border-border bg-muted/10 hover:bg-muted/20'} p-3 transition-colors cursor-pointer`}
             onClick={()=>{ setSelected(i); loadBundle(i.id); }}
           >
-            <div className="text-base font-semibold truncate">{i.id}</div>
-            <div className="text-[11px] text-muted-foreground truncate">{i.fileCount || 0} files</div>
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-base font-semibold truncate">{getLabel(i)}</div>
+              <button
+                className="text-[11px] px-2 py-0.5 rounded border border-border hover:bg-accent"
+                title="Rename index"
+                onClick={(e)=>{ e.stopPropagation(); const v = prompt('Index name', getLabel(i)); if (v != null) setLabels((m)=>({ ...m, [i.id]: v.trim() })); }}
+              >Edit</button>
+              <button
+                className="text-[11px] px-2 py-0.5 rounded border border-border hover:bg-destructive/10 hover:text-destructive"
+                title="Delete index"
+                onClick={async (e)=>{ e.stopPropagation(); if (!confirm(`Delete index "${getLabel(i)}"?`)) return; try { const r = await api.indexer.remove(i.id); if (r.ok) { if (selected?.id===i.id) setSelected(null); await load(); } else { alert('Failed to delete'); } } catch { alert('Failed to delete'); } }}
+              >Delete</button>
+            </div>
+            <div className="text-[11px] text-muted-foreground truncate">
+              {(i.fileCount || 0)} files{estTokens ? ` • ~${estTokens.toLocaleString()} tokens` : ''}
+            </div>
           </div>
-        ))}
+        )})}
         {items.length === 0 && <div className="text-xs text-muted-foreground">No indexes yet. Abra Projects → Index repo.</div>}
       </div>
       <div className="flex-1 p-2 overflow-auto">
         {selected ? (
           <div className="space-y-2">
-            <div className="text-sm">Indexed repo: <span className="text-muted-foreground">{selected.repoPath}</span></div>
+            <div className="text-sm">Name: <span className="text-foreground font-medium">{getLabel(selected)}</span></div>
+            <div className="text-sm">Source path: <span className="text-muted-foreground">{selected.repoPath}</span></div>
             <div className="flex flex-wrap gap-2">
               <button className="text-xs px-2 py-1 rounded bg-primary text-primary-foreground" onClick={async()=>{ try { await navigator.clipboard.writeText(bundle); } catch {} }}>Copy bundle</button>
               <button className="text-xs px-2 py-1 rounded bg-background border border-border" onClick={async()=>{ try { const r=await authenticatedFetch(`/api/indexer/${selected.id}`,{}); const j=await r.json(); await navigator.clipboard.writeText(JSON.stringify(j)); } catch {} }}>Copy JSON</button>
+              <button className="text-xs px-2 py-1 rounded bg-background border border-border hover:bg-destructive/10 hover:text-destructive" onClick={async()=>{ if (!confirm(`Delete index "${getLabel(selected)}"?`)) return; try { const r = await api.indexer.remove(selected.id); if (r.ok) { setSelected(null); await load(); } else { alert('Failed to delete'); } } catch { alert('Failed to delete'); } }}>Delete</button>
               {/* Step 1: summarize (text) */}
               <button
                 className={`text-xs px-2 py-1 rounded inline-flex items-center gap-2 ${summarizing ? 'bg-muted text-muted-foreground' : 'bg-background border border-border hover:bg-accent'}`}

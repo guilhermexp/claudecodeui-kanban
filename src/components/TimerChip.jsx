@@ -94,6 +94,31 @@ export default function TimerChip({ projectName }) {
         const elapsed = now - (prev.startedAt || now);
         const remainingMs = clamp(prev.totalMs - elapsed, 0, prev.totalMs);
         if (remainingMs <= 0) {
+          // Play notification sound when timer ends
+          try {
+            // Try to use the Claude hooks sound if configured
+            fetch('/api/claude-hooks/test-sound', {
+              method: 'POST',
+              headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('auth-token') || ''}`
+              },
+              body: JSON.stringify({ soundType: 'system', soundName: 'Glass' })
+            }).catch(() => {
+              // Fallback: Try to play sound using Web Audio API
+              const audio = new Audio('/sounds/notification.wav');
+              audio.play().catch(() => {
+                // Final fallback: Use system notification if available
+                if ('Notification' in window && Notification.permission === 'granted') {
+                  new Notification('Timer Finished', {
+                    body: prev.label || 'Your timer has completed!',
+                    icon: '/icon.png'
+                  });
+                }
+              });
+            });
+          } catch {}
+          
           try {
             addSession({
               project: projectName || 'Standalone',
@@ -126,6 +151,11 @@ export default function TimerChip({ projectName }) {
   const minutesValue = Math.max(1, Math.round(state.totalMs / 60000));
 
   const start = () => {
+    // Request notification permission if needed
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+    
     setState(prev => ({
       ...prev,
       mode: 'running',

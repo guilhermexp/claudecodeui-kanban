@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-export default function ToolResultItem({ action = 'Executed', filePath = '', content }) {
+export default function ToolResultItem({ action = 'Executed', filePath = '', content, icon, details }) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   const shortenTail = (path, keep = 2) => {
@@ -65,19 +65,28 @@ export default function ToolResultItem({ action = 'Executed', filePath = '', con
 
   return (
     <div className="mb-1">
-      <div className="flex h-6 items-center gap-1 text-sm cursor-pointer group" onClick={() => content && setIsExpanded(!isExpanded)}>
+      <div className="flex items-start gap-2 text-sm bg-accent/10 dark:bg-accent/5 border-l-2 border-primary/30 pl-3 pr-2 py-1.5 rounded-r cursor-pointer" onClick={() => content && setIsExpanded(!isExpanded)}>
         {content && (
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`text-muted-foreground/60 transition-transform flex-shrink-0 ${isExpanded ? 'rotate-90' : ''}`}>
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`text-muted-foreground/60 transition-transform flex-shrink-0 mt-0.5 ${isExpanded ? 'rotate-90' : ''}`}>
             <polyline points="9 18 15 12 9 6"></polyline>
           </svg>
         )}
-        <div className="flex items-center flex-shrink-0"><Icon /></div>
-        <span className="text-muted-foreground">{action}</span>
-        {filePath && (
-          <span className="max-w-xs truncate rounded-md bg-muted px-2 py-0 text-xs text-muted-foreground" title={filePath}>
-            {filePath}
-          </span>
+        {icon ? (
+          <span className="text-base mt-[-2px] flex-shrink-0" style={{ filter: 'grayscale(100%)' }}>{icon}</span>
+        ) : (
+          <div className="flex items-center flex-shrink-0"><Icon /></div>
         )}
+        <div className="flex-1">
+          <span className="font-medium text-foreground/90">{action}</span>
+          {filePath && (
+            <span className="ml-2 font-mono text-xs text-muted-foreground" title={filePath}>
+              {displayLabel}
+            </span>
+          )}
+          {details && (
+            <span className="ml-2 text-xs text-muted-foreground">• {details}</span>
+          )}
+        </div>
       </div>
       {isExpanded && content && (
         <div className="mt-1 ml-5 p-2 bg-muted rounded">

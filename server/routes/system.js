@@ -362,9 +362,68 @@ async function getCpuUsage() {
 
 async function killProcessOnPort(port) {
   try {
+    // Protected ports for Codeui - never kill these
+    const PROTECTED_PORTS = [5892, 7347];
+    
+    if (PROTECTED_PORTS.includes(parseInt(port))) {
+      log.warn(`Attempted to kill protected port ${port} - operation blocked`);
+      throw new Error(`Port ${port} is protected and cannot be terminated from this interface`);
+    }
+    
     let command;
     if (process.platform === 'darwin' || process.platform === 'linux') {
-      command = `lsof -ti:${port} | xargs kill -9`;
+      // First get the PIDs using the port
+      const { stdout: pidOutput } = await execAsync(`lsof -ti:${port}`);
+      const pids = pidOutput.trim().split('\n').filter(pid => pid);
+      
+      if (pids.length === 0) {
+        log.info(`No process found on port ${port}`);
+        return;
+      }
+      
+      // Get the current process PID and parent PID to avoid killing ourselves
+      const currentPid = process.pid.toString();
+      const parentPid = process.ppid?.toString();
+      
+      // Filter out current process and parent process
+      const pidsToKill = pids.filter(pid => {
+        const pidStr = pid.trim();
+        if (pidStr === currentPid || pidStr === parentPid) {
+          log.warn(`Skipping PID ${pidStr} (current or parent process)`);
+          return false;
+        }
+        return true;
+      });
+      
+      if (pidsToKill.length === 0) {
+        log.info(`No external processes to kill on port ${port}`);
+        return;
+      }
+      
+      // Kill each PID individually with better error handling
+      for (const pid of pidsToKill) {
+        try {
+          // First try graceful termination (SIGTERM)
+          await execAsync(`kill -15 ${pid}`);
+          log.info(`Sent SIGTERM to PID ${pid} on port ${port}`);
+          
+          // Wait a bit for graceful shutdown
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          // Check if process still exists
+          try {
+            await execAsync(`kill -0 ${pid} 2>/dev/null`);
+            // Process still exists, force kill
+            await execAsync(`kill -9 ${pid}`);
+            log.info(`Force killed PID ${pid} on port ${port}`);
+          } catch {
+            // Process already terminated
+            log.info(`PID ${pid} terminated gracefully`);
+          }
+        } catch (error) {
+          log.warn(`Could not kill PID ${pid}: ${error.message}`);
+        }
+      }
     } else if (process.platform === 'win32') {
       // Windows: find PID and kill it
       const { stdout } = await execAsync(`netstat -ano | findstr :${port}`);
@@ -378,15 +437,21 @@ async function killProcessOnPort(port) {
         }
       }
       
+      // Get current process PID
+      const currentPid = process.pid.toString();
+      
       for (const pid of pids) {
-        if (pid && pid !== '0') {
-          await execAsync(`taskkill /PID ${pid} /F`);
+        if (pid && pid !== '0' && pid !== currentPid) {
+          try {
+            await execAsync(`taskkill /PID ${pid} /F`);
+            log.info(`Killed PID ${pid} on port ${port}`);
+          } catch (error) {
+            log.warn(`Could not kill PID ${pid}: ${error.message}`);
+          }
         }
       }
       return;
     }
-    
-    await execAsync(command);
   } catch (error) {
     log.error(`Error killing process on port ${port}: ${error.message}`);
     throw error;

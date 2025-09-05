@@ -58,6 +58,16 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
     }
   }, [cliProviderFixed]);
   
+  // Auto-resize textarea when input changes programmatically
+  useEffect(() => {
+    if (trayInputRef.current) {
+      const textarea = trayInputRef.current;
+      textarea.style.height = 'auto';
+      const newHeight = Math.min(textarea.scrollHeight, 300);
+      textarea.style.height = `${newHeight}px`;
+    }
+  }, [input]);
+  
   // Separate states for each CLI provider
   const [codexMessages, setCodexMessages] = useState([]);
   const [claudeMessages, setClaudeMessages] = useState([]);
@@ -233,7 +243,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
               setWsMessages(prev => [...prev, data]);
               return;
             }
-            const baseOpts = { projectPath: projectPath || process.cwd(), cwd: projectPath || process.cwd() };
+            const baseOpts = { projectPath: activeProjectPath || process.cwd(), cwd: activeProjectPath || process.cwd() };
             if (cliProvider === 'claude') {
               if (!wsHandshakeDoneRef.current && shouldAutoResumeOnReconnectRef.current) {
                 const sid = (claudeSessionId && !String(claudeSessionId).startsWith('temp-')) ? claudeSessionId : null;
@@ -420,7 +430,10 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
       if (p.test(txt)) return true;
       // Our older system message sometimes: "🔧 Tool …`arg`"
       if (/^🔧\s+.+`[^`]+`/.test(txt)) return true;
-      // Generic emoji tool name (e.g., "🔎 WebSearch" / "🛠 WebFetch")
+      // Emoji + tool name without bold (e.g., "📖 Read …", "🔍 Grep …")
+      const emojiLeading = /^([📖✏️📝🔍⚡🤖🌐✅🗄️📚🎭🎯🔧])\s*(Read|Write|Edit|MultiEdit|Grep|Search|Glob|LS|Bash|WebSearch|WebFetch|TodoWrite)\b/i;
+      if (emojiLeading.test(txt)) return true;
+      // Generic emoji tool name (fallback)
       const emojiTool = /^(?:[\p{Emoji}\p{Extended_Pictographic}]\s*)?(WebSearch|WebFetch|Search)\b/iu;
       if (emojiTool.test(txt)) return true;
       return false;
@@ -433,30 +446,101 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
       let action = 'Executed';
       let filePath = '';
       let cleanContent = undefined;
+      let icon = '🔧';
+      let details = '';
+      
+      // New enhanced format with emoji icons (bold)
+      let iconMatch = /^([📖✏️📝🔍⚡🤖🌐✅🗄️📚🎭🎯🔧])\s*\*\*([^*]+)\*\*(.*)/.exec(txt);
+      // Also support emoji + plain name (no bold)
+      if (!iconMatch) {
+        const mEmoji = /^([📖✏️📝🔍⚡🤖🌐✅🗄️📚🎭🎯🔧])\s*([A-Za-z][\w-]+)\b(.*)/.exec(txt);
+        if (mEmoji) {
+          iconMatch = [mEmoji[0], mEmoji[1], mEmoji[2], mEmoji[3] || ''];
+        }
+      }
+      if (iconMatch) {
+        icon = iconMatch[1];
+        const toolName = iconMatch[2];
+        const rest = iconMatch[3];
+        
+        // Extract parameters and details
+        const paramMatch = /`([^`]+)`(.*)/.exec(rest);
+        if (paramMatch) {
+          filePath = paramMatch[1];
+          details = paramMatch[2].replace(/^[•\s]+/, '').trim();
+        } else {
+          // Fallback: use last known tool details (path/command)
+          const d = lastToolDetailsRef.current || {};
+          const candidate = d.path || d.command || d.pattern || d.query || d.url || '';
+          if (candidate) filePath = candidate;
+        }
+        
+        // Format based on icon/tool type
+        switch(icon) {
+          case '📖': action = 'Reading'; break;
+          case '✏️': 
+          case '📝': action = 'Editing'; break;
+          case '🔍': action = 'Searching'; break;
+          case '⚡': action = 'Executing'; break;
+          case '🤖': action = 'Running task'; break;
+          case '🌐': action = 'Fetching'; break;
+          case '✅': action = 'Updating todos'; break;
+          case '🗄️': action = 'Database op'; break;
+          case '📚': action = 'Fetching docs'; break;
+          case '🎭': action = 'Browser action'; break;
+          case '🎯': action = 'Planning'; break;
+          default: action = 'Executing';
+        }
+        
+        const handleToggleOutputs = (e) => {
+          try {
+            const container = messagesScrollRef.current || document;
+            const details = Array.from(container.querySelectorAll('details'));
+            if (details.length === 0) return;
+            const anyClosed = details.some(d => !d.open);
+            details.forEach(d => { d.open = anyClosed; });
+          } catch {}
+        };
+        return (
+          <div className="flex items-start gap-2 text-sm bg-accent/10 dark:bg-accent/5 border-l-2 border-primary/30 pl-3 pr-2 py-1.5 rounded-r tool-header">
+            <button onClick={handleToggleOutputs} className="opacity-60 hover:opacity-90 transition mt-[1px]" title="Toggle tool output">
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 5l7 7-7 7"/></svg>
+            </button>
+            <span className="text-base mt-[-2px] opacity-60">{icon}</span>
+            <div className="flex-1">
+              <span className="font-medium text-foreground/90">{action}</span>
+              {filePath && <span className="ml-2 font-mono text-xs text-muted-foreground">{shortenPath(filePath)}</span>}
+              {/* Hide trailing details like line counts in header per request */}
+            </div>
+          </div>
+        );
+      }
+      
+      // Legacy format support
       const m = /\*\*(Read|LS|Glob|Grep|Edit|Write|Bash|MultiEdit|TodoWrite)\*\*\s*`?([^`\n]+)`?/.exec(txt);
       if (m) {
         const toolName = m[1];
         const arg = m[2].trim();
         switch (toolName) {
-          case 'Read': action = 'Read'; filePath = arg; break;
+          case 'Read': action = 'Read'; filePath = arg; icon = '📖'; break;
           case 'Edit':
-          case 'MultiEdit': action = 'Edited'; filePath = arg; break;
-          case 'Write': action = 'Created'; filePath = arg; break;
+          case 'MultiEdit': action = 'Edited'; filePath = arg; icon = '📝'; break;
+          case 'Write': action = 'Created'; filePath = arg; icon = '✏️'; break;
           case 'LS':
           case 'Glob':
-          case 'Grep': action = 'Searched'; filePath = arg; break;
-          case 'Bash': action = 'Executed'; filePath = arg.split('\n')[0]; break;
-          case 'TodoWrite': action = 'Generated'; filePath = 'Todo List'; break;
+          case 'Grep': action = 'Searched'; filePath = arg; icon = '🔍'; break;
+          case 'Bash': action = 'Executed'; filePath = arg.split('\n')[0]; icon = '⚡'; break;
+          case 'TodoWrite': action = 'Generated'; filePath = 'Todo List'; icon = '✅'; break;
         }
         try { if (action === 'Executed' && filePath) lastToolCommandRef.current = filePath.trim(); } catch {}
-        return <ToolResultItem action={action} filePath={filePath} content={cleanContent} />;
+        return <ToolResultItem action={action} filePath={filePath} content={cleanContent} icon={icon} />;
       }
       // Our older system line: "🔧 ToolName `arg`"
       const m2 = /^🔧\s+([^`]+)\s*`([^`]+)`/.exec(txt);
       if (m2) {
         const arg = m2[2];
         try { if (arg) lastToolCommandRef.current = String(arg).trim(); } catch {}
-        return <ToolResultItem action={'Executed'} filePath={arg} content={undefined} />;
+        return <ToolResultItem action={'Executed'} filePath={arg} content={undefined} icon={'🔧'} />;
       }
       return null;
     } catch { return null; }
@@ -541,6 +625,21 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
   const themeCodex = theme === 'dark'; // Use Codex theme only in dark mode
   // Track how current session was started: 'normal' | 'bypass' | 'resume'
   const [sessionMode, setSessionMode] = useState(null);
+  // UI toggle for bypass behavior (mirrors Shell behavior)
+  const [isBypassingPermissions, setIsBypassingPermissions] = useState(false);
+
+  // Load persisted bypass preference
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('overlay-bypass');
+      if (saved === 'true') setIsBypassingPermissions(true);
+    } catch {}
+  }, []);
+
+  // Persist bypass preference
+  useEffect(() => {
+    try { localStorage.setItem('overlay-bypass', String(!!isBypassingPermissions)); } catch {}
+  }, [isBypassingPermissions]);
 
   // Apply runtime option changes to backend when model or plan mode changes
   const lastSentOptionsRef = useRef(null);
@@ -704,6 +803,13 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
 
   // Session helpers
   const startSession = useCallback((mode = 'normal', resumeSessionId = null) => {
+    // Reset close button state when starting a new session
+    setCloseClickCount(0);
+    if (closeResetTimerRef.current) {
+      clearTimeout(closeResetTimerRef.current);
+      closeResetTimerRef.current = null;
+    }
+    
     // Prevent duplicate session starts
     if (isSessionInitializing) {
       return;
@@ -714,7 +820,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
       return;
     }
     
-    const options = { projectPath: projectPath || process.cwd(), cwd: projectPath || process.cwd() };
+    const options = { projectPath: activeProjectPath || process.cwd(), cwd: activeProjectPath || process.cwd() };
     
     if (cliProvider === 'claude') {
       // Para Claude, abra a sessão apenas com o primeiro comando "Oi"
@@ -735,8 +841,8 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
       const isResume = mode === 'resume' && !!resumeSessionId;
       const modelMap = { default: null, opus: 'opus', sonnet: 'sonnet', 'opus-plan': 'opus' };
       const greetOptions = {
-        projectPath: projectPath || process.cwd(),
-        cwd: projectPath || process.cwd(),
+        projectPath: activeProjectPath || process.cwd(),
+        cwd: activeProjectPath || process.cwd(),
         sessionId: isResume ? resumeSessionId : null,
         resume: isResume,
         model: modelMap[selectedModel],
@@ -750,6 +856,13 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
         setIsTyping(false);
         setTypingStatus({ mode: 'idle', label: '' });
         setActivityLock(false);
+        autoGreetSentRef.current = true;
+      } else {
+        // Para resume, precisamos enviar o comando com sessionId e flag resume
+        console.log('[Resume] Sending claude-start-session with resume:', greetOptions);
+        sendMessage({ type: 'claude-start-session', options: greetOptions });
+        setClaudeSessionId(resumeSessionId);
+        setClaudeSessionActive(true);
         autoGreetSentRef.current = true;
       }
 
@@ -781,6 +894,8 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
   // Convenience actions for UI
   const startSessionNormal = useCallback(() => startSession('normal'), [startSession]);
   const startSessionBypass = useCallback(() => startSession('bypass'), [startSession]);
+  // Unified start that respects bypass toggle
+  const startSessionAuto = useCallback(() => startSession(isBypassingPermissions ? 'bypass' : 'normal'), [isBypassingPermissions, startSession]);
   const resumeLastSession = useCallback(async () => {
     try {
       if (!projectPath) { addMessage({ type: 'system', text: 'Select a project to resume a session.' }); return; }
@@ -797,19 +912,52 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
         }
         if (!sid) { addMessage({ type: 'system', text: 'No previous session available to resume.' }); return; }
         // Prefill history from server before starting stream
+        let historyLoaded = false;
         try {
+          console.log('[Resume] Loading messages for session:', sid, 'project:', projectName);
           if (projectName) {
             const r = await api.sessionMessages(projectName, sid);
             if (r.ok) {
               const data = await r.json();
               const history = Array.isArray(data?.messages) ? data.messages : [];
+              console.log('[Resume] Loaded', history.length, 'messages from server');
               if (history.length) {
-                const mapped = history.map(m => ({ type: m.role === 'user' ? 'user' : 'assistant', text: m.content || '' }));
-                setMessages(mapped);
+                // Map all message types including system (tool outputs)
+                const mapped = history.map(m => ({ 
+                  type: m.role === 'user' ? 'user' : 
+                        m.role === 'system' ? 'system' : 
+                        m.role === 'error' ? 'error' : 'assistant', 
+                  text: m.content || m.text || '' 
+                }));
+                // Set messages for Claude provider
+                setClaudeMessages(mapped);
+                historyLoaded = true;
               }
+            } else {
+              console.error('[Resume] Failed to load messages:', r.status, r.statusText);
             }
+          } else {
+            console.warn('[Resume] No projectName available, cannot load history');
           }
-        } catch {}
+        } catch (e) {
+          console.error('[Resume] Error loading session messages:', e);
+        }
+        
+        // Fallback: try to load from local storage if server failed
+        if (!historyLoaded && projectPath) {
+          try {
+            console.log('[Resume] Trying to load history from local storage');
+            const localHistory = loadChatHistory(projectPath);
+            if (localHistory && Array.isArray(localHistory.messages) && localHistory.messages.length > 0) {
+              console.log('[Resume] Loaded', localHistory.messages.length, 'messages from local storage');
+              // Set messages for Claude provider
+              setClaudeMessages(localHistory.messages);
+              historyLoaded = true;
+            }
+          } catch (e) {
+            console.error('[Resume] Error loading from local storage:', e);
+          }
+        }
         startSession('resume', sid);
         return;
       }
@@ -882,12 +1030,56 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
     }, 400);
   }, [isConnected, sendMessage, cliProvider, isSessionInitializing, projectPath, onPanelClosed]);
 
+  // State for double-click close logic
+  const [closeClickCount, setCloseClickCount] = useState(0);
+  const closeResetTimerRef = useRef(null);
+  
   const endSessionUser = useCallback(() => {
     allowEndRef.current = true;
     endSessionCore();
     allowEndRef.current = false;
     autoGreetSentRef.current = false;
   }, [endSessionCore]);
+  
+  // Handle close button with double-click logic
+  const handleCloseButton = useCallback(() => {
+    // Check if there's an active session
+    const hasActiveSession = (cliProvider === 'claude' && claudeSessionActive) || 
+                           (cliProvider === 'codex' && codexSessionActive);
+    
+    if (hasActiveSession) {
+      // With active session: need two clicks
+      if (closeClickCount === 0) {
+        // First click: end session
+        endSessionUser();
+        setCloseClickCount(1);
+        
+        // Reset counter after 2 seconds if no second click
+        if (closeResetTimerRef.current) clearTimeout(closeResetTimerRef.current);
+        closeResetTimerRef.current = setTimeout(() => {
+          setCloseClickCount(0);
+        }, 2000);
+      } else {
+        // Second click: close panel
+        if (closeResetTimerRef.current) {
+          clearTimeout(closeResetTimerRef.current);
+          closeResetTimerRef.current = null;
+        }
+        setCloseClickCount(0);
+        setOpen(false);
+        if (onPanelClosed) onPanelClosed();
+      }
+    } else {
+      // No active session: close panel immediately
+      setCloseClickCount(0);
+      if (closeResetTimerRef.current) {
+        clearTimeout(closeResetTimerRef.current);
+        closeResetTimerRef.current = null;
+      }
+      setOpen(false);
+      if (onPanelClosed) onPanelClosed();
+    }
+  }, [closeClickCount, endSessionUser, onPanelClosed, cliProvider, claudeSessionActive, codexSessionActive]);
 
   // Expose basic controls to parent (global header)
   useEffect(() => {
@@ -1109,6 +1301,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
   const processedMessagesRef = useRef(new Set()); // Track processed messages to prevent duplicates
   const lastToolLabelRef = useRef(null); // Deduplicate consecutive tool_use lines
   const lastToolCommandRef = useRef(null); // Track last bash command to avoid duplicate fenced block
+  const lastToolDetailsRef = useRef({}); // Store tool details (path, command, pattern, etc)
   
   // Process messages from WebSocket with cleaner formatting
   useEffect(() => {
@@ -1318,10 +1511,84 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
             // Debug to see what we're receiving
             console.log('Tool use event:', { name: toolNameRaw, input, fullData: data });
             
-            let toolMessage = `**${toolNameRaw}**`;
+            // Determine tool icon and formatting
+            const getToolIcon = (name) => {
+              if (name.includes('Read') || name.includes('read')) return '📖';
+              if (name.includes('Write') || name.includes('write')) return '✏️';
+              if (name.includes('Edit') || name.includes('edit')) return '📝';
+              if (name.includes('Search') || name.includes('Grep') || name.includes('Glob')) return '🔍';
+              if (name.includes('Bash') || name.includes('bash')) return '⚡';
+              if (name.includes('Task') || name.includes('task')) return '🤖';
+              if (name.includes('WebFetch') || name.includes('WebSearch')) return '🌐';
+              if (name.includes('TodoWrite')) return '✅';
+              if (name.includes('mcp__supabase')) return '🗄️';
+              if (name.includes('mcp__context7')) return '📚';
+              if (name.includes('mcp__microsoft-playwright')) return '🎭';
+              if (name.includes('ExitPlanMode')) return '🎯';
+              return '🔧';
+            };
             
-            // Format parameters based on tool type
-            if (toolNameRaw.includes('mcp__')) {
+            const icon = getToolIcon(toolNameRaw);
+            let toolMessage = `${icon} **${toolNameRaw}**`;
+            
+            // Format parameters based on tool type with better detail
+            if (toolNameRaw === 'Read') {
+              const path = input.file_path || input.path || '';
+              const limit = input.limit;
+              const offset = input.offset;
+              if (limit || offset) {
+                toolMessage += ` \`${path}\` • ${offset ? `from line ${offset}` : ''} ${limit ? `${limit}L` : ''}`;
+              } else {
+                toolMessage += ` \`${path}\``;
+              }
+            } else if (toolNameRaw === 'Grep' || toolNameRaw === 'Search') {
+              const pattern = input.pattern || input.query || '';
+              const path = input.path || input.glob || '';
+              const mode = input.output_mode;
+              toolMessage += ` \`${pattern}\``;
+              if (path) toolMessage += ` in \`${path}\``;
+              if (mode) toolMessage += ` • ${mode}`;
+            } else if (toolNameRaw === 'Glob') {
+              const pattern = input.pattern || '';
+              const path = input.path || '.';
+              toolMessage += ` \`${pattern}\` in \`${path}\``;
+            } else if (toolNameRaw === 'Bash') {
+              const cmd = input.command || '';
+              const timeout = input.timeout;
+              const bg = input.run_in_background;
+              toolMessage += ` \`${cmd}\``;
+              if (timeout) toolMessage += ` • timeout: ${timeout}ms`;
+              if (bg) toolMessage += ` • background`;
+            } else if (toolNameRaw === 'Edit' || toolNameRaw === 'MultiEdit') {
+              const path = input.file_path || '';
+              const old = input.old_string || '';
+              const edits = input.edits;
+              if (edits && Array.isArray(edits)) {
+                toolMessage += ` \`${path}\` • ${edits.length} edits`;
+              } else {
+                const snippet = old.slice(0, 30);
+                toolMessage += ` \`${path}\` • "${snippet}${old.length > 30 ? '...' : ''}"`;
+              }
+            } else if (toolNameRaw === 'Write') {
+              const path = input.file_path || 'new file';
+              const content = input.content || '';
+              const lines = content.split('\n').length;
+              toolMessage += ` \`${path}\` • ${lines}L`;
+            } else if (toolNameRaw === 'Task') {
+              const desc = input.description || input.prompt?.slice(0, 50) || 'task';
+              const subagent = input.subagent_type;
+              toolMessage += ` "${desc}${input.prompt?.length > 50 ? '...' : ''}"`;
+              if (subagent) toolMessage += ` • ${subagent}`;
+            } else if (toolNameRaw === 'TodoWrite') {
+              const todos = input.todos || [];
+              const pending = todos.filter(t => t.status === 'pending').length;
+              const inProgress = todos.filter(t => t.status === 'in_progress').length;
+              const completed = todos.filter(t => t.status === 'completed').length;
+              toolMessage += ` • ${pending} pending, ${inProgress} in progress, ${completed} completed`;
+            } else if (toolNameRaw === 'WebFetch' || toolNameRaw === 'WebSearch') {
+              const url = input.url || input.query || '';
+              toolMessage += ` \`${url}\``;
+            } else if (toolNameRaw.includes('mcp__')) {
               // MCP tool - extract meaningful parameters
               if (input.query) {
                 toolMessage += ` \`${input.query}\``;
@@ -1345,34 +1612,43 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
                 toolMessage += ` \`${value}${String(input[firstKey]).length > 50 ? '...' : ''}\``;
               }
             } else {
-              // Standard tool - show main parameter
+              // Generic fallback for any tool
               if (input.file_path) {
                 toolMessage += ` \`${input.file_path}\``;
               } else if (input.command) {
                 toolMessage += ` \`${input.command}\``;
               } else if (input.pattern) {
                 toolMessage += ` \`${input.pattern}\``;
-              } else if (input.old_string) {
-                const snippet = String(input.old_string).slice(0, 30);
-                toolMessage += ` \`${snippet}${input.old_string.length > 30 ? '...' : ''}\``;
-              } else if (input.content && toolNameRaw === 'Write') {
-                toolMessage += ` \`${input.file_path || 'new file'}\``;
-              } else if (input.todos) {
-                toolMessage += ` \`updating todo list\``;
               } else if (Object.keys(input).length > 0) {
-                // Generic fallback for any tool
                 const firstKey = Object.keys(input)[0];
                 const value = String(input[firstKey]).slice(0, 50);
                 toolMessage += ` \`${value}${String(input[firstKey]).length > 50 ? '...' : ''}\``;
               }
             }
             
-            // Always show the formatted tool message
-            addMessage({ type: 'system', text: toolMessage });
+            // Create a References-style message for file operations
+            if (toolNameRaw === 'Read' || toolNameRaw === 'Edit' || toolNameRaw === 'MultiEdit' || toolNameRaw === 'Write') {
+              const path = input.file_path || input.path || '';
+              const action = toolNameRaw === 'Read' ? '' : 'MODIFY';
+              const referencesMessage = `References\n${path} ${action}`.trim();
+              addMessage({ type: 'system', text: referencesMessage });
+            } else {
+              // Always show the formatted tool message with enhanced styling
+              addMessage({ type: 'system', text: toolMessage, toolUse: true });
+            }
             
             setIsTyping(true);
             setTypingStatus({ mode: 'tool', label });
             lastToolLabelRef.current = label;
+            
+            // Store tool details for better output context
+            lastToolDetailsRef.current = {
+              path: input.file_path || input.path || '',
+              command: input.command || '',
+              pattern: input.pattern || '',
+              query: input.query || '',
+              url: input.url || ''
+            };
             try { setToolIndicator({ label: toolNameRaw || toolName, status: 'running' }); } catch {}
           } else if (data.type === 'result') {
             // Capturar informações reais de contexto do Claude
@@ -1428,14 +1704,48 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
                       return '';
                     };
                     const resultText = extractText(block.content) || extractText(block.output) || '';
+                    
+                    // Get the tool name and details from the last used tool
+                    const toolName = lastToolLabelRef.current || 'Tool';
+                    const toolDetails = lastToolDetailsRef.current || {};
+                    
+                    const toolIcon = (() => {
+                      if (!toolName) return '📄';
+                      if (toolName.includes('Read') || toolName.includes('read')) return '📖';
+                      if (toolName.includes('Write') || toolName.includes('write')) return '✏️';
+                      if (toolName.includes('Edit') || toolName.includes('edit')) return '📝';
+                      if (toolName.includes('Search') || toolName.includes('Grep') || toolName.includes('Glob')) return '🔍';
+                      if (toolName.includes('Bash') || toolName.includes('bash')) return '⚡';
+                      if (toolName.includes('Task') || toolName.includes('task')) return '🤖';
+                      if (toolName.includes('WebFetch') || toolName.includes('WebSearch')) return '🌐';
+                      if (toolName.includes('TodoWrite')) return '✅';
+                      return '🔧';
+                    })();
+                    
+                    // Build smart header with context
+                    let headerInfo = toolName;
+                    if (toolDetails.path) {
+                      headerInfo = `${toolName} • \`${toolDetails.path}\``;
+                    } else if (toolDetails.command) {
+                      headerInfo = `${toolName} • \`${toolDetails.command}\``;
+                    } else if (toolDetails.pattern) {
+                      headerInfo = `${toolName} • searching for \`${toolDetails.pattern}\``;
+                    }
+                    
                     if (resultText.trim()) {
                       const lang = detectCodeLanguage(resultText);
+                      // Count lines or size of output
+                      const lines = resultText.split('\n').length;
+                      const sizeInfo = lines > 1 ? ` (${lines} lines)` : '';
+                      
+                      // Add tool name header with context
+                      const header = `${toolIcon} **${headerInfo}**${sizeInfo}\n`;
                       const fenced = '```' + lang + '\n' + resultText.replace(/```/g, '\\u0060\\u0060\\u0060') + '\n```';
-                      addMessage({ type: 'system', text: fenced });
+                      addMessage({ type: 'system', text: header + fenced });
                   } else {
-                    // If no text, at least note completion
+                    // If no text, at least note completion with context
                       if (!HIDE_OUTPUTS) {
-                        addMessage({ type: 'system', text: 'Tool finished.' });
+                        addMessage({ type: 'system', text: `${toolIcon} **${headerInfo}** • no output` });
                       }
                   }
                   } catch {
@@ -1819,42 +2129,70 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
   };
 
   // Shared chat panel content (can render inline or into a portal)
-  const renderPanelContent = () => (
+  const renderPanelContent = () => {
+    const overlaySessionActive = cliProvider === 'claude' ? claudeSessionActive : codexSessionActive;
+    const bypassVisualOn = cliProvider === 'claude' ? (overlaySessionActive ? (sessionMode === 'bypass') : isBypassingPermissions) : false;
+
+    return (
     <div className={`${embedded 
         ? `w-full h-full flex flex-col bg-card ${tightEdgeLeft ? 'rounded-none border-none' : 'rounded-xl border'} ${tightEdgeLeft ? '' : 'border-border'}` 
         : 'w-full max-h-[70vh] bg-background rounded-2xl flex flex-col overflow-hidden border border-border shadow-2xl'} relative`}>
       {/* Top-right quick controls (restart/close; lock toggles Dangerous for Codex) */}
       {embedded && (
-        <div className="absolute top-2 right-2 z-30 flex items-center gap-1.5 select-none">
+        <div className="absolute top-1 right-1 z-30 flex items-center gap-0.5 select-none">
+          {/* Claude bypass toggle in embedded mode */}
+          {cliProvider === 'claude' && (
+            <button
+              onClick={() => setIsBypassingPermissions(v => !v)}
+              className={`icon-pill-sm ${bypassVisualOn ? 'text-amber-400' : 'text-muted-foreground'}`}
+              title={isBypassingPermissions ? 'Bypass permissions: ON' : 'Bypass permissions: OFF'}
+            >
+              {isBypassingPermissions ? (
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              ) : (
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+              )}
+            </button>
+          )}
           {/* Lock/Danger toggle – only meaningful for Codex */}
           {cliProvider === 'codex' && (
             <button
               onClick={() => setDangerousMode(v => !v)}
-              className={`w-8 h-8 rounded-full border ${dangerousMode ? 'bg-foreground/80 text-background border-foreground/70' : 'bg-background/60 text-foreground/80 border-border/70'} flex items-center justify-center hover:bg-accent/40 transition`}
+              className={`icon-pill-sm ${dangerousMode ? 'text-amber-400' : 'text-muted-foreground'}`}
               title={dangerousMode ? 'Dangerous mode: on' : 'Dangerous mode: off'}
             >
               {/* lock icon */}
-              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="6" y="10" width="12" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="6" y="10" width="12" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
             </button>
           )}
           {/* Restart */}
           <button
             onClick={restartSession}
-            className="w-8 h-8 rounded-full border bg-background/60 text-foreground/80 border-border/70 flex items-center justify-center hover:bg-accent/40 transition"
+            className="icon-pill-sm text-muted-foreground"
             title="Restart session"
           >
-            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 2v6h-6"/>
               <path d="M3 12a9 9 0 1 0 3-6.7L3 8"/>
             </svg>
           </button>
           {/* Close */}
           <button
-            onClick={endSessionUser}
-            className="w-8 h-8 rounded-full border bg-background/60 text-foreground/80 border-border/70 flex items-center justify-center hover:bg-accent/40 transition"
-            title="End session"
+            onClick={handleCloseButton}
+            className={`icon-pill-sm ${closeClickCount === 0 ? 'text-muted-foreground' : 'text-red-400 animate-pulse'}`}
+            title={
+              ((cliProvider === 'claude' && claudeSessionActive) || (cliProvider === 'codex' && codexSessionActive))
+                ? (closeClickCount === 0 ? "End session (click again to close)" : "Click again to close panel")
+                : "Close panel"
+            }
           >
-            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
           </button>
         </div>
       )}
@@ -1952,27 +2290,46 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
           )}
         </div>
         <div className="flex items-center gap-2">
+          {/* Bypass toggle aligned with right controls (Claude only) */}
+          {cliProvider === 'claude' && (
+            <button
+              onClick={() => setIsBypassingPermissions(v => !v)}
+              className={`icon-pill-sm ${bypassVisualOn ? 'text-amber-400' : 'text-muted-foreground'}`}
+              title={isBypassingPermissions ? 'Bypass permissions: ON' : 'Bypass permissions: OFF'}
+            >
+              {isBypassingPermissions ? (
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              ) : (
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+              )}
+            </button>
+          )}
+          {/* Dangerous toggle for Codex (same pattern) */}
+          {cliProvider === 'codex' && (
+            <button
+              onClick={() => setDangerousMode(v => !v)}
+              className={`icon-pill-sm ${dangerousMode ? 'text-amber-400' : 'text-muted-foreground'}`}
+              title={dangerousMode ? 'Dangerous mode: ON' : 'Dangerous mode: OFF'}
+            >
+              {/* lock icon */}
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="6" y="10" width="12" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+            </button>
+          )}
           {!sessionActive && !isSessionInitializing && (
             <div className="flex">
               <div className="flex flex-col gap-1.5 p-2 rounded-2xl bg-background/20 backdrop-blur-sm border border-white/10">
                 <CtaButton
-                  onClick={startSessionNormal}
+                  onClick={startSessionAuto}
                   variant="default"
                   className="w-full justify-center px-3 py-1.5 text-xs rounded-2xl"
                   title="Start new session"
                 >
                   {cliProvider === 'claude' ? 'Start' : 'Start Codex'}
                 </CtaButton>
-                {cliProvider === 'claude' && (
-                  <CtaButton
-                    onClick={startSessionBypass}
-                    variant="default"
-                    className="w-full justify-center px-3 py-1.5 text-xs rounded-2xl"
-                    title="Start with full permissions (bypass)"
-                  >
-                    Bypass
-                  </CtaButton>
-                )}
                 {(cliProvider === 'claude' ? !!latestClaudeSessionId : !!latestCodexRolloutPath) && (
                   <CtaButton
                     onClick={resumeLastSession}
@@ -1992,7 +2349,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
             <button
               onClick={() => { try { endSessionUser(); } catch {} }}
               disabled={!isConnected}
-              className="w-7 h-7 rounded-full border border-white/40 bg-white/10 shadow-sm flex items-center justify-center text-white hover:bg-white/20 transition disabled:opacity-50"
+              className="icon-pill-sm text-muted-foreground disabled:opacity-50"
               title="End session"
             >
               <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -2005,9 +2362,9 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
               try { if (sessionActive) endSessionUser(); } catch {}
               try { clearLastSession(projectPath, cliProvider); } catch {}
               try { setMessages([]); } catch {}
-              try { startSessionNormal(); } catch {}
+              try { startSessionAuto(); } catch {}
             }}
-            className="w-7 h-7 rounded-full border border-white/40 bg-white/10 shadow-sm flex items-center justify-center text-white hover:bg-white/20 transition"
+            className="icon-pill-sm text-muted-foreground"
             title="New session"
           >
             <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -2022,18 +2379,18 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
               setOpen(false);
               try { if (typeof onPanelClosed === 'function') onPanelClosed(); } catch {}
             }}
-            className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-white/10"
+            className="icon-pill-sm text-muted-foreground"
             title="Close panel"
           >
-            <svg className="w-4 h-4 text-zinc-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
           </button>
           <button
             onClick={restartSession}
             disabled={!isConnected}
-            className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-white/10 disabled:opacity-50"
+            className="icon-pill-sm text-muted-foreground disabled:opacity-50"
             title="Restart"
           >
-            <svg className="w-4 h-4 text-zinc-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 2v6h-6"/>
               <path d="M3 12a9 9 0 1 0 3-6.7L3 8"/>
             </svg>
@@ -2050,28 +2407,27 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
             Limits: {codexLimitStatus.remaining != null ? codexLimitStatus.remaining : '?'} remaining{codexLimitStatus.resetAt ? `, reset ${codexLimitStatus.resetAt}` : ''}
           </div>
         )}
+        {/* Persistent bypass chip for active sessions (Claude bypass, Codex dangerous) */}
+        {(cliProvider === 'claude' && sessionActive && sessionMode === 'bypass') || (cliProvider === 'codex' && sessionActive && dangerousMode) ? (
+          <div className="mb-2 inline-flex items-center gap-2 px-3 py-1 rounded-lg border shadow-sm bg-amber-500/10 border-amber-500/30 text-amber-600">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            <span className="text-[11px] font-medium">Bypass permissions enabled</span>
+          </div>
+        ) : null}
         {/* floating controls removidos; migrados para o header */}
         {messages.length === 0 && !isTyping && !sessionActive && !isSessionInitializing && (
           <div className="flex flex-col items-center justify-center gap-3 h-full min-h-[220px] py-2">
             <div className="flex items-center gap-2">
               <button
-                onClick={startSessionNormal}
+                onClick={startSessionAuto}
                 disabled={isSessionInitializing || !isConnected}
                 className="h-7 px-3 rounded-[10px] border border-border bg-background text-[12px] text-foreground/90 hover:bg-accent disabled:opacity-50"
                 title={cliProvider === 'claude' ? 'Start Claude' : 'Start Codex'}
               >
                 {cliProvider === 'claude' ? 'Start Claude' : 'Start Codex'}
               </button>
-              {cliProvider === 'claude' && (
-                <button
-                  onClick={startSessionBypass}
-                  disabled={isSessionInitializing || !isConnected}
-                  className="h-7 px-3 rounded-[10px] border border-border bg-background text-[12px] text-foreground/90 hover:bg-accent disabled:opacity-50"
-                  title="Start with bypass"
-                >
-                  Bypass
-                </button>
-              )}
               {(cliProvider === 'claude' ? !!latestClaudeSessionId : !!latestCodexRolloutPath) && (
                 <button
                   onClick={resumeLastSession}
@@ -2086,6 +2442,15 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
             <div className="text-center select-none">
               <div className="text-sm sm:text-base font-semibold text-foreground/90">{cliProvider === 'claude' ? 'Start a new Claude session' : 'Start a new Codex session'}</div>
               <div className="text-muted-foreground text-xs">Arraste imagens ou pressione ⌘V para adicionar ao chat</div>
+              {/* Persistent bypass status directly under the subtitle (Claude bypass or Codex dangerous, pre-session) */}
+              {((cliProvider === 'claude' && isBypassingPermissions) || (cliProvider === 'codex' && dangerousMode)) && (
+                <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-lg border shadow-sm bg-amber-500/10 border-amber-500/30 text-amber-600">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  <span className="text-[11px] font-medium">Bypass permissions enabled</span>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -2386,7 +2751,27 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
             <span className="w-4 h-4 border-2 border-muted-foreground/40 border-t-muted-foreground rounded-full animate-spin inline-block" />
             <span className="text-[12px]">
               {typingStatus.mode === 'tool' && typingStatus.label
-                ? `${getToolIcon(typingStatus.label)} Using ${typingStatus.label} — ${elapsedSec}s`
+                ? (() => {
+                    const getToolIcon = (name) => {
+                      if (!name) return '';
+                      if (name.includes('Read') || name.includes('read')) return '📖';
+                      if (name.includes('Write') || name.includes('write')) return '✏️';
+                      if (name.includes('Edit') || name.includes('edit')) return '📝';
+                      if (name.includes('Search') || name.includes('Grep') || name.includes('Glob')) return '🔍';
+                      if (name.includes('Bash') || name.includes('bash')) return '⚡';
+                      if (name.includes('Task') || name.includes('task')) return '🤖';
+                      if (name.includes('WebFetch') || name.includes('WebSearch')) return '🌐';
+                      if (name.includes('TodoWrite')) return '✅';
+                      return '🔧';
+                    };
+                    const toolIcon = getToolIcon(typingStatus.label);
+                    return (
+                      <>
+                        <span className="opacity-60">{toolIcon}</span>
+                        {` Using ${typingStatus.label} — ${elapsedSec}s`}
+                      </>
+                    );
+                  })()
                 : typingStatus.label ? `${typingStatus.label} — ${elapsedSec}s` : `Running… ${elapsedSec}s`}
             </span>
             <button
@@ -2516,7 +2901,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
                 {imageAttachments.map(img => (
                   <div key={img.id} className="relative group">
                     <img 
-                      src={img.dataUrl} 
+                      src={img.url} 
                       alt={img.name}
                       className="w-16 h-16 object-cover rounded-md border border-border"
                     />
@@ -2635,38 +3020,48 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
                     <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 8a4 4 0 100 8 4 4 0 000-8z"/><path d="M12 2v6m0 8v6m10-10h-6m-8 0H2"/></svg>
                     <span>Agent</span>
                   </button>
-                  <button className="flex items-center gap-1 hover:text-foreground transition-colors h-6">
-                    <span>Model:</span>
-                    <span className="font-medium">gpt-5</span>
-                  </button>
+                  <div className="relative flex-shrink-0">
+                    <button 
+                      onClick={() => setShowModelMenu(v => !v)}
+                      className="flex items-center gap-1 hover:text-foreground transition-colors h-6"
+                    >
+                      <span>Model:</span>
+                      <span className="font-medium">{(String(modelLabel||'').toLowerCase() === 'gpt-high') ? 'GPT High' : modelLabel}</span>
+                      <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M6 9l6 6 6-6"/>
+                      </svg>
+                    </button>
+                    {showModelMenu && (
+                      <div className="absolute z-50 bottom-full mb-1 right-0 w-48 rounded-lg border border-border bg-popover shadow-xl overflow-hidden">
+                        <button 
+                          onClick={() => { setModelLabel('gpt-high'); saveModelLabel('gpt-high'); setShowModelMenu(false); }}
+                          className={`w-full text-left px-3 py-2 text-xs hover:bg-muted transition-colors ${String(modelLabel).toLowerCase() === 'gpt-high' ? 'text-foreground bg-muted/50' : 'text-muted-foreground'}`}
+                        >
+                          <div className="font-medium">GPT High</div>
+                          <div className="text-[10px] opacity-70">Default — reasoning elevado</div>
+                        </button>
+                        <button 
+                          onClick={() => { setModelLabel('gpt-5'); saveModelLabel('gpt-5'); setShowModelMenu(false); }}
+                          className={`w-full text-left px-3 py-2 text-xs hover:bg-muted transition-colors ${String(modelLabel).toLowerCase() === 'gpt-5' ? 'text-foreground bg-muted/50' : 'text-muted-foreground'}`}
+                        >
+                          <div className="font-medium">gpt-5</div>
+                          <div className="text-[10px] opacity-70">Compatível; menor custo</div>
+                        </button>
+                        <button 
+                          onClick={() => {
+                            const v = window.prompt('Custom model label', String(modelLabel || 'gpt-high'));
+                            if (v && v.trim()) { const val = v.trim(); setModelLabel(val); saveModelLabel(val); }
+                            setShowModelMenu(false);
+                          }}
+                          className="w-full text-left px-3 py-2 text-xs hover:bg-muted transition-colors text-muted-foreground"
+                        >
+                          <div className="font-medium">Custom…</div>
+                          <div className="text-[10px] opacity-70">Definir rótulo manualmente</div>
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </>
-              )}
-              {/* Match Codex overlay: Dangerous chip toggle */}
-              {dangerousMode && (
-                <button
-                  onClick={() => setDangerousMode(false)}
-                  className="flex items-center gap-1 text-yellow-500/80 hover:text-yellow-400 transition-colors h-6"
-                  title="Dangerous mode active - click to disable"
-                >
-                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-                  </svg>
-                  <span>Dangerous</span>
-                </button>
-              )}
-              {!dangerousMode && !themeCodex && (
-                <button
-                  onClick={() => {
-                    const ok = window.confirm('Enable Dangerous mode? Codex may modify files in your real project.');
-                    if (ok) setDangerousMode(true);
-                  }}
-                  className="opacity-0 hover:opacity-100 transition-opacity h-6"
-                  title="Enable dangerous mode"
-                >
-                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-                  </svg>
-                </button>
               )}
             </div>
           
@@ -2726,6 +3121,12 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
                   const value = e.target.value;
                   setInput(value);
                   
+                  // Auto-resize textarea
+                  const textarea = e.target;
+                  textarea.style.height = 'auto';
+                  const newHeight = Math.min(textarea.scrollHeight, 300);
+                  textarea.style.height = `${newHeight}px`;
+                  
                   // Detectar comandos slash
                   if (value === '/') {
                     setShowSlashMenu(true);
@@ -2748,10 +3149,15 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
                   } catch {}
                 }}
                 placeholder=""
-                className="flex-1 text-[14px] leading-relaxed bg-transparent outline-none text-foreground placeholder:text-[#999999] resize-none py-1"
+                className="flex-1 text-[14px] leading-relaxed bg-transparent outline-none text-foreground placeholder:text-[#999999] resize-none py-2 transition-all duration-100"
                 disabled={!isConnected || (isSessionInitializing && !sessionActive)}
                 rows={1}
-                style={{ minHeight: '44px', maxHeight: '220px', height: 'auto', overflowY: input.split('\n').length > 4 ? 'auto' : 'hidden' }}
+                style={{ 
+                  minHeight: '44px', 
+                  maxHeight: '300px', 
+                  overflowY: 'auto',
+                  lineHeight: '1.5'
+                }}
               />
               {/* voice (audio summary of selection) */}
               <button
@@ -2813,6 +3219,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
       </div>
     </div>
   );
+  };
 
   // Handle drag events
   const handleDragOver = (e) => {
@@ -3329,10 +3736,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
               detailsStateStore.set(blockKey, e.target.open);
             }}
           >
-            <summary className="list-none cursor-pointer inline-flex items-center gap-1 text-xs text-muted-foreground/40 hover:text-muted-foreground/60 px-0.5">
-              <svg className="w-3 h-3 transition-transform group-open:rotate-90 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5l7 7-7 7" /></svg>
-              <span className="font-mono text-[10px] opacity-50">{lineCount}</span>
-            </summary>
+            <summary className="hidden" />
             <div className="mt-1">
               <CodeBlockCollapsible language={language || 'text'} text={raw} />
             </div>
@@ -3528,13 +3932,10 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
                 detailsStateStore.set(plainKey, e.target.open);
               }}
             >
-              <summary className="list-none cursor-pointer inline-flex items-center gap-1 text-xs text-muted-foreground/40 hover:text-muted-foreground/60 px-0.5" style={{ backgroundColor: 'transparent' }}>
-                <svg className="w-3 h-3 transition-transform group-open:rotate-90 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5l7 7-7 7" /></svg>
-                <span className="font-mono text-[10px] opacity-50">{lineCount}</span>
-              </summary>
+            <summary className="hidden" />
               <pre className="mt-1 text-sm font-mono whitespace-pre-wrap break-words text-foreground/90 bg-transparent p-0">{raw}</pre>
             </details>
-          );
+        );
         }
         // Non-plain languages: collapse into summary
         const langKey = `details-lang-${hashText(raw)}`;
@@ -3549,10 +3950,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
               detailsStateStore.set(langKey, e.target.open);
             }}
           >
-            <summary className="list-none cursor-pointer inline-flex items-center gap-1.5 text-xs text-muted-foreground/60 hover:text-muted-foreground px-1 py-0.5" style={{ backgroundColor: 'transparent' }}>
-              <svg className="w-3 h-3 transition-transform group-open:rotate-90 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-              <span className="font-mono opacity-70">{language} • {lineCount}L</span>
-            </summary>
+            <summary className="hidden" />
             <div className="mt-1">
               <CodeBlockCollapsible language={language} text={raw} />
             </div>

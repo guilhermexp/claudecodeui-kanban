@@ -33,6 +33,7 @@ const CodeEditor = forwardRef(({
   const [copySuccess, setCopySuccess] = useState(false);
   // Use external state if provided (inline mode), otherwise use internal state
   const [internalShowMarkdownPreview, setInternalShowMarkdownPreview] = useState(false);
+  // General preview flag (not only markdown)
   const showMarkdownPreview = inline ? externalShowMarkdownPreview : internalShowMarkdownPreview;
   const setShowMarkdownPreview = inline ? onToggleMarkdownPreview : setInternalShowMarkdownPreview;
   const [remarkGfm, setRemarkGfm] = useState(null);
@@ -361,9 +362,13 @@ const CodeEditor = forwardRef(({
           </div>
         </div>
         
-        {/* Editor content or Markdown Preview */}
+        {/* Editor content or Preview */}
         <div className="flex-1 min-h-0 overflow-hidden">
-          {showMarkdownPreview && file.name.toLowerCase().endsWith('.md') ? (
+          {showMarkdownPreview && (() => {
+            const n = file.name.toLowerCase();
+            const ext = n.split('.').pop() || '';
+            return ['md','markdown','html','htm','csv','json'].includes(ext);
+          })() ? (
             <div className="h-full overflow-auto p-6 prose prose-sm max-w-none dark:prose-invert
               prose-headings:font-semibold prose-h1:text-3xl prose-h2:text-2xl prose-h3:text-xl
               prose-p:text-base prose-p:leading-relaxed
@@ -376,9 +381,69 @@ const CodeEditor = forwardRef(({
               prose-table:border-collapse prose-th:border prose-th:border-gray-300 dark:prose-th:border-gray-600
               prose-td:border prose-td:border-gray-300 dark:prose-td:border-gray-600"
             >
-              <ReactMarkdown remarkPlugins={remarkGfm ? [remarkGfm] : []}>
-                {content}
-              </ReactMarkdown>
+              {(() => {
+                const lower = file.name.toLowerCase();
+                if (lower.endsWith('.md') || lower.endsWith('.markdown')) {
+                  return (
+                    <ReactMarkdown remarkPlugins={remarkGfm ? [remarkGfm] : []}>
+                      {content}
+                    </ReactMarkdown>
+                  );
+                }
+                if (lower.endsWith('.html') || lower.endsWith('.htm')) {
+                  return (
+                    <iframe
+                      title="html-preview"
+                      sandbox=""
+                      className="w-full h-[calc(100vh-160px)] bg-white dark:bg-black rounded"
+                      srcDoc={content}
+                    />
+                  );
+                }
+                if (lower.endsWith('.csv')) {
+                  const rows = content.split(/\r?\n/).filter(Boolean).map(line => {
+                    const cells = [];
+                    let cur = '';
+                    let inQ = false;
+                    for (let i = 0; i < line.length; i++) {
+                      const ch = line[i];
+                      if (ch === '"') {
+                        if (inQ && line[i+1] === '"') { cur += '"'; i++; } else { inQ = !inQ; }
+                      } else if (ch === ',' && !inQ) {
+                        cells.push(cur); cur = '';
+                      } else {
+                        cur += ch;
+                      }
+                    }
+                    cells.push(cur);
+                    return cells;
+                  });
+                  return (
+                    <div className="overflow-auto">
+                      <table className="w-full text-sm border-collapse">
+                        <tbody>
+                          {rows.map((r, ri) => (
+                            <tr key={ri} className={ri === 0 ? 'font-semibold' : ''}>
+                              {r.map((c, ci) => (
+                                <td key={ci} className="border px-2 py-1 border-gray-300 dark:border-gray-700 whitespace-pre">{c}</td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                }
+                if (lower.endsWith('.json')) {
+                  try {
+                    const obj = JSON.parse(content);
+                    return <pre className="text-sm whitespace-pre-wrap">{JSON.stringify(obj, null, 2)}</pre>;
+                  } catch {
+                    return <pre className="text-sm whitespace-pre-wrap">{content}</pre>;
+                  }
+                }
+                return <pre className="text-sm whitespace-pre-wrap">{content}</pre>;
+              })()}
             </div>
           ) : (
             <CodeMirror

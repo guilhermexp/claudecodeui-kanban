@@ -5,7 +5,7 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
-import { Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, ChevronUp, Edit3, Check, X, Trash2, RefreshCw, Search, Star, Edit2, Loader2, FolderSearch, Filter, Eye } from 'lucide-react';
+import { Folder, Plus, MessageSquare, Clock, ChevronDown, ChevronRight, ChevronUp, Edit3, Check, X, Trash2, RefreshCw, Search, Star, Edit2, Loader2, FolderSearch, Filter, Eye, LayoutGrid, List as ListIcon } from 'lucide-react';
 import { ProjectIcon } from '../utils/projectIcons.jsx';
 import { cn } from '../lib/utils';
 import ClaudeLogo from './ClaudeLogo';
@@ -43,6 +43,7 @@ function ProjectsModal({
   const [indexing, setIndexing] = useState(null); // project name currently indexing
   const [highlightProject, setHighlightProject] = useState(null);
   const prevProjectNamesRef = React.useRef([]);
+  const [viewMode, setViewMode] = useState('list'); // 'list' | 'grid'
 
   // Time update interval
   useEffect(() => {
@@ -145,6 +146,29 @@ function ProjectsModal({
               <p className="text-xs text-muted-foreground mt-1">Choose from your recent projects</p>
             </div>
             <div className="flex items-center gap-2 mr-4">
+              {/* View mode toggle */}
+              <div className="hidden sm:flex items-center gap-1 mr-2" title="Toggle view">
+                <button
+                  className={cn(
+                    'inline-flex h-8 w-8 items-center justify-center rounded-md border border-border',
+                    viewMode === 'grid' ? 'bg-accent text-foreground' : 'bg-background hover:bg-accent'
+                  )}
+                  onClick={() => setViewMode('grid')}
+                  aria-pressed={viewMode === 'grid'}
+                >
+                  <LayoutGrid className="w-4 h-4" />
+                </button>
+                <button
+                  className={cn(
+                    'inline-flex h-8 w-8 items-center justify-center rounded-md border border-border',
+                    viewMode === 'list' ? 'bg-accent text-foreground' : 'bg-background hover:bg-accent'
+                  )}
+                  onClick={() => setViewMode('list')}
+                  aria-pressed={viewMode === 'list'}
+                >
+                  <ListIcon className="w-4 h-4" />
+                </button>
+              </div>
               <button
                 className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-border bg-background hover:bg-accent text-sm transition-colors"
                 onClick={() => setShowFolderPicker(true)}
@@ -276,7 +300,7 @@ function ProjectsModal({
                 ? 'No projects match your filters' 
                 : 'No projects yet. Click "New Project" to create one.'}
             </div>
-          ) : (
+          ) : viewMode === 'grid' ? (
             <div className="grid gap-2 sm:gap-3 [grid-template-columns:repeat(auto-fill,minmax(260px,1fr))]">
               {sortedProjects.map((project, index) => {
                 const projectSessions = project.sessions || [];
@@ -486,6 +510,190 @@ function ProjectsModal({
                       >
                         <Trash2 className="w-3.5 h-3.5 text-muted-foreground hover:text-destructive" />
                       </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            // List mode
+            <div className="flex flex-col gap-1">
+              {sortedProjects.map((project, index) => {
+                const projectSessions = project.sessions || [];
+                const latestSession = projectSessions[0];
+                const totalSessions = project.sessionMeta?.total || projectSessions.length;
+                const isHighlighted = highlightProject && project.name === highlightProject;
+
+                return (
+                  <div
+                    key={project.name || `project-row-${index}`}
+                    className={cn(
+                      'group rounded-md border border-border bg-muted/10 hover:bg-muted/20 transition-colors flex items-start sm:items-center gap-2 sm:gap-3 p-2.5 sm:p-3',
+                      selectedProject?.name === project.name && 'ring-1 ring-border',
+                      isHighlighted && 'ring-1 ring-primary border-primary/60 shadow-md'
+                    )}
+                    onClick={() => handleProjectClick(project)}
+                  >
+                    <ProjectIcon project={project} className="w-4 h-4 flex-shrink-0 text-foreground/70 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      {editingProject === project.name ? (
+                        <div className="flex items-center gap-1">
+                          <Input
+                            value={editingName}
+                            onChange={(e) => setEditingName(e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                            onKeyDown={(e) => {
+                              e.stopPropagation();
+                              if (e.key === 'Enter') {
+                                if (editingName && editingName !== project.name) {
+                                  api.updateProject(project.name, { name: editingName })
+                                    .then(() => onRefresh?.())
+                                    .catch(console.error);
+                                }
+                                setEditingProject(null);
+                              } else if (e.key === 'Escape') {
+                                setEditingProject(null);
+                              }
+                            }}
+                            className="h-7 text-xs bg-background/60"
+                            autoFocus
+                          />
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (editingName && editingName !== project.name) {
+                                api.updateProject(project.name, { name: editingName })
+                                  .then(() => onRefresh?.())
+                                  .catch(console.error);
+                              }
+                              setEditingProject(null);
+                            }}
+                            className="p-0.5 hover:bg-accent rounded"
+                          >
+                            <Check className="w-3 h-3 text-success" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingProject(null);
+                            }}
+                            className="p-0.5 hover:bg-accent rounded"
+                          >
+                            <X className="w-3 h-3 text-destructive" />
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-xs sm:text-sm font-semibold text-foreground leading-tight truncate">
+                              {(() => {
+                                const pathSegments = project.path.split('/').filter(seg => seg);
+                                const lastTwo = pathSegments.slice(-2).join('/');
+                                return lastTwo || project.name;
+                              })()}
+                            </h3>
+                            {isHighlighted && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/30">New</span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-muted-foreground mt-0.5 break-all" title={project.path}>
+                            {project.path}
+                          </div>
+                          <div className="text-[10px] sm:text-[11px] text-muted-foreground mt-1">
+                            {latestSession ? `Updated ${formatTimeAgo(latestSession.updated_at, currentTime)}` : 'No sessions yet'}
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Row actions */}
+                    <div className="flex flex-wrap items-center justify-end gap-1 sm:gap-2">
+                      <button
+                        className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] rounded border border-border/60 bg-background/40 hover:bg-accent/20 text-foreground"
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); onNewSession?.(project); onClose(); }}
+                        title="New session"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span className="hidden sm:inline">New session</span>
+                        <span className="sm:hidden">New</span>
+                      </button>
+                      <button
+                        className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] rounded border border-border/60 bg-background/40 hover:bg-accent/20 text-foreground disabled:opacity-50"
+                        disabled={!!indexing}
+                        onClick={async (e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setIndexing(project.name);
+                          try {
+                            await api.indexer.create(project.fullPath || project.path, project.name);
+                            setToast({ type: 'success', message: 'Repository indexed successfully' });
+                            setTimeout(() => setToast(null), 2000);
+                          } catch (err) {
+                            setToast({ type: 'error', message: 'Failed to index repository' });
+                            setTimeout(() => setToast(null), 2500);
+                          } finally {
+                            setIndexing(null);
+                          }
+                        }}
+                        title="Index repository for AI context"
+                      >
+                        {indexing === project.name ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <FolderSearch className="w-3 h-3" />
+                        )}
+                        Index repo
+                      </button>
+                      {latestSession && (
+                        <button
+                          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] rounded border border-border/60 bg-background/40 hover:bg-accent/20 text-foreground"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onProjectSelect(project);
+                            onSessionSelect(latestSession);
+                            onClose();
+                          }}
+                          title="Resume last session"
+                        >
+                          <Clock className="w-3 h-3" />
+                          Resume
+                        </button>
+                      )}
+                      <button
+                        className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] rounded border border-border/60 bg-background/40 hover:bg-accent/20 text-foreground"
+                        onClick={(e) => { e.stopPropagation(); navigate(`/project/${encodeURIComponent(project.name)}/sessions`); onClose(); }}
+                        title={`View all ${totalSessions} sessions`}
+                      >
+                        <Eye className="w-3 h-3" />
+                        <span className="hidden sm:inline">View all</span>
+                        <span className="sm:hidden">All</span>
+                      </button>
+                      {/* Quick edit/delete icons on larger screens */}
+                      <div className="hidden sm:flex items-center gap-1 ml-1">
+                        <button
+                          className="p-1 rounded hover:bg-accent transition-colors"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingProject(project.name);
+                            setEditingName(project.name);
+                          }}
+                          title="Edit project name"
+                        >
+                          <Edit2 className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground" />
+                        </button>
+                        <button
+                          className="p-1 rounded hover:bg-destructive/10 transition-colors"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (confirm(`Delete project "${project.name}"?\n\nThis will delete all sessions and data for this project.`)) {
+                              onProjectDelete?.(project.name);
+                            }
+                          }}
+                          title="Delete project"
+                        >
+                          <Trash2 className="w-3.5 h-3.5 text-muted-foreground hover:text-destructive" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );

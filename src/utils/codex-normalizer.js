@@ -109,11 +109,39 @@ function handleParsedObject(obj) {
     return handleMsg(obj);
   }
 
-  // tool_use style
+  // tool_use style with enhanced formatting
   if (obj && obj.type === 'tool_use' && obj.name) {
     const tool = obj.name.toLowerCase();
     if (['reasoning', 'thinking'].includes(tool)) return [];
-    return [{ type: 'system', text: `🔧 ${obj.name}` }];
+    
+    // Get tool icon
+    const getToolIcon = (name) => {
+      if (name.includes('read') || name.includes('Read')) return '📖';
+      if (name.includes('write') || name.includes('Write')) return '✏️';
+      if (name.includes('edit') || name.includes('Edit')) return '📝';
+      if (name.includes('search') || name.includes('Search') || name.includes('grep') || name.includes('Grep')) return '🔍';
+      if (name.includes('bash') || name.includes('Bash')) return '⚡';
+      if (name.includes('task') || name.includes('Task')) return '🤖';
+      return '🔧';
+    };
+    
+    const icon = getToolIcon(obj.name);
+    let toolMessage = `${icon} **${obj.name}**`;
+    
+    // Add input details if available
+    if (obj.input) {
+      if (obj.input.file_path || obj.input.path) {
+        const path = obj.input.file_path || obj.input.path;
+        toolMessage += ` \`${path}\``;
+        if (obj.input.limit) toolMessage += ` • ${obj.input.limit}L`;
+      } else if (obj.input.command) {
+        toolMessage += ` \`${obj.input.command}\``;
+      } else if (obj.input.pattern) {
+        toolMessage += ` \`${obj.input.pattern}\``;
+      }
+    }
+    
+    return [{ type: 'system', text: toolMessage, toolUse: true }];
   }
 
   // text block

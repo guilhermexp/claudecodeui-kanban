@@ -52,6 +52,12 @@ export default defineConfig(({ command, mode }) => {
           target: 'http://localhost:7347',
           changeOrigin: true
         },
+        // Unified Claude WebSocket endpoint
+        '/claude': {
+          target: 'ws://localhost:7347',
+          ws: true,
+          changeOrigin: true
+        },
         '/ws': {
           target: 'ws://localhost:7347',
           ws: true,
