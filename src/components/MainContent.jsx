@@ -92,6 +92,7 @@ function MainContent({
   const [chatActivity, setChatActivity] = useState(false); // true if any chat is active
   const [productivityMode, setProductivityMode] = useState(false);
   const { registerMessageHandler } = useClaudeWebSocket();
+  const [ctxUsed, setCtxUsed] = useState({ claude: 0, codex: 0 });
   
   // Debug logging for endClaudeOverlaySession updates
   useEffect(() => {
@@ -114,8 +115,51 @@ function MainContent({
   useEffect(() => {
     const unsub = registerMessageHandler('ctx-window', (msg) => {
       try {
-        if (msg && msg.type === 'context-usage' && typeof msg.percentage === 'number') {
+        if (!msg || msg.type !== 'context-usage') return;
+        // Server may send percentage directly. Prefer it if present.
+        if (typeof msg.percentage === 'number') {
           setContextWindowPercentage(Math.max(0, Math.min(100, Math.round(msg.percentage))));
+          return;
+        }
+        // Otherwise compute locally using provider defaults and accumulated usage.
+        const provider = (msg.provider || 'claude').toLowerCase();
+        const usedIncrement = Number(msg.used || 0);
+        // Accumulate tokens per provider (approx if server only sends per-message usage)
+        setCtxUsed((prev) => {
+          const next = { ...prev };
+          if (!Number.isFinite(next[provider])) next[provider] = 0;
+          next[provider] += usedIncrement;
+          // Compute limit
+          let limit = 200000; // default 200k
+          if (provider === 'codex') {
+            try {
+              const label = (localStorage.getItem('codex-model-label') || '').toLowerCase();
+              limit = label === 'gpt-high' ? 400000 : 200000;
+            } catch {}
+          } else {
+            // Claude defaults to 200k for Sonnet/Opus; adjust here if needed in the future
+            limit = 200000;
+          }
+          const pct = Math.max(0, Math.min(100, Math.round((next[provider] / Math.max(1, limit)) * 100)));
+          setContextWindowPercentage(pct);
+          return next;
+        });
+      } catch {}
+    });
+    return () => { try { unsub && unsub(); } catch {} };
+  }, [registerMessageHandler]);
+
+  // Reset context usage counters when new sessions start
+  useEffect(() => {
+    const unsub = registerMessageHandler('ctx-reset', (msg) => {
+      try {
+        if (!msg) return;
+        if (msg.type === 'claude-session-started') {
+          setCtxUsed((p) => ({ ...p, claude: 0 }));
+          setContextWindowPercentage(0);
+        } else if (msg.type === 'codex-session-started') {
+          setCtxUsed((p) => ({ ...p, codex: 0 }));
+          setContextWindowPercentage(0);
         }
       } catch {}
     });
@@ -484,16 +528,7 @@ function MainContent({
           </div>
           
 
-          {/* Context Window Display - shows on all screen sizes */}
-          {contextWindowPercentage !== null && (
-            <div className={`order-2 ml-2 px-2 py-1 rounded text-xs sm:text-sm ${
-              contextWindowPercentage >= 90 ? 'bg-destructive/20 text-destructive' :
-              contextWindowPercentage >= 70 ? 'bg-warning/20 text-warning-foreground' :
-              'bg-success/20 text-success-foreground'
-            }`}>
-              Context: {contextWindowPercentage}%
-            </div>
-          )}
+          {/* Context Window chip moved into each chat overlay; header chip disabled */}
         </div>
 
         {/* Centered tabs container across the header */}

@@ -372,6 +372,18 @@ export async function spawnCodex(prompt, options = {}, ws) {
               stdout: json.msg.stdout,
               stderr: json.msg.stderr
             }));
+          } else if (json.msg && json.msg.type === 'token_count') {
+            // Native token usage event from Codex CLI
+            // Example payload shape may include: { prompt_tokens, completion_tokens, total_tokens }
+            const u = json.msg || {};
+            const used = Number(u.total_tokens || (u.prompt_tokens || 0) + (u.completion_tokens || 0)) || 0;
+            ws.send(JSON.stringify({
+              type: 'context-usage',
+              provider: 'codex',
+              used,
+              // Limit will be interpreted on the frontend/global or via modelLabel update from options
+              // We keep limit undefined here to let the UI/server state decide if needed
+            }));
           } else if (json.msg && json.msg.type === 'agent_message' && json.msg.message) {
             // Send agent messages to frontend (skip during warmup)
             if (!suppressOutput) {

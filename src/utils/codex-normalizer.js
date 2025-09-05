@@ -144,6 +144,22 @@ function handleParsedObject(obj) {
     return [{ type: 'system', text: toolMessage, toolUse: true }];
   }
 
+  // Heuristics for textual tool notices from Codex
+  if (obj && typeof obj === 'string') {
+    const s = obj.trim();
+    // Using mcp__... style
+    const mcp = /^Using\s+(mcp__[^\s]+)(.*)/i.exec(s);
+    if (mcp) {
+      const name = mcp[1];
+      return [{ type: 'system', text: `🔧 ${name}` }];
+    }
+    // BashOutput/Bash summary style
+    const bashOut = /^(BashOutput|Bash)\b/i.exec(s);
+    if (bashOut) {
+      return [{ type: 'system', text: `⚡ ${bashOut[1]} #toolu_` }];
+    }
+  }
+
   // text block
   if (obj && obj.type === 'text' && obj.text) {
     return [{ type: 'assistant', text: obj.text }];
@@ -159,8 +175,9 @@ function handleParsedObject(obj) {
 export function normalizeCodexEvent(evt) {
   try {
     // Direct response
-    if (evt.type === 'codex-response' && evt.text) {
-      return [{ type: 'assistant', text: evt.text }];
+    if (evt.type === 'codex-response' && evt.text !== undefined) {
+      const t = (typeof evt.text === 'string') ? evt.text : (evt.text?.content || evt.text?.message || JSON.stringify(evt.text));
+      return [{ type: 'assistant', text: t }];
     }
     if (evt.type === 'codex-error' && evt.error) {
       return [{ type: 'error', text: String(evt.error) }];
@@ -168,8 +185,8 @@ export function normalizeCodexEvent(evt) {
     if (evt.type === 'codex-tool' && evt.data) {
       return handleParsedObject(evt.data);
     }
-    if (evt.type === 'codex-output' && evt.data) {
-      const line = String(evt.data).trim();
+    if (evt.type === 'codex-output' && evt.data !== undefined) {
+      const line = (typeof evt.data === 'string') ? evt.data.trim() : JSON.stringify(evt.data);
       if (!line) return [];
       // Heuristic: drop pure config-ish noise lines if not JSON
       if (/reasoning|sandbox|approval|provider|model|workdir/i.test(line)) return [];
@@ -189,4 +206,3 @@ export function normalizeCodexEvent(evt) {
   }
   return [];
 }
-

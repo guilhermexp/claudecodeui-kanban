@@ -167,6 +167,41 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
   const projectMenuRef = useRef(null);
   const activeProjectPath = chatProjectPath || projectPath || process.cwd();
 
+  // Per-provider context usage (real) accumulated from WS events
+  const [contextUsage, setContextUsage] = useState({
+    claude: { used: 0, limit: 200000, pct: 0 },
+    codex: { used: 0, limit: 400000, pct: 0 }
+  });
+
+  // Ensure Cmd/Ctrl+C copies selected chat text even when textarea is focused
+  useEffect(() => {
+    const onCopyKey = async (e) => {
+      try {
+        const isCopy = (e.key === 'c' || e.key === 'C') && (e.metaKey || e.ctrlKey);
+        if (!isCopy) return;
+        // If user is selecting inside an input/textarea, let default behavior run
+        const ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable)) return;
+        const sel = window.getSelection();
+        if (!sel || sel.isCollapsed) return;
+        // Only handle if the selection is within the messages container
+        const container = messagesScrollRef.current;
+        if (!container) return;
+        let n = sel.anchorNode;
+        let within = false;
+        while (n) { if (n === container) { within = true; break; } n = n.parentNode; }
+        if (!within) return;
+        const text = sel.toString();
+        if (!text) return;
+        // Try programmatic copy as a robust fallback
+        await navigator.clipboard.writeText(text).catch(() => {});
+        // Do not prevent default to allow native copy as well
+      } catch {}
+    };
+    document.addEventListener('keydown', onCopyKey);
+    return () => document.removeEventListener('keydown', onCopyKey);
+  }, []);
+
   // When outer project changes, ask user if chat should follow (shell can switch independently)
   useEffect(() => {
     if (!projectPath) return;
@@ -259,6 +294,28 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
               }
             }
           } catch {}
+        }
+      } catch {}
+      // Context usage events (real, per provider)
+      try {
+        if (data && data.type === 'context-usage') {
+          const provider = (data.provider || cliProvider || 'claude').toLowerCase();
+          const inc = Number(data.used || 0);
+          setContextUsage((prev) => {
+            const next = { ...prev };
+            const cur = { ...(prev[provider] || { used: 0, limit: provider === 'codex' ? 400000 : 200000, pct: 0 }) };
+            // Update limit if backend provided
+            if (Number.isFinite(data.limit)) cur.limit = Number(data.limit);
+            // For Codex, prefer UI model selection when not provided
+            if (provider === 'codex' && !Number.isFinite(data.limit)) {
+              // Todos modelos GPT (Codex) usam 400k por padrão
+              cur.limit = 400000;
+            }
+            cur.used += inc;
+            cur.pct = Math.max(0, Math.min(100, Math.round((cur.used / Math.max(1, cur.limit)) * 100)));
+            next[provider] = cur;
+            return next;
+          });
         }
       } catch {}
       setWsMessages(prev => [...prev, data]);
@@ -976,10 +1033,17 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
         if (rr.ok) {
           const d = await rr.json();
           if (Array.isArray(d.messages) && d.messages.length) {
-            setMessages(d.messages.map(x => ({ 
-              type: x.type === 'user' ? 'user' : x.type === 'system' ? 'system' : 'assistant', 
-              text: typeof x.text === 'string' ? x.text : (x.text?.content || x.text?.message || JSON.stringify(x.text) || '')
-            })));
+            const safe = d.messages.map((x) => {
+              const role = x.type === 'user' ? 'user' : x.type === 'system' ? 'system' : 'assistant';
+              // Robust text extraction from various Codex transcript shapes
+              let t = undefined;
+              if (typeof x.text === 'string') t = x.text;
+              else if (x.text) t = x.text.content || x.text.message || x.text.msg || x.text;
+              else t = x.content || x.message || x.msg || x;
+              const text = (typeof t === 'string') ? t : (()=>{ try { return JSON.stringify(t); } catch { return String(t); } })();
+              return { type: role, text };
+            });
+            setMessages(safe);
           }
         }
       } catch {}
@@ -1109,13 +1173,16 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
     setTimeout(() => startSession(), 200);
   }, [endSessionUser, startSession]);
 
-  // Map tool names to small icons
+  // Map tool names to minimal, monochrome symbols
   const getToolIcon = useCallback((name) => {
     const n = String(name || '').toLowerCase();
-    if (n.includes('bash') || n.includes('shell')) return '💻';
-    if (n.includes('edit') || n.includes('patch')) return '✏️';
-    if (n.includes('git')) return '🌿';
-    return '🔧';
+    if (n.includes('bash') || n.includes('shell')) return '›';     // minimal run
+    if (n.includes('edit') || n.includes('patch')) return '✎';     // minimal edit
+    if (n.includes('search') || n.includes('grep') || n.includes('glob')) return '﹡'; // subtle star
+    if (n.includes('git')) return '⎇';                              // branch symbol
+    if (n.includes('read')) return '≣';                             // lines
+    if (n.includes('write')) return '→';                            // write arrow
+    return '•';                                                     // generic
   }, []);
 
   // Elapsed time for the whole "working" cycle (from start to done)
@@ -1133,8 +1200,22 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
   const addMessage = useCallback((newMessage) => {
     setMessages(prev => {
       const timestamp = new Date().toISOString();
+      // Coerce non-string texts to string to avoid "[object Object]"
+      let safeText = newMessage?.text;
+      if (typeof safeText !== 'string') {
+        try {
+          if (safeText && typeof safeText === 'object') {
+            safeText = safeText.content || safeText.message || JSON.stringify(safeText);
+          } else if (safeText != null) {
+            safeText = String(safeText);
+          } else {
+            safeText = '';
+          }
+        } catch { safeText = String(safeText || ''); }
+      }
       const messageWithMeta = {
         ...newMessage,
+        text: safeText,
         timestamp,
         id: `msg-${Date.now()}-${Math.random()}`
       };
@@ -1513,19 +1594,15 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
             
             // Determine tool icon and formatting
             const getToolIcon = (name) => {
-              if (name.includes('Read') || name.includes('read')) return '📖';
-              if (name.includes('Write') || name.includes('write')) return '✏️';
-              if (name.includes('Edit') || name.includes('edit')) return '📝';
-              if (name.includes('Search') || name.includes('Grep') || name.includes('Glob')) return '🔍';
-              if (name.includes('Bash') || name.includes('bash')) return '⚡';
-              if (name.includes('Task') || name.includes('task')) return '🤖';
-              if (name.includes('WebFetch') || name.includes('WebSearch')) return '🌐';
-              if (name.includes('TodoWrite')) return '✅';
-              if (name.includes('mcp__supabase')) return '🗄️';
-              if (name.includes('mcp__context7')) return '📚';
-              if (name.includes('mcp__microsoft-playwright')) return '🎭';
-              if (name.includes('ExitPlanMode')) return '🎯';
-              return '🔧';
+              const n = String(name || '').toLowerCase();
+              if (n.includes('read')) return '≣';
+              if (n.includes('write')) return '→';
+              if (n.includes('edit')) return '✎';
+              if (n.includes('search') || n.includes('grep') || n.includes('glob')) return '﹡';
+              if (n.includes('bash')) return '›';
+              if (n.includes('task')) return '·';
+              if (n.includes('webfetch') || n.includes('websearch')) return '·';
+              return '•';
             };
             
             const icon = getToolIcon(toolNameRaw);
@@ -1937,13 +2014,16 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
           return;
         }
         if (lastMsg.type === 'codex-tool') {
-          const toolData = lastMsg.data;
-          if (toolData && toolData.name && !['reasoning', 'thinking'].includes(toolData.name.toLowerCase())) {
+          const toolData = lastMsg.data || {};
+          const name = String(toolData.name || '').toLowerCase();
+          // Evitar linhas "Bash #toolu_" extras — será coberto pelos eventos exec_* acima
+          if (name.includes('bash')) return;
+          // Mantém outras ferramentas como mensagens mínimas apenas se houver informação útil
+          if (toolData && toolData.name) {
             setIsTyping(true);
             setTypingStatus({ mode: 'tool', label: toolData.name });
             addMessage({ type: 'system', text: `${getToolIcon(toolData.name)} ${toolData.name}` });
             setTypingStart(Date.now());
-            // elapsed timer resets automatically when active state changes
           }
           return;
         }
@@ -1953,7 +2033,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
       if (cliProvider === 'codex' && lastMsg.type === 'codex-exec-begin') {
         const { callId, command, cwd } = lastMsg;
         const cmdString = Array.isArray(command) ? command.join(' ') : String(command || '');
-        const title = `🔧 bash\n\n\`${cmdString}\``;
+        const title = `› Bash #toolu_\n\n\`${cmdString}\``;
         const id = addMessageAndGetId({ type: 'system', text: title });
         execStreamsRef.current.set(callId, { id, buffer: '', lastTs: Date.now() });
         setIsTyping(true);
@@ -1967,8 +2047,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
           const now = Date.now();
           if (now - (stream.lastTs || 0) > 120) { // throttle updates ~8fps
             stream.lastTs = now;
-            const fenced = '```bash\n' + stream.buffer.replace(/```/g, '\u0060\u0060\u0060') + '\n```';
-            updateMessageById(stream.id, (m) => ({ ...m, text: m.text.split('\n\n')[0] + '\n\n' + fenced }));
+            updateMessageById(stream.id, (m) => ({ ...m, toolProps: { ...(m.toolProps || {}), content: stream.buffer } }));
           }
         }
         return;
@@ -1977,10 +2056,16 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
         const { callId, exit_code } = lastMsg;
         const stream = execStreamsRef.current.get(callId);
         if (stream) {
-          const fenced = '```bash\n' + stream.buffer.replace(/```/g, '\u0060\u0060\u0060') + '\n```';
           const showExit = (typeof exit_code === 'number') ? (exit_code !== 0) : (String(exit_code) !== '0');
-          const suffix = showExit ? `\n\nExit code: ${exit_code}` : '';
-          updateMessageById(stream.id, (m) => ({ ...m, text: m.text.split('\n\n')[0] + '\n\n' + fenced + suffix }));
+          const lines = stream.buffer ? stream.buffer.split('\n').length : 0;
+          updateMessageById(stream.id, (m) => ({
+            ...m,
+            toolProps: {
+              ...(m.toolProps || {}),
+              content: stream.buffer,
+              details: `${lines} lines${showExit ? ` • exit ${exit_code}` : ''}`
+            }
+          }));
           execStreamsRef.current.delete(callId);
         }
         setIsTyping(false);
@@ -2475,7 +2560,22 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
               return match ? match[1] : '';
             };
 
-            const textContent = typeof m.text === 'string' ? m.text : (m.text?.toString() || '');
+            // Render unified Tool UI when toolProps is present
+            if (m.toolProps) {
+              return (
+                <div className={containerClass}>
+                  <ToolResultItem {...m.toolProps} />
+                </div>
+              );
+            }
+
+            const textContent = (() => {
+              if (typeof m.text === 'string') return m.text;
+              if (m.text && typeof m.text === 'object') {
+                try { return JSON.stringify(m.text, null, 2); } catch {}
+              }
+              return String(m.text ?? '');
+            })();
             const rawText = textContent.trim();
             const firstLine = rawText.split('\n')[0] || '';
             const looksLikeSpec = !isUser && !isError && !isSystem && /^(plan|observations|spec|plano|observa|especifica)/i.test(firstLine);
@@ -3067,27 +3167,20 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
           
           {/* Activity indicator moved to floating pill (top-right) */}
 
-          {/* Context window indicator - minimalista e real */}
-          {contextInfo.num_turns > 0 && (
-            <div className="px-6 py-2 border-t border-white/10">
-              <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <span className="font-mono">context: {contextInfo.num_turns} turns</span>
-                <div className="flex items-center gap-2">
-                  <span className="font-mono">{Math.round(contextInfo.estimated_tokens / 1000)}k/{Math.round(contextInfo.max_context / 1000)}k</span>
-                  <div className="w-20 h-1 bg-border/30 rounded-full overflow-hidden">
-                    <div 
-                      className={`h-full transition-all duration-500 ${
-                        contextInfo.estimated_tokens / contextInfo.max_context > 0.8 ? 'bg-red-500/70' :
-                        contextInfo.estimated_tokens / contextInfo.max_context > 0.6 ? 'bg-amber-500/70' :
-                        'bg-green-500/70'
-                      }`}
-                      style={{ width: `${Math.min(100, (contextInfo.estimated_tokens / contextInfo.max_context) * 100)}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
+          {/* Context window indicator chip (per provider) */}
+          <div className="px-4 pb-1">
+            <div className="flex items-center justify-end text-[11px]">
+              {cliProvider === 'claude' ? (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full border border-border/50 bg-muted/40 text-foreground/80">
+                  <span className="font-mono">{contextUsage.claude.pct}%</span>
+                </span>
+              ) : (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full border border-border/50 bg-muted/40 text-foreground/80">
+                  <span className="font-mono">{contextUsage.codex.pct}%</span>
+                </span>
+              )}
             </div>
-          )}
+          </div>
 
           {/* Input container - transparent, only top divider to suggest separation */}
           <div className="space-y-3 bg-transparent border-t border-white/10 py-3 px-4">

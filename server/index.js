@@ -1734,13 +1734,7 @@ function handleUnifiedClaudeConnection(ws, request) {
           break;
         }
         case 'claude-message':
-          try {
-            const msg = String(data.message || '');
-            const est = Math.ceil(msg.length / 4);
-            contextUsage.claude.used += est;
-            const pct = Math.max(0, Math.min(100, Math.round((contextUsage.claude.used / Math.max(1, contextUsage.claude.limit)) * 100)));
-            ws.send(JSON.stringify({ type: 'context-usage', provider: 'claude', used: contextUsage.claude.used, limit: contextUsage.claude.limit, percentage: pct }));
-          } catch {}
+          // Métrica real virá do parser de stream-json em claude-cli.js
           await handleClaudeMessage(ws, data, sessions);
           break;
         case 'claude-command': // alias for backwards compatibility
@@ -1835,18 +1829,33 @@ function handleUnifiedClaudeConnection(ws, request) {
           ws.send(JSON.stringify({ type: 'codex-session-started' }));
           break;
         case 'codex-message':
-          try {
-            // Update limit according to model label (gpt-high => 400k)
-            const label = String(data.options?.modelLabel || '').toLowerCase();
-            contextUsage.codex.limit = (label === 'gpt-high') ? 400000 : 200000;
-            const msg = String(data.message || '');
-            const est = Math.ceil(msg.length / 4);
-            contextUsage.codex.used += est;
-            const pct = Math.max(0, Math.min(100, Math.round((contextUsage.codex.used / Math.max(1, contextUsage.codex.limit)) * 100)));
-            ws.send(JSON.stringify({ type: 'context-usage', provider: 'codex', used: contextUsage.codex.used, limit: contextUsage.codex.limit, percentage: pct }));
-          } catch {}
+          // Token usage real será reportado por codex-cli.js (token_count)
           await handleCodexMessage(ws, data, codexSession, codexQueue, processNextCodex);
           break;
+        case 'codex-abort': {
+          // Abort current Codex task and clear queue
+          try {
+            // Clear queued tasks
+            try { codexQueue.length = 0; } catch {}
+            // Try graceful stop first
+            let aborted = false;
+            try {
+              if (codexCurrentProcess && typeof codexCurrentProcess.kill === 'function') {
+                aborted = codexCurrentProcess.kill('SIGINT');
+                // Force kill after short delay if still alive
+                setTimeout(() => {
+                  try { codexCurrentProcess && codexCurrentProcess.kill && codexCurrentProcess.kill('SIGKILL'); } catch {}
+                }, 1000);
+              }
+            } catch {}
+            codexProcessing = false;
+            try { ws.send(JSON.stringify({ type: 'codex-aborted', success: aborted })); } catch {}
+            try { ws.send(JSON.stringify({ type: 'codex-idle' })); } catch {}
+          } catch (e) {
+            try { ws.send(JSON.stringify({ type: 'codex-error', error: e?.message || 'Failed to abort' })); } catch {}
+          }
+          break;
+        }
         case 'codex-command': // alias for backwards compatibility
           await handleCodexMessage(ws, { message: data.command, options: data.options }, codexSession, codexQueue, processNextCodex);
           break;

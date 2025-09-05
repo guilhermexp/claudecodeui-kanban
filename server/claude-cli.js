@@ -277,25 +277,22 @@ async function spawnClaude(command, options = {}, ws) {
       }
     }
     
-    // Use node directly with the CLI script
-    // The claude wrapper seems to have issues with --print mode
-    const nodeCommand = '/opt/homebrew/bin/node';
-    const claudeScript = '/opt/homebrew/lib/node_modules/@anthropic-ai/claude-code/cli.js';
+    // Use the claude command directly from PATH
+    // This will use the correct version based on user's environment
     
     log.info(`\n🎯 Iniciando Claude no modo interativo`);
     log.info(`📝 Comando: ${finalCommand || 'Nenhum comando fornecido'}`);
-    log.debug(`🔧 Executável: ${nodeCommand} ${claudeScript}`);
+    log.debug(`🔧 Executável: claude`);
     log.debug(`⚙️  Argumentos: ${args.join(' ')}`);
     log.info(`cwd: ${workingDir}`);
     log.info(`sessionId: ${sessionId || 'new session'}`);
     log.info(`resume: ${resume}`);
     
-    const claudeProcess = spawn(nodeCommand, [claudeScript, ...args], {
+    const claudeProcess = spawn('claude', args, {
       cwd: workingDir,
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { 
-        ...process.env,
-        PATH: `/opt/homebrew/bin:/usr/local/bin:${process.env.PATH}` // Add homebrew to PATH
+        ...process.env
       }
     });
     
@@ -521,7 +518,40 @@ import * as fsSync from 'fs';
 function buildMcpConfigArg() {
   try {
     const cfgPath = path.join(os.homedir(), '.claude.json');
-    if (fsSync.existsSync(cfgPath)) return ['--mcp-config', cfgPath];
+    if (!fsSync.existsSync(cfgPath)) return [];
+    // Validate minimal MCP schema to avoid hard crash when config is malformed
+    try {
+      const raw = fsSync.readFileSync(cfgPath, 'utf8');
+      const json = JSON.parse(raw);
+      if (!json || typeof json !== 'object') return [];
+      
+      // Check if any project has non-empty mcpServers
+      let hasValidMcpServers = false;
+      
+      // Check global mcpServers
+      if (json.mcpServers && typeof json.mcpServers === 'object' && Object.keys(json.mcpServers).length > 0) {
+        hasValidMcpServers = true;
+      }
+      
+      // Check project-specific mcpServers
+      if (!hasValidMcpServers && json.projects) {
+        for (const project of Object.values(json.projects)) {
+          if (project.mcpServers && typeof project.mcpServers === 'object' && Object.keys(project.mcpServers).length > 0) {
+            hasValidMcpServers = true;
+            break;
+          }
+        }
+      }
+      
+      // Only pass --mcp-config if there are actual MCP servers configured
+      if (hasValidMcpServers) {
+        return ['--mcp-config', cfgPath];
+      }
+      return [];
+    } catch {
+      // Ignore invalid config and continue without MCP
+      return [];
+    }
   } catch {}
   return [];
 }
@@ -679,9 +709,24 @@ function spawnClaudeStream(options = {}, ws, onSession) {
             log.error(`❌ Critical: Cannot send any messages to WebSocket: ${fallbackError.message}`);
           }
         }
-        
+
         // Live, compact logging
         logClaudeEvent(data);
+
+        // Emit native usage/context metrics when present
+        try {
+          // Anthropic Messages API style: { usage: { input_tokens, output_tokens, total_tokens } }
+          if (data && data.usage && (data.usage.input_tokens != null || data.usage.output_tokens != null)) {
+            const used = Number(data.usage.total_tokens || (data.usage.input_tokens || 0) + (data.usage.output_tokens || 0)) || 0;
+            ws.send(JSON.stringify({ type: 'context-usage', provider: 'claude', used }));
+          } else if (data && (data.type === 'token_count' || data.event_type === 'token_count')) {
+            const u = data || {};
+            const used = Number(u.total_tokens || (u.prompt_tokens || 0) + (u.completion_tokens || 0)) || 0;
+            ws.send(JSON.stringify({ type: 'context-usage', provider: 'claude', used }));
+          }
+        } catch (e) {
+          // ignore metrics errors
+        }
       } catch (e) {
         log.warn(`⚠️ Failed to parse message: ${messageStr.substring(0, 100)}... Error: ${e.message}`);
         // Skip malformed message and continue processing

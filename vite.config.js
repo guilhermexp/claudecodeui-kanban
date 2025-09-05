@@ -19,6 +19,18 @@ export default defineConfig(({ command, mode }) => {
         '@': path.resolve(__dirname, './src'),
       },
     },
+    optimizeDeps: {
+      // Restrict crawling to the actual app entry to avoid scanning server/database mirrors
+      entries: ['src/main.jsx'],
+      // Prevent Vite from trying to resolve third-party deps used only inside repo snapshots
+      exclude: [
+        'immer',
+        'zustand',
+        'zustand/middleware/immer',
+        'auto-zustand-selectors-hook',
+        '@google/genai'
+      ]
+    },
     server: {
       port: 5892,
       host: true, // Allow access from network
