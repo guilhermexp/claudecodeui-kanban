@@ -561,9 +561,12 @@ app.use('/api', authenticateToken, previewRoutes);
 app.use('/preview/:projectName', (req, res, next) => {
   try {
     const projectName = req.params.projectName;
+    console.log(`[Preview Proxy] Requested project: ${projectName}`);
     const st = getPreviewStatus(projectName);
+    console.log(`[Preview Proxy] Status:`, st);
     if (!st.running || !st.port) {
-      return res.status(502).send('Preview not running');
+      console.log(`[Preview Proxy] Preview not running for ${projectName}`);
+      return res.status(502).send(`Preview not running for project: ${projectName}`);
     }
     const target = `http://localhost:${st.port}`;
     // Create one-off proxy middleware to forward this request
@@ -580,6 +583,45 @@ app.use('/preview/:projectName', (req, res, next) => {
     })(req, res, next);
   } catch (e) {
     return res.status(500).send('Proxy error');
+  }
+});
+
+// Static preview serving: /preview-static/:projectName/*
+app.get('/preview-static/:projectName/*', async (req, res) => {
+  try {
+    const projectName = req.params.projectName;
+    // Try to resolve project dir via preview status (which carries repoPath via preview manager active list)
+    let baseDir = null;
+    try {
+      const st = getPreviewStatus(projectName);
+      baseDir = st && st.path ? st.path : null;
+    } catch {}
+    // Fallback to projects directory resolution
+    if (!baseDir) {
+      try {
+        const { extractProjectDirectory } = await import('./lib/utils.js');
+        baseDir = await extractProjectDirectory(projectName);
+      } catch {}
+    }
+    if (!baseDir) return res.status(404).send('Static preview not available');
+    const candidates = ['', 'public', 'dist', 'build', 'docs'];
+    let root = null;
+    for (const c of candidates) {
+      const r = path.resolve(path.join(baseDir, c));
+      try { if (fs.existsSync(path.join(r, 'index.html'))) { root = r; break; } } catch {}
+    }
+    if (!root) return res.status(404).send('Static preview root not found');
+    const rel = req.params[0] || '';
+    let finalPath = path.join(root, rel);
+    try {
+      const stat = fs.statSync(finalPath);
+      if (stat.isDirectory()) finalPath = path.join(finalPath, 'index.html');
+    } catch {
+      finalPath = path.join(root, 'index.html');
+    }
+    res.sendFile(finalPath);
+  } catch (e) {
+    res.status(500).send('Static preview error');
   }
 });
 
@@ -1237,7 +1279,7 @@ app.get('/api/codex/rollout-read', authenticateToken, async (req, res) => {
     const codexDir = path.join(home, '.codex', 'sessions');
     // Soft sandbox: warn if outside known directory but still allow in dev
     if (!String(rolloutPath).startsWith(codexDir)) {
-      xlog.warn(`[CODEX] rollout-read outside ~/.codex/sessions: ${rolloutPath}`);
+      xlog.warn(`⚠️ Codex rollout-read outside ~/.codex/sessions: ${rolloutPath}`);
     }
 
     const raw = await fsPromises.readFile(rolloutPath, 'utf8');
@@ -1361,8 +1403,8 @@ app.get('/api/projects/:projectName/files', authenticateToken, async (req, res) 
       actualPath = await extractProjectDirectory(req.params.projectName);
     } catch (error) {
       slog.error(`Error extracting project directory: ${error.message}`);
-      // Fallback to simple dash replacement
-      actualPath = req.params.projectName.replace(/-/g, '/');
+      // Do NOT guess paths from projectName. Return a clear error instead.
+      return res.status(404).json({ error: `Project not found: ${req.params.projectName}` });
     }
     
     // Check if path exists
@@ -1493,6 +1535,11 @@ function handleUnifiedClaudeConnection(ws, request) {
     claude: null, // Claude CLI session
     codex: null   // Codex session
   };
+  // Approximate context usage per connection
+  const contextUsage = {
+    claude: { used: 0, limit: 200000 }, // default 200k window
+    codex: { used: 0, limit: 400000 }   // default 400k for gpt-high
+  };
   
   // Shell-specific state
   let shellProcess = null;
@@ -1531,11 +1578,7 @@ function handleUnifiedClaudeConnection(ws, request) {
       
       // Visible log at info level for Codex activity
       try { 
-        xlog.info(`[CODEX] Processing message from queue`);
-        xlog.info(`[CODEX] Working directory: ${shortPath}`);
-        if (codexQueue.length > 0) {
-          xlog.info(`[CODEX] Remaining in queue: ${codexQueue.length}`);
-        }
+        xlog.info(`🔄 Processing Codex message [${shortPath}]${codexQueue.length > 0 ? ` (${codexQueue.length} remaining)` : ''}`);
       } catch {}
       try { ws.send(JSON.stringify({ type: 'codex-busy', queueLength: codexQueue.length })); } catch {}
       codexCurrentProcess = null;
@@ -1548,22 +1591,22 @@ function handleUnifiedClaudeConnection(ws, request) {
         }
       }, ws);
       try { 
-        xlog.info(`[CODEX] Message processing completed`);
+        xlog.info(`✅ Codex message completed`);
       } catch {}
     } catch (e) {
       // Errors are already forwarded by spawnCodex
       try { 
-        xlog.info(`[CODEX] Message processing failed: ${e.message || 'Unknown error'}`);
+        xlog.error(`❌ Codex error: ${e.message || 'Unknown error'}`);
       } catch {}
     } finally {
       codexProcessing = false;
       if (codexQueue.length > 0) {
         try { 
-          xlog.info(`[CODEX] Moving to next message in queue (${codexQueue.length} remaining)`);
+          xlog.info(`⏭️ Processing next Codex message (${codexQueue.length} in queue)`);
         } catch {}
       } else {
         try { 
-          xlog.info(`[CODEX] Queue empty, returning to idle state`);
+          xlog.info(`💤 Codex queue empty`);
         } catch {}
       }
       processNextCodex();
@@ -1677,10 +1720,27 @@ function handleUnifiedClaudeConnection(ws, request) {
             hasSentMessage: false,
             lastOptionsSig: initialSig // Initialize to prevent unnecessary restart on first options update
           };
+          // Initialize context window limit for Claude based on model
+          try {
+            const mdl = String(options.model || '').toLowerCase();
+            contextUsage.claude.limit = 200000; // Sonnet/Opus default
+            if (mdl.includes('sonnet') || mdl.includes('opus') || mdl.includes('default')) {
+              contextUsage.claude.limit = 200000;
+            }
+            // Reset usage at session start
+            contextUsage.claude.used = 0;
+          } catch {}
           // Don't send a temp session ID - wait for the real one from the callback
           break;
         }
         case 'claude-message':
+          try {
+            const msg = String(data.message || '');
+            const est = Math.ceil(msg.length / 4);
+            contextUsage.claude.used += est;
+            const pct = Math.max(0, Math.min(100, Math.round((contextUsage.claude.used / Math.max(1, contextUsage.claude.limit)) * 100)));
+            ws.send(JSON.stringify({ type: 'context-usage', provider: 'claude', used: contextUsage.claude.used, limit: contextUsage.claude.limit, percentage: pct }));
+          } catch {}
           await handleClaudeMessage(ws, data, sessions);
           break;
         case 'claude-command': // alias for backwards compatibility
@@ -1715,6 +1775,16 @@ function handleUnifiedClaudeConnection(ws, request) {
             try { ws.send(JSON.stringify({ type: 'claude-options-updated', options: opts, sessionId: currentSid, unchanged: true })); } catch {}
             break;
           }
+
+          // Track model to adjust context limit
+          try { sessions.claude.model = opts.model || null; } catch {}
+          try {
+            const mdl = String(opts.model || '').toLowerCase();
+            contextUsage.claude.limit = 200000;
+            if (mdl.includes('sonnet') || mdl.includes('opus') || mdl.includes('default')) {
+              contextUsage.claude.limit = 200000;
+            }
+          } catch {}
 
           // If session hasn't materialized (no user message yet), queue options to apply later
           // DO NOT stop the stream if it just started - just queue the options
@@ -1765,6 +1835,16 @@ function handleUnifiedClaudeConnection(ws, request) {
           ws.send(JSON.stringify({ type: 'codex-session-started' }));
           break;
         case 'codex-message':
+          try {
+            // Update limit according to model label (gpt-high => 400k)
+            const label = String(data.options?.modelLabel || '').toLowerCase();
+            contextUsage.codex.limit = (label === 'gpt-high') ? 400000 : 200000;
+            const msg = String(data.message || '');
+            const est = Math.ceil(msg.length / 4);
+            contextUsage.codex.used += est;
+            const pct = Math.max(0, Math.min(100, Math.round((contextUsage.codex.used / Math.max(1, contextUsage.codex.limit)) * 100)));
+            ws.send(JSON.stringify({ type: 'context-usage', provider: 'codex', used: contextUsage.codex.used, limit: contextUsage.codex.limit, percentage: pct }));
+          } catch {}
           await handleCodexMessage(ws, data, codexSession, codexQueue, processNextCodex);
           break;
         case 'codex-command': // alias for backwards compatibility
@@ -1860,7 +1940,7 @@ async function handleShellInit(ws, data, sessions) {
 async function handleClaudeStart(ws, data, sessions) {
   const options = data.options || {};
   
-  slog.info('[CLAUDE] Starting new session');
+  slog.info('🚀 Starting Claude session');
   clog.debug('start options: ' + JSON.stringify({
     projectPath: options.projectPath,
     cwd: options.cwd,
@@ -1902,7 +1982,7 @@ async function handleClaudeStart(ws, data, sessions) {
 async function handleClaudeMessage(ws, data, sessions) {
   // Ensure stream exists; if not, create streaming process now
   if (!sessions.claude || !sessions.claude.stream) {
-    slog.info('[CLAUDE] Starting persistent stream');
+    slog.info('📡 Starting Claude persistent stream');
     const options = data.options || {};
     const projectPath = (options.projectPath && options.projectPath !== 'STANDALONE_MODE') ? options.projectPath : (os.homedir?.() || process.env.HOME || process.cwd());
     const workingDir = projectPath;
@@ -1912,7 +1992,7 @@ async function handleClaudeMessage(ws, data, sessions) {
     sessions.claude = { projectPath, sessionId: null, stream };
   }
 
-  clog.debug('[CLAUDE] Sending message: ' + JSON.stringify({
+  clog.debug('📤 Claude message: ' + JSON.stringify({
     message: data.message?.substring(0, 50),
     sessionId: data.sessionId,
     hasStoredSession: !!sessions.claude?.sessionId
@@ -1985,10 +2065,7 @@ async function handleCodexMessage(ws, data, codexSession, codexQueue, processNex
     process.cwd();
   
   try { 
-    xlog.info(`[CODEX] New message received`);
-    xlog.info(`[CODEX] Message: "${truncatedCommand}${task.command.length > 100 ? '...' : ''}"`);
-    xlog.info(`[CODEX] Project: ${shortPath}`);
-    xlog.info(`[CODEX] Queue length: ${codexQueue.length + 1}`);
+    xlog.info(`✍️ Sending message to Codex: "${truncatedCommand}${task.command.length > 100 ? '...' : ''}" [${shortPath}]${codexQueue.length > 0 ? ` (queued: ${codexQueue.length + 1})` : ''}`);
   } catch {}
   
   codexQueue.push(task);
@@ -2073,7 +2150,7 @@ function handleChatConnection_DEPRECATED(ws, request) {
     if (!data) return; // Message validation failed
     
     try {
-      slog.debug(`[WS] Received message type: ${data.type}`);
+      slog.debug(`📨 WS message: ${data.type}`);
       
       // Handle image upload from Shell/Chat
       if (data.type === 'upload-image') {
@@ -2142,8 +2219,7 @@ function handleChatConnection_DEPRECATED(ws, request) {
       }
       
       if (data.type === 'claude-command') {
-        clog.debug(`[CLAUDE] Command received: ${data.command?.substring(0, 100)}...`);
-        clog.debug(`[CLAUDE] Options:`, data.options);
+        clog.debug(`📥 Claude command: "${data.command?.substring(0, 100)}..." [${data.options?.projectPath || 'default'}]`);
         clog.debug('Received claude-command: ' + JSON.stringify({ command: data.command?.substring(0, 50), options: data.options }));
         
         // Register user's active project for smart broadcasting
@@ -2200,12 +2276,12 @@ function handleChatConnection_DEPRECATED(ws, request) {
         // DEPRECATED: Claude sessions are now handled via the /claude WebSocket endpoint
         // This handler is kept only for backward compatibility but does nothing
         slog.warn('[/ws endpoint] WRONG ENDPOINT - Received claude-start-session, should use /claude');
-        slog.warn('[WS] Received claude-start-session on /ws endpoint - ignoring (use /claude endpoint instead)');
+        slog.warn('⚠️ Deprecated: claude-start-session on /ws (use /claude endpoint)');
         // Do NOT send any response - frontend should use /claude endpoint
       } else if (data.type === 'claude-end-session') {
         // DEPRECATED: Claude sessions are now handled via the /claude WebSocket endpoint
         // This handler is kept only for backward compatibility but does nothing
-        slog.warn('[WS] Received claude-end-session on /ws endpoint - ignoring (use /claude endpoint instead)');
+        slog.warn('⚠️ Deprecated: claude-end-session on /ws (use /claude endpoint)');
         ws.send(JSON.stringify({ type: 'claude-session-closed' }));
       } else if (data.type === 'codex-start-session') {
         // Acknowledgement-only: do NOT spawn Codex here to avoid autonomous actions
@@ -2268,10 +2344,10 @@ function handleShellConnection(ws, request) {
         const txt = data.data || '';
         const isSignificant = LOG_SHELL_KEYS || txt.includes('\n') || txt.length > 2 || /[\u0003\u0004\u001b]/.test(txt);
         if (isSignificant) {
-          shlog.debug(`Received input len=${txt.length} preview="${txt.substring(0, 50)}${txt.length > 50 ? '...' : ''}"`);
+          shlog.debug(`⌨️ Shell input: "${txt.substring(0, 50).replace(/\n/g, '\\n').replace(/\r/g, '\\r')}${txt.length > 50 ? '...' : ''}" (${txt.length} chars)`);
         }
       } else if (data.type !== 'ping') {
-        shlog.debug(`Received ${data.type}: ` + JSON.stringify({
+        shlog.debug(`📩 Shell ${data.type}: ` + JSON.stringify({
           ...(data.type === 'init' ? {
             projectPath: data.projectPath,
             sessionId: data.sessionId,
@@ -2346,8 +2422,7 @@ function handleShellConnection(ws, request) {
             const shellCommand = `cd "${projectPath}" && ${claudeCommand}`;
             
             // Log the Shell command being executed
-            shlog.info('Spawning Claude shell');
-            shlog.debug(JSON.stringify({ shell: userShell, command: shellCommand, cwd: projectPath, cols: data.cols || 80, rows: data.rows || 24 }));
+            shlog.info(`🖥️ Starting Shell session [${projectPath}] ${data.cols || 80}x${data.rows || 24}`);
             
             // If node-pty is not available, inform client and skip spawning
             if (!pty || !pty.spawn) {
@@ -2388,7 +2463,7 @@ function handleShellConnection(ws, request) {
               ];
               
               if (suspiciousPatterns.some(pattern => output.match(pattern))) {
-                shlog.warn('Filtered suspicious CLI output');
+                shlog.warn('⚠️ Filtered suspicious CLI output');
                 return; // Skip this output entirely
               }
               
@@ -2408,7 +2483,7 @@ function handleShellConnection(ws, request) {
             
             // Handle process exit
             shellProcess.onExit((exitCode) => {
-              shlog.debug(`process exited code=${exitCode.exitCode} signal=${exitCode.signal}`);
+              shlog.info(`🔚 Shell process exited (code: ${exitCode.exitCode}${exitCode.signal ? `, signal: ${exitCode.signal}` : ''})`);
               
               if (ws.readyState === ws.OPEN) {
                 ws.send(JSON.stringify({
@@ -2422,7 +2497,7 @@ function handleShellConnection(ws, request) {
             });
             
           } catch (spawnError) {
-            shlog.error(`❌ Error spawning process: ${spawnError?.message || spawnError}`);
+            shlog.error(`❌ Shell spawn error: ${spawnError?.message || spawnError}`);
             ws.send(JSON.stringify({
               type: 'output',
               data: `\r\n\x1b[31mError: ${spawnError.message}\x1b[0m\r\n`
@@ -2433,7 +2508,7 @@ function handleShellConnection(ws, request) {
         // Log Shell input for debugging
         const txt = data.data || '';
         const isSignificant = LOG_SHELL_KEYS || txt.includes('\n') || txt.length > 2 || /[\u0003\u0004\u001b]/.test(txt);
-        if (isSignificant) shlog.debug(`Processing input len=${txt.length}`);
+        if (isSignificant) shlog.debug(`⚡ Processing Shell input (${txt.length} chars)`);
         
         // Send input to shell process
         if (shellProcess && shellProcess.write) {
@@ -2480,7 +2555,7 @@ function handleShellConnection(ws, request) {
                         data: `\r\n\x1b[32m✓ Imagem local encontrada: ${path.basename(fullFilePath)}\x1b[0m\r\n`
                       }));
                     } else {
-                      shlog.error(`Image file not found: ${fullFilePath}`);
+                      shlog.error(`❌ Image not found: ${fullFilePath}`);
                       ws.send(JSON.stringify({
                         type: 'output',
                         data: `\r\n\x1b[31m✗ Arquivo de imagem não encontrado: ${path.basename(filePath)}\x1b[0m\r\n`
@@ -2488,7 +2563,7 @@ function handleShellConnection(ws, request) {
                     }
                   }
                 } catch (error) {
-                  shlog.error(`Error processing internal image URL: ${error.message}`);
+                  shlog.error(`❌ Image processing error: ${error.message}`);
                 }
               }
             }
@@ -2534,7 +2609,7 @@ function handleShellConnection(ws, request) {
                     data: `\r\n\x1b[32m✓ Imagem baixada: ${filename}\x1b[0m\r\n`
                   }));
                 } catch (error) {
-                  shlog.error(`Error downloading external image: ${error.message}`);
+                  shlog.error(`❌ Image download error: ${error.message}`);
                   ws.send(JSON.stringify({
                     type: 'output',
                     data: `\r\n\x1b[31m✗ Erro ao baixar imagem: ${error.message}\x1b[0m\r\n`
@@ -2546,14 +2621,14 @@ function handleShellConnection(ws, request) {
             // Send the processed input with file paths instead of URLs
             shellProcess.write(processedInput);
             } catch (error) {
-              shlog.error(`Error writing to shell: ${error.message}`);
+              shlog.error(`❌ Shell write error: ${error.message}`);
             }
           })(); // Execute the async function immediately
         } else {
         }
       } else if (data.type === 'resize') {
         // Log Shell resize
-        shlog.debug(`[SHELL] Resizing terminal cols=${data.cols} rows=${data.rows}`);
+        shlog.debug(`📐 Shell resize: ${data.cols}x${data.rows}`);
         
         // Handle terminal resize
         if (shellProcess && shellProcess.resize) {
@@ -2621,7 +2696,7 @@ function handleShellConnection(ws, request) {
           }));
           
         } catch (error) {
-          shlog.error(`Error processing image: ${error.message}`);
+          shlog.error(`❌ Image error: ${error.message}`);
           ws.send(JSON.stringify({
             type: 'output',
             data: `\r\n\x1b[31m❌ Erro ao processar imagem: ${error.message}\x1b[0m\r\n`
@@ -2629,7 +2704,7 @@ function handleShellConnection(ws, request) {
         }
       }
     } catch (error) {
-      shlog.error(`❌ Shell WebSocket error: ${error.message}`);
+      shlog.error(`❌ Shell message error: ${error.message}`);
       if (ws.readyState === ws.OPEN) {
         ws.send(JSON.stringify({
           type: 'output',
@@ -2640,18 +2715,18 @@ function handleShellConnection(ws, request) {
   });
   
   ws.on('close', () => {
-    shlog.info(`[SHELL] WebSocket closed`);
+    shlog.info(`🔌 Shell connection closed`);
     
     // Clean up shell process if still running
     if (shellProcess && shellProcess.kill) {
-      shlog.debug(`[SHELL] Killing shell process on disconnect`);
+      shlog.debug(`⚡ Terminating shell process`);
       shellProcess.kill();
       shellProcess = null;
     }
   });
   
   ws.on('error', (error) => {
-    shlog.error(`❌ [SHELL] WebSocket error: ${error?.message || error}`);
+    shlog.error(`❌ Shell WebSocket error: ${error?.message || error}`);
   });
 }
 

@@ -12,6 +12,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { useClaudeWebSocket } from '../contexts/ClaudeWebSocketContext';
 import FileManagerSimple from './FileManagerSimple';
 import CodeEditor from './CodeEditor';
 import Shell from './Shell';
@@ -82,6 +83,7 @@ function MainContent({
   // const [showKanbanModal, setShowKanbanModal] = useState(false);
   const [showGitModal, setShowGitModal] = useState(false);
   const [showPromptsModal, setShowPromptsModal] = useState(false);
+  // Desktop Files overlay removed; Files opens inside Preview/Shell area
   const [toast, setToast] = useState(null);
   const [showPromptEnhancer, setShowPromptEnhancer] = useState(false);
   const [claudeOverlaySessionId, setClaudeOverlaySessionId] = useState(null);
@@ -89,6 +91,7 @@ function MainContent({
   const [codexOverlayControls, setCodexOverlayControls] = useState(null);
   const [chatActivity, setChatActivity] = useState(false); // true if any chat is active
   const [productivityMode, setProductivityMode] = useState(false);
+  const { registerMessageHandler } = useClaudeWebSocket();
   
   // Debug logging for endClaudeOverlaySession updates
   useEffect(() => {
@@ -106,6 +109,18 @@ function MainContent({
       delete window.openPromptEnhancer;
     };
   }, []);
+
+  // Listen for backend context window updates and reflect in header chip
+  useEffect(() => {
+    const unsub = registerMessageHandler('ctx-window', (msg) => {
+      try {
+        if (msg && msg.type === 'context-usage' && typeof msg.percentage === 'number') {
+          setContextWindowPercentage(Math.max(0, Math.min(100, Math.round(msg.percentage))));
+        }
+      } catch {}
+    });
+    return () => { try { unsub && unsub(); } catch {} };
+  }, [registerMessageHandler]);
 
   // Notify parent component about active side panel changes
   useEffect(() => {
@@ -374,7 +389,7 @@ function MainContent({
         {/* Chat column header overlay: make header area match chat background when open */}
         {(!isMobile && (activeSidePanel === 'codex-chat' || activeSidePanel === 'claude-chat')) && (
           <div
-            className={`absolute top-0 right-0 h-full bg-card border-l border-border pointer-events-none transition-all duration-300 ease-in-out ${
+            className={`absolute top-0 right-0 h-full bg-card border-l border-border pointer-events-none transition-all duration-300 ease-in-out rounded-r-lg overflow-hidden ${
               activeSidePanel === 'codex-chat' || activeSidePanel === 'claude-chat'
                 ? 'w-[260px] sm:w-[320px] md:w-[360px] lg:w-[420px]'
                 : 'w-0'
@@ -518,10 +533,11 @@ function MainContent({
                 onClick={() => {
                   if (!selectedProject || selectedProject?.isStandalone || selectedProject?.path === 'STANDALONE_MODE') {
                     setShowProjectsModal(true);
-                    setToast({ message: 'Select a project to browse files' });
+                    setToast({ message: 'Select a project to view files' });
                     setTimeout(() => setToast(null), 1800);
                     return;
                   }
+                  // Open in Preview/Shell area so it coexists with chats
                   try {
                     if (window.__shellControls?.openFilesPrimary) {
                       window.__shellControls.openFilesPrimary();
@@ -675,20 +691,6 @@ function MainContent({
                   Active
                 </span>
               )}
-              {(activeSidePanel === 'claude-chat' ? claudeOverlayControls?.end : codexOverlayControls?.end) && (
-                <button
-                  onClick={() => { 
-                    try { 
-                      (activeSidePanel === 'claude-chat' ? claudeOverlayControls.end : codexOverlayControls.end)(); 
-                      setTimeout(() => setActiveSidePanel(null), 500);
-                    } catch {} 
-                  }}
-                  className="icon-pill-sm text-muted-foreground"
-                  title="End session"
-                >
-                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-                </button>
-              )}
               {(activeSidePanel === 'claude-chat' ? claudeOverlayControls?.new : codexOverlayControls?.new) && (
                 <button
                   onClick={() => { try { (activeSidePanel === 'claude-chat' ? claudeOverlayControls.new : codexOverlayControls.new)(); } catch {}; if (!activeSidePanel) setActiveSidePanel('claude-chat'); }}
@@ -725,9 +727,11 @@ function MainContent({
       <div className="flex-1 min-h-0 flex relative bg-background">
         {productivityMode ? (
           <div className="flex w-full h-full">
-            <div className="w-1/3 min-w-0 border-r border-border">
+            {/* Left: Shell (keeps its own bordered container) */}
+            <div className="w-1/3 min-w-0 overflow-hidden rounded-none">
               {!isMobile && (
                 <Shell
+                  key="shell-main" // Fixed key to preserve session
                   selectedProject={selectedProject}
                   selectedSession={selectedSession}
                   isActive={true}
@@ -741,17 +745,20 @@ function MainContent({
                   onTerminalVisibilityChange={setShellVisible}
                   onSidebarClose={() => {}}
                   disablePreview={true}
+                  flushRight={true}
                 />
               )}
             </div>
-            <div className="w-1/3 min-w-0 border-r border-border">
+            {/* Middle: Claude (wrapper draws border; inner is borderless) */}
+            <div className="w-1/3 min-w-0 overflow-hidden rounded-none">
               {!isMobile && (
-                <OverlayChatClaude
-                  key="claude-chat-prod"
+                <div className="h-full border border-border rounded-none overflow-hidden">
+                  <OverlayChatClaude
+                  key="claude-chat-panel" // Use same key as panel mode
                   embedded={true}
                   disableInlinePanel={true}
                   cliProviderFixed="claude"
-                  chatId="claude-prod"
+                  chatId="claude-instance" // Use same chatId as panel mode
                   projectPath={selectedProject?.path}
                   projects={projects}
                   previewUrl={null}
@@ -759,18 +766,21 @@ function MainContent({
                   onBindControls={setClaudeOverlayControls}
                   onActivityChange={(active) => setChatActivity(active)}
                   onPanelClosed={() => {}}
-                  tightEdgeLeft={false}
+                  tightEdgeLeft={true}
                 />
+                </div>
               )}
             </div>
-            <div className="w-1/3 min-w-0">
+            {/* Right: Codex (wrapper with right rounded) */}
+            <div className="w-1/3 min-w-0 overflow-hidden">
               {!isMobile && (
-                <OverlayChatClaude
-                  key="codex-chat-prod"
+                <div className="h-full border border-border rounded-r-lg overflow-hidden">
+                  <OverlayChatClaude
+                  key="codex-chat-panel" // Use same key as panel mode
                   embedded={true}
                   disableInlinePanel={true}
                   cliProviderFixed="codex"
-                  chatId="codex-prod"
+                  chatId="codex-instance" // Use same chatId as panel mode
                   projectPath={selectedProject?.path}
                   projects={projects}
                   previewUrl={null}
@@ -778,8 +788,9 @@ function MainContent({
                   onBindControls={setCodexOverlayControls}
                   onActivityChange={(active) => setChatActivity(active)}
                   onPanelClosed={() => {}}
-                  tightEdgeLeft={false}
+                  tightEdgeLeft={true}
                 />
+                </div>
               )}
             </div>
           </div>
@@ -788,6 +799,7 @@ function MainContent({
             <div className="h-full overflow-hidden">
               {!isMobile && (
                   <Shell 
+                    key="shell-main" // Fixed key to preserve session
                     selectedProject={selectedProject} 
                     selectedSession={selectedSession}
                     isActive={true}
@@ -867,7 +879,7 @@ function MainContent({
           </div>
         )}
 
-        {/* Files panel overlay removed: Files now always opens integrated over the Preview */}
+        {/* Files overlay removed: Files opens inside Preview to avoid overlapping other panels */}
         
 
         {/* Mobile support - keeping existing tabs behavior */}
@@ -876,7 +888,7 @@ function MainContent({
             {activeTab === 'files' && (
               <div className="absolute inset-0 bg-background z-10 mobile-modal ios-sides-safe">
                 <div className="h-full mobile-content overflow-y-auto scrollable-content">
-                  <FileManagerSimple selectedProject={selectedProject} />
+                  <FileManagerSimple selectedProject={selectedProject} embedded={true} />
                 </div>
               </div>
             )}
@@ -897,6 +909,8 @@ function MainContent({
           </>
         )}
       </div>
+
+      {/* No desktop-specific picker here; Files uses current project */}
 
       {/* Code Editor Modal */}
       {editingFile && (

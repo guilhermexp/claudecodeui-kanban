@@ -128,7 +128,7 @@ body {
     --border: 214.3 31.8% 91.4%;          /* Bordas mais suaves para light mode */
     --input: 214.3 31.8% 91.4%;
     --ring: 262.1 83.3% 57.8%;
-    --radius: 0.5rem;
+    --radius: 0.6rem; /* unified panel radius */
 
     /* VibeKanban specific status colors for light mode */
     --success: 142 76% 36%;                /* Verde escuro */
@@ -221,6 +221,8 @@ body {
     box-sizing: border-box;
     transition: none;
   }
+
+  /* Keep component-specific rounding; avoid global !important overrides */
   
   body {
     @apply bg-background text-foreground;

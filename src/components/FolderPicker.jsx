@@ -95,7 +95,8 @@ function FolderPicker({ isOpen, onClose, onSelect }) {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="w-full max-w-3xl h-[70vh] p-0 bg-card border border-border">
+      {/* Make the dialog a flex column so the middle area can scroll */}
+      <DialogContent className="w-full max-w-3xl h-[70vh] p-0 bg-card border border-border flex flex-col">
         <DialogHeader className="px-4 py-3 border-b border-border">
           <div className="flex items-center justify-between">
             <DialogTitle className="text-lg font-semibold">Select Project Folder</DialogTitle>

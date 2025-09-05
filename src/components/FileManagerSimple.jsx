@@ -15,7 +15,7 @@ import { formatFileSize } from '../utils/formatters';
 import { formatTimeAgo } from '../utils/time';
 
 // Simple File Manager - Updates only on manual refresh or project change
-function FileManagerSimple({ selectedProject, onClose }) {
+function FileManagerSimple({ selectedProject, onClose, embedded = false }) {
   // State Management
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -26,9 +26,13 @@ function FileManagerSimple({ selectedProject, onClose }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
   const [showHiddenFiles, setShowHiddenFiles] = useState(false);
-  const [showMarkdownPreview, setShowMarkdownPreview] = useState(false);
+  const [showMarkdownPreview, setShowMarkdownPreview] = useState(() => {
+    const v = localStorage.getItem('fm-default-preview');
+    return v === null ? true : v === '1';
+  });
   const codeEditorRef = useRef(null);
   const containerRef = useRef(null);
+  const searchInputRef = useRef(null);
   const [containerWidth, setContainerWidth] = useState(0);
   
   // Context Menu State
@@ -171,6 +175,8 @@ function FileManagerSimple({ selectedProject, onClose }) {
         projectPath: selectedProject.path,
         projectName: selectedProject.name
       });
+      // Image viewer doesn't use markdown preview
+      setShowMarkdownPreview(true);
       setShowFilePanel(true);
     } else {
       setSelectedFile({
@@ -179,6 +185,11 @@ function FileManagerSimple({ selectedProject, onClose }) {
         projectPath: selectedProject.path,
         projectName: selectedProject.name
       });
+      // Default to preview for markdown files respecting user preference
+      if (item.name.toLowerCase().endsWith('.md')) {
+        const pref = localStorage.getItem('fm-default-preview');
+        setShowMarkdownPreview(pref === null ? true : pref === '1');
+      }
       setShowFilePanel(true);
     }
   }, [selectedProject, toggleDirectory]);
@@ -400,8 +411,9 @@ function FileManagerSimple({ selectedProject, onClose }) {
       : filterFiles(items.filter(item => !item.name.startsWith('.')));
     
     // Improve tree readability: larger, consistent indents
-    const indentSize = compact ? 12 : 14;
-    const indentBase = compact ? 8 : 10;
+    const indentSize = compact ? 14 : 16;
+    // Absolute minimal left gutter
+    const indentBase = compact ? 0 : 2;
 
     return filtered.map((item) => {
       const isExpanded = expandedDirs.has(item.path);
@@ -410,8 +422,8 @@ function FileManagerSimple({ selectedProject, onClose }) {
         <div key={item.path} className="select-none">
           <div
             className={cn(
-              "w-full flex items-center justify-start px-2 h-auto cursor-pointer rounded-sm hover:bg-accent transition-colors",
-              compact ? "py-0.5" : "py-1",
+              "w-full flex items-center justify-start h-auto cursor-pointer hover:bg-accent transition-colors",
+              compact ? "px-0 py-1 rounded" : "px-0 py-1.5 rounded-md",
               "touch-manipulation active:bg-accent/80 min-h-[26px] md:min-h-0",
             )}
             style={{ paddingLeft: `${level * indentSize + indentBase}px` }}
@@ -483,6 +495,17 @@ function FileManagerSimple({ selectedProject, onClose }) {
     filterFiles, handleOpen, handleContextMenu, toggleDirectory
   ]);
   
+  // Helper: collect all directory paths
+  const collectDirPaths = useCallback((items, acc = []) => {
+    for (const it of items || []) {
+      if (it.type === 'directory') {
+        acc.push(it.path);
+        if (it.children) collectDirPaths(it.children, acc);
+      }
+    }
+    return acc;
+  }, []);
+
   if (loading) {
     return (
       <div className="h-full flex items-center justify-center bg-card rounded-xl border border-border">
@@ -492,121 +515,61 @@ function FileManagerSimple({ selectedProject, onClose }) {
       </div>
     );
   }
-  
+
   return (
     <>
-    <div ref={containerRef} className="h-full flex bg-card rounded-xl border border-border overflow-hidden">
+    <div ref={containerRef} className={`h-full flex bg-card ${embedded ? '' : 'rounded-xl border border-border'} overflow-hidden`}>
       {/* Files List */}
       <div className={`flex flex-col transition-all duration-300 ease-in-out ${
         showFilePanel ? 'hidden md:flex md:w-[25%] lg:w-[20%] xl:w-[18%]' : 'flex-1'
       }`}>
-        {/* Header */}
-        <div className={`${compact ? 'py-2' : 'py-3'} pl-3 pr-2 md:pl-4 md:pr-3 border-b border-border`}> 
-          <div className="flex items-center justify-between gap-2">
+        {/* Header - sticky with fixed height to align with viewer header */}
+        <div className={`h-10 pl-5 pr-4 md:pl-6 md:pr-5 border-b border-border sticky top-0 z-10 bg-card`}> 
+          <div className="h-full flex items-center justify-between gap-2">
             <div className="min-w-0 flex-1">
-              <h3 className={`text-foreground font-medium truncate ${tight ? 'text-xs' : compact ? 'text-sm' : 'text-base'}`}>Files</h3>
-              {selectedProject?.path && !tight && (
-                <div className={`mt-1 flex items-center gap-1 text-muted-foreground/70 ${compact ? 'text-[10px]' : 'text-[11px] sm:text-xs'} overflow-x-auto whitespace-nowrap`}> 
-                  <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-5l-2-2H5a2 2 0 00-2 2z" />
-                  </svg>
-                  <span className={`${compact ? 'text-[10px]' : 'text-[11px]'}`} title={selectedProject.path}>
-                    {selectedProject.path}
-                  </span>
+              {(() => {
+                const segs = (selectedProject?.path || '').split('/').filter(Boolean);
+                const label = segs.length ? segs.slice(-2).join(' / ') : '';
+                return (
+                  <div
+                    className={`text-muted-foreground/80 ${compact ? 'text-[11px]' : 'text-[12px]'} font-mono truncate max-w-full`}
+                    title={selectedProject?.path || ''}
+                  >
+                    {label}
+                  </div>
+                );
+              })()}
+              {showSearch && (
+                <div className="relative mt-2 max-w-sm">
+                  <Search className={`absolute left-2 top-1/2 -translate-y-1/2 ${tight ? 'w-3 h-3' : compact ? 'w-3.5 h-3.5' : 'w-4 h-4'} text-muted-foreground`} />
+                  <input
+                    id="fm-search-input"
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search files..."
+                    ref={searchInputRef}
+                    className={`w-full ${tight ? 'pl-5 pr-5 py-1 text-[12px]' : compact ? 'pl-6 pr-6 py-1 text-[13px]' : 'pl-7 pr-7 py-1.5 text-sm'} bg-background border rounded focus:outline-none focus:ring-1 focus:ring-primary`}
+                  />
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery('')}
+                      className={`absolute right-2 top-1/2 -translate-y-1/2 ${tight ? 'p-0.5' : 'p-0.5'} hover:bg-accent rounded`}
+                      title="Clear"
+                    >
+                      <X className={`${tight ? 'w-3 h-3' : 'w-3 h-3'}`} />
+                    </button>
+                  )}
                 </div>
               )}
             </div>
-            <div className={`flex items-center ${compact ? 'gap-0.5' : 'gap-1'} flex-shrink-0`}>
-              {/* Search toggle */}
-              <button
-                onClick={() => setShowSearch(v => !v)}
-                className={`hover:bg-accent rounded-md transition-colors ${(compact || tight) ? 'p-0.5' : 'p-1'}`}
-                title="Search"
-              >
-                <Search className={`${tight ? 'w-3 h-3' : compact ? 'w-3.5 h-3.5' : 'w-4 h-4'} text-muted-foreground`} />
-              </button>
-              <button
-               onClick={() => setShowHiddenFiles(!showHiddenFiles)}
-              className={cn("hover:bg-accent rounded-md transition-colors", (compact || tight) ? 'p-0.5' : 'p-1', showHiddenFiles && "bg-accent")}
-               title={showHiddenFiles ? "Hide hidden files" : "Show hidden files"}
-             >
-              {showHiddenFiles ? <Eye className={`${tight ? 'w-3 h-3' : compact ? 'w-3.5 h-3.5' : 'w-4 h-4'}`} /> : <EyeOff className={`${tight ? 'w-3 h-3' : compact ? 'w-3.5 h-3.5' : 'w-4 h-4'}`} />}
-              </button>
-              {onClose && (
-                <button
-                  onClick={onClose}
-                  className="text-muted-foreground hover:text-foreground transition-colors"
-                  title="Close"
-                >
-                  <X className={`${tight ? 'w-3 h-3' : compact ? 'w-3.5 h-3.5' : 'w-4 h-4'}`} />
-                </button>
-              )}
-              <button
-                onClick={() => {
-                  setCreateType('file');
-                  setCreateType('file');
-                  setShowCreateModal(true);
-                  setCreatePath('');
-                  setCreateName('');
-                  setCreateError('');
-                }}
-              className={`hover:bg-accent rounded-md transition-colors ${(compact || tight) ? 'p-0.5' : 'p-1'}`}
-                title="New File"
-              >
-              <FilePlus className={`${tight ? 'w-3 h-3' : compact ? 'w-3.5 h-3.5' : 'w-4 h-4'} text-muted-foreground`} />
-              </button>
-              <button
-                onClick={() => {
-                  setCreateType('folder');
-                  setShowCreateModal(true);
-                  setCreatePath('');
-                  setCreateName('');
-                  setCreateError('');
-                }}
-              className={`hover:bg-accent rounded-md transition-colors ${(compact || tight) ? 'p-0.5' : 'p-1'}`}
-                title="New Folder"
-              >
-              <FolderPlus className={`${tight ? 'w-3 h-3' : compact ? 'w-3.5 h-3.5' : 'w-4 h-4'} text-muted-foreground`} />
-              </button>
-              <button
-                onClick={handleRefresh}
-              className={cn(`hover:bg-accent rounded-md transition-colors ${(compact || tight) ? 'p-0.5' : 'p-1'}`, loading && "animate-spin")}
-                title="Refresh"
-              >
-              <RefreshCw className={`${tight ? 'w-3 h-3' : compact ? 'w-3.5 h-3.5' : 'w-4 h-4'} text-muted-foreground`} />
-              </button>
-            </div>
+            {/* Actions moved to footer toolbar */}
           </div>
         </div>
-        
-        {/* Search Bar (compact, only when toggled) */}
-        {showSearch && (
-          <div className={`${tight ? 'px-0.5 py-0.5' : compact ? 'px-1 py-1' : 'px-2 py-1.5'} border-b border-border`}> 
-            <div className="relative max-w-sm ml-auto">
-              <Search className={`absolute left-2 top-1/2 -translate-y-1/2 ${tight ? 'w-3 h-3' : compact ? 'w-3.5 h-3.5' : 'w-4 h-4'} text-muted-foreground`} />
-              <input
-                id="fm-search-input"
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search files..."
-                className={`w-full ${tight ? 'pl-5 pr-5 py-1 text-[12px]' : compact ? 'pl-6 pr-6 py-1 text-[13px]' : 'pl-7 pr-7 py-1 text-sm'} bg-background border rounded focus:outline-none focus:ring-1 focus:ring-primary`}
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className={`absolute right-2 top-1/2 -translate-y-1/2 ${tight ? 'p-0.5' : 'p-0.5'} hover:bg-accent rounded`}
-                  title="Clear"
-                >
-                  <X className={`${tight ? 'w-3 h-3' : 'w-3 h-3'}`} />
-                </button>
-              )}
-            </div>
-          </div>
-        )}
+        {/* Search moved into header */}
         
         {/* File Tree */}
-        <ScrollArea className={`flex-1 ${compact ? 'pl-2 pr-1 py-2' : 'pl-3 pr-2 py-3'}`}>
+        <ScrollArea className={`flex-1 ${compact ? 'pl-0 pr-3 py-2.5' : 'pl-0 pr-4 py-3.5'}`}>
           {selectedProject?.isStandalone || selectedProject?.path === 'STANDALONE_MODE' ? (
             <div className="text-center py-8">
               <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center mx-auto mb-3">
@@ -633,6 +596,86 @@ function FileManagerSimple({ selectedProject, onClose }) {
             </div>
           )}
         </ScrollArea>
+
+        {/* Footer toolbar with controls (sticky bottom) */}
+        <div className={`sticky bottom-0 bg-card border-t border-border ${compact ? 'px-3 py-1.5' : 'px-4 py-2'}`}>
+          <div className={`flex items-center ${compact ? 'gap-1' : 'gap-2'}`}>
+            {/* Search toggle */}
+            <button
+              onClick={() => { setShowSearch(v => !v); setTimeout(() => searchInputRef.current?.focus(), 0); }}
+              className={`hover:bg-accent rounded-md transition-colors ${(compact || tight) ? 'p-1' : 'p-1.5'}`}
+              title="Search"
+            >
+              <Search className={`${tight ? 'w-3.5 h-3.5' : 'w-4 h-4'} text-muted-foreground`} />
+            </button>
+            {/* Expand/Collapse all */}
+            <button
+              onClick={() => setExpandedDirs(new Set(collectDirPaths(files)))}
+              className={`hover:bg-accent rounded-md transition-colors ${(compact || tight) ? 'p-1' : 'p-1.5'}`}
+              title="Expand all"
+            >
+              <ChevronDown className={`${tight ? 'w-3.5 h-3.5' : 'w-4 h-4'} text-muted-foreground`} />
+            </button>
+            <button
+              onClick={() => setExpandedDirs(new Set())}
+              className={`hover:bg-accent rounded-md transition-colors ${(compact || tight) ? 'p-1' : 'p-1.5'}`}
+              title="Collapse all"
+            >
+              <ChevronRight className={`${tight ? 'w-3.5 h-3.5' : 'w-4 h-4'} text-muted-foreground`} />
+            </button>
+            <button
+              onClick={() => setShowHiddenFiles(!showHiddenFiles)}
+              className={cn("hover:bg-accent rounded-md transition-colors", (compact || tight) ? 'p-1' : 'p-1.5', showHiddenFiles && "bg-accent")}
+              title={showHiddenFiles ? "Hide hidden files" : "Show hidden files"}
+            >
+              {showHiddenFiles ? <Eye className={`${tight ? 'w-3.5 h-3.5' : 'w-4 h-4'}`} /> : <EyeOff className={`${tight ? 'w-3.5 h-3.5' : 'w-4 h-4'}`} />}
+            </button>
+            {onClose && (
+              <button
+                onClick={onClose}
+                className={`text-muted-foreground hover:text-foreground transition-colors ${(compact || tight) ? 'p-1' : 'p-1.5'}`}
+                title="Close"
+              >
+                <X className={`${tight ? 'w-3.5 h-3.5' : 'w-4 h-4'}`} />
+              </button>
+            )}
+            <div className="ml-auto flex items-center gap-2">
+              <button
+                onClick={() => {
+                  setCreateType('file');
+                  setShowCreateModal(true);
+                  setCreatePath('');
+                  setCreateName('');
+                  setCreateError('');
+                }}
+                className={`hover:bg-accent rounded-md transition-colors ${(compact || tight) ? 'p-1' : 'p-1.5'}`}
+                title="New File"
+              >
+                <FilePlus className={`${tight ? 'w-3.5 h-3.5' : 'w-4 h-4'} text-muted-foreground`} />
+              </button>
+              <button
+                onClick={() => {
+                  setCreateType('folder');
+                  setShowCreateModal(true);
+                  setCreatePath('');
+                  setCreateName('');
+                  setCreateError('');
+                }}
+                className={`hover:bg-accent rounded-md transition-colors ${(compact || tight) ? 'p-1' : 'p-1.5'}`}
+                title="New Folder"
+              >
+                <FolderPlus className={`${tight ? 'w-3.5 h-3.5' : 'w-4 h-4'} text-muted-foreground`} />
+              </button>
+              <button
+                onClick={handleRefresh}
+                className={cn(`hover:bg-accent rounded-md transition-colors ${(compact || tight) ? 'p-1' : 'p-1.5'}`, loading && "animate-spin")}
+                title="Refresh"
+              >
+                <RefreshCw className={`${tight ? 'w-3.5 h-3.5' : 'w-4 h-4'} text-muted-foreground`} />
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
       
       {/* File Viewer Panel - Integrated Side Panel */}
@@ -642,7 +685,7 @@ function FileManagerSimple({ selectedProject, onClose }) {
         {selectedFile && (
           <div className="h-full flex flex-col">
             {/* File Header */}
-            <div className={`${tight ? 'px-2 py-1.5' : compact ? 'px-3 py-1.5' : 'px-4 py-2'} border-b border-border bg-muted/30 flex items-center justify-between`}> 
+            <div className={`h-10 pl-5 pr-4 md:pl-6 md:pr-5 border-b border-border bg-card flex items-center justify-between`}> 
               <div className="flex items-center gap-2 min-w-0">
                 {/* Back button for mobile */}
                 <button
@@ -700,8 +743,8 @@ function FileManagerSimple({ selectedProject, onClose }) {
                   </svg>
                 </button>
                 
-                {/* Eye/View button - only for markdown files */}
-                {selectedFile.name.toLowerCase().endsWith('.md') && (
+                {/* Eye/View button - for previewable types (md, html, csv, json) */}
+                {[".md", ".markdown", ".html", ".htm", ".csv", ".json"].some(ext => selectedFile.name.toLowerCase().endsWith(ext)) && (
                   <button
                     onClick={() => {
                       setShowMarkdownPreview(!showMarkdownPreview);
@@ -711,7 +754,7 @@ function FileManagerSimple({ selectedProject, onClose }) {
                         ? 'bg-accent text-foreground' 
                         : 'hover:bg-accent'
                     }`}
-                    title={showMarkdownPreview ? "Show raw markdown" : "Preview markdown"}
+                    title={showMarkdownPreview ? "Show raw content" : "Preview content"}
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -798,7 +841,11 @@ function FileManagerSimple({ selectedProject, onClose }) {
                 projectPath={selectedFile.projectPath}
                 inline={true}
                 showMarkdownPreview={showMarkdownPreview}
-                onToggleMarkdownPreview={() => setShowMarkdownPreview(!showMarkdownPreview)}
+                onToggleMarkdownPreview={() => {
+                  const next = !showMarkdownPreview;
+                  setShowMarkdownPreview(next);
+                  try { localStorage.setItem('fm-default-preview', next ? '1' : '0'); } catch {}
+                }}
               />
             </div>
           </div>

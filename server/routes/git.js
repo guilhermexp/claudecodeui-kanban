@@ -480,6 +480,65 @@ router.post('/generate-commit-message', async (req, res) => {
   }
 });
 
+// Helper function to extract modified functions/components from diff
+function extractModifiedFunctions(diff) {
+  const functions = new Set();
+  
+  // Match function declarations and React components
+  const patterns = [
+    /^[+-].*function\s+(\w+)/gm,
+    /^[+-].*const\s+(\w+)\s*=\s*\(/gm,
+    /^[+-].*const\s+(\w+)\s*=\s*async/gm,
+    /^[+-].*export\s+default\s+function\s+(\w+)/gm,
+    /^[+-].*export\s+function\s+(\w+)/gm,
+    /^[+-].*class\s+(\w+)/gm,
+    /^[+-].*interface\s+(\w+)/gm,
+    /^[+-].*type\s+(\w+)/gm,
+  ];
+  
+  patterns.forEach(pattern => {
+    let match;
+    while ((match = pattern.exec(diff)) !== null) {
+      if (match[1] && match[1].length > 2) {
+        functions.add(match[1]);
+      }
+    }
+  });
+  
+  return Array.from(functions).slice(0, 5); // Limit to 5 most relevant
+}
+
+// Helper function to extract file types from file paths
+function extractFileTypes(files) {
+  const types = new Set();
+  
+  files.forEach(file => {
+    const ext = path.extname(file).toLowerCase();
+    const dir = path.dirname(file).split('/').pop();
+    
+    // Categorize by extension and directory
+    if (['.jsx', '.tsx'].includes(ext)) {
+      types.add('React Component');
+    } else if (['.js', '.ts'].includes(ext)) {
+      if (dir === 'routes' || dir === 'api') {
+        types.add('API');
+      } else if (dir === 'utils' || dir === 'lib') {
+        types.add('Utility');
+      } else {
+        types.add('JavaScript');
+      }
+    } else if (['.css', '.scss', '.sass'].includes(ext)) {
+      types.add('Styles');
+    } else if (['.json'].includes(ext)) {
+      types.add('Config');
+    } else if (['.md', '.txt'].includes(ext)) {
+      types.add('Documentation');
+    }
+  });
+  
+  return Array.from(types);
+}
+
 // Enhanced commit message generator using Gemini 2.0 Flash
 async function generateSmartCommitMessage(files, diff, projectPath) {
   try {
@@ -495,45 +554,85 @@ async function generateSmartCommitMessage(files, diff, projectPath) {
     const model = 'gemini-2.0-flash-exp';
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
-    // Create a prompt for Gemini to generate a commit message
-    const prompt = `Sua tarefa é criar uma mensagem de commit em português (pt-BR) a partir de um diff de git.
+    // Analyze diff to extract key information
+    const addedLines = (diff.match(/^\+[^+]/gm) || []).length;
+    const deletedLines = (diff.match(/^-[^-]/gm) || []).length;
+    const modifiedFunctions = extractModifiedFunctions(diff);
+    const fileTypes = extractFileTypes(files);
+    
+    // Get additional context
+    let recentCommits = '';
+    try {
+      const { stdout } = await execAsync(
+        `git log --pretty=format:'%s' -n 5`,
+        { cwd: projectPath }
+      );
+      recentCommits = stdout;
+    } catch (error) {
+      // Ignore if git log fails
+    }
 
-Siga estritamente estas regras:
-1.  **Formato Conventional Commit:** A mensagem DEVE seguir o formato: \`tipo(escopo): emoji descrição\`.
-2.  **Tipo:** Use um dos seguintes tipos:
-    *   \`feat\`: para novas funcionalidades.
-    *   \`fix\`: para correções de bugs.
-    *   \`refactor\`: para reestruturações de código que não alteram a funcionalidade.
-    *   \`style\`: para mudanças de formatação e estilo de código.
-    *   \`docs\`: para atualizações na documentação.
-    *   \`test\`: para adição ou correção de testes.
-    *   \`chore\`: para tarefas de manutenção e build.
-    *   \`perf\`: para melhorias de performance.
-3.  **Escopo (Opcional):** Se aplicável, infira um escopo a partir dos arquivos modificados (ex: \`api\`, \`ui\`, \`auth\`, \`git-panel\`).
-4.  **Emoji:** Adicione um emoji correspondente ao tipo:
-    *   \`feat\`: ✨
-    *   \`fix\`: 🐛
-    *   \`refactor\`: ♻️
-    *   \`style\`: 🎨
-    *   \`docs\`: 📚
-    *   \`test\`: 🧪
-    *   \`chore\`: 🧹
-    *   \`perf\`: ⚡️
-5.  **Descrição:**
-    *   Escreva uma descrição curta e impactante.
-    *   Use o modo imperativo (ex: "adiciona", "corrige", "remove").
-    *   Comece com letra minúscula.
-6.  **Tamanho:** A linha de assunto inteira (tudo) NÃO PODE exceder 72 caracteres.
-7.  **Saída:** Retorne APENAS a mensagem de commit formatada, sem nenhuma explicação ou texto adicional.
+    // Create a more detailed prompt for Gemini to generate a commit message
+    const prompt = `Você é um especialista em Git e desenvolvimento de software. Analise as mudanças abaixo e gere uma mensagem de commit profissional.
 
-**Exemplo de Saída:**
-feat(auth): ✨ adiciona sistema de autenticação com JWT
+**CONTEXTO DO PROJETO:**
+- Arquivos modificados: ${files.length} arquivo(s)
+- Tipos de arquivo: ${fileTypes.join(', ')}
+- Linhas adicionadas: ${addedLines}
+- Linhas removidas: ${deletedLines}
+- Funções/componentes modificados: ${modifiedFunctions.length > 0 ? modifiedFunctions.join(', ') : 'N/A'}
 
-**Arquivos Modificados:**
-${files.join('\n')}
+**COMMITS RECENTES (para contexto):**
+${recentCommits || 'N/A'}
 
-**Diff das Mudanças (truncado em 4000 caracteres):**
-${diff.substring(0, 4000)} ${diff.length > 4000 ? '... (truncado)' : ''}`
+**REGRAS OBRIGATÓRIAS:**
+1. Use o formato Conventional Commit: tipo(escopo): descrição
+2. Tipos permitidos e quando usar:
+   - feat: nova funcionalidade adicionada
+   - fix: correção de bug ou erro
+   - refactor: reestruturação sem alterar funcionalidade
+   - style: formatação, espaços, vírgulas, etc
+   - docs: documentação apenas
+   - test: adição ou correção de testes
+   - chore: manutenção, build, dependências
+   - perf: melhorias de performance
+
+3. O escopo deve ser específico baseado nos arquivos:
+   - Para componentes React: use o nome do componente
+   - Para APIs: use o endpoint ou recurso
+   - Para configurações: use o tipo de config
+   
+4. A descrição deve:
+   - Ser específica sobre O QUE mudou e POR QUE (se evidente no diff)
+   - Usar português brasileiro
+   - Começar com verbo no presente (adiciona, corrige, remove, atualiza, etc)
+   - Mencionar componentes/funções específicos quando relevante
+   - Ser concisa mas informativa (máximo 72 caracteres total)
+
+5. NÃO use emojis na mensagem
+
+**ANÁLISE DO DIFF:**
+Analise cuidadosamente o diff abaixo para entender:
+- Qual é a mudança principal?
+- É uma nova feature, correção ou refatoração?
+- Quais componentes/módulos foram afetados?
+- Há mudanças em lógica de negócio importante?
+
+**ARQUIVOS MODIFICADOS:**
+${files.map(f => `- ${f}`).join('\n')}
+
+**DIFF DETALHADO (primeiros 8000 caracteres para análise completa):**
+\`\`\`diff
+${diff.substring(0, 8000)} ${diff.length > 8000 ? '\n... (diff continua, total de ' + diff.length + ' caracteres)' : ''}
+\`\`\`
+
+**INSTRUÇÕES FINAIS:**
+- Retorne APENAS a mensagem de commit, sem explicações
+- A mensagem deve capturar a essência da mudança
+- Seja específico sobre componentes/funções modificados
+- Evite mensagens genéricas como "atualiza código" ou "corrige bugs"
+
+MENSAGEM DE COMMIT:`
 
     const requestBody = {
       contents: [
@@ -547,10 +646,10 @@ ${diff.substring(0, 4000)} ${diff.length > 4000 ? '... (truncado)' : ''}`
         }
       ],
       generationConfig: {
-        temperature: 0.3,
-        maxOutputTokens: 100,
-        topP: 0.8,
-        topK: 40
+        temperature: 0.4, // Slightly higher for more creative descriptions
+        maxOutputTokens: 150, // Allow for more detailed messages
+        topP: 0.9,
+        topK: 50
       }
     };
 
@@ -572,15 +671,36 @@ ${diff.substring(0, 4000)} ${diff.length > 4000 ? '... (truncado)' : ''}`
     const commitMessage = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
 
     if (commitMessage) {
-      // Validate that it looks like a proper commit message
+      // Clean and validate the commit message
       const lines = commitMessage.split('\n');
-      // New format is `type(scope): emoji description`
+      
+      // Find a line that matches Conventional Commit format (without requiring emoji)
       const validMessage = lines.find(line => 
-        line.match(/^(feat|fix|refactor|style|docs|test|chore|perf)(\(.*\))?:\s.+/i)
+        line.match(/^(feat|fix|refactor|style|docs|test|chore|perf)(\([^)]+\))?:\s*.+/i)
       ) || lines[0];
       
-      // Ensure it's not too long
-      const finalMessage = validMessage.substring(0, 72).trim();
+      // Clean up the message
+      let finalMessage = validMessage
+        .replace(/^\s*[-*]\s*/, '') // Remove bullet points if any
+        .replace(/^```.*?\n?/, '') // Remove code block markers
+        .replace(/```$/, '')
+        .trim();
+      
+      // Ensure it's not too long (72 chars for subject line)
+      if (finalMessage.length > 72) {
+        // Try to cut at a sensible point
+        const colonIndex = finalMessage.indexOf(':');
+        if (colonIndex > 0 && colonIndex < 30) {
+          // Keep the type and scope, truncate the description
+          const prefix = finalMessage.substring(0, colonIndex + 1);
+          const description = finalMessage.substring(colonIndex + 1).trim();
+          const maxDescLength = 72 - prefix.length - 1;
+          finalMessage = prefix + ' ' + description.substring(0, maxDescLength).trim();
+        } else {
+          finalMessage = finalMessage.substring(0, 72).trim();
+        }
+      }
+      
       log.info(`Generated commit message with Gemini: ${finalMessage}`);
       return finalMessage;
     } else {
@@ -603,35 +723,100 @@ function generateSimpleCommitMessage(files, diff) {
   const additions = (diff.match(/^\+[^+]/gm) || []).length;
   const deletions = (diff.match(/^-[^-]/gm) || []).length;
   
-  // Determine the primary action
-  let action = 'Update';
-  if (additions > 0 && deletions === 0) {
-    action = 'Add';
-  } else if (deletions > 0 && additions === 0) {
-    action = 'Remove';
-  } else if (additions > deletions * 2) {
-    action = 'Enhance';
-  } else if (deletions > additions * 2) {
-    action = 'Refactor';
+  // Extract component/module names
+  const extractComponentName = (filePath) => {
+    const fileName = filePath.split('/').pop();
+    return fileName.replace(/\.(jsx?|tsx?|css|scss|json|md)$/, '');
+  };
+  
+  // Determine the type and action based on file patterns and changes
+  let type = 'chore';
+  let action = 'atualiza';
+  
+  // Check file extensions to determine type
+  const hasReactFiles = files.some(f => /\.(jsx|tsx)$/.test(f));
+  const hasApiFiles = files.some(f => f.includes('/routes/') || f.includes('/api/'));
+  const hasStyleFiles = files.some(f => /\.(css|scss|sass)$/.test(f));
+  const hasConfigFiles = files.some(f => /\.(json|yml|yaml|config\.)/.test(f));
+  const hasTestFiles = files.some(f => /\.(test|spec)\.(js|ts|jsx|tsx)$/.test(f));
+  
+  // Determine type based on files
+  if (hasTestFiles) {
+    type = 'test';
+    action = additions > deletions ? 'adiciona' : 'corrige';
+  } else if (hasApiFiles) {
+    type = additions > deletions * 2 ? 'feat' : 'fix';
+    action = additions > deletions ? 'implementa' : 'corrige';
+  } else if (hasReactFiles) {
+    if (additions > 0 && deletions === 0) {
+      type = 'feat';
+      action = 'cria';
+    } else if (deletions > additions * 2) {
+      type = 'refactor';
+      action = 'refatora';
+    } else if (additions > deletions * 2) {
+      type = 'feat';
+      action = 'adiciona';
+    } else {
+      type = 'fix';
+      action = 'corrige';
+    }
+  } else if (hasStyleFiles) {
+    type = 'style';
+    action = 'ajusta';
+  } else if (hasConfigFiles) {
+    type = 'chore';
+    action = 'configura';
   }
   
-  // Generate message based on files
+  // Generate scope and description
+  let scope = '';
+  let description = '';
+  
   if (isMultipleFiles) {
-    const components = new Set(files.map(f => {
+    // Find common directory
+    const dirs = new Set(files.map(f => {
       const parts = f.split('/');
-      return parts[parts.length - 2] || parts[0];
-    }));
+      return parts.length > 1 ? parts[parts.length - 2] : '';
+    }).filter(d => d));
     
-    if (components.size === 1) {
-      return `${action} ${[...components][0]} component`;
+    if (dirs.size === 1) {
+      scope = [...dirs][0];
+      const components = files.map(extractComponentName).slice(0, 2).join(' e ');
+      description = `${action} ${components}`;
     } else {
-      return `${action} multiple components`;
+      // Multiple directories - be more generic
+      if (hasReactFiles) scope = 'components';
+      else if (hasApiFiles) scope = 'api';
+      else scope = 'app';
+      description = `${action} ${fileCount} arquivos`;
     }
   } else {
-    const fileName = files[0].split('/').pop();
-    const componentName = fileName.replace(/\.(jsx?|tsx?|css|scss)$/, '');
-    return `${action} ${componentName}`;
+    // Single file - be specific
+    const filePath = files[0];
+    const fileName = extractComponentName(filePath);
+    const parts = filePath.split('/');
+    
+    // Use parent directory as scope if meaningful
+    if (parts.length > 1) {
+      const parentDir = parts[parts.length - 2];
+      if (['components', 'routes', 'utils', 'hooks', 'services'].includes(parentDir)) {
+        scope = fileName;
+      } else {
+        scope = parentDir;
+      }
+    } else {
+      scope = fileName;
+    }
+    
+    description = `${action} ${scope === fileName ? 'funcionalidade' : fileName}`;
   }
+  
+  // Build the commit message
+  const message = scope ? `${type}(${scope}): ${description}` : `${type}: ${description}`;
+  
+  // Ensure it's not too long
+  return message.length > 72 ? message.substring(0, 72).trim() : message;
 }
 
 // Get remote status (ahead/behind commits with smart remote detection)
