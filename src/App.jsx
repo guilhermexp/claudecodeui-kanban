@@ -18,6 +18,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import { api } from './utils/api';
 import { authPersistence } from './utils/auth-persistence';
 import { appStatePersistence } from './utils/app-state-persistence';
+import { useCleanup, useLifecycleTracker } from './hooks/useCleanup';
 
 // Main App component with routing
 function AppContent() {
@@ -59,6 +60,11 @@ function AppContent() {
   const [shellHasActiveSession, setShellHasActiveSession] = useState(false);
   const [activeSessions, setActiveSessions] = useState(new Set());
   
+  // Cleanup utilities
+  const { onWindow, onDocument, setManagedTimeout } = useCleanup();
+  
+  // Lifecycle tracking for debugging
+  useLifecycleTracker('App');
 
   const { isLoading: authLoading, user } = useAuth();
   const authReady = !authLoading && !!user;
@@ -118,27 +124,16 @@ function AppContent() {
       }
     };
 
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    document.addEventListener('click', handleClick);
-
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-      document.removeEventListener('click', handleClick);
-    };
-  }, [selectedProject, selectedSession, activeTab]);
+    onWindow('beforeunload', handleBeforeUnload, false, 'app navigation context save');
+    onDocument('click', handleClick, false, 'app link click save');
+  }, [selectedProject, selectedSession, activeTab, onWindow, onDocument]);
 
   useEffect(() => {
     let previousWidth = window.innerWidth;
-    let resizeTimeout = null;
     
     const handleResize = () => {
-      // Clear existing timeout
-      if (resizeTimeout) {
-        clearTimeout(resizeTimeout);
-      }
-      
       // Debounce resize handling
-      resizeTimeout = setTimeout(() => {
+      const { clear } = setManagedTimeout(() => {
         const currentWidth = window.innerWidth;
         const wasMobile = previousWidth < 768;
         const nowMobile = currentWidth < 768;
@@ -151,7 +146,7 @@ function AppContent() {
         }
         
         previousWidth = currentWidth;
-      }, 150); // 150ms debounce
+      }, 150, 'resize debounce'); // 150ms debounce
     };
     
     // Initial check
@@ -162,15 +157,8 @@ function AppContent() {
     };
     
     initialCheck();
-    window.addEventListener('resize', handleResize);
-    
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      if (resizeTimeout) {
-        clearTimeout(resizeTimeout);
-      }
-    };
-  }, []);
+    onWindow('resize', handleResize, false, 'app resize detector');
+  }, [onWindow, setManagedTimeout]);
 
   useEffect(() => {
     // Clear any invalid persisted state on mount to ensure clean start

@@ -49,8 +49,97 @@ export function createWebSocketServer(server) {
 
   // Start heartbeat interval for connection health
   startHeartbeatInterval(wss);
+  
+  // Start cleanup timer for inactive connections
+  setInterval(() => {
+    cleanupInactiveConnections(connectedClients);
+  }, 10 * 60 * 1000); // Run every 10 minutes
 
   return { wss, connectedClients, connectionTracker };
+}
+
+// Handle authenticated WebSocket messages
+async function handleAuthenticatedMessage(ws, data, context) {
+  const log = createLogger('WS-AUTH');
+  
+  try {
+    // Rate limiting per user
+    const userId = context.userId;
+    const rateLimitKey = `ws_${userId}`;
+    
+    // Simple rate limiting: max 100 messages per minute per user
+    const rateLimits = global.wsRateLimits = global.wsRateLimits || new Map();
+    const userLimit = rateLimits.get(rateLimitKey) || { count: 0, resetTime: Date.now() + 60000 };
+    
+    if (Date.now() > userLimit.resetTime) {
+      userLimit.count = 0;
+      userLimit.resetTime = Date.now() + 60000;
+    }
+    
+    if (userLimit.count >= 100) {
+      log.warn('WebSocket rate limit exceeded', { userId, messageType: data.type });
+      ws.send(JSON.stringify({
+        type: 'error',
+        error: 'Rate limit exceeded',
+        code: 'RATE_LIMITED'
+      }));
+      return;
+    }
+    
+    userLimit.count++;
+    rateLimits.set(rateLimitKey, userLimit);
+    
+    // Log security-relevant messages
+    if (['claude-start-session', 'codex-start-session', 'claude-stream-message'].includes(data.type)) {
+      log.info('WebSocket authenticated message', {
+        userId,
+        username: context.username,
+        type: data.type,
+        projectPath: data.options?.projectPath
+      });
+    }
+    
+    // TODO: Add specific message handlers here based on message type
+    // For now, just log that we received an authenticated message
+    log.debug('Authenticated WebSocket message processed', {
+      userId,
+      type: data.type
+    });
+    
+  } catch (error) {
+    log.error('Error handling authenticated WebSocket message:', error);
+    ws.send(JSON.stringify({
+      type: 'error',
+      error: 'Internal server error',
+      code: 'INTERNAL_ERROR'
+    }));
+  }
+}
+
+// Cleanup inactive connections
+function cleanupInactiveConnections(connectedClients) {
+  const log = createLogger('WS-CLEANUP');
+  const now = Date.now();
+  const INACTIVE_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+  
+  let cleaned = 0;
+  for (const [ws, context] of connectedClients.entries()) {
+    if (now - context.lastActivity > INACTIVE_TIMEOUT) {
+      log.info('Closing inactive WebSocket connection', {
+        userId: context.userId,
+        username: context.username,
+        inactiveFor: Math.round((now - context.lastActivity) / 60000) + ' minutes'
+      });
+      
+      ws.close(1001, 'Connection inactive');
+      connectedClients.delete(ws);
+      cleaned++;
+    }
+  }
+  
+  if (cleaned > 0) {
+    log.info(`Cleaned up ${cleaned} inactive WebSocket connections`);
+  }
 }
 
 export function setupWebSocketHandlers(wss, connectedClients, connectionTracker) {
@@ -83,14 +172,26 @@ export function setupWebSocketHandlers(wss, connectedClients, connectionTracker)
           return;
         }
 
-        // Update last activity
+        // SECURITY: All other messages require authentication
         const context = connectedClients.get(ws);
-        if (context) {
-          context.lastActivity = Date.now();
+        if (!context || !context.userId) {
+          log.warn('Unauthenticated WebSocket message attempt', {
+            type: data.type,
+            ip: ws._socket?.remoteAddress
+          });
+          ws.send(JSON.stringify({
+            type: 'error',
+            error: 'Authentication required',
+            code: 'UNAUTHENTICATED'
+          }));
+          return;
         }
 
-        // Handle other message types here
-        // (This will be expanded based on the original server logic)
+        // Update last activity for authenticated users
+        context.lastActivity = Date.now();
+
+        // Handle authenticated messages
+        await handleAuthenticatedMessage(ws, data, context);
         
       } catch (error) {
         log.error('WebSocket message error:', error);

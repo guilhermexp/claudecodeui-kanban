@@ -45,7 +45,10 @@ export default defineConfig(({ command, mode }) => {
       // Permite requisições do ngrok
       strictPort: true,
       headers: {
-        'Access-Control-Allow-Origin': '*',
+        // CORS seguro baseado em ambiente
+        'Access-Control-Allow-Origin': isNgrok 
+          ? env.VITE_NGROK_DOMAIN 
+          : 'http://localhost:5892',
         'Cache-Control': 'no-cache, no-store, must-revalidate',
         'Pragma': 'no-cache',
         'Expires': '0',

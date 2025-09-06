@@ -1,41 +1,48 @@
 // server/index.js - Main Server Entry Point (Refactored)
-import fs from 'fs';
+
+// CRITICAL: Load environment variables FIRST before any other imports
+import dotenv from 'dotenv';
 import path, { dirname } from 'path';
 import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Load environment variables using dotenv BEFORE any other imports
+const possibleEnvPaths = [
+  path.join(__dirname, '../.env'),
+  path.join(process.cwd(), '.env'),
+  '.env'
+];
+
+let envLoaded = false;
+for (const envPath of possibleEnvPaths) {
+  const result = dotenv.config({ path: envPath });
+  if (!result.error && result.parsed) {
+    console.log(`[ENV] Loaded environment from: ${envPath}`);
+    envLoaded = true;
+    break;
+  }
+}
+
+if (!envLoaded) {
+  console.warn('[ENV] Warning: Could not load .env file from any path');
+}
+
+// Now import everything else after environment is loaded
 import http from 'http';
 import { createLogger } from './utils/logger.js';
-
-// Import refactored modules
 import { createApp } from './config/app.js';
 import { setupRoutes } from './config/routes.js';
 import { createWebSocketServer, setupWebSocketHandlers } from './websocket/server.js';
 import { initializeDatabase } from './database/db.js';
 import { 
   apiRateLimit, 
+  userRateLimit,
   strictRateLimit, 
   resourceMonitor, 
   processLimiter 
 } from './middleware/rateLimiting.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-// Load environment variables
-try {
-  const envPath = path.join(__dirname, '../.env');
-  const envFile = fs.readFileSync(envPath, 'utf8');
-  envFile.split('\n').forEach(line => {
-    const trimmedLine = line.trim();
-    if (trimmedLine && !trimmedLine.startsWith('#')) {
-      const [key, ...valueParts] = trimmedLine.split('=');
-      if (key && valueParts.length > 0 && !process.env[key]) {
-        process.env[key] = valueParts.join('=').trim();
-      }
-    }
-  });
-} catch (e) {
-  // .env file is optional
-}
 
 // Initialize logger
 const log = createLogger('SERVER');
@@ -55,6 +62,7 @@ async function startServer() {
     
     // Setup rate limiting and security middleware
     app.use('/api', apiRateLimit);
+    app.use('/api', userRateLimit); // User-based rate limiting after IP-based
     app.use('/api/claude-stream', strictRateLimit);
     app.use(resourceMonitor);
     app.use(processLimiter);
