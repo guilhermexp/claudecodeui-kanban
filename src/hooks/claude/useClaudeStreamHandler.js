@@ -125,7 +125,7 @@ export function useClaudeStreamHandler({
           if (lastToolLabelRef.current !== label) {
             setIsTyping(true);
             setTypingStatus({ mode: 'tool', label });
-            addMessage?.({ type: 'system', text: `${getToolIcon ? getToolIcon(label) : '🔧'} ${label}` });
+            // Do not emit a separate "Tool" message; OverlayChat creates the compact card
             lastToolLabelRef.current = label;
           }
           return true;

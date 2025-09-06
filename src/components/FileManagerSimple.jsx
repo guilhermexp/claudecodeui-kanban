@@ -26,6 +26,7 @@ function FileManagerSimple({ selectedProject, onClose, embedded = false }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
   const [showHiddenFiles, setShowHiddenFiles] = useState(false);
+  const [selectedItem, setSelectedItem] = useState(null); // Track selected item for keyboard shortcuts
   const [showMarkdownPreview, setShowMarkdownPreview] = useState(() => {
     const v = localStorage.getItem('fm-default-preview');
     return v === null ? true : v === '1';
@@ -127,25 +128,31 @@ function FileManagerSimple({ selectedProject, onClose, embedded = false }) {
     }
   }, [selectedProject, fetchFiles]);
   
-  // Close context menu on click outside
+  // Close context menu on click outside and handle keyboard shortcuts
   useEffect(() => {
     const handleClick = () => setContextMenu(null);
-    const handleEscape = (e) => {
+    const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
         setContextMenu(null);
         setRenameItem(null);
         setShowCreateModal(false);
       }
+      
+      // Delete key handler
+      if (e.key === 'Delete' && selectedItem && !renameItem && !showCreateModal && !showFilePanel) {
+        e.preventDefault();
+        handleDelete(selectedItem);
+      }
     };
     
     document.addEventListener('click', handleClick);
-    document.addEventListener('keydown', handleEscape);
+    document.addEventListener('keydown', handleKeyDown);
     
     return () => {
       document.removeEventListener('click', handleClick);
-      document.removeEventListener('keydown', handleEscape);
+      document.removeEventListener('keydown', handleKeyDown);
     };
-  }, []);
+  }, [selectedItem, renameItem, showCreateModal, showFilePanel]);
   
   // Toggle directory expansion
   const toggleDirectory = useCallback((path, e) => {
@@ -296,7 +303,10 @@ function FileManagerSimple({ selectedProject, onClose, embedded = false }) {
   
   // Delete files/folders
   const handleDelete = async (item) => {
-    const message = `Delete "${item.name}"?`;
+    const isDirectory = item.type === 'directory';
+    const message = isDirectory 
+      ? `Delete folder "${item.name}" and all its contents?`
+      : `Delete file "${item.name}"?`;
     
     if (!confirm(message)) return;
     
@@ -314,8 +324,16 @@ function FileManagerSimple({ selectedProject, onClose, embedded = false }) {
       });
       
       if (!response.ok) {
-        throw new Error(`Failed to delete ${item.name}`);
+        const error = await response.json();
+        throw new Error(error.error || `Failed to delete ${item.name}`);
       }
+      
+      // Clear selection
+      setSelectedItem(null);
+      setContextMenu(null);
+      
+      // Show success feedback (optional - you can add a toast notification here)
+      console.log(`Successfully deleted ${item.name}`);
       
       // Refresh to remove deleted file/folder
       await fetchFiles();
@@ -425,11 +443,13 @@ function FileManagerSimple({ selectedProject, onClose, embedded = false }) {
               "w-full flex items-center justify-start h-auto cursor-pointer hover:bg-accent transition-colors",
               compact ? "px-0 py-1 rounded" : "px-0 py-1.5 rounded-md",
               "touch-manipulation active:bg-accent/80 min-h-[26px] md:min-h-0",
+              selectedItem === item && "bg-accent/50" // Highlight selected item
             )}
             style={{ paddingLeft: `${level * indentSize + indentBase}px` }}
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
+              setSelectedItem(item); // Set selected item on click
               handleOpen(item);
             }}
             onContextMenu={(e) => handleContextMenu(e, item)}
@@ -492,7 +512,7 @@ function FileManagerSimple({ selectedProject, onClose, embedded = false }) {
     });
   }, [
     expandedDirs, renameItem, renameValue, showHiddenFiles, searchQuery,
-    filterFiles, handleOpen, handleContextMenu, toggleDirectory
+    filterFiles, handleOpen, handleContextMenu, toggleDirectory, selectedItem, compact
   ]);
   
   // Helper: collect all directory paths
@@ -640,6 +660,15 @@ function FileManagerSimple({ selectedProject, onClose, embedded = false }) {
               </button>
             )}
             <div className="ml-auto flex items-center gap-2">
+              {selectedItem && (
+                <button
+                  onClick={() => handleDelete(selectedItem)}
+                  className={`hover:bg-destructive/20 text-destructive rounded-md transition-colors ${(compact || tight) ? 'p-1' : 'p-1.5'}`}
+                  title="Delete selected (Delete key)"
+                >
+                  <Trash2 className={`${tight ? 'w-3.5 h-3.5' : 'w-4 h-4'}`} />
+                </button>
+              )}
               <button
                 onClick={() => {
                   setCreateType('file');

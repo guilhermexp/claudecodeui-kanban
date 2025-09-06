@@ -69,6 +69,7 @@ function MainContent({
   onShellSessionStateChange // Function to update Shell session protection state
 }) {
   const [editingFile, setEditingFile] = useState(null);
+  const [forceMdPreview, setForceMdPreview] = useState(false);
   // openShellSessions removed - was set but never used
   const [contextWindowPercentage, setContextWindowPercentage] = useState(null);
   const [shellResizeTrigger, setShellResizeTrigger] = useState(0);
@@ -192,11 +193,28 @@ function MainContent({
       diffInfo: diffInfo // Pass along diff information if available
     };
     setEditingFile(file);
+    setForceMdPreview(/\.(md|markdown)$/i.test(file.name));
   };
 
   const handleCloseEditor = () => {
     setEditingFile(null);
+    setForceMdPreview(false);
   };
+
+  // Global helper to open Markdown from chat badges
+  useEffect(() => {
+    const fn = (absOrRelPath) => {
+      try {
+        const isAbs = typeof absOrRelPath === 'string' && absOrRelPath.startsWith('/');
+        const p = isAbs ? absOrRelPath : ((selectedProject?.path || '') + '/' + String(absOrRelPath || ''));
+        const name = String(p).split('/').pop() || 'file.md';
+        setEditingFile({ name, path: p, projectName: selectedProject?.name });
+        setForceMdPreview(true);
+      } catch {}
+    };
+    window.__openMarkdown = fn;
+    return () => { try { delete window.__openMarkdown; } catch {} };
+  }, [selectedProject]);
 
   // Shell session protection handler - now uses prop function
   const handleShellSessionStateChange = (isActive) => {
@@ -953,6 +971,7 @@ function MainContent({
           file={editingFile}
           onClose={handleCloseEditor}
           projectPath={selectedProject?.path}
+          preferMarkdownPreview={forceMdPreview}
         />
       )}
       

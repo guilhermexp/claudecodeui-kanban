@@ -20,7 +20,8 @@ const CodeEditor = forwardRef(({
   projectPath, 
   inline = false,
   showMarkdownPreview: externalShowMarkdownPreview,
-  onToggleMarkdownPreview
+  onToggleMarkdownPreview,
+  preferMarkdownPreview = false
 }, ref) => {
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(true);
@@ -47,6 +48,15 @@ const CodeEditor = forwardRef(({
       });
     }
   }, [file.name]);
+
+  // Prefer showing markdown preview on open when requested
+  useEffect(() => {
+    try {
+      if (!inline && preferMarkdownPreview && /\.(md|markdown)$/i.test(file.name)) {
+        setInternalShowMarkdownPreview(true);
+      }
+    } catch {}
+  }, [inline, preferMarkdownPreview, file.name]);
 
   // Create diff highlighting
   const diffEffect = StateEffect.define();

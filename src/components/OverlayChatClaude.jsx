@@ -300,18 +300,20 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
       try {
         if (data && data.type === 'context-usage') {
           const provider = (data.provider || cliProvider || 'claude').toLowerCase();
-          const inc = Number(data.used || 0);
+          const usedNow = Math.max(0, Number(data.used || 0)); // treat as instantaneous usage for this run
           setContextUsage((prev) => {
             const next = { ...prev };
-            const cur = { ...(prev[provider] || { used: 0, limit: provider === 'codex' ? 400000 : 200000, pct: 0 }) };
-            // Update limit if backend provided
-            if (Number.isFinite(data.limit)) cur.limit = Number(data.limit);
-            // For Codex, prefer UI model selection when not provided
-            if (provider === 'codex' && !Number.isFinite(data.limit)) {
-              // Todos modelos GPT (Codex) usam 400k por padrão
-              cur.limit = 400000;
+            const base = (prev[provider] || { used: 0, limit: provider === 'codex' ? 256000 : 200000, pct: 0 });
+            const cur = { ...base };
+            // Derive sensible limits per provider/model when server doesn't send one
+            if (Number.isFinite(data.limit)) {
+              cur.limit = Number(data.limit);
+            } else if (provider === 'codex') {
+              const m = String(modelLabel || '').toLowerCase();
+              cur.limit = m.includes('gpt-5') ? 128000 : 256000; // rough defaults
             }
-            cur.used += inc;
+            // Instant reading (not cumulative across conversation)
+            cur.used = usedNow;
             cur.pct = Math.max(0, Math.min(100, Math.round((cur.used / Math.max(1, cur.limit)) * 100)));
             next[provider] = cur;
             return next;
@@ -395,14 +397,27 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
         typeof el === 'string' ? <React.Fragment key={`t-${idx}`}>{el}</React.Fragment> : React.cloneElement(el, { key: el.key ?? `k-${idx}` })
       ));
       const badge = (cls, label) => <span className={`badge ${cls}`}>{label}</span>;
-      const copyBadge = (cls, label, value) => (
-        <span
-          className={`badge ${cls}`}
-          onClick={() => { try { navigator.clipboard.writeText(value); } catch {} }}
-          title="Copy"
-          style={{ cursor: 'pointer' }}
-        >{label}</span>
-      );
+      const copyBadge = (cls, label, value) => {
+        const lower = String(value || '').toLowerCase();
+        const isMd = /\.(md|markdown)$/.test(lower);
+        const handleClick = () => {
+          try {
+            if (isMd && typeof window !== 'undefined' && typeof window.__openMarkdown === 'function') {
+              window.__openMarkdown(value);
+              return;
+            }
+            navigator.clipboard.writeText(value);
+          } catch {}
+        };
+        return (
+          <span
+            className={`badge ${cls}`}
+            onClick={handleClick}
+            title={isMd ? 'Open markdown' : 'Copy'}
+            style={{ cursor: 'pointer' }}
+          >{label}</span>
+        );
+      };
       const extToCls = (p) => {
         try {
           const ext = (p.split('.').pop() || '').toLowerCase();
@@ -466,6 +481,60 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
     } catch { 
       return content; 
     }
+  }, []);
+
+  // Beautify Codex markdown to match Claude's final output style
+  const enhanceCodexMarkdown = useCallback((raw) => {
+    try {
+      if (!raw || typeof raw !== 'string') return raw;
+      // Normalize bullets and section markers
+      let text = raw
+        .replace(/^\u2022\s+/gm, '- ')
+        .replace(/^•\s+/gm, '- ')
+        .replace(/^▪\s+/gm, '- ');
+      const lines = text.split('\n');
+      // Find first non-empty line
+      let i = 0; while (i < lines.length && !lines[i].trim()) i++;
+      if (i < lines.length) {
+        const first = lines[i].trim();
+        const bulletMatch = /^[-*]\s+(.*)$/.exec(first) || /^•\s+(.*)$/.exec(first);
+        const headingCandidates = ['Resumo', 'Summary', 'Overview', 'Destaques', 'Highlights'];
+        const promote = (s) => `## ${s.trim()}`;
+        const squareMatch = /^(?:[■□▣◼️◻️🟦🟩🟥]\s+)(.+)$/.exec(first);
+        if (squareMatch && squareMatch[1]) {
+          lines[i] = promote(squareMatch[1]);
+          if (!lines[i+1] || lines[i+1].trim() !== '') lines.splice(i+1, 0, '');
+        } else
+        if (bulletMatch) {
+          const t = bulletMatch[1].trim();
+          const wc = t.split(/\s+/).filter(Boolean).length;
+          if (headingCandidates.some(h => new RegExp(`^${h}\b`, 'i').test(t)) || wc <= 6) {
+            lines[i] = promote(t);
+            // ensure blank after heading
+            if (!lines[i+1] || lines[i+1].trim() !== '') lines.splice(i+1, 0, '');
+          }
+        } else if (!/^#{1,6}\s/.test(first)) {
+          // Title-like line: reasonably short and not a sentence
+          const len = first.length;
+          if (len >= 12 && len <= 120 && !/[.!?]$/.test(first)) {
+            lines[i] = promote(first);
+            if (!lines[i+1] || lines[i+1].trim() !== '') lines.splice(i+1, 0, '');
+          }
+        }
+      }
+
+      // Bold list term prefixes before colon: "- Key: value" -> "- **Key:** value"
+      for (let k = 0; k < lines.length; k++) {
+        const m = /^([\t ]*[-*]\s+)([^:]{1,48}):\s*(.*)$/.exec(lines[k]);
+        if (m && !/^\*\*/.test(m[2])) {
+          lines[k] = `${m[1]}**${m[2].trim()}:** ${m[3]}`;
+        }
+      }
+
+      // Reduce duplicate blank lines
+      text = lines.join('\n').replace(/\n{3,}/g, '\n\n');
+      return text;
+    } catch { return raw; }
   }, []);
 
   // Utilities inspired by Claudable UI
@@ -1379,6 +1448,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
   }, [registerConnectionHandler, chatId, cliProvider, claudeSessionActive, codexSessionActive]);
 
   const execStreamsRef = useRef(new Map()); // callId -> { id, buffer, lastTs }
+  const toolStreamsRef = useRef(new Map()); // tool_use_id -> { id }
   const processedMessagesRef = useRef(new Set()); // Track processed messages to prevent duplicates
   const lastToolLabelRef = useRef(null); // Deduplicate consecutive tool_use lines
   const lastToolCommandRef = useRef(null); // Track last bash command to avoid duplicate fenced block
@@ -1389,6 +1459,16 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
     if (wsMessages && wsMessages.length > 0) {
       const lastMsg = wsMessages[wsMessages.length - 1];
       // Claude messages are handled explicitly below when cliProvider === 'claude'
+      // If available, let the centralized Claude stream handler consume the event.
+      // It normalizes end-of-run signals and reliably clears typing/activity states.
+      try {
+        if (cliProvider === 'claude' && typeof processClaudeMessage === 'function') {
+          const handled = processClaudeMessage(lastMsg);
+          if (handled) {
+            return;
+          }
+        }
+      } catch {}
       
       // Create a unique key for this message to prevent duplicate processing
       const msgKey = `${lastMsg.type}-${lastMsg.sessionId || ''}-${JSON.stringify(lastMsg)}-${wsMessages.length}`;
@@ -1515,16 +1595,26 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
                     textContent += (textContent ? '\n' : '') + block.text;
                     hasTextContent = true;
                   } else if (block.type === 'tool_use') {
-                    // tool_use may come embedded in assistant message
+                    // Compact tool header (like Codex) and keep handle to attach results
                     const idRaw = block.tool_use_id || block.toolUseId || block.id || '';
-                    const shortId = idRaw ? String(idRaw).slice(0, 6) : null;
                     const toolNameRaw = block.name || block.tool || '';
-                    const isMcp = /mcp/i.test(toolNameRaw) || /mcp/i.test(idRaw || '');
-                    const toolName = toolNameRaw || (isMcp ? 'MCP tool' : 'Tool');
-                    const label = `${toolName}${shortId ? ` #${shortId}` : ''}`;
+                    const n = String(toolNameRaw || '').toLowerCase();
+                    const action = n.includes('bash') ? 'Bash'
+                                  : n.includes('read') ? 'Read'
+                                  : (n.includes('todo') ? 'TodoWrite'
+                                     : n.includes('write') ? 'Write'
+                                     : n.includes('edit') ? 'Edit'
+                                     : (n.includes('websearch') ? 'WebSearch'
+                                        : n.includes('webfetch') ? 'WebFetch'
+                                        : (n.includes('grep') || n.includes('search') || n.includes('glob')) ? 'Search'
+                                        : (toolNameRaw || 'Tool')));
+                    const input = block.input || block.parameters || {};
+                    const filePath = input?.file_path || input?.path || input?.command || input?.pattern || input?.query || input?.url || '';
+                    const id = addMessageAndGetId({ type: 'system', toolProps: { action, filePath, content: '', showMeta: false } });
+                    if (idRaw) toolStreamsRef.current.set(String(idRaw), { id });
                     setIsTyping(true);
-                    setTypingStatus({ mode: 'tool', label });
-                    lastToolLabelRef.current = label;
+                    setTypingStatus({ mode: 'tool', label: action });
+                    lastToolLabelRef.current = action;
                   }
                 });
                 
@@ -1558,15 +1648,25 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
                   addMessage({ type: 'assistant', text: block.text });
                 } else if (block.type === 'tool_use') {
                   const idRaw = block.tool_use_id || block.toolUseId || block.id || '';
-                  const shortId = idRaw ? String(idRaw).slice(0, 6) : null;
                   const toolNameRaw = block.name || block.tool || '';
-                  const isMcp = /mcp/i.test(toolNameRaw) || /mcp/i.test(idRaw || '');
-                  const toolName = toolNameRaw || (isMcp ? 'MCP tool' : 'Tool');
-                  const label = `${toolName}${shortId ? ` #${shortId}` : ''}`;
+                  const n = String(toolNameRaw || '').toLowerCase();
+                  const action = n.includes('bash') ? 'Bash'
+                                : n.includes('read') ? 'Read'
+                                : (n.includes('todo') ? 'TodoWrite'
+                                   : n.includes('write') ? 'Write'
+                                   : n.includes('edit') ? 'Edit'
+                                   : (n.includes('websearch') ? 'WebSearch'
+                                      : n.includes('webfetch') ? 'WebFetch'
+                                      : (n.includes('grep') || n.includes('search') || n.includes('glob')) ? 'Search'
+                                      : (toolNameRaw || 'Tool')));
+                  const input = block.input || block.parameters || {};
+                  const filePath = input?.file_path || input?.path || input?.command || input?.pattern || input?.query || input?.url || '';
+                  const id = addMessageAndGetId({ type: 'system', toolProps: { action, filePath, content: '', showMeta: false } });
+                  if (idRaw) toolStreamsRef.current.set(String(idRaw), { id });
                   setIsTyping(true);
-                  setTypingStatus({ mode: 'tool', label });
-                  lastToolLabelRef.current = label;
-                  try { setToolIndicator({ label: toolNameRaw || toolName, status: 'running' }); } catch {}
+                  setTypingStatus({ mode: 'tool', label: action });
+                  lastToolLabelRef.current = action;
+                  try { setToolIndicator({ label: action, status: 'running' }); } catch {}
                 }
               });
               setIsTyping(false);
@@ -1578,155 +1678,27 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
             setIsTyping(false);
             setTypingStatus({ mode: 'idle', label: '' });
           } else if (data.type === 'tool_use') {
-            // Tool usage notification with parameters
+            // Compact ToolResultItem for Claude tools
             const idRaw = data.tool_use_id || data.toolUseId || data.id || '';
-            const shortId = idRaw ? String(idRaw).slice(0, 6) : null;
             const toolNameRaw = data.name || data.tool || '';
-            const isMcp = /mcp/i.test(toolNameRaw) || /mcp/i.test(idRaw || '');
-            const toolName = toolNameRaw || (isMcp ? 'MCP tool' : 'Tool');
-            const label = `${toolName}${shortId ? ` #${shortId}` : ''}`;
-            
-            // Extract and format tool parameters for display
+            const n = String(toolNameRaw || '').toLowerCase();
+            const action = n.includes('bash') ? 'Bash'
+                          : n.includes('read') ? 'Read'
+                          : (n.includes('todo') ? 'TodoWrite'
+                             : n.includes('write') ? 'Write'
+                             : n.includes('edit') ? 'Edit'
+                             : (n.includes('websearch') ? 'WebSearch'
+                                : n.includes('webfetch') ? 'WebFetch'
+                                : (n.includes('grep') || n.includes('search') || n.includes('glob')) ? 'Search'
+                                : (toolNameRaw || 'Tool')));
             const input = data.input || data.parameters || {};
-            
-            // Debug to see what we're receiving
-            console.log('Tool use event:', { name: toolNameRaw, input, fullData: data });
-            
-            // Determine tool icon and formatting
-            const getToolIcon = (name) => {
-              const n = String(name || '').toLowerCase();
-              if (n.includes('read')) return '≣';
-              if (n.includes('write')) return '→';
-              if (n.includes('edit')) return '✎';
-              if (n.includes('search') || n.includes('grep') || n.includes('glob')) return '﹡';
-              if (n.includes('bash')) return '›';
-              if (n.includes('task')) return '·';
-              if (n.includes('webfetch') || n.includes('websearch')) return '·';
-              return '•';
-            };
-            
-            const icon = getToolIcon(toolNameRaw);
-            let toolMessage = `${icon} **${toolNameRaw}**`;
-            
-            // Format parameters based on tool type with better detail
-            if (toolNameRaw === 'Read') {
-              const path = input.file_path || input.path || '';
-              const limit = input.limit;
-              const offset = input.offset;
-              if (limit || offset) {
-                toolMessage += ` \`${path}\` • ${offset ? `from line ${offset}` : ''} ${limit ? `${limit}L` : ''}`;
-              } else {
-                toolMessage += ` \`${path}\``;
-              }
-            } else if (toolNameRaw === 'Grep' || toolNameRaw === 'Search') {
-              const pattern = input.pattern || input.query || '';
-              const path = input.path || input.glob || '';
-              const mode = input.output_mode;
-              toolMessage += ` \`${pattern}\``;
-              if (path) toolMessage += ` in \`${path}\``;
-              if (mode) toolMessage += ` • ${mode}`;
-            } else if (toolNameRaw === 'Glob') {
-              const pattern = input.pattern || '';
-              const path = input.path || '.';
-              toolMessage += ` \`${pattern}\` in \`${path}\``;
-            } else if (toolNameRaw === 'Bash') {
-              const cmd = input.command || '';
-              const timeout = input.timeout;
-              const bg = input.run_in_background;
-              toolMessage += ` \`${cmd}\``;
-              if (timeout) toolMessage += ` • timeout: ${timeout}ms`;
-              if (bg) toolMessage += ` • background`;
-            } else if (toolNameRaw === 'Edit' || toolNameRaw === 'MultiEdit') {
-              const path = input.file_path || '';
-              const old = input.old_string || '';
-              const edits = input.edits;
-              if (edits && Array.isArray(edits)) {
-                toolMessage += ` \`${path}\` • ${edits.length} edits`;
-              } else {
-                const snippet = old.slice(0, 30);
-                toolMessage += ` \`${path}\` • "${snippet}${old.length > 30 ? '...' : ''}"`;
-              }
-            } else if (toolNameRaw === 'Write') {
-              const path = input.file_path || 'new file';
-              const content = input.content || '';
-              const lines = content.split('\n').length;
-              toolMessage += ` \`${path}\` • ${lines}L`;
-            } else if (toolNameRaw === 'Task') {
-              const desc = input.description || input.prompt?.slice(0, 50) || 'task';
-              const subagent = input.subagent_type;
-              toolMessage += ` "${desc}${input.prompt?.length > 50 ? '...' : ''}"`;
-              if (subagent) toolMessage += ` • ${subagent}`;
-            } else if (toolNameRaw === 'TodoWrite') {
-              const todos = input.todos || [];
-              const pending = todos.filter(t => t.status === 'pending').length;
-              const inProgress = todos.filter(t => t.status === 'in_progress').length;
-              const completed = todos.filter(t => t.status === 'completed').length;
-              toolMessage += ` • ${pending} pending, ${inProgress} in progress, ${completed} completed`;
-            } else if (toolNameRaw === 'WebFetch' || toolNameRaw === 'WebSearch') {
-              const url = input.url || input.query || '';
-              toolMessage += ` \`${url}\``;
-            } else if (toolNameRaw.includes('mcp__')) {
-              // MCP tool - extract meaningful parameters
-              if (input.query) {
-                toolMessage += ` \`${input.query}\``;
-              } else if (input.url) {
-                toolMessage += ` \`${input.url}\``;
-              } else if (input.path || input.file_path) {
-                toolMessage += ` \`${input.path || input.file_path}\``;
-              } else if (input.command) {
-                toolMessage += ` \`${input.command}\``;
-              } else if (input.pattern) {
-                toolMessage += ` \`${input.pattern}\``;
-              } else if (input.libraryName) {
-                toolMessage += ` \`${input.libraryName}\``;
-              } else if (input.graphql_query) {
-                const query = String(input.graphql_query).replace(/\n/g, ' ').slice(0, 50);
-                toolMessage += ` \`${query}...\``;
-              } else if (Object.keys(input).length > 0) {
-                // Show first meaningful parameter
-                const firstKey = Object.keys(input)[0];
-                const value = String(input[firstKey]).slice(0, 50);
-                toolMessage += ` \`${value}${String(input[firstKey]).length > 50 ? '...' : ''}\``;
-              }
-            } else {
-              // Generic fallback for any tool
-              if (input.file_path) {
-                toolMessage += ` \`${input.file_path}\``;
-              } else if (input.command) {
-                toolMessage += ` \`${input.command}\``;
-              } else if (input.pattern) {
-                toolMessage += ` \`${input.pattern}\``;
-              } else if (Object.keys(input).length > 0) {
-                const firstKey = Object.keys(input)[0];
-                const value = String(input[firstKey]).slice(0, 50);
-                toolMessage += ` \`${value}${String(input[firstKey]).length > 50 ? '...' : ''}\``;
-              }
-            }
-            
-            // Create a References-style message for file operations
-            if (toolNameRaw === 'Read' || toolNameRaw === 'Edit' || toolNameRaw === 'MultiEdit' || toolNameRaw === 'Write') {
-              const path = input.file_path || input.path || '';
-              const action = toolNameRaw === 'Read' ? '' : 'MODIFY';
-              const referencesMessage = `References\n${path} ${action}`.trim();
-              addMessage({ type: 'system', text: referencesMessage });
-            } else {
-              // Always show the formatted tool message with enhanced styling
-              addMessage({ type: 'system', text: toolMessage, toolUse: true });
-            }
-            
+            const filePath = input?.file_path || input?.path || input?.command || input?.pattern || input?.query || input?.url || '';
+            const id = addMessageAndGetId({ type: 'system', toolProps: { action, filePath, content: '', showMeta: false } });
+            if (idRaw) toolStreamsRef.current.set(String(idRaw), { id });
             setIsTyping(true);
-            setTypingStatus({ mode: 'tool', label });
-            lastToolLabelRef.current = label;
-            
-            // Store tool details for better output context
-            lastToolDetailsRef.current = {
-              path: input.file_path || input.path || '',
-              command: input.command || '',
-              pattern: input.pattern || '',
-              query: input.query || '',
-              url: input.url || ''
-            };
-            try { setToolIndicator({ label: toolNameRaw || toolName, status: 'running' }); } catch {}
+            setTypingStatus({ mode: 'tool', label: action });
+            lastToolLabelRef.current = action;
+            try { setToolIndicator({ label: action, status: 'running' }); } catch {}
           } else if (data.type === 'result') {
             // Capturar informações reais de contexto do Claude
             if (data.num_turns !== undefined || data.duration_ms !== undefined) {
@@ -1766,7 +1738,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
             if (msg.content && Array.isArray(msg.content)) {
               msg.content.forEach(block => {
                 if (block.type === 'tool_result') {
-                  // Tool completed – show the tool result as a system message
+                  // Tool completed — attach output to the matching ToolResultItem
                   try {
                     const extractText = (content) => {
                       if (!content) return '';
@@ -1781,50 +1753,14 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
                       return '';
                     };
                     const resultText = extractText(block.content) || extractText(block.output) || '';
-                    
-                    // Get the tool name and details from the last used tool
-                    const toolName = lastToolLabelRef.current || 'Tool';
-                    const toolDetails = lastToolDetailsRef.current || {};
-                    
-                    const toolIcon = (() => {
-                      if (!toolName) return '📄';
-                      if (toolName.includes('Read') || toolName.includes('read')) return '📖';
-                      if (toolName.includes('Write') || toolName.includes('write')) return '✏️';
-                      if (toolName.includes('Edit') || toolName.includes('edit')) return '📝';
-                      if (toolName.includes('Search') || toolName.includes('Grep') || toolName.includes('Glob')) return '🔍';
-                      if (toolName.includes('Bash') || toolName.includes('bash')) return '⚡';
-                      if (toolName.includes('Task') || toolName.includes('task')) return '🤖';
-                      if (toolName.includes('WebFetch') || toolName.includes('WebSearch')) return '🌐';
-                      if (toolName.includes('TodoWrite')) return '✅';
-                      return '🔧';
-                    })();
-                    
-                    // Build smart header with context
-                    let headerInfo = toolName;
-                    if (toolDetails.path) {
-                      headerInfo = `${toolName} • \`${toolDetails.path}\``;
-                    } else if (toolDetails.command) {
-                      headerInfo = `${toolName} • \`${toolDetails.command}\``;
-                    } else if (toolDetails.pattern) {
-                      headerInfo = `${toolName} • searching for \`${toolDetails.pattern}\``;
+                    const tuid = block.tool_use_id || block.toolUseId || block.id || '';
+                    const stream = tuid ? toolStreamsRef.current.get(String(tuid)) : null;
+                    if (stream) {
+                      updateMessageById(stream.id, (m) => ({ ...m, toolProps: { ...(m.toolProps || {}), content: resultText, showMeta: false } }));
+                    } else {
+                      // Fallback to compact item
+                      addMessage({ type: 'system', toolProps: { action: lastToolLabelRef.current || 'Tool', filePath: '', content: resultText, showMeta: false } });
                     }
-                    
-                    if (resultText.trim()) {
-                      const lang = detectCodeLanguage(resultText);
-                      // Count lines or size of output
-                      const lines = resultText.split('\n').length;
-                      const sizeInfo = lines > 1 ? ` (${lines} lines)` : '';
-                      
-                      // Add tool name header with context
-                      const header = `${toolIcon} **${headerInfo}**${sizeInfo}\n`;
-                      const fenced = '```' + lang + '\n' + resultText.replace(/```/g, '\\u0060\\u0060\\u0060') + '\n```';
-                      addMessage({ type: 'system', text: header + fenced });
-                  } else {
-                    // If no text, at least note completion with context
-                      if (!HIDE_OUTPUTS) {
-                        addMessage({ type: 'system', text: `${toolIcon} **${headerInfo}** • no output` });
-                      }
-                  }
                   } catch {
                     // Ignore parse errors, still end typing state
                   }
@@ -1982,7 +1918,13 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
         : normalizeCodexEvent(lastMsg) || [];
       if (normalized.length) {
         resetTypingState();
-        normalized.forEach((m) => addMessage({ type: m.type, text: m.text }));
+        normalized.forEach((m) => {
+          if (m.toolProps) {
+            addMessage({ type: 'system', toolProps: m.toolProps });
+          } else {
+            addMessage({ type: m.type, text: m.text, audioUrl: m.audioUrl });
+          }
+        });
         return;
       }
       // Fallbacks for start/complete/tool notices
@@ -2031,10 +1973,28 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
 
       // Streaming: exec begin/delta/end
       if (cliProvider === 'codex' && lastMsg.type === 'codex-exec-begin') {
-        const { callId, command, cwd } = lastMsg;
+        const { callId, command } = lastMsg;
         const cmdString = Array.isArray(command) ? command.join(' ') : String(command || '');
-        const title = `› Bash #toolu_\n\n\`${cmdString}\``;
-        const id = addMessageAndGetId({ type: 'system', text: title });
+        const deriveExecMeta = (cmd) => {
+          try {
+            let c = String(cmd || '').trim();
+            c = c.replace(/^bash\s+-lc\s+/, '').trim();
+            const firstSegment = c.split('|')[0].trim();
+            const firstToken = firstSegment.split(/\s+/)[0];
+            const base = firstToken.replace(/.*\//, '');
+            const low = base.toLowerCase();
+            const action = (/^(rg|grep|ack|ag)$/i.test(low)) ? 'Search'
+                         : (/^(sed|cat|head|tail|wc|hexdump|xxd|cut|awk|less|more|bat)$/i.test(low)) ? 'Read'
+                         : 'Bash';
+            // Try to extract an obvious file path argument
+            const pathMatch = firstSegment.match(/(?:^|\s)([\w@.\-\/]+\/[\w@.\-\/]+\.[\w]{1,8})/);
+            const filePath = pathMatch ? pathMatch[1] : c;
+            return { action, filePath };
+          } catch { return { action: 'Bash', filePath: cmd }; }
+        };
+        const meta = deriveExecMeta(cmdString);
+        // Start a ToolResultItem block immediately with derived action
+        const id = addMessageAndGetId({ type: 'system', toolProps: { action: meta.action, filePath: meta.filePath, content: '', showMeta: false } });
         execStreamsRef.current.set(callId, { id, buffer: '', lastTs: Date.now() });
         setIsTyping(true);
         return;
@@ -2053,17 +2013,23 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
         return;
       }
       if (cliProvider === 'codex' && lastMsg.type === 'codex-exec-end') {
-        const { callId, exit_code } = lastMsg;
+        const { callId, exit_code, stdout, stderr } = lastMsg;
         const stream = execStreamsRef.current.get(callId);
         if (stream) {
-          const showExit = (typeof exit_code === 'number') ? (exit_code !== 0) : (String(exit_code) !== '0');
-          const lines = stream.buffer ? stream.buffer.split('\n').length : 0;
+          const isError = (typeof exit_code === 'number' ? exit_code !== 0 : String(exit_code) !== '0') || (stderr && String(stderr).trim().length > 0);
+          const combined = (() => {
+            const out = String(stream.buffer || '');
+            const err = typeof stderr === 'string' ? stderr : '';
+            if (err && !out.includes(err)) return (err ? `STDERR:\n${err}\n\n` : '') + out;
+            return out;
+          })();
           updateMessageById(stream.id, (m) => ({
             ...m,
             toolProps: {
               ...(m.toolProps || {}),
-              content: stream.buffer,
-              details: `${lines} lines${showExit ? ` • exit ${exit_code}` : ''}`
+              content: combined,
+              showMeta: false,
+              error: isError,
             }
           }));
           execStreamsRef.current.delete(callId);
@@ -2576,7 +2542,11 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
               }
               return String(m.text ?? '');
             })();
-            const rawText = textContent.trim();
+            let rawText = textContent.trim();
+            // Improve Codex output readability to match Claude styling
+            if (isAssistant && cliProvider === 'codex') {
+              rawText = enhanceCodexMarkdown(rawText);
+            }
             const firstLine = rawText.split('\n')[0] || '';
             const looksLikeSpec = !isUser && !isError && !isSystem && /^(plan|observations|spec|plano|observa|especifica)/i.test(firstLine);
             const specTitle = looksLikeSpec ? (firstLine.length > 2 ? firstLine : 'Plan Specification') : null;
@@ -2662,12 +2632,12 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
                   ) : (
                     isUser ? (
                       <div className="prose prose-sm dark:prose-invert max-w-none leading-relaxed prose-p:my-1 prose-li:my-1 bg-black/20 dark:bg-white/5 rounded-xl px-3 py-2">
-                        <ReactMarkdown components={markdownComponents}>{textContent}</ReactMarkdown>
+                    <ReactMarkdown components={markdownComponents}>{rawText}</ReactMarkdown>
                       </div>
                     ) : isError ? (
                       <SpecWrapper>
                         <div className={`prose prose-sm dark:prose-invert max-w-none leading-relaxed prose-p:my-1 prose-li:my-1 text-destructive`}>
-                          <ReactMarkdown components={markdownComponents}>{textContent}</ReactMarkdown>
+                          <ReactMarkdown components={markdownComponents}>{rawText}</ReactMarkdown>
                         </div>
                       </SpecWrapper>
                     ) : isSystem ? (
@@ -2721,7 +2691,7 @@ const OverlayChat = React.memo(function OverlayChat({ projectPath, projects = []
                         <div className="space-y-1">
                           {refs.before && (
                             <div className="prose prose-sm dark:prose-invert max-w-none leading-relaxed prose-p:my-1">
-                              <ReactMarkdown components={markdownComponents}>{refs.before}</ReactMarkdown>
+                              <ReactMarkdown components={markdownComponents}>{cliProvider === 'codex' ? enhanceCodexMarkdown(refs.before) : refs.before}</ReactMarkdown>
                             </div>
                           )}
                           <details className="group">
