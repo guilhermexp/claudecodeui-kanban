@@ -111,37 +111,56 @@ function handleParsedObject(obj) {
 
   // tool_use style with enhanced formatting
   if (obj && obj.type === 'tool_use' && obj.name) {
-    const tool = obj.name.toLowerCase();
-    if (['reasoning', 'thinking'].includes(tool)) return [];
-    
-    // Get tool icon
-    const getToolIcon = (name) => {
-      if (name.includes('read') || name.includes('Read')) return '📖';
-      if (name.includes('write') || name.includes('Write')) return '✏️';
-      if (name.includes('edit') || name.includes('Edit')) return '📝';
-      if (name.includes('search') || name.includes('Search') || name.includes('grep') || name.includes('Grep')) return '🔍';
-      if (name.includes('bash') || name.includes('Bash')) return '⚡';
-      if (name.includes('task') || name.includes('Task')) return '🤖';
-      return '🔧';
-    };
-    
-    const icon = getToolIcon(obj.name);
-    let toolMessage = `${icon} **${obj.name}**`;
-    
-    // Add input details if available
+    const name = String(obj.name);
+    const n = name.toLowerCase();
+    if (['reasoning', 'thinking'].includes(n)) return [];
+
+    // Prefer rich ToolResultItem rendering via toolProps
+    // Avoid duplicating Bash streams (handled by codex-exec-* events)
+    if (n.includes('bash')) return [];
+
+    const toolProps = { action: name, filePath: '', content: undefined, showMeta: false };
+    // Normalize a few common aliases to desired labels
+    if (n.includes('bash') || n.includes('shell')) toolProps.action = 'Bash';
+    else if (n === 'read') toolProps.action = 'Read';
+    else if (n === 'write') toolProps.action = 'Write';
+    else if (n === 'edit') toolProps.action = 'Edit';
+    else if (n === 'todowrite' || n.includes('todo')) toolProps.action = 'TodoWrite';
+    else if (n === 'websearch') toolProps.action = 'WebSearch';
+    else if (n === 'webfetch' || n.includes('fetch')) toolProps.action = 'WebFetch';
+
+    // Extract main argument to show as a badge
     if (obj.input) {
-      if (obj.input.file_path || obj.input.path) {
-        const path = obj.input.file_path || obj.input.path;
-        toolMessage += ` \`${path}\``;
-        if (obj.input.limit) toolMessage += ` • ${obj.input.limit}L`;
-      } else if (obj.input.command) {
-        toolMessage += ` \`${obj.input.command}\``;
-      } else if (obj.input.pattern) {
-        toolMessage += ` \`${obj.input.pattern}\``;
+      const input = obj.input;
+      const pick = (...keys) => {
+        for (const k of keys) { if (input[k]) return input[k]; }
+        return '';
+      };
+      switch (toolProps.action) {
+        case 'Read':
+        case 'Edit':
+        case 'Write':
+        case 'TodoWrite':
+          toolProps.filePath = pick('file_path','path');
+          break;
+        case 'Search':
+          toolProps.filePath = pick('pattern','glob','path');
+          break;
+        case 'WebSearch':
+          toolProps.filePath = pick('query');
+          break;
+        case 'WebFetch':
+          toolProps.filePath = pick('url');
+          break;
+        case 'Bash':
+          toolProps.filePath = pick('command');
+          break;
+        default:
+          toolProps.filePath = pick('file_path','path','command','pattern','query','url');
       }
     }
-    
-    return [{ type: 'system', text: toolMessage, toolUse: true }];
+
+    return [{ type: 'system', toolProps }];
   }
 
   // Heuristics for textual tool notices from Codex

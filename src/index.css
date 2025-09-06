@@ -961,7 +961,7 @@ body {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   background: rgba(148, 163, 184, 0.18); /* slate-400/18 */
   border: 1px solid rgba(148, 163, 184, 0.35);
-  color: #e5e7eb; /* text-gray-200 */
+  color: #334155; /* slate-700 for light mode */
   /* Prevent clipping of long inline code */
   white-space: normal !important;
   word-break: break-word;
@@ -993,21 +993,34 @@ body {
   border-radius: 9999px;
   font-size: 11px;
   line-height: 1;
-  border: 1px solid rgba(148, 163, 184, 0.35);
+  border: 1px solid rgba(100, 116, 139, 0.35); /* slate-500/35 */
+  background: rgba(148,163,184,0.16);
+  color: #334155; /* slate-700 for light mode */
+}
+.badge.badge-js { background: rgba(245, 158, 11, 0.18); border-color: rgba(245,158,11,0.45); color: #92400e; }
+.badge.badge-ts { background: rgba(59, 130, 246, 0.16); border-color: rgba(59,130,246,0.45); color: #1d4ed8; }
+.badge.badge-md { background: rgba(16, 185, 129, 0.14); border-color: rgba(16,185,129,0.4); color: #065f46; }
+.badge.badge-json { background: rgba(245, 158, 11, 0.14); border-color: rgba(245,158,11,0.4); color: #9a3412; }
+.badge.badge-modify {
+  background: linear-gradient(180deg, rgba(59,130,246,0.10) 0%, rgba(29,78,216,0.08) 100%);
+  border-color: rgba(59,130,246,0.45);
+  color: #1e3a8a;
+  box-shadow: inset 0 0 0 0.5px rgba(59,130,246,0.35), 0 1px 1px rgba(0,0,0,0.25);
+}
+.badge.badge-ref { background: rgba(99,102,241,0.12); border-color: rgba(99,102,241,0.45); color: #4338ca; }
+
+/* Dark mode overrides for badges and inline code */
+.dark .badge {
+  border-color: rgba(148, 163, 184, 0.35);
   background: rgba(148,163,184,0.16);
   color: #e5e7eb;
 }
-.badge.badge-js { background: rgba(234, 179, 8, 0.15); border-color: rgba(234,179,8,0.45); color: #fde68a; }
-.badge.badge-ts { background: rgba(59, 130, 246, 0.15); border-color: rgba(59,130,246,0.45); color: #93c5fd; }
-.badge.badge-md { background: rgba(16, 185, 129, 0.12); border-color: rgba(16,185,129,0.4); color: #6ee7b7; }
-.badge.badge-json { background: rgba(245, 158, 11, 0.12); border-color: rgba(245,158,11,0.4); color: #fcd34d; }
-.badge.badge-modify {
-  background: linear-gradient(180deg, rgba(59,130,246,0.22) 0%, rgba(29,78,216,0.18) 100%);
-  border-color: rgba(59,130,246,0.55);
-  color: #cfe3ff;
-  box-shadow: inset 0 0 0 0.5px rgba(59,130,246,0.35), 0 1px 1px rgba(0,0,0,0.25);
-}
-.badge.badge-ref { background: rgba(99,102,241,0.16); border-color: rgba(99,102,241,0.45); color: #c7d2fe; }
+.dark .badge.badge-js { background: rgba(234, 179, 8, 0.15); border-color: rgba(234,179,8,0.45); color: #fde68a; }
+.dark .badge.badge-ts { background: rgba(59, 130, 246, 0.15); border-color: rgba(59,130,246,0.45); color: #93c5fd; }
+.dark .badge.badge-md { background: rgba(16, 185, 129, 0.12); border-color: rgba(16,185,129,0.4); color: #6ee7b7; }
+.dark .badge.badge-json { background: rgba(245, 158, 11, 0.12); border-color: rgba(245,158,11,0.4); color: #fcd34d; }
+.dark .badge.badge-modify { background: linear-gradient(180deg, rgba(59,130,246,0.22) 0%, rgba(29,78,216,0.18) 100%); border-color: rgba(59,130,246,0.55); color: #cfe3ff; }
+.dark .badge.badge-ref { background: rgba(99,102,241,0.16); border-color: rgba(99,102,241,0.45); color: #c7d2fe; }
 
 /* Gradient link style for references and paths (subtle) */
 .prose a {
@@ -1293,19 +1306,13 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background:
-    linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.02)),
-    rgba(24,24,24,0.45);
-  backdrop-filter: blur(10px) saturate(120%);
-  -webkit-backdrop-filter: blur(10px) saturate(120%);
-  border: 1px solid rgba(255,255,255,0.1);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -1px 0 rgba(0,0,0,0.25);
+  background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(255,255,255,0.94));
+  border: 1px solid rgba(0,0,0,0.08);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.7);
   color: inherit;
   transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
 }
-.icon-pill:hover {
-  border-color: rgba(255,255,255,0.18);
-}
+.icon-pill:hover { border-color: rgba(0,0,0,0.14); }
 
 /* Smaller variant for header actions */
 .icon-pill-sm {
@@ -1315,6 +1322,17 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(255,255,255,0.94));
+  border: 1px solid rgba(0,0,0,0.08);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.7);
+  color: inherit;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+.icon-pill-sm:hover { border-color: rgba(0,0,0,0.14); }
+
+/* Dark mode overrides for icon pills */
+.dark .icon-pill,
+.dark .icon-pill-sm {
   background:
     linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.02)),
     rgba(24,24,24,0.45);
@@ -1322,10 +1340,9 @@ body {
   -webkit-backdrop-filter: blur(10px) saturate(120%);
   border: 1px solid rgba(255,255,255,0.10);
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -1px 0 rgba(0,0,0,0.25);
-  color: inherit;
-  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
 }
-.icon-pill-sm:hover { border-color: rgba(255,255,255,0.18); }
+.dark .icon-pill:hover,
+.dark .icon-pill-sm:hover { border-color: rgba(255,255,255,0.18); }
 
 /* Hide xterm scrollbars (invisible) */
 .xterm .xterm-viewport::-webkit-scrollbar { width: 0 !important; height: 0 !important; }
