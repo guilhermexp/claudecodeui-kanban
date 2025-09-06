@@ -29,6 +29,7 @@ import PromptEnhancer from './PromptEnhancer';
 import { Folder, Settings as SettingsIcon } from 'lucide-react';
 import CtaButton from './ui/CtaButton';
 import TimerChip from './TimerChip';
+import { ModalManager, useModalManager } from './managers/ModalManager';
 
 function MainContent({ 
   selectedProject, 
@@ -79,7 +80,7 @@ function MainContent({
   const [shellVisible, setShellVisible] = useState(true); // Terminal visibility for header dynamics
   // Shell terminals state removed - single terminal mode only
   
-  // Modal states
+  // TODO: MODAL_MANAGEMENT - These states will be moved to ModalManager
   const [showProjectsModal, setShowProjectsModal] = useState(false);
   // const [showKanbanModal, setShowKanbanModal] = useState(false);
   const [showGitModal, setShowGitModal] = useState(false);
