@@ -9,7 +9,7 @@ import { createLogger } from '../utils/logger.js';
 
 const rateLimitLogger = createLogger('RATE-LIMIT');
 
-// General API rate limiting
+// General API rate limiting (by IP)
 export const apiRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 1000, // general API rate limit
@@ -35,6 +35,35 @@ export const apiRateLimit = rateLimit({
     res.status(429).json({
       error: 'Too many requests from this IP',
       retryAfter: '15 minutes',
+      current: req.rateLimit.current,
+      limit: req.rateLimit.limit,
+      remaining: req.rateLimit.remaining
+    });
+  }
+});
+
+// User-based rate limiting (requires authentication)
+export const userRateLimit = rateLimit({
+  windowMs: 10 * 60 * 1000, // 10 minutes
+  max: 200, // limit each user to 200 requests per windowMs
+  // Remove custom keyGenerator to avoid IPv6 issues - use default IP-based limiting
+  message: {
+    error: 'Too many requests from this user',
+    retryAfter: '10 minutes'
+  },
+  handler: (req, res) => {
+    rateLimitLogger.warn('User rate limit exceeded', {
+      event: 'user_rate_limit_exceeded',
+      userId: req.user?.id,
+      username: req.user?.username,
+      ip: req.ip,
+      path: req.path,
+      method: req.method
+    });
+    
+    res.status(429).json({
+      error: 'Too many requests from this user',
+      retryAfter: '10 minutes',
       current: req.rateLimit.current,
       limit: req.rateLimit.limit,
       remaining: req.rateLimit.remaining

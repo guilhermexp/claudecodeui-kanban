@@ -87,6 +87,7 @@ export const AuthProvider = ({ children }) => {
   const login = async (username, password) => {
     try {
       setError(null);
+      console.log('[AuthContext] Login attempt:', { username, password });
       const response = await api.auth.login(username, password);
 
       const data = await response.json();

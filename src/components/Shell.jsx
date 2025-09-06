@@ -10,6 +10,7 @@ import PreviewPanel from './PreviewPanel';
 import FileManagerSimple from './FileManagerSimple';
 import CtaButton from './ui/CtaButton';
 import { detectBestPreviewUrl } from '../utils/detectPreviewUrl';
+import { useCleanup } from '../hooks/useCleanup';
 import 'xterm/css/xterm.css';
 
 // CSS to make xterm responsive and remove focus outline
@@ -171,6 +172,10 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   
   // Terminal visibility (allow chat + preview without terminal)
   const [showTerminal, setShowTerminal] = useState(true);
+  
+  // Unified cleanup utilities for listeners/timers
+  const { addManagedEventListener } = useCleanup();
+
   useEffect(() => {
     try { onTerminalVisibilityChange && onTerminalVisibilityChange(showTerminal); } catch {}
   }, [showTerminal, onTerminalVisibilityChange]);
@@ -1405,17 +1410,19 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
         viewport.style.scrollBehavior = 'smooth';
         
         // Prevent default touch behaviors that interfere with scrolling
-        viewport.addEventListener('touchstart', (e) => {
+        const onTouchStart = (e) => {
           // Allow scrolling but prevent text selection during scroll
           if (e.touches.length === 1) {
             e.stopPropagation();
           }
-        }, { passive: true });
-        
-        viewport.addEventListener('touchmove', (e) => {
+        };
+        const onTouchMove = (e) => {
           // Allow scrolling
           e.stopPropagation();
-        }, { passive: true });
+        };
+        
+        addManagedEventListener(viewport, 'touchstart', onTouchStart, { passive: true }, 'shell viewport touchstart');
+        addManagedEventListener(viewport, 'touchmove', onTouchMove, { passive: true }, 'shell viewport touchmove');
       }
     }
 
@@ -1562,16 +1569,14 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       resizeObserver.observe(terminalRef.current);
     }
 
-    // Also listen for window resize
-    window.addEventListener('resize', () => handleResize(false));
-    
-    // Also listen for orientation change on mobile
-    window.addEventListener('orientationchange', handleResize);
+    // Also listen for window resize/orientation with stable handlers
+    const onWindowResize = () => handleResize(false);
+    const onOrientationChange = () => handleResize(true);
+    addManagedEventListener(window, 'resize', onWindowResize, false, 'shell window resize');
+    addManagedEventListener(window, 'orientationchange', onOrientationChange, false, 'shell window orientationchange');
 
     return () => {
       resizeObserver.disconnect();
-      window.removeEventListener('resize', handleResize);
-      window.removeEventListener('orientationchange', handleResize);
       if (resizeDebounceTimer) {
         clearTimeout(resizeDebounceTimer);
       }
