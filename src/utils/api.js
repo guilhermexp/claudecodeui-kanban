@@ -5,9 +5,9 @@ let refreshPromise = null;
 
 // Function to refresh token
 const refreshToken = async () => {
-  const token = authPersistence.getToken();
+  const token = await authPersistence.getToken();
   if (!token) return null;
-  
+
   try {
     const response = await fetch('/api/auth/refresh', {
       method: 'POST',
@@ -16,16 +16,16 @@ const refreshToken = async () => {
         'Authorization': `Bearer ${token}`
       }
     });
-    
+
     if (response.ok) {
       const data = await response.json();
-      authPersistence.saveToken(data.token);
+      await authPersistence.saveToken(data.token);
       return data.token;
     }
   } catch (error) {
     // Token refresh failed
   }
-  
+
   return null;
 };
 
@@ -55,7 +55,7 @@ export const authenticatedFetch = async (url, options = {}) => {
     });
   };
   
-  let token = authPersistence.getToken();
+  let token = await authPersistence.getToken();
   let response = await makeRequest(token);
   
   // If we get a 401 with TOKEN_EXPIRED, try to refresh
