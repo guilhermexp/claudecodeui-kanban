@@ -12,15 +12,18 @@ import ClaudeLogo from './ClaudeLogo';
 import FolderPicker from './FolderPicker';
 import { api } from '../utils/api';
 import { formatTimeAgo } from '../utils/time';
+import { createLogger } from '../utils/logger';
 
-function ProjectsModal({ 
+const log = createLogger('ProjectsModal');
+
+function ProjectsModal({
   isOpen,
   onClose,
-  projects, 
-  selectedProject, 
-  selectedSession, 
-  onProjectSelect, 
-  onSessionSelect, 
+  projects,
+  selectedProject,
+  selectedSession,
+  onProjectSelect,
+  onSessionSelect,
   onNewSession,
   onSessionDelete,
   onProjectDelete,
@@ -45,6 +48,8 @@ function ProjectsModal({
   const prevProjectNamesRef = React.useRef([]);
   const [viewMode, setViewMode] = useState('list'); // 'list' | 'grid'
 
+  const projectList = Array.isArray(projects) ? projects : [];
+
   // Time update interval
   useEffect(() => {
     const interval = setInterval(() => {
@@ -65,6 +70,7 @@ function ProjectsModal({
 
 
   const handleRefresh = async () => {
+    if (typeof onRefresh !== 'function') return;
     setIsRefreshing(true);
     try {
       await onRefresh();
@@ -75,7 +81,8 @@ function ProjectsModal({
 
   // Detect newly created project to highlight and pin first
   useEffect(() => {
-    const names = (projects || []).map(p => p.name);
+    const list = Array.isArray(projects) ? projects : [];
+    const names = list.map(p => p.name);
     const prev = prevProjectNamesRef.current || [];
     const added = names.find(n => !prev.includes(n));
     if (added && names.length > prev.length) {
@@ -92,7 +99,7 @@ function ProjectsModal({
   }, [isOpen]);
 
   // Filter and sort projects
-  const filteredProjects = projects.filter(project => {
+  const filteredProjects = projectList.filter(project => {
     // Search filter
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
@@ -710,7 +717,7 @@ function ProjectsModal({
       isOpen={showFolderPicker}
       onClose={() => setShowFolderPicker(false)}
       onSelect={async (folderPath) => {
-        console.log('Selected folder:', folderPath);
+        log.info('Selected folder:', folderPath);
         setShowFolderPicker(false);
         
         // Show loading state
@@ -733,17 +740,17 @@ function ProjectsModal({
             setTimeout(() => setToast(null), 2000);
           } else {
             const err = await create.text();
-            setToast({ 
-              type: 'error', 
-              message: `Failed to create project: ${err}` 
+            setToast({
+              type: 'error',
+              message: `Failed to create project: ${err}`
             });
             setTimeout(() => setToast(null), 3000);
           }
         } catch (e) {
-          console.error('Create project error:', e);
-          setToast({ 
-            type: 'error', 
-            message: 'Failed to create project: ' + e.message 
+          log.error('Create project error:', e);
+          setToast({
+            type: 'error',
+            message: 'Failed to create project: ' + e.message
           });
           setTimeout(() => setToast(null), 3000);
         }

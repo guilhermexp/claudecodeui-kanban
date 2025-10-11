@@ -134,6 +134,12 @@ shell-backup/
 *VIBE_KANBAN_CRASH*.md
 *VITE_PROXY*.md
 
+# Test files with sensitive data
+test-*.js
+test-*.mjs
+test-*.sh
+setup-user.js
+
 # Script obsolescence prevention
 run.sh
 push-to-github.sh
