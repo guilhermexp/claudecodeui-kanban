@@ -16,12 +16,9 @@ import FileManagerSimple from './FileManagerSimple';
 import CodeEditor from './CodeEditor';
 import Shell from './Shell';
 import GitPanel from './GitPanel';
-import OverlayChat from './OverlayChat';
-import OverlayChatClaude from './OverlayChatClaude';
 import ResourceMonitor from './ResourceMonitor';
 import ErrorBoundary from './ErrorBoundary';
 import { TextShimmer } from './ui/text-shimmer';
-import { createLogger } from '../utils/logger';
 import ProjectsModal from './ProjectsModal';
 import DarkModeToggle from './DarkModeToggle';
 import { Folder, Settings as SettingsIcon } from 'lucide-react';
@@ -36,9 +33,6 @@ function MainContent({
   sendMessage, 
   messages,
   isMobile,
-  onSidebarOpen,          // Function to open sidebar (for desktop)
-  sidebarOpen,            // Sidebar open state (for desktop)
-  onActiveSidePanelChange, // Callback to report active side panel state
   isLoading,
   onInputFocusChange,
   // New props for projects modal
@@ -69,8 +63,6 @@ function MainContent({
   // openShellSessions removed - was set but never used
   const [contextWindowPercentage, setContextWindowPercentage] = useState(null);
   const [shellResizeTrigger, setShellResizeTrigger] = useState(0);
-  // Panel states - only one can be open at a time
-  const [activeSidePanel, setActiveSidePanel] = useState(null); // 'files' | 'git' | 'chat' | null
   const [hasPreviewOpen, setHasPreviewOpen] = useState(false); // Track if preview is open
   const [shellVisible, setShellVisible] = useState(true); // Terminal visibility for header dynamics
   // Shell terminals state removed - single terminal mode only
@@ -80,27 +72,7 @@ function MainContent({
   // const [showKanbanModal, setShowKanbanModal] = useState(false);
   const [showGitModal, setShowGitModal] = useState(false);
   const [toast, setToast] = useState(null);
-  const [claudeOverlaySessionId, setClaudeOverlaySessionId] = useState(null);
-  const [claudeOverlayControls, setClaudeOverlayControls] = useState(null);
-  const [codexOverlayControls, setCodexOverlayControls] = useState(null);
-  const [chatActivity, setChatActivity] = useState(false); // true if any chat is active
   
-  // Debug logging for endClaudeOverlaySession updates
-  useEffect(() => {
-    const log = createLogger('MainContent');
-    log.debug('claudeOverlayControls updated:', {
-      hasEnd: typeof claudeOverlayControls?.end === 'function',
-      hasNew: typeof claudeOverlayControls?.new === 'function'
-    });
-  }, [claudeOverlayControls]);
-
-  // Notify parent component about active side panel changes
-  useEffect(() => {
-    if (onActiveSidePanelChange) {
-      onActiveSidePanelChange(activeSidePanel);
-    }
-  }, [activeSidePanel, onActiveSidePanelChange]);
-
   // (Removed assistant side panel integration)
   
   // Expose tab switching globally for Shell image drops
@@ -326,8 +298,7 @@ function MainContent({
                 {
                   <div className="flex items-center gap-3">
                     <h2 className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white whitespace-nowrap">
-                      Shell {activeSidePanel && `+ ${activeSidePanel === 'files' ? 'Files' : 
-                                                      activeSidePanel === 'chat' ? 'Assistant' : ''}`}
+                      Shell
                     </h2>
                     <span className="inline-block px-2 py-0.5 text-xs rounded-full bg-gradient-to-r from-primary/20 to-accent/20 dark:from-primary/30 dark:to-accent/30 text-primary dark:text-primary-foreground font-medium shrink-0">
                       {selectedProject.displayName}
@@ -386,9 +357,6 @@ function MainContent({
               {/* Files (desktop hidden if mobile). Opens preview + file tree */}
               <button
                 onClick={() => {
-                  if (activeSidePanel === 'claude-chat' || activeSidePanel === 'codex-chat') {
-                    try { window.__shellControls?.hideTerminal?.(); } catch {}
-                  }
                   try {
                     // Show files first so it becomes the primary view, then ensure preview is open
                     window.__shellControls?.showFiles?.();
@@ -425,108 +393,12 @@ function MainContent({
                   <span className="hidden sm:inline">Source Control</span>
                 </span>
               </button>
-              {/* Codex AI button - opens Codex chat panel */}
-              <button
-                onClick={() => {
-                  if (activeSidePanel === 'codex-chat') {
-                    setActiveSidePanel(null);
-                  } else {
-                    // Don't close preview - allow both to be open
-                    // Close Claude chat if open
-                    if (activeSidePanel === 'claude-chat') {
-                      setActiveSidePanel('codex-chat');
-                    } else {
-                      setActiveSidePanel('codex-chat');
-                    }
-                    if (sidebarOpen && onSidebarOpen) {
-                      onSidebarOpen();
-                    }
-                  }
-                  setTimeout(() => setShellResizeTrigger(prev => prev + 1), 350);
-                }}
-                className={`relative inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
-                  activeSidePanel === 'codex-chat'
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-                }`}
-                title="Open Codex AI Assistant"
-              >
-                <span className="flex items-center gap-1 sm:gap-1.5 leading-none">
-                  <svg className="w-3 sm:w-3.5 h-3 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h6m-7 7l-2 2V5a2 2 0 012-2h14a2 2 0 012 2v12a2 2 0 01-2 2H7z" />
-                  </svg>
-                  <span className="hidden sm:inline">Codex</span>
-                </span>
-              </button>
-              
-              {/* Claude Code button - opens Claude chat panel */}
-              <button
-                onClick={() => {
-                  if (activeSidePanel === 'claude-chat') {
-                    setActiveSidePanel(null);
-                  } else {
-                    // Don't close preview - allow both to be open
-                    // Close Codex chat if open
-                    if (activeSidePanel === 'codex-chat') {
-                      setActiveSidePanel('claude-chat');
-                    } else {
-                      setActiveSidePanel('claude-chat');
-                    }
-                    if (sidebarOpen && onSidebarOpen) {
-                      onSidebarOpen();
-                    }
-                  }
-                  setTimeout(() => setShellResizeTrigger(prev => prev + 1), 350);
-                }}
-                className={`relative inline-flex items-center gap-1 px-2 sm:px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-all duration-200 ${
-                  activeSidePanel === 'claude-chat'
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-                }`}
-                title="Open Claude Code Assistant"
-              >
-                <span className="flex items-center gap-1 sm:gap-1.5 leading-none">
-                  <svg className="w-3 sm:w-3.5 h-3 sm:h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                  </svg>
-                  <span className="hidden sm:inline">Claude</span>
-                </span>
-              </button>
-              
-
             </div>
           </div>
           
           {/* Right-side controls group - Settings, Dark Mode, System */}
           <div className="flex absolute right-4 top-1/2 -translate-y-1/2 z-40">
             <div className="flex items-center bg-muted rounded-lg p-1 gap-1 shadow-sm">
-              {claudeOverlaySessionId && !String(claudeOverlaySessionId).startsWith('temp-') && (
-                <span className="hidden sm:inline-flex items-center h-7 px-2 rounded-md bg-background/80 text-[11px] text-muted-foreground border border-border/40 mr-1" title="Claude session active">
-                  Active
-                </span>
-              )}
-              {(activeSidePanel === 'claude-chat' ? claudeOverlayControls?.end : codexOverlayControls?.end) && (
-                <button
-                  onClick={() => { 
-                    try { 
-                      (activeSidePanel === 'claude-chat' ? claudeOverlayControls.end : codexOverlayControls.end)(); 
-                      // Close panel after a delay to allow session to end properly
-                      setTimeout(() => {
-                        setActiveSidePanel(null);
-                      }, 500);
-                    } catch {} 
-                  }}
-                  className="px-2 h-7 rounded-md text-[11px] bg-background/80 border border-border/40 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                  title="End Claude session and close panel"
-                >End</button>
-              )}
-              {(activeSidePanel === 'claude-chat' ? claudeOverlayControls?.new : codexOverlayControls?.new) && (
-                <button
-                  onClick={() => { try { (activeSidePanel === 'claude-chat' ? claudeOverlayControls.new : codexOverlayControls.new)(); } catch {}; if (!activeSidePanel) setActiveSidePanel('claude-chat'); }}
-                  className="px-2 h-7 rounded-md text-[11px] bg-background/80 border border-border/40 text-muted-foreground hover:text-foreground hover:bg-accent/20"
-                  title="Start new Claude session"
-                >New</button>
-              )}
               {/* Settings */}
               <button
                 onClick={onShowSettings}
@@ -558,69 +430,15 @@ function MainContent({
                   onSessionStateChange={handleShellSessionStateChange}
                   isMobile={false}
                   resizeTrigger={shellResizeTrigger}
-                  activeSidePanel={activeSidePanel}
                   onPreviewStateChange={setHasPreviewOpen}
                   onBindControls={(controls) => { window.__shellControls = controls; }}
                   onTerminalVisibilityChange={setShellVisible}
-                  onSidebarClose={() => {
-                    if (sidebarOpen && onSidebarOpen) {
-                      onSidebarOpen();
-                    }
-                    setActiveSidePanel(null);
-                  }}
                 />
             )}
           </div>
         </div>
 
         {/* Removed empty-state overlay when shell is hidden to avoid duplication */}
-
-        {/* Codex Chat panel integrated */}
-        {!isMobile && (
-          <div className={`transition-all duration-300 ease-in-out overflow-hidden ${
-            activeSidePanel === 'codex-chat' ? 'w-[260px] sm:w-[320px] md:w-[360px] lg:w-[420px] border-l border-border bg-black' : 'w-0'
-          }`}>
-            {activeSidePanel === 'codex-chat' && (
-              <OverlayChat 
-                embedded={true}
-                disableInlinePanel={true}
-                projectPath={selectedProject?.path}
-                previewUrl={null}
-                onPanelClosed={() => setActiveSidePanel(null)}
-                cliProviderFixed="codex"
-                chatId="codex-instance"
-                onBindControls={setCodexOverlayControls}
-                onActivityChange={(active) => setChatActivity(active)}
-              />
-            )}
-          </div>
-        )}
-        
-        {/* Claude Chat panel integrated */}
-        {!isMobile && (
-          <div className={`transition-all duration-300 ease-in-out overflow-hidden ${
-            activeSidePanel === 'claude-chat' ? 'w-[260px] sm:w-[320px] md:w-[360px] lg:w-[420px] border-l border-border bg-black' : 'w-0'
-          }`}>
-            {activeSidePanel === 'claude-chat' && (
-              <div style={{ height: '100%' }}>
-                <OverlayChatClaude 
-                  key="claude-chat-panel"
-                  embedded={true}
-                  disableInlinePanel={true}
-                  cliProviderFixed="claude"
-                  chatId="claude-instance"
-                  projectPath={selectedProject?.path}
-                  projects={projects}
-                  previewUrl={null}
-                  onSessionIdChange={setClaudeOverlaySessionId}
-                  onBindControls={setClaudeOverlayControls}
-                  onActivityChange={(active) => setChatActivity(active)}
-                  onPanelClosed={() => setActiveSidePanel(null)}
-                />
-              </div>
-            )}
-          </div>
-        )}
 
         {/* Files panel overlay removed: Files now always opens integrated over the Preview */}
         
