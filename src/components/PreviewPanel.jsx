@@ -1017,21 +1017,6 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
           <div className="mt-3 flex gap-2">
             <button
               onClick={() => {
-                // Send to OverlayChat (our internal chat)
-                if (window.pushToOverlayChat) {
-                  // Send the complete element data, not just HTML
-                  window.pushToOverlayChat(selectedElement.html, selectedElement);
-                }
-                // Set global context for compatibility
-                window.selectedElementContext = selectedElement;
-                setSelectedElement(null);
-              }}
-              className="px-3 py-1 bg-primary text-primary-foreground rounded-md text-xs hover:bg-primary/90"
-            >
-              Send to Chat
-            </button>
-            <button
-              onClick={() => {
                 // Copy element HTML to clipboard
                 navigator.clipboard.writeText(selectedElement.html);
                 setSelectedElement(null);
@@ -1044,7 +1029,6 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
         </div>
       )}
       
-      {/* OverlayChat removed from preview to keep panel clean */}
     </div>
   );
 }

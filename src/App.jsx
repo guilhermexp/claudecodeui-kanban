@@ -12,7 +12,6 @@ import SessionsView from './components/SessionsView';
 import { useWebSocket } from './utils/websocket';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { ClaudeWebSocketProvider } from './contexts/ClaudeWebSocketContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import { api } from './utils/api';
 import { authPersistence } from './utils/auth-persistence';
@@ -26,15 +25,9 @@ function AppContent() {
   // Load persisted state on mount
   const loadPersistedState = () => {
     const savedState = appStatePersistence.loadState();
-    // Check if we have recent chat state (within 30 minutes)
-    const chatState = savedState[appStatePersistence.KEYS.CHAT_MESSAGES];
-    const shouldRestoreSession = chatState && 
-      chatState.timestamp && 
-      (Date.now() - chatState.timestamp < 30 * 60 * 1000); // 30 minutes
-    
     return {
-      selectedProject: shouldRestoreSession ? savedState[appStatePersistence.KEYS.SELECTED_PROJECT] : null,
-      selectedSession: shouldRestoreSession ? savedState[appStatePersistence.KEYS.SELECTED_SESSION] : null,
+      selectedProject: savedState[appStatePersistence.KEYS.SELECTED_PROJECT] || null,
+      selectedSession: savedState[appStatePersistence.KEYS.SELECTED_SESSION] || null,
       activeTab: savedState[appStatePersistence.KEYS.ACTIVE_TAB] === 'shell' || 
                   savedState[appStatePersistence.KEYS.ACTIVE_TAB] === 'files' || 
                   savedState[appStatePersistence.KEYS.ACTIVE_TAB] === 'git'
@@ -54,7 +47,6 @@ function AppContent() {
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [isShellConnected, setIsShellConnected] = useState(false);
   const [showToolsSettings, setShowToolsSettings] = useState(false);
-  const [activeSidePanel, setActiveSidePanel] = useState(null);
   const [shellHasActiveSession, setShellHasActiveSession] = useState(false);
   const [activeSessions, setActiveSessions] = useState(new Set());
   
@@ -585,19 +577,15 @@ function AppContent() {
           />
         ) : (
           // Main content view
-          <MainContent
-            selectedProject={selectedProject}
-            selectedSession={selectedSession}
+        <MainContent
+          selectedProject={selectedProject}
+          selectedSession={selectedSession}
           activeTab={activeTab}
           setActiveTab={setActiveTab}
           ws={ws}
           sendMessage={sendMessage}
           messages={messages}
           isMobile={isMobile}
-          onMenuClick={() => {}} // No longer needed
-          onSidebarOpen={() => {}} // No longer needed
-          // Sidebar open prop removed
-          onActiveSidePanelChange={setActiveSidePanel}
           isLoading={isLoadingProjects}
           onInputFocusChange={setIsInputFocused}
           // New props for ProjectsModal
@@ -669,21 +657,19 @@ function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <ClaudeWebSocketProvider>
-          <ProtectedRoute>
-            <Router future={{ 
-              v7_startTransition: true,
-              v7_relativeSplatPath: true
-            }}>
-              <Routes>
-                <Route path="/" element={<AppContent />} />
-                <Route path="/session/:sessionId" element={<AppContent />} />
-                <Route path="/project/:projectName/sessions" element={<AppContent />} />
-                { /* Vibe Kanban pages removed */ }
-              </Routes>
-            </Router>
-          </ProtectedRoute>
-        </ClaudeWebSocketProvider>
+        <ProtectedRoute>
+          <Router future={{ 
+            v7_startTransition: true,
+            v7_relativeSplatPath: true
+          }}>
+            <Routes>
+              <Route path="/" element={<AppContent />} />
+              <Route path="/session/:sessionId" element={<AppContent />} />
+              <Route path="/project/:projectName/sessions" element={<AppContent />} />
+              { /* Vibe Kanban pages removed */ }
+            </Routes>
+          </Router>
+        </ProtectedRoute>
       </AuthProvider>
     </ThemeProvider>
   );
