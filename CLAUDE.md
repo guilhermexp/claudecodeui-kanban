@@ -285,7 +285,37 @@ node scripts/test-port-attack.js
 - `CLAUDE.md` - This file - Complete development context
 - `PORT-MANAGEMENT.md` - Port protection system documentation
 
-### Feature Documentation  
+### AI Documentation Structure (NEW - 2025-01-10)
+
+**Organized AI documentation directories for long-term project maintenance:**
+
+- **ai_changelog/** - Version history and change tracking
+  - `CHANGELOG_FORK.md` - Main changelog with semantic versioning
+  - View `ai_changelog/README.md` for guidelines
+
+- **ai_docs/** - Technical documentation and architecture
+  - `ARCHITECTURE_OVERVIEW.md` - Complete system design and decisions
+  - `README.md` - Index and navigation guide
+  - Additional docs to be added as needed
+
+- **ai_issues/** - Bug tracking and known limitations
+  - Current status: ✅ No critical issues
+  - Resolved issues documented for reference
+  - View `ai_issues/README.md` for templates and guidelines
+
+- **ai_research/** - Research notes and experiments
+  - Dependency analysis results
+  - Bundle size optimization ideas
+  - Performance verification results
+  - View `ai_research/README.md` for methodology
+
+- **ai_specs/** - Technical specifications
+  - Component specifications
+  - API specifications
+  - Database schemas
+  - View `ai_specs/README.md` for templates
+
+### Feature Documentation
 - `docs/ARCHITECTURE.md` - Detailed architecture documentation
 - `docs/API.md` - Complete API reference
 - `docs/TROUBLESHOOTING.md` - Common issues and solutions
@@ -353,6 +383,30 @@ npm run server  # Production server only (no tunnel)
 
 ---
 
+## 🧹 **Recent Updates (2025-01-10)**
+
+### Comprehensive Codebase Cleanup ✅
+- **Status**: Completed and Validated
+- **Changes**: Removed 56 obsolete files, eliminated 7,357 lines of dead code
+- **Affected**: Debug artifacts, deprecated components, old utilities
+- **Commit**: `3e1b7d3` - chore: Remove obsolete files and deprecated components
+- **Build Status**: ✅ Passes with no regressions
+- **Backup Tag**: `cleanup-backup-20250110` - For rollback if needed
+
+### New AI Documentation Infrastructure ✅
+- Created 5 organized documentation directories (ai_changelog, ai_docs, ai_issues, ai_research, ai_specs)
+- Added comprehensive architecture documentation in `ai_docs/ARCHITECTURE_OVERVIEW.md`
+- Established changelog tracking in `ai_changelog/CHANGELOG_FORK.md`
+- See "AI Documentation Structure" section above for full details
+
+### What This Means
+- Codebase is now cleaner and more maintainable
+- Documentation is organized for long-term project sustainability
+- Any new agent can quickly understand project state via ai_docs/
+- Future changes are tracked systematically in ai_changelog/
+
+---
+
 ## ⚠️ **CRITICAL NOTES FOR CLAUDE CODE**
 
 1. **ALWAYS use `npm run dev` for development** - includes port protection
@@ -365,6 +419,8 @@ npm run server  # Production server only (no tunnel)
 8. **Monitor WebSocket connections** - critical for terminal functionality
 9. **Use semantic CSS classes** - Never use hardcoded colors like `text-blue-500`, always use theme variables
 10. **Mobile-first development** - Test mobile layout and touch interactions
+11. **Reference AI Documentation** - Check `ai_docs/` for architecture and implementation details
+12. **Track Changes** - Document work in appropriate `ai_*` directories
 
 This application is actively used for development work, so **stability and reliability are paramount**. When in doubt, ask the user before making significant changes.
 
