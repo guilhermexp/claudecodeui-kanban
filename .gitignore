@@ -115,6 +115,16 @@ temp/
 *.db-shm
 *.db-wal
 
+# Secrets and env variants
+.env.*
+
+# Do not commit local indexes or source mirrors
+server/database/repo-indexes/
+server/database/repo-sources/
+
+# Local Playwright data
+.playwright-mcp/
+
 # Test and documentation obsolescence prevention
 test-results/
 *backup*/
@@ -124,9 +134,16 @@ shell-backup/
 *VIBE_KANBAN_CRASH*.md
 *VITE_PROXY*.md
 
+# Test files with sensitive data
+test-*.js
+test-*.mjs
+test-*.sh
+setup-user.js
+
 # Script obsolescence prevention
 run.sh
 push-to-github.sh
 start-vibe-backend.sh
 *-old.sh
 *-backup.sh certs/
+tmp-chatterbox/

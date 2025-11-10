@@ -14,11 +14,27 @@ class ProcessManager {
     this.forceTimeout = options.forceTimeout || 3000; // 3s for SIGKILL
     this.healthCheckInterval = options.healthCheckInterval || 30000; // 30s
     this.staleProcessTimeout = options.staleProcessTimeout || 300000; // 5 minutes
+    this.orphanCheckInterval = options.orphanCheckInterval || 10000; // 10s for orphan detection
+    this.memoryThreshold = options.memoryThreshold || 500 * 1024 * 1024; // 500MB per process
+    this.cpuCheckInterval = options.cpuCheckInterval || 60000; // 1 minute
+    this.enableResourceMonitoring = options.enableResourceMonitoring !== false;
     
     // Start health check timer
     this.healthCheckTimer = setInterval(() => {
       this.performHealthCheck();
     }, this.healthCheckInterval);
+    
+    // Start orphan detection timer
+    this.orphanCheckTimer = setInterval(() => {
+      this.detectOrphanProcesses();
+    }, this.orphanCheckInterval);
+    
+    // Start resource monitoring if enabled
+    if (this.enableResourceMonitoring) {
+      this.resourceMonitorTimer = setInterval(() => {
+        this.monitorResourceUsage();
+      }, this.cpuCheckInterval);
+    }
     
     // Handle process exit
     process.on('exit', () => {
@@ -37,7 +53,7 @@ class ProcessManager {
   /**
    * Register a new process
    */
-  register(sessionId, process, metadata = {}) {
+  register(sessionId, childProcess, metadata = {}) {
     // Enforce process limits
     if (this.processes.size >= this.maxProcesses) {
       log.warn(`Process limit reached (${this.maxProcesses}). Cleaning up oldest processes.`);
@@ -45,19 +61,27 @@ class ProcessManager {
     }
     
     const processInfo = {
-      process,
+      process: childProcess,
       sessionId,
-      pid: process.pid,
+      pid: childProcess.pid,
       startTime: Date.now(),
       lastActivity: Date.now(),
+      resourceUsage: {
+        cpu: 0,
+        memory: 0,
+        lastCheck: Date.now()
+      },
       metadata: {
         command: metadata.command || 'unknown',
         cwd: metadata.cwd || process.cwd(),
         type: metadata.type || 'claude',
+        priority: metadata.priority || 'normal', // low, normal, high
+        maxMemory: metadata.maxMemory || this.memoryThreshold,
         ...metadata
       },
       isShuttingDown: false,
-      shutdownPromise: null
+      shutdownPromise: null,
+      warnings: []
     };
     
     // Set up process event listeners
@@ -75,7 +99,7 @@ class ProcessManager {
    * Set up event listeners for a process
    */
   setupProcessListeners(processInfo) {
-    const { process, sessionId, pid } = processInfo;
+    const { process: childProcess, sessionId, pid } = processInfo;
     
     // Track process activity
     const updateActivity = () => {
@@ -84,23 +108,23 @@ class ProcessManager {
       }
     };
     
-    process.stdout?.on('data', updateActivity);
-    process.stderr?.on('data', updateActivity);
-    process.stdin?.on('data', updateActivity);
+    childProcess.stdout?.on('data', updateActivity);
+    childProcess.stderr?.on('data', updateActivity);
+    childProcess.stdin?.on('data', updateActivity);
     
     // Handle process exit
-    process.on('exit', (code, signal) => {
+    childProcess.on('exit', (code, signal) => {
       log.info(`Process ${pid} exited with code=${code}, signal=${signal}`);
       this.unregister(sessionId);
     });
     
-    process.on('error', (error) => {
+    childProcess.on('error', (error) => {
       log.error(`Process ${pid} error: ${error.message}`);
       this.unregister(sessionId);
     });
     
     // Handle process disconnection
-    process.on('disconnect', () => {
+    childProcess.on('disconnect', () => {
       log.debug(`Process ${pid} disconnected`);
     });
   }
@@ -176,7 +200,7 @@ class ProcessManager {
    * Implement graceful shutdown sequence: SIGINT → SIGTERM → SIGKILL
    */
   async gracefulShutdown(processInfo) {
-    const { process, pid } = processInfo;
+    const { process: childProcess, pid } = processInfo;
     
     return new Promise((resolve, reject) => {
       let shutdownTimer;
@@ -194,29 +218,29 @@ class ProcessManager {
         resolve();
       };
       
-      process.once('exit', onExit);
+      childProcess.once('exit', onExit);
       
       // Step 1: Try graceful SIGINT first
       try {
         log.debug(`Sending SIGINT to process ${pid}`);
-        process.kill('SIGINT');
+        childProcess.kill('SIGINT');
         
         // Step 2: Escalate to SIGTERM after timeout
         shutdownTimer = setTimeout(() => {
           try {
             log.debug(`Escalating to SIGTERM for process ${pid}`);
-            process.kill('SIGTERM');
+            childProcess.kill('SIGTERM');
             
             // Step 3: Force kill with SIGKILL after timeout
             forceTimer = setTimeout(() => {
               try {
                 log.warn(`Force killing process ${pid} with SIGKILL`);
-                process.kill('SIGKILL');
+                childProcess.kill('SIGKILL');
                 
                 // Final timeout - consider it failed
                 setTimeout(() => {
                   cleanup();
-                  process.removeListener('exit', onExit);
+                  childProcess.removeListener('exit', onExit);
                   reject(new Error(`Failed to terminate process ${pid} even with SIGKILL`));
                 }, 1000);
                 
@@ -234,7 +258,7 @@ class ProcessManager {
             
           } catch (error) {
             cleanup();
-            process.removeListener('exit', onExit);
+            childProcess.removeListener('exit', onExit);
             if (error.code === 'ESRCH') {
               // Process already dead
               resolve();
@@ -246,7 +270,7 @@ class ProcessManager {
         
       } catch (error) {
         cleanup();
-        process.removeListener('exit', onExit);
+        childProcess.removeListener('exit', onExit);
         if (error.code === 'ESRCH') {
           // Process already dead
           resolve();
@@ -278,6 +302,194 @@ class ProcessManager {
     }
     
     log.info('All processes shutdown completed');
+  }
+  
+  /**
+   * Detect and clean up orphan processes
+   */
+  detectOrphanProcesses() {
+    const now = Date.now();
+    const orphanedSessions = [];
+    
+    for (const [sessionId, processInfo] of this.processes) {
+      const { pid, process: childProcess } = processInfo;
+      
+      try {
+        // Check if process is still accessible
+        process.kill(pid, 0);
+        
+        // Additional check: see if the process object is still valid
+        if (childProcess.killed || childProcess.exitCode !== null) {
+          log.warn(`Found orphaned process object: ${pid} (session: ${sessionId})`);
+          orphanedSessions.push(sessionId);
+        }
+      } catch (error) {
+        if (error.code === 'ESRCH') {
+          log.warn(`Found orphaned process entry: ${pid} (session: ${sessionId})`);
+          orphanedSessions.push(sessionId);
+        }
+      }
+    }
+    
+    // Clean up orphaned sessions
+    for (const sessionId of orphanedSessions) {
+      this.unregister(sessionId);
+      log.info(`Cleaned up orphaned session: ${sessionId}`);
+    }
+    
+    if (orphanedSessions.length > 0) {
+      log.info(`Orphan check: cleaned up ${orphanedSessions.length} orphaned entries`);
+    }
+  }
+  
+  /**
+   * Monitor resource usage of all processes
+   */
+  async monitorResourceUsage() {
+    if (!this.enableResourceMonitoring) return;
+    
+    const now = Date.now();
+    const resourceViolations = [];
+    
+    for (const [sessionId, processInfo] of this.processes) {
+      const { pid, metadata } = processInfo;
+      
+      try {
+        // Get process resource usage
+        const usage = await this.getProcessResourceUsage(pid);
+        if (usage) {
+          processInfo.resourceUsage = {
+            ...usage,
+            lastCheck: now
+          };
+          
+          // Check memory threshold
+          if (usage.memory > metadata.maxMemory) {
+            const violation = {
+              sessionId,
+              pid,
+              type: 'memory',
+              current: usage.memory,
+              limit: metadata.maxMemory,
+              priority: metadata.priority
+            };
+            resourceViolations.push(violation);
+            processInfo.warnings.push({
+              type: 'memory_exceeded',
+              timestamp: now,
+              details: violation
+            });
+          }
+          
+          // Check CPU usage (if it's consistently high)
+          if (usage.cpu > 90) {
+            processInfo.warnings.push({
+              type: 'high_cpu',
+              timestamp: now,
+              details: { cpu: usage.cpu }
+            });
+          }
+        }
+      } catch (error) {
+        log.debug(`Failed to get resource usage for process ${pid}: ${error.message}`);
+      }
+    }
+    
+    // Handle resource violations
+    this.handleResourceViolations(resourceViolations);
+  }
+  
+  /**
+   * Get resource usage for a process (cross-platform)
+   */
+  async getProcessResourceUsage(pid) {
+    try {
+      // Use pidusage if available, otherwise fallback to system calls
+      if (typeof require !== 'undefined') {
+        try {
+          const pidusage = await import('pidusage');
+          return await pidusage.default(pid);
+        } catch (error) {
+          // Fallback to manual calculation
+        }
+      }
+      
+      // Manual resource check (simplified)
+      const { spawn } = await import('child_process');
+      
+      return new Promise((resolve) => {
+        // Use ps command to get memory info
+        const ps = spawn('ps', ['-o', 'pid,pcpu,pmem,rss', '-p', pid.toString()]);
+        let output = '';
+        
+        ps.stdout.on('data', (data) => {
+          output += data.toString();
+        });
+        
+        ps.on('close', (code) => {
+          if (code === 0) {
+            const lines = output.trim().split('\n');
+            if (lines.length > 1) {
+              const parts = lines[1].trim().split(/\s+/);
+              const cpu = parseFloat(parts[1]) || 0;
+              const memory = (parseFloat(parts[3]) || 0) * 1024; // Convert KB to bytes
+              
+              resolve({ cpu, memory });
+              return;
+            }
+          }
+          resolve(null);
+        });
+        
+        setTimeout(() => {
+          ps.kill();
+          resolve(null);
+        }, 5000);
+      });
+    } catch (error) {
+      return null;
+    }
+  }
+  
+  /**
+   * Handle resource violations based on priority
+   */
+  handleResourceViolations(violations) {
+    if (violations.length === 0) return;
+    
+    log.warn(`Found ${violations.length} resource violations`);
+    
+    // Sort by priority (low priority processes get terminated first)
+    violations.sort((a, b) => {
+      const priorityOrder = { 'low': 0, 'normal': 1, 'high': 2 };
+      return priorityOrder[a.priority] - priorityOrder[b.priority];
+    });
+    
+    for (const violation of violations) {
+      const { sessionId, type, current, limit } = violation;
+      
+      log.warn(`Process ${violation.pid} (${sessionId}) exceeded ${type} limit: ${this.formatBytes(current)} > ${this.formatBytes(limit)}`);
+      
+      // For low priority processes, terminate immediately on memory violation
+      if (violation.priority === 'low' && type === 'memory') {
+        log.warn(`Terminating low-priority process ${violation.pid} due to memory violation`);
+        this.terminate(sessionId, 'resource-violation').catch(error => {
+          log.error(`Failed to terminate process for resource violation: ${error.message}`);
+        });
+      }
+      // For normal/high priority, give a warning first
+      else {
+        log.warn(`Resource violation warning for process ${violation.pid} (priority: ${violation.priority})`);
+      }
+    }
+  }
+  
+  /**
+   * Format bytes for logging
+   */
+  formatBytes(bytes) {
+    const mb = bytes / (1024 * 1024);
+    return `${mb.toFixed(1)}MB`;
   }
   
   /**
@@ -365,12 +577,76 @@ class ProcessManager {
   }
   
   /**
+   * Get detailed process information
+   */
+  getProcessInfo(sessionId) {
+    const processInfo = this.processes.get(sessionId);
+    if (!processInfo) return null;
+    
+    return {
+      sessionId,
+      pid: processInfo.pid,
+      startTime: processInfo.startTime,
+      lastActivity: processInfo.lastActivity,
+      age: Date.now() - processInfo.startTime,
+      inactiveTime: Date.now() - processInfo.lastActivity,
+      resourceUsage: processInfo.resourceUsage,
+      metadata: processInfo.metadata,
+      isShuttingDown: processInfo.isShuttingDown,
+      warnings: processInfo.warnings.slice(-5) // Last 5 warnings
+    };
+  }
+  
+  /**
+   * Get processes by criteria
+   */
+  findProcesses(criteria = {}) {
+    const results = [];
+    
+    for (const [sessionId, processInfo] of this.processes) {
+      let matches = true;
+      
+      if (criteria.type && processInfo.metadata.type !== criteria.type) {
+        matches = false;
+      }
+      
+      if (criteria.priority && processInfo.metadata.priority !== criteria.priority) {
+        matches = false;
+      }
+      
+      if (criteria.olderThan && (Date.now() - processInfo.startTime) < criteria.olderThan) {
+        matches = false;
+      }
+      
+      if (criteria.inactiveSince && (Date.now() - processInfo.lastActivity) < criteria.inactiveSince) {
+        matches = false;
+      }
+      
+      if (matches) {
+        results.push(this.getProcessInfo(sessionId));
+      }
+    }
+    
+    return results;
+  }
+  
+  /**
    * Clean up resources
    */
   cleanup() {
     if (this.healthCheckTimer) {
       clearInterval(this.healthCheckTimer);
       this.healthCheckTimer = null;
+    }
+    
+    if (this.orphanCheckTimer) {
+      clearInterval(this.orphanCheckTimer);
+      this.orphanCheckTimer = null;
+    }
+    
+    if (this.resourceMonitorTimer) {
+      clearInterval(this.resourceMonitorTimer);
+      this.resourceMonitorTimer = null;
     }
   }
   

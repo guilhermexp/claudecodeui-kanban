@@ -242,8 +242,8 @@ const ModernLoginForm = () => {
                     <form onSubmit={handleEmailSubmit} className="space-y-3">
                       <div className="relative">
                         <input 
-                          type="email" 
-                          placeholder="Enter your email"
+                          type="text" 
+                          placeholder="Enter your username"
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
                           className="w-full backdrop-blur-sm bg-white/5 text-white border border-white/10 rounded-full py-3 px-4 focus:outline-none focus:border-white/30 text-center placeholder-white/40 transition-all duration-300"

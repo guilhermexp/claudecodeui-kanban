@@ -21,7 +21,7 @@ const CONFIG = {
     MAX_DISPLAY_NAME_LENGTH: 100,
     MAX_PATH_LENGTH: 4096,
     MAX_SESSIONS_PER_REQUEST: 100,
-    MAX_JSONL_LINE_LENGTH: 1024 * 1024,  // 1MB per line
+    MAX_JSONL_LINE_LENGTH: 5 * 1024 * 1024,  // 5MB per line (was 1MB)
   },
   PERFORMANCE: {
     SESSION_BATCH_SIZE: 10,
@@ -288,7 +288,8 @@ class FileSystemUtils {
       
       // Security: limit line length
       if (trimmed.length > CONFIG.LIMITS.MAX_JSONL_LINE_LENGTH) {
-        Logger.warn('Skipping oversized JSONL line', { 
+        // Reduce noise: log as debug instead of warn
+        Logger.debug('Skipping oversized JSONL line', { 
           filePath, 
           lineLength: trimmed.length 
         });
@@ -508,24 +509,46 @@ class ProjectManager {
         projects.push(...batchResults.filter(p => p !== null));
       }
 
-      // Add manually configured projects
+      // Add manually configured projects and clean up orphaned entries
+      let configModified = false;
       for (const [projectName, projectConfig] of Object.entries(config)) {
-        if (!existingProjects.has(projectName) && projectConfig.manuallyAdded) {
-          const actualDir = projectConfig.originalPath || 
-                           await this.extractProjectDirectory(projectName);
+        if (!existingProjects.has(projectName)) {
+          // Check if the project directory should exist
+          const projectDir = path.join(this.projectsDir, projectName);
           
-          projects.push({
-            name: projectName,
-            path: actualDir,
-            displayName: projectConfig.displayName || 
-                        await this.generateDisplayName(projectName, actualDir),
-            fullPath: actualDir,
-            isCustomName: !!projectConfig.displayName,
-            isManuallyAdded: true,
-            sessions: [],
-            sessionMeta: { total: 0, hasMore: false }
-          });
+          if (projectConfig.manuallyAdded) {
+            // For manually added projects, create directory if missing
+            if (!await FileSystemUtils.fileExists(projectDir)) {
+              Logger.info(`Creating missing directory for manually added project ${projectName}`);
+              await FileSystemUtils.ensureDirectory(projectDir);
+            }
+            
+            const actualDir = projectConfig.originalPath || 
+                             await this.extractProjectDirectory(projectName);
+            
+            projects.push({
+              name: projectName,
+              path: actualDir,
+              displayName: projectConfig.displayName || 
+                          await this.generateDisplayName(projectName, actualDir),
+              fullPath: actualDir,
+              isCustomName: !!projectConfig.displayName,
+              isManuallyAdded: true,
+              sessions: [],
+              sessionMeta: { total: 0, hasMore: false }
+            });
+          } else {
+            // Clean up orphaned config entries for non-manual projects
+            Logger.info(`Cleaning up orphaned config for ${projectName}`);
+            delete config[projectName];
+            configModified = true;
+          }
         }
+      }
+      
+      // Save config if modified
+      if (configModified) {
+        await this.saveConfig(config);
       }
 
       // Sort by most recent activity
@@ -887,6 +910,13 @@ class ProjectManager {
     // Check if already exists
     const config = await this.loadConfig();
     const projectDir = path.join(this.projectsDir, sanitizedName);
+    
+    // If project is in config but directory doesn't exist, clean it up
+    if (config[sanitizedName] && !await FileSystemUtils.fileExists(projectDir)) {
+      Logger.info(`Cleaning up orphaned project config for ${sanitizedName}`);
+      delete config[sanitizedName];
+      await this.saveConfig(config);
+    }
     
     if (await FileSystemUtils.fileExists(projectDir)) {
       throw new ValidationError(`Project already exists for path: ${absolutePath}`);

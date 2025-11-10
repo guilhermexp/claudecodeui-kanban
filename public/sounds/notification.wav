@@ -1,0 +1,4 @@
+# Este é um placeholder para o arquivo de som
+# O navegador tentará primeiro usar o sistema de hooks do Claude
+# Se falhar, tentará usar este arquivo
+# Por enquanto, vamos usar a API de hooks que já funciona

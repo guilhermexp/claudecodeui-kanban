@@ -23,7 +23,7 @@ export const useAuth = () => {
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [token, setToken] = useState(authPersistence.getToken());
+  const [token, setToken] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [needsSetup, setNeedsSetup] = useState(false);
   const [error, setError] = useState(null);
@@ -37,41 +37,41 @@ export const AuthProvider = ({ children }) => {
     try {
       setIsLoading(true);
       setError(null);
-      
+
       // Check if system needs setup
       const statusResponse = await api.auth.status();
       const statusData = await statusResponse.json();
-      
+
       if (statusData.needsSetup) {
         setNeedsSetup(true);
         setIsLoading(false);
         return;
       }
-      
-      // If we have a token, verify it
-      const savedToken = authPersistence.getToken();
+
+      // If we have a token, verify it (now async)
+      const savedToken = await authPersistence.getToken();
       if (savedToken) {
         try {
           // Set the token in state first
           setToken(savedToken);
-          // Refresh expiry on use
-          authPersistence.refreshExpiry();
-          
+          // Refresh expiry on use (now async)
+          await authPersistence.refreshExpiry();
+
           const userResponse = await api.auth.user();
-          
+
           if (userResponse.ok) {
             const userData = await userResponse.json();
             setUser(userData.user);
             setNeedsSetup(false);
           } else {
             // Token is invalid
-            authPersistence.clearToken();
+            await authPersistence.clearToken();
             setToken(null);
             setUser(null);
           }
         } catch (error) {
           console.error('Token verification failed:', error);
-          authPersistence.clearToken();
+          await authPersistence.clearToken();
           setToken(null);
           setUser(null);
         }
@@ -87,6 +87,7 @@ export const AuthProvider = ({ children }) => {
   const login = async (username, password) => {
     try {
       setError(null);
+      console.log('[AuthContext] Login attempt:', { username, password });
       const response = await api.auth.login(username, password);
 
       const data = await response.json();
@@ -94,7 +95,7 @@ export const AuthProvider = ({ children }) => {
       if (response.ok) {
         setToken(data.token);
         setUser(data.user);
-        authPersistence.saveToken(data.token);
+        await authPersistence.saveToken(data.token); // Now async with encryption
         return { success: true };
       } else {
         setError(data.error || 'Login failed');
@@ -119,7 +120,7 @@ export const AuthProvider = ({ children }) => {
         setToken(data.token);
         setUser(data.user);
         setNeedsSetup(false);
-        authPersistence.saveToken(data.token);
+        await authPersistence.saveToken(data.token); // Now async with encryption
         return { success: true };
       } else {
         setError(data.error || 'Registration failed');
@@ -133,11 +134,11 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const logout = () => {
+  const logout = async () => {
     setToken(null);
     setUser(null);
-    authPersistence.clearToken();
-    
+    await authPersistence.clearToken(); // Now async
+
     // Optional: Call logout endpoint for logging
     if (token) {
       api.auth.logout().catch(error => {
