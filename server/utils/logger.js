@@ -142,6 +142,10 @@ function format(service, level, msg) {
         output += `${COLORS.dim}${msg}${COLORS.reset}`;
         return output;
       }
+    } else if (service === 'CODEX-CLI' || service === 'CODEX') {
+      // Distinct styling for Codex logs
+      const svcColor = service === 'CODEX-CLI' ? COLORS.brightMagenta : COLORS.magenta;
+      output += `${svcColor}[${service}]${COLORS.reset} `;
     } else {
       // Service tag with color based on level
       output += `${levelColor}[${service}]${COLORS.reset} `;

@@ -1,0 +1,80 @@
+{
+  "prompts": [
+    {
+      "id": "p1",
+      "title": "Personalized Fitness Plan",
+      "description": "Generate a personalized fitness plan based on inputs",
+      "tags": [
+        "fitness",
+        "example"
+      ],
+      "variables": [
+        {
+          "name": "fitness_goal",
+          "example": "hypertrophy"
+        },
+        {
+          "name": "fitness_level",
+          "example": "intermediate"
+        },
+        {
+          "name": "available_equipment",
+          "example": "dumbbells, bench"
+        },
+        {
+          "name": "time_available",
+          "example": "45 minutes/day"
+        }
+      ],
+      "template": "Generate a personalized fitness plan based on the following information:\nGoal: {fitness_goal}\nFitness Level: {fitness_level}\nAvailable Equipment: {available_equipment}\nTime Available: {time_available}"
+    },
+    {
+      "id": "p-1756806323664",
+      "title": "New Prompt",
+      "description": "",
+      "tags": [],
+      "variables": [],
+      "template": ""
+    },
+    {
+      "id": "pr-1756814761603",
+      "title": "You can place CLAUDE.md files in several locations:",
+      "description": "",
+      "tags": [],
+      "variables": [],
+      "template": "You can place CLAUDE.md files in several locations:\nThe root of your repo, or wherever you run claude from (the most common usage). Name it CLAUDE.md and check it into git so that you can share it across sessions and with your team (recommended), or name it CLAUDE.local.md and .gitignore it\nAny parent of the directory where you run claude. This is most useful for monorepos, where you might run claude from root/foo, and have CLAUDE.md files in both root/CLAUDE.md and root/foo/CLAUDE.md. Both of these will be pulled into context automatically\nAny child of the directory where you run claude. This is the inverse of the above, and in this case, Claude will pull in CLAUDE.md files on demand when you work with files in child directories\nYour home folder (~/.claude/CLAUDE.md), which applies it to all your claude sessions\nWhen you run the /init command, Claude will automatically generate a CLAUDE.md for you.\nb. Tune your CLAUDE.md files\nYour CLAUDE.md files become part of Claude's prompts, so they should be refined like any frequently used prompt. A common mistake is adding extensive content without iterating on its effectiveness. Take time to experiment and determine what produces the best instruction following from the model.\nYou can add content to your CLAUDE.md manually or press the # key to give Claude an instruction that it will automatically incorporate into the relevant CLAUDE.md. Many engineers use # frequently to document commands, files, and style guidelines while coding, then include CLAUDE.md changes in commits so team members benefit as well.\nAt Anthropic, we occasionally run CLAUDE.md files through the prompt improver and often tune instructions (e.g. adding emphasis with \"IMPORTANT\" or \"YOU MUST\") to improve adherence.\nClaude Code tool allowlist\nc. Curate Claude's list of allowed tools\nBy default, Claude Code requests permission for any action that might modify your system: file writes, many bash commands, MCP tools, etc. We designed Claude Code with this deliberately conservative approach to prioritize safety. You can customize the allowlist to permit additional tools that you know are safe, or to allow potentially unsafe tools that are easy to undo (e.g., file editing, git commit).\nThere are four ways to manage allowed tools:\nSelect \"Always allow\" when prompted during a session.\nUse the /permissions command after starting Claude Code to add or remove tools from the allowlist. For example, you can add Edit to always allow file edits, Bash(git commit:*) to allow git commits, or mcp__puppeteer__puppeteer_navigate to allow navigating with the Puppeteer MCP server.\nManually edit your .claude/settings.json or ~/.claude.json (we recommend checking the former into source control to share with your team).\nUse the --allowedTools CLI flag for session-specific permissions.\nd. If using GitHub, install the gh CLI\nClaude knows how to use the gh CLI to interact with GitHub for creating issues, opening pull requests, reading comments, and more. Without gh installed, Claude can still use the GitHub API or MCP server (if you have it installed).\n2. Give Claude more tools\nClaude has access to your shell environment, where you can build up sets of convenience scripts and functions for it just like you would for yourself. It can also leverage more complex tools through MCP and REST APIs.\na. Use Claude with bash tools\nClaude Code inherits your bash environment, giving it access to all your tools. While Claude knows common utilities like unix tools and gh, it won't know about your custom bash tools without instructions:\nTell Claude the tool name with usage examples\nTell Claude to run --help to see tool documentation\nDocument frequently used tools in CLAUDE.md\nb. Use Claude with MCP\nClaude Code functions as both an MCP server and client. As a client, it can connect to any number of MCP servers to access their tools in three ways:\nIn project config (available when running Claude Code in that directory)\nIn global config (available in all projects)\nIn a checked-in .mcp.json file (available to anyone working in your codebase). For example, you can add Puppeteer and Sentry servers to your .mcp.json, so that every engineer working on your repo can use these out of the box.\nWhen working with MCP, it can also be helpful to launch Claude with the --mcp-debug flag to help identify configuration issues.\nc. Use custom slash commands\nFor repeated workflows—debugging loops, log analysis, etc.—store prompt templates in Markdown files within the .claude/commands folder. These become available through the slash commands menu when you type /. You can check these commands into git to make them available for the rest of your team.\nCustom slash commands can include the special keyword $ARGUMENTS to pass parameters from command invocation.\nFor example, here's a slash command that you could use to automatically pull and fix a Github issue:\nPlease analyze and fix the GitHub issue: $ARGUMENTS.\nFollow these steps:\n1. Use `gh issue view` to get the issue details\n2. Understand the problem described in the issue\n3. Search the codebase for relevant files\n4. Implement the necessary changes to fix the issue\n5. Write and run tests to verify the fix\n6. Ensure code passes linting and type checking\n7. Create a descriptive commit message\n8. Push and create a PR\nRemember to use the GitHub CLI (`gh`) for all GitHub-related tasks.{var}"
+    }
+  ],
+  "snippets": [
+    {
+      "id": "s1",
+      "title": "React useLocalStorage Hook",
+      "language": "js",
+      "description": "Persist state in localStorage with a hook",
+      "code": "function useLocalStorage(key, initialValue) {\n  const [storedValue, setStoredValue] = useState(() => {\n    try {\n      const item = window.localStorage.getItem(key);\n      return item ? JSON.parse(item) : initialValue;\n    } catch (error) {\n      console.log(error);\n      return initialValue;\n    }\n  });\n\n  const setValue = (value) => {\n    try {\n      setStoredValue(value);\n      window.localStorage.setItem(key, JSON.stringify(value));\n    } catch (error) {\n      console.log(error);\n    }\n  };\n\n  return [storedValue, setValue];\n}"
+    },
+    {
+      "id": "s2",
+      "title": "Async Error Handler (Express)",
+      "language": "js",
+      "description": "Middleware for handling async errors in Express",
+      "code": "const asyncHandler = fn => (req, res, next) => {\n  return Promise.resolve(fn(req, res, next)).catch(next);\n};\n\n// Usage\napp.get('/users', asyncHandler(async (req, res) => {\n  const users = await User.findAll();\n  res.json(users);\n}));"
+    }
+  ],
+  "templates": [
+    {
+      "id": "t1",
+      "title": "HTML5 Boilerplate",
+      "language": "html",
+      "description": "Basic HTML5 structure with meta tags and CSS links",
+      "code": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <meta http-equiv=\"X-UA-Compatible\" content=\"ie=edge\">\n    <title>Document</title>\n    <link rel=\"stylesheet\" href=\"styles.css\">\n</head>\n<body>\n    <header>\n        <nav>\n            <ul>\n                <li><a href=\"#\">Home</a></li>\n                <li><a href=\"#\">About</a></li>\n                <li><a href=\"#\">Contact</a></li>\n            </ul>\n        </nav>\n    </header>\n    \n    <main>\n        <h1>Welcome</h1>\n        <p>Your content goes here.</p>\n    </main>\n    \n    <footer>\n        <p>&copy; 2024. All rights reserved.</p>\n    </footer>\n    \n    <script src=\"script.js\"></script>\n</body>\n</html>"
+    },
+    {
+      "id": "t2",
+      "title": "React Component Template",
+      "language": "jsx",
+      "description": "Functional React component with hooks",
+      "code": "import React, { useState, useEffect } from 'react';\nimport PropTypes from 'prop-types';\n\nconst ComponentName = ({ prop1, prop2 }) => {\n  const [state, setState] = useState(null);\n\n  useEffect(() => {\n    // Component did mount logic\n    return () => {\n      // Cleanup\n    };\n  }, []);\n\n  const handleClick = () => {\n    // Event handler logic\n  };\n\n  return (\n    <div className=\"component-name\">\n      <h2>{prop1}</h2>\n      <button onClick={handleClick}>\n        {prop2}\n      </button>\n    </div>\n  );\n};\n\nComponentName.propTypes = {\n  prop1: PropTypes.string.isRequired,\n  prop2: PropTypes.string\n};\n\nComponentName.defaultProps = {\n  prop2: 'Default Value'\n};\n\nexport default ComponentName;"
+    }
+  ]
+}

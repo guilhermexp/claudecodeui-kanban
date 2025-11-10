@@ -136,6 +136,62 @@ export function getLogs(projectName, lines = 200) {
 }
 
 export async function startPreview(projectName, repoPath, preferredPort = null) {
+  // First, check if there's already a dev server running for this project
+  // This happens when user manually started the project outside of our UI
+  const checkExistingServer = async (checkPort) => {
+    try {
+      const testUrl = `http://localhost:${checkPort}`;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 500);
+      await fetch(testUrl, { 
+        method: 'HEAD', 
+        signal: controller.signal,
+        headers: { 'Accept': '*/*' }
+      });
+      clearTimeout(timeout);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  
+  // Try to detect port from package.json first
+  let detectedPort = null;
+  try {
+    const packageJsonPath = path.join(repoPath, 'package.json');
+    const fs = await import('fs').then(m => m.promises);
+    const packageContent = await fs.readFile(packageJsonPath, 'utf8');
+    const packageJson = JSON.parse(packageContent);
+    
+    // Check dev script for port configuration
+    const devScript = packageJson?.scripts?.dev || '';
+    const portMatch = devScript.match(/-p\s+(\d+)|--port[=\s]+(\d+)/);
+    if (portMatch) {
+      detectedPort = parseInt(portMatch[1] || portMatch[2], 10);
+      console.log(`[Preview] Detected port ${detectedPort} from package.json for ${projectName}`);
+      
+      // Check if server is already running on this port
+      if (await checkExistingServer(detectedPort)) {
+        console.log(`[Preview] Server already running on port ${detectedPort} for ${projectName}, using existing server`);
+        
+        // Register this as running without starting a new process
+        processes.set(projectName, { 
+          proc: null, // No process since we're using existing server
+          port: detectedPort, 
+          logs: ['Using existing server'], 
+          startedAt: Date.now(), 
+          repoPath: path.resolve(repoPath),
+          external: true // Flag to indicate this is an external server
+        });
+        
+        broadcast({ type: 'preview_success', project: projectName, port: detectedPort, url: `http://localhost:${detectedPort}` });
+        return { port: detectedPort, url: `http://localhost:${detectedPort}` };
+      }
+    }
+  } catch (e) {
+    console.log(`[Preview] Could not detect port from package.json: ${e.message}`);
+  }
+  
   // Check if this project should not have preview
   const blockedPaths = [
     '/Users/guilhermevarela/.claude',
@@ -179,23 +235,44 @@ export async function startPreview(projectName, repoPath, preferredPort = null) 
     };
   }
   
-  // Check if it's standalone mode (no package.json)
+  // Check if it's standalone/static mode (no package.json) and try a static preview
   const fs = await import('fs').then(m => m.promises);
   const packageJsonPath = path.join(repoPath, 'package.json');
-  
-  try {
-    await fs.access(packageJsonPath);
-  } catch {
-    console.log(`[Preview] No package.json found in ${repoPath} - preview not available`);
-    broadcast({ 
-      type: 'preview_error', 
-      project: projectName, 
-      error: 'No package.json found. Preview requires a Node.js project with package.json' 
+  let hasPkg = true;
+  try { await fs.access(packageJsonPath); } catch { hasPkg = false; }
+  if (!hasPkg) {
+    // Try common static roots that have index.html
+    const candidates = ['', 'public', 'dist', 'build', 'docs'];
+    let staticRoot = null;
+    for (const c of candidates) {
+      const root = path.join(repoPath, c);
+      try {
+        await fs.access(path.join(root, 'index.html'));
+        staticRoot = root;
+        break;
+      } catch {}
+    }
+    if (!staticRoot) {
+      console.log(`[Preview] No package.json or index.html found in ${repoPath}`);
+      broadcast({ 
+        type: 'preview_error', 
+        project: projectName, 
+        error: 'Preview not available: no package.json or index.html' 
+      });
+      return { error: 'Preview not available', blocked: true };
+    }
+    // Register static root in process map (no process/port required)
+    processes.set(projectName, {
+      proc: null,
+      port: null,
+      logs: ['Static preview'],
+      startedAt: Date.now(),
+      repoPath: path.resolve(repoPath),
+      staticRoot,
+      external: true
     });
-    return { 
-      error: 'Preview requires a Node.js project with package.json',
-      blocked: true 
-    };
+    broadcast({ type: 'preview_success', project: projectName, url: `/preview-static/${encodeURIComponent(projectName)}/` });
+    return { url: `/preview-static/${encodeURIComponent(projectName)}/` };
   }
   
   // Stop existing
@@ -236,13 +313,14 @@ export async function startPreview(projectName, repoPath, preferredPort = null) 
   let args = ['run', 'dev'];
   let isNextJs = false;
   let isVite = false;
+  let packageJson = null;
   
   try {
     // Check if package.json exists and what scripts are available
     const packageJsonPath = path.join(repoPath, 'package.json');
     const fs = await import('fs').then(m => m.promises);
     const packageContent = await fs.readFile(packageJsonPath, 'utf8');
-    const packageJson = JSON.parse(packageContent);
+    packageJson = JSON.parse(packageContent);
     
     // Detect framework
     if (packageJson.dependencies) {
@@ -273,7 +351,28 @@ export async function startPreview(projectName, repoPath, preferredPort = null) 
 
   // Append port argument based on framework
   let fullArgs;
-  if (isNextJs) {
+  
+  // First check if the script already contains a port specification
+  const scriptCommand = packageJson?.scripts?.[args[1]] || '';
+  const scriptHasPort = scriptCommand.includes(' -p ') || scriptCommand.includes('--port');
+  
+  // Extract port from script if it exists
+  let scriptPort = null;
+  if (scriptHasPort) {
+    // Try to extract port number from script
+    const portMatch = scriptCommand.match(/-p\s+(\d+)|--port[=\s]+(\d+)/);
+    if (portMatch) {
+      scriptPort = parseInt(portMatch[1] || portMatch[2], 10);
+      console.log(`[Preview] Found port ${scriptPort} in script for ${projectName}`);
+    }
+  }
+  
+  // Use script port if available, otherwise use the assigned port
+  if (scriptPort) {
+    port = scriptPort;
+    console.log(`[Preview] Using script-defined port ${port} for ${projectName}`);
+    fullArgs = [...args];
+  } else if (isNextJs) {
     // Next.js uses -p PORT directly (no --)
     fullArgs = [...args, '-p', String(port)];
   } else if (isVite) {
@@ -397,4 +496,3 @@ export async function stopPreview(projectName) {
   }
   return { success: true };
 }
-

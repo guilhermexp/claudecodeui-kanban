@@ -2,6 +2,9 @@ import { spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { createLogger } from './utils/logger.js';
+
+const log = createLogger('CODEX-CLI');
 
 /**
  * Spawn Codex CLI (OpenAI subscription-based CLI)
@@ -263,6 +266,7 @@ export async function spawnCodex(prompt, options = {}, ws) {
     }
     if (!codexProcess) {
       const err = new Error('Failed to start Codex using both node execPath and shell');
+      try { log.error(err.message); } catch {}
       ws?.send?.(JSON.stringify({ type: 'codex-error', error: err.message }));
       return reject(err);
     }
@@ -368,6 +372,18 @@ export async function spawnCodex(prompt, options = {}, ws) {
               stdout: json.msg.stdout,
               stderr: json.msg.stderr
             }));
+          } else if (json.msg && json.msg.type === 'token_count') {
+            // Native token usage event from Codex CLI
+            // Example payload shape may include: { prompt_tokens, completion_tokens, total_tokens }
+            const u = json.msg || {};
+            const used = Number(u.total_tokens || (u.prompt_tokens || 0) + (u.completion_tokens || 0)) || 0;
+            ws.send(JSON.stringify({
+              type: 'context-usage',
+              provider: 'codex',
+              used,
+              // Limit will be interpreted on the frontend/global or via modelLabel update from options
+              // We keep limit undefined here to let the UI/server state decide if needed
+            }));
           } else if (json.msg && json.msg.type === 'agent_message' && json.msg.message) {
             // Send agent messages to frontend (skip during warmup)
             if (!suppressOutput) {
@@ -423,7 +439,7 @@ export async function spawnCodex(prompt, options = {}, ws) {
     // Handle stderr
     codexProcess.stderr.on('data', (data) => {
       const error = data.toString();
-      console.error('Codex stderr:', error);
+      try { log.warn(`stderr: ${error.trim()}`); } catch {}
       // Try to extract session id from stderr logs
       const lines = error.split('\n');
       let sessionFound = false;
@@ -455,6 +471,7 @@ export async function spawnCodex(prompt, options = {}, ws) {
         type: 'codex-complete',
         exitCode: code
       }));
+      try { log.info(`process exited with code ${code}`); } catch {}
       // Cleanup temp mirror if any
       if (tempMirrorPath) {
         try { fs.rmSync(tempMirrorPath, { recursive: true, force: true }); } catch {}
@@ -469,7 +486,7 @@ export async function spawnCodex(prompt, options = {}, ws) {
     
     // Handle process errors
     codexProcess.on('error', (err) => {
-      console.error('Failed to start Codex:', err);
+      try { log.error(`failed to start: ${err.message}`); } catch {}
       // If first strategy failed and we haven\'t tried shell yet, attempt fallback
       // Note: This only triggers if initial spawn threw asynchronously (rare). Most sync failures are caught above.
       ws?.send?.(JSON.stringify({ type: 'codex-error', error: `Failed to start Codex: ${err.message}` }));

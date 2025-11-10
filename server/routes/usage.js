@@ -3,7 +3,7 @@ import { authenticateToken } from '../middleware/auth.js';
 import { createLogger } from '../utils/logger.js';
 
 // Import the usage tracker
-import UsageTracker from '../../backend/usageTracker.js';
+import UsageTracker from '../lib/usageTracker.js';
 
 const router = express.Router();
 const log = createLogger('USAGE');

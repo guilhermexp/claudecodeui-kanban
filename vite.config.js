@@ -19,6 +19,18 @@ export default defineConfig(({ command, mode }) => {
         '@': path.resolve(__dirname, './src'),
       },
     },
+    optimizeDeps: {
+      // Restrict crawling to the actual app entry to avoid scanning server/database mirrors
+      entries: ['src/main.jsx'],
+      // Prevent Vite from trying to resolve third-party deps used only inside repo snapshots
+      exclude: [
+        'immer',
+        'zustand',
+        'zustand/middleware/immer',
+        'auto-zustand-selectors-hook',
+        '@google/genai'
+      ]
+    },
     server: {
       port: 5892,
       host: true, // Allow access from network
@@ -33,7 +45,10 @@ export default defineConfig(({ command, mode }) => {
       // Permite requisições do ngrok
       strictPort: true,
       headers: {
-        'Access-Control-Allow-Origin': '*',
+        // CORS seguro baseado em ambiente
+        'Access-Control-Allow-Origin': isNgrok 
+          ? env.VITE_NGROK_DOMAIN 
+          : 'http://localhost:5892',
         'Cache-Control': 'no-cache, no-store, must-revalidate',
         'Pragma': 'no-cache',
         'Expires': '0',
@@ -50,6 +65,12 @@ export default defineConfig(({ command, mode }) => {
         // Claude Code UI API routes
         '/api': {
           target: 'http://localhost:7347',
+          changeOrigin: true
+        },
+        // Unified Claude WebSocket endpoint
+        '/claude': {
+          target: 'ws://localhost:7347',
+          ws: true,
           changeOrigin: true
         },
         '/ws': {

@@ -2,14 +2,35 @@ import jwt from 'jsonwebtoken';
 import { userDb } from '../database/db.js';
 import crypto from 'crypto';
 
-// Use the JWT secret from environment or config
-// For development, we use a consistent secret from .env file
-const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-here-change-in-production';
+// Lazy initialization of JWT_SECRET to allow environment to be loaded first
+let JWT_SECRET = null;
+let jwtInitialized = false;
 
-// Warn if using default secret
-if (JWT_SECRET === 'your-super-secret-jwt-key-here-change-in-production') {
-  console.warn('⚠️ Using default JWT secret. Set JWT_SECRET environment variable for production!');
-}
+const initializeJWT = () => {
+  if (jwtInitialized) return JWT_SECRET;
+  
+  JWT_SECRET = process.env.JWT_SECRET;
+  
+  // CRITICAL: JWT_SECRET is mandatory
+  if (!JWT_SECRET) {
+    console.error('🚨 CRITICAL: JWT_SECRET environment variable is required!');
+    console.error('   Set JWT_SECRET in your .env file or environment');
+    console.error('   Example: JWT_SECRET=your-super-secure-secret-here');
+    process.exit(1);
+  }
+  
+  // Warn if JWT secret is too short (less than 32 characters)
+  if (JWT_SECRET.length < 32) {
+    console.warn('⚠️ WARNING: JWT_SECRET should be at least 32 characters long for security!');
+  }
+  
+  jwtInitialized = true;
+  return JWT_SECRET;
+};
+
+const getJWTSecret = () => {
+  return initializeJWT();
+};
 
 // Optional API key middleware
 const validateApiKey = (req, res, next) => {
@@ -35,7 +56,7 @@ const authenticateToken = async (req, res, next) => {
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, getJWTSecret());
     
     // Verify user still exists and is active
     const user = userDb.getUserById(decoded.userId);
@@ -68,7 +89,7 @@ const generateToken = (user) => {
       userId: user.id, 
       username: user.username
     },
-    JWT_SECRET,
+    getJWTSecret(),
     {
       expiresIn: '24h'
     }
@@ -82,7 +103,7 @@ const authenticateWebSocket = (token) => {
   }
   
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, getJWTSecret());
     return decoded;
   } catch (error) {
     console.error('WebSocket token verification error:', error);
@@ -95,5 +116,5 @@ export {
   authenticateToken,
   generateToken,
   authenticateWebSocket,
-  JWT_SECRET
+  getJWTSecret
 };

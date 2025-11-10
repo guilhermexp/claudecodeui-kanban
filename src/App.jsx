@@ -1,21 +1,29 @@
 // App.jsx - Main Application Component with Session Protection System
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate, useParams } from 'react-router-dom';
-import MainContent from './components/MainContent';
-import MobileNav from './components/MobileNav';
-import ToolsSettings from './components/ToolsSettings';
-import SessionKeepAlive from './components/SessionKeepAlive';
-import { FloatingMicMenu } from './components/FloatingMicMenu';
-import SessionsView from './components/SessionsView';
 
-import { useWebSocket } from './utils/websocket';
+// Lazy load heavy components for code splitting
+const MainContent = lazy(() => import('./components/MainContent'));
+const MobileNav = lazy(() => import('./components/MobileNav'));
+const ToolsSettings = lazy(() => import('./components/ToolsSettings'));
+const SessionKeepAlive = lazy(() => import('./components/SessionKeepAlive'));
+const FloatingMicMenu = lazy(() => import('./components/FloatingMicMenu').then(module => ({ default: module.FloatingMicMenu })));
+const SessionsView = lazy(() => import('./components/SessionsView'));
+
+// WebSocket is managed by ClaudeWebSocketProvider; avoid duplicate connections
+import { useClaudeWebSocket } from './contexts/ClaudeWebSocketContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import LoadingFallback from './components/LoadingFallback';
 import { api } from './utils/api';
 import { authPersistence } from './utils/auth-persistence';
 import { appStatePersistence } from './utils/app-state-persistence';
+import { useCleanup, useLifecycleTracker } from './hooks/useCleanup';
+import { createLogger } from './utils/logger';
+
+const log = createLogger('App');
 
 // Main App component with routing
 function AppContent() {
@@ -50,26 +58,45 @@ function AppContent() {
   const [shellHasActiveSession, setShellHasActiveSession] = useState(false);
   const [activeSessions, setActiveSessions] = useState(new Set());
   
+  // Cleanup utilities
+  const { onWindow, onDocument, setManagedTimeout } = useCleanup();
+  
+  // Lifecycle tracking for debugging
+  useLifecycleTracker('App');
 
   const { isLoading: authLoading, user } = useAuth();
   const authReady = !authLoading && !!user;
   
-  const { ws, sendMessage, messages, reconnect } = useWebSocket(authReady, '/claude');
+  // Use the unified Claude WebSocket from context (single connection)
+  const { isConnected, registerMessageHandler, connect } = useClaudeWebSocket();
 
 
+  // Ensure socket connects once auth is ready
   useEffect(() => {
-    const handleStorageChange = (e) => {
-      if (e.key === 'auth-token') {
-        if (e.newValue) {
-          // Token was added, reconnect WebSocket
-          reconnect();
-        }
+    if (authReady && !isConnected) {
+      try {
+        connect();
+      } catch (error) {
+        log.error('Failed to connect WebSocket:', error);
+      }
+    }
+  }, [authReady, isConnected, connect]);
+
+  // Enable compact UI globally (minimal spacing/buttons)
+  useEffect(() => {
+    try {
+      document.body.classList.add('compact-ui');
+    } catch (error) {
+      log.warn('Failed to add compact-ui class:', error);
+    }
+    return () => {
+      try {
+        document.body.classList.remove('compact-ui');
+      } catch (error) {
+        log.warn('Failed to remove compact-ui class:', error);
       }
     };
-    
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
-  }, [reconnect]);
+  }, []);
 
   // Persist state changes
   useEffect(() => {
@@ -109,27 +136,29 @@ function AppContent() {
       }
     };
 
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    document.addEventListener('click', handleClick);
+    const beforeUnloadListener = onWindow('beforeunload', handleBeforeUnload, false, 'app navigation context save');
+    const documentClickListener = onDocument('click', handleClick, false, 'app link click save');
 
     return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-      document.removeEventListener('click', handleClick);
+      try {
+        beforeUnloadListener?.remove?.();
+      } catch (error) {
+        log.warn('Failed to remove beforeunload listener:', error);
+      }
+      try {
+        documentClickListener?.remove?.();
+      } catch (error) {
+        log.warn('Failed to remove document click listener:', error);
+      }
     };
-  }, [selectedProject, selectedSession, activeTab]);
+  }, [selectedProject, selectedSession, activeTab, onWindow, onDocument]);
 
   useEffect(() => {
     let previousWidth = window.innerWidth;
-    let resizeTimeout = null;
     
     const handleResize = () => {
-      // Clear existing timeout
-      if (resizeTimeout) {
-        clearTimeout(resizeTimeout);
-      }
-      
       // Debounce resize handling
-      resizeTimeout = setTimeout(() => {
+      const { clear } = setManagedTimeout(() => {
         const currentWidth = window.innerWidth;
         const wasMobile = previousWidth < 768;
         const nowMobile = currentWidth < 768;
@@ -142,7 +171,7 @@ function AppContent() {
         }
         
         previousWidth = currentWidth;
-      }, 150); // 150ms debounce
+      }, 150, 'resize debounce'); // 150ms debounce
     };
     
     // Initial check
@@ -153,15 +182,16 @@ function AppContent() {
     };
     
     initialCheck();
-    window.addEventListener('resize', handleResize);
-    
+    const resizeListener = onWindow('resize', handleResize, false, 'app resize detector');
+
     return () => {
-      window.removeEventListener('resize', handleResize);
-      if (resizeTimeout) {
-        clearTimeout(resizeTimeout);
+      try {
+        resizeListener?.remove?.();
+      } catch (error) {
+        log.warn('Failed to remove resize listener:', error);
       }
     };
-  }, []);
+  }, [onWindow, setManagedTimeout]);
 
   useEffect(() => {
     // Clear any invalid persisted state on mount to ensure clean start
@@ -216,32 +246,32 @@ function AppContent() {
     return sessionUnchanged;
   };
 
-  // Handle WebSocket messages for real-time project updates
+  // Handle WebSocket messages for real-time project updates (single provider socket)
   useEffect(() => {
-    if (messages.length > 0) {
-      const latestMessage = messages[messages.length - 1];
-      
+    const unsubscribe = registerMessageHandler('app-projects', (latestMessage) => {
+
       // Handle session not found error (when resuming external Claude CLI sessions)
       if (latestMessage.type === 'session-not-found') {
-        // Session not found in Claude CLI, will create new session
-        
+        log.warn('Session not found - creating new session');
+
         // Show a user-friendly notification
         const notification = document.createElement('div');
         notification.className = 'fixed top-4 right-4 bg-yellow-500 text-white px-4 py-2 rounded-lg shadow-lg z-50 animate-pulse';
         notification.textContent = 'Session not found. Starting a new session...';
         document.body.appendChild(notification);
-        
+
         setTimeout(() => {
           notification.remove();
         }, 3000);
-        
+
         // The backend will automatically create a new session
         // No need to do anything else here
         return;
       }
-      
+
       if (latestMessage.type === 'projects_updated') {
-        
+        log.debug('Projects updated via WebSocket');
+
         // Session Protection Logic: Allow additions but prevent changes during active conversations
         // This allows new sessions/projects to appear in sidebar while protecting active chat messages
         // We check for two types of active sessions:
@@ -287,44 +317,79 @@ function AppContent() {
           }
         }
       }
-    }
-  }, [messages, selectedProject, selectedSession, activeSessions]);
+    });
+    return () => {
+      try {
+        if (unsubscribe) unsubscribe();
+      } catch (error) {
+        log.warn('Failed to unsubscribe from WebSocket handler:', error);
+      }
+    };
+  }, [registerMessageHandler, selectedProject, selectedSession, activeSessions, projects]);
 
   const fetchProjects = async () => {
     try {
       setIsLoadingProjects(true);
       const response = await api.projects();
-      const data = await response.json();
-      
+
+      if (!response.ok) {
+        setProjects([]);
+        return;
+      }
+
+      let data;
+      try {
+        data = await response.json();
+      } catch {
+        data = [];
+      }
+
+      let normalized = Array.isArray(data)
+        ? data
+        : Array.isArray(data?.projects)
+          ? data.projects
+          : [];
+
       // Optimize to preserve object references when data hasn't changed
       setProjects(prevProjects => {
-        // If no previous projects, just set the new data
-        if (prevProjects.length === 0) {
-          return data;
+        const previous = Array.isArray(prevProjects) ? prevProjects : [];
+
+        if (previous.length === 0) {
+          return normalized;
         }
-        
-        // Check if the projects data has actually changed
-        const hasChanges = data.some((newProject, index) => {
-          const prevProject = prevProjects[index];
+
+        // Shallow comparison - more efficient than JSON.stringify
+        const hasChanges = normalized.length !== previous.length || normalized.some((newProject, index) => {
+          const prevProject = previous[index];
           if (!prevProject) return true;
-          
-          // Compare key properties that would affect UI
-          return (
+
+          // Basic field comparison
+          if (
             newProject.name !== prevProject.name ||
             newProject.displayName !== prevProject.displayName ||
-            newProject.fullPath !== prevProject.fullPath ||
-            JSON.stringify(newProject.sessionMeta) !== JSON.stringify(prevProject.sessionMeta) ||
-            JSON.stringify(newProject.sessions) !== JSON.stringify(prevProject.sessions)
-          );
-        }) || data.length !== prevProjects.length;
-        
-        // Only update if there are actual changes
-        return hasChanges ? data : prevProjects;
+            newProject.fullPath !== prevProject.fullPath
+          ) return true;
+
+          // Compare session meta
+          const prevMeta = prevProject.sessionMeta || {};
+          const newMeta = newProject.sessionMeta || {};
+          if (prevMeta.total !== newMeta.total) return true;
+
+          // Compare sessions length (more efficient than deep comparison)
+          const prevSessions = prevProject.sessions || [];
+          const newSessions = newProject.sessions || [];
+          if (prevSessions.length !== newSessions.length) return true;
+
+          // Check if session IDs changed (lightweight comparison)
+          return newSessions.some((s, i) => s.id !== prevSessions[i]?.id);
+        });
+
+        return hasChanges ? normalized : previous;
       });
-      
+
       // Don't auto-select any project - user should choose manually
     } catch (error) {
-      // Error: 'Error fetching projects:', error
+      setProjects([]);
     } finally {
       setIsLoadingProjects(false);
     }
@@ -409,7 +474,7 @@ function AppContent() {
     try {
       // First try to delete as empty project
       let response = await api.deleteProject(projectName);
-      
+
       // If it fails because project has sessions, ask user to confirm complete deletion
       if (!response.ok) {
         const errorData = await response.json();
@@ -434,13 +499,13 @@ function AppContent() {
         setSelectedSession(null);
         navigate('/');
       }
-      
+
       // Update projects state locally
-      setProjects(prevProjects => 
+      setProjects(prevProjects =>
         prevProjects.filter(project => project.name !== projectName)
       );
     } catch (error) {
-      console.error('Failed to delete project:', error);
+      log.error('Failed to delete project:', error);
       alert(`Failed to delete project: ${error.message}`);
     }
   };
@@ -453,43 +518,60 @@ function AppContent() {
       
       // Optimize to preserve object references and minimize re-renders
       setProjects(prevProjects => {
-        // Check if projects data has actually changed
-        const hasChanges = freshProjects.some((newProject, index) => {
+        // Efficient shallow comparison instead of JSON.stringify
+        const hasChanges = freshProjects.length !== prevProjects.length || freshProjects.some((newProject, index) => {
           const prevProject = prevProjects[index];
           if (!prevProject) return true;
-          
-          return (
+
+          // Basic fields
+          if (
             newProject.name !== prevProject.name ||
             newProject.displayName !== prevProject.displayName ||
-            newProject.fullPath !== prevProject.fullPath ||
-            JSON.stringify(newProject.sessionMeta) !== JSON.stringify(prevProject.sessionMeta) ||
-            JSON.stringify(newProject.sessions) !== JSON.stringify(prevProject.sessions)
-          );
-        }) || freshProjects.length !== prevProjects.length;
-        
+            newProject.fullPath !== prevProject.fullPath
+          ) return true;
+
+          // Session meta comparison
+          const prevMeta = prevProject.sessionMeta || {};
+          const newMeta = newProject.sessionMeta || {};
+          if (prevMeta.total !== newMeta.total) return true;
+
+          // Sessions comparison (lightweight)
+          const prevSessions = prevProject.sessions || [];
+          const newSessions = newProject.sessions || [];
+          if (prevSessions.length !== newSessions.length) return true;
+
+          return newSessions.some((s, i) => s.id !== prevSessions[i]?.id || s.updated_at !== prevSessions[i]?.updated_at);
+        });
+
         return hasChanges ? freshProjects : prevProjects;
       });
-      
+
       // If we have a selected project, make sure it's still selected after refresh
       if (selectedProject) {
         const refreshedProject = freshProjects.find(p => p.name === selectedProject.name);
         if (refreshedProject) {
-          // Only update selected project if it actually changed
-          if (JSON.stringify(refreshedProject) !== JSON.stringify(selectedProject)) {
+          // Only update selected project if it actually changed (shallow comparison)
+          const projectChanged = (
+            refreshedProject.displayName !== selectedProject.displayName ||
+            refreshedProject.fullPath !== selectedProject.fullPath ||
+            (refreshedProject.sessions?.length || 0) !== (selectedProject.sessions?.length || 0)
+          );
+
+          if (projectChanged) {
             setSelectedProject(refreshedProject);
           }
-          
+
           // If we have a selected session, try to find it in the refreshed project
           if (selectedSession) {
             const refreshedSession = refreshedProject.sessions?.find(s => s.id === selectedSession.id);
-            if (refreshedSession && JSON.stringify(refreshedSession) !== JSON.stringify(selectedSession)) {
+            if (refreshedSession && refreshedSession.updated_at !== selectedSession.updated_at) {
               setSelectedSession(refreshedSession);
             }
           }
         }
       }
     } catch (error) {
-      // Error: 'Error refreshing sidebar:', error
+      log.error('Error refreshing sidebar:', error);
     }
   };
 
@@ -568,9 +650,10 @@ function AppContent() {
 
       {/* Main Content Area - Now takes full width */}
       <div className={`flex-1 flex flex-col min-w-0 relative ${isMobile ? 'pb-14' : ''} bg-card overflow-hidden`}>
-        {projectName ? (
-          // Sessions view for specific project
-          <SessionsView
+        <Suspense fallback={<LoadingFallback message="Loading content..." />}>
+          {projectName ? (
+            // Sessions view for specific project
+            <SessionsView
             onSessionSelect={handleSessionSelect}
             onNewSession={handleNewSession}
             onSessionDelete={handleSessionDelete}
@@ -582,9 +665,7 @@ function AppContent() {
           selectedSession={selectedSession}
           activeTab={activeTab}
           setActiveTab={setActiveTab}
-          ws={ws}
-          sendMessage={sendMessage}
-          messages={messages}
+          // WebSocket handled via ClaudeWebSocketContext; no direct props needed
           isMobile={isMobile}
           isLoading={isLoadingProjects}
           onInputFocusChange={setIsInputFocused}
@@ -607,24 +688,28 @@ function AppContent() {
           shellHasActiveSession={shellHasActiveSession}
           onShellSessionStateChange={setShellHasActiveSession}
         />
-        )}
+          )}
+        </Suspense>
       </div>
 
       {/* Mobile Bottom Navigation */}
       {isMobile && (
-        <MobileNav
+        <Suspense fallback={null}>
+          <MobileNav
           activeTab={activeTab}
           setActiveTab={setActiveTab}
           isInputFocused={isInputFocused}
           isShellConnected={isShellConnected}
           shellHasActiveSession={shellHasActiveSession}
         />
+        </Suspense>
       )}
-      
+
       {/* Floating Mic Menu for Mobile Shell */}
       {isMobile && activeTab === 'shell' && !isInputFocused && (
-        <div className="fixed bottom-20 right-4 z-50">
-          <FloatingMicMenu 
+        <Suspense fallback={null}>
+          <div className="fixed bottom-20 right-4 z-50">
+            <FloatingMicMenu 
             onTranscript={(text) => {
               // Send the transcribed text to the terminal via the global handler
               if (window.sendToActiveTerminal && typeof window.sendToActiveTerminal === 'function') {
@@ -636,18 +721,22 @@ function AppContent() {
               }
             }}
           />
-        </div>
+          </div>
+        </Suspense>
       )}
 
       {/* Tools Settings Modal */}
-      <ToolsSettings
+      <Suspense fallback={null}>
+        <ToolsSettings
         isOpen={showToolsSettings}
         onClose={() => setShowToolsSettings(false)}
       />
-      
+      </Suspense>
 
       {/* Session Keep Alive Component */}
-      <SessionKeepAlive />
+      <Suspense fallback={null}>
+        <SessionKeepAlive />
+      </Suspense>
     </div>
   );
 }

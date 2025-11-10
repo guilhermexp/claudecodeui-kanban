@@ -5,9 +5,9 @@ let refreshPromise = null;
 
 // Function to refresh token
 const refreshToken = async () => {
-  const token = authPersistence.getToken();
+  const token = await authPersistence.getToken();
   if (!token) return null;
-  
+
   try {
     const response = await fetch('/api/auth/refresh', {
       method: 'POST',
@@ -16,16 +16,16 @@ const refreshToken = async () => {
         'Authorization': `Bearer ${token}`
       }
     });
-    
+
     if (response.ok) {
       const data = await response.json();
-      authPersistence.saveToken(data.token);
+      await authPersistence.saveToken(data.token);
       return data.token;
     }
   } catch (error) {
     // Token refresh failed
   }
-  
+
   return null;
 };
 
@@ -55,7 +55,7 @@ export const authenticatedFetch = async (url, options = {}) => {
     });
   };
   
-  let token = authPersistence.getToken();
+  let token = await authPersistence.getToken();
   let response = await makeRequest(token);
   
   // If we get a 401 with TOKEN_EXPIRED, try to refresh
@@ -88,14 +88,21 @@ export const authenticatedFetch = async (url, options = {}) => {
 
 // API endpoints
 export const api = {
+  // Export authenticatedFetch for direct use
+  authenticatedFetch,
   // Auth endpoints (no token required)
   auth: {
     status: () => fetch('/api/auth/status'),
-    login: (username, password) => fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
-    }),
+    login: (username, password) => {
+      console.log('[API] Login request:', { username, password });
+      const body = JSON.stringify({ username, password });
+      console.log('[API] Request body:', body);
+      return fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: body,
+      });
+    },
     register: (username, password) => fetch('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -130,6 +137,17 @@ export const api = {
     authenticatedFetch(`/api/projects/${projectName}/force`, {
       method: 'DELETE',
     }),
+  codex: {
+    lastSession: (projectPath = null) => authenticatedFetch(`/api/codex/last-session${projectPath ? `?projectPath=${encodeURIComponent(projectPath)}` : ''}`),
+    rolloutRead: (rolloutPath) => authenticatedFetch(`/api/codex/rollout-read?path=${encodeURIComponent(rolloutPath)}`)
+  },
+  images: {
+    uploadData: (dataUrl, fileName) => authenticatedFetch('/api/images/upload-data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dataUrl, fileName })
+    })
+  },
   createProject: (path) =>
     authenticatedFetch('/api/projects/create', {
       method: 'POST',
@@ -151,4 +169,17 @@ export const api = {
       // Don't override headers completely - authenticatedFetch will handle Authorization
       // and browser will set Content-Type for FormData automatically
     }),
+  // Repo indexer
+  indexer: {
+    list: () => authenticatedFetch('/api/indexer'),
+    create: (absPath, name) => authenticatedFetch('/api/indexer/create', { method: 'POST', body: JSON.stringify({ path: absPath, name }) }),
+    get: (id) => authenticatedFetch(`/api/indexer/${id}`),
+    bundle: (id) => authenticatedFetch(`/api/indexer/${id}/bundle`),
+    remove: (id) => authenticatedFetch(`/api/indexer/${id}`, { method: 'DELETE' }),
+    search: (id, query) => authenticatedFetch('/api/indexer/search', { method: 'POST', body: JSON.stringify({ id, query }) }),
+    github: (url, name, branch) => authenticatedFetch('/api/indexer/github', { method: 'POST', body: JSON.stringify({ url, name, branch }) }),
+  },
+  system: {
+    pickFolder: () => authenticatedFetch('/api/system/pick-folder', { method: 'POST' }),
+  },
 };

@@ -1,4 +1,11 @@
-import Database from 'better-sqlite3';
+// Load better-sqlite3 lazily to avoid native-ABI crashes in dev environments
+let Database = null;
+try {
+  const mod = await import('better-sqlite3');
+  Database = mod?.default || mod;
+} catch (e) {
+  console.warn('[DB] better-sqlite3 unavailable, falling back to in-memory auth store:', e?.message || e);
+}
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -12,31 +19,80 @@ const INIT_SQL_PATH = path.join(__dirname, 'init.sql');
 
 // Create database connection with error handling
 let db;
-try {
-  // Ensure database directory exists
-  const dbDir = path.dirname(DB_PATH);
-  if (!fs.existsSync(dbDir)) {
-    fs.mkdirSync(dbDir, { recursive: true });
+if (Database) {
+  try {
+    // Ensure database directory exists
+    const dbDir = path.dirname(DB_PATH);
+    if (!fs.existsSync(dbDir)) {
+      fs.mkdirSync(dbDir, { recursive: true });
+    }
+    
+    db = new Database(DB_PATH);
+    db.pragma('journal_mode = WAL');
+    // Database connected successfully
+  } catch (error) {
+    console.error('Failed to connect to SQLite database:', error);
+    // Fallback to in-memory implementation instead of crashing
+    Database = null;
   }
-  
-  db = new Database(DB_PATH);
-  db.pragma('journal_mode = WAL');
-  // Database connected successfully
-} catch (error) {
-  console.error('Failed to connect to SQLite database:', error);
-  throw error;
+}
+
+// Minimal in-memory DB fallback for auth if native module is unavailable
+if (!Database || !db) {
+  const mem = { users: [], nextId: 1 };
+  db = {
+    prepare(sql) {
+      const text = String(sql).toLowerCase();
+      return {
+        run: (a, b) => {
+          if (/insert\s+into\s+users/.test(text)) {
+            const row = { id: mem.nextId++, username: a, password_hash: b, is_active: 1, created_at: new Date().toISOString(), last_login: null };
+            mem.users.push(row);
+            return { lastInsertRowid: row.id };
+          }
+          if (/update\s+users\s+set\s+last_login/.test(text)) {
+            const id = a;
+            const u = mem.users.find(u => u.id === id);
+            if (u) u.last_login = new Date().toISOString();
+            return { changes: u ? 1 : 0 };
+          }
+          return { changes: 0 };
+        },
+        get: (a) => {
+          if (/select\s+count\(\*\)/.test(text)) {
+            return { count: mem.users.filter(u => u.is_active === 1).length };
+          }
+          if (/from\s+users\s+where\s+username/.test(text)) {
+            const u = mem.users.find(u => u.username === a && u.is_active === 1);
+            return u || undefined;
+          }
+          if (/from\s+users\s+where\s+id/.test(text)) {
+            const u = mem.users.find(u => u.id === a && u.is_active === 1);
+            if (!u) return undefined;
+            const { id, username, created_at, last_login } = u;
+            return { id, username, created_at, last_login };
+          }
+          return undefined;
+        }
+      };
+    },
+    exec() { /* no-op for fallback */ }
+  };
 }
 
 // Initialize database with schema
 const initializeDatabase = async () => {
   try {
-    const initSQL = fs.readFileSync(INIT_SQL_PATH, 'utf8');
-    db.exec(initSQL);
+    if (Database) {
+      const initSQL = fs.readFileSync(INIT_SQL_PATH, 'utf8');
+      db.exec(initSQL);
+    }
     // Return the active DB connection for callers expecting it
     return db;
   } catch (error) {
     console.error('Error initializing database:', error.message);
-    throw error;
+    // Do not crash in fallback mode
+    return db;
   }
 };
 

@@ -4,8 +4,9 @@ import { useConsoleCapture } from '../hooks/preview/useConsoleCapture';
 import { useElementSelection } from '../hooks/preview/useElementSelection';
 import FileManagerSimple from './FileManagerSimple';
 import CtaButton from './ui/CtaButton';
+import { useClaudeWebSocket } from '../contexts/ClaudeWebSocketContext';
 
-function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPaused = false, onBindControls = null }) {
+function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPaused = false, onBindControls = null, tightEdgeLeft = false }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [currentUrl, setCurrentUrl] = useState(url || '');
@@ -13,6 +14,7 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
   const [logs, setLogs] = useState([]);
   const [showLogs, setShowLogs] = useState(false);
   const [pausedUrl, setPausedUrl] = useState(initialPaused ? (url || '') : null); // Store URL when paused
+  const [stagedProxyUrl, setStagedProxyUrl] = useState(null); // gate: only swap into iframe when server is ready
   const [microphoneStatus, setMicrophoneStatus] = useState('idle'); // idle, granted, denied, requesting
   const [showPermissionInfo, setShowPermissionInfo] = useState(false);
   const [elementSelectionMode, setElementSelectionMode] = useState(false); // Direct element selection
@@ -42,21 +44,24 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
   const [stopping, setStopping] = useState(false);
   const [previewBlocked, setPreviewBlocked] = useState(false);
   const [blockReason, setBlockReason] = useState('');
+  const [startHint, setStartHint] = useState('');
   const pingTimerRef = useRef(null);
   const pingAttemptsRef = useRef(0);
+  // Simple external URL health signal
+  const [netStatus, setNetStatus] = useState('idle'); // idle | checking | online | offline
+  const [lastCheckedAt, setLastCheckedAt] = useState(null);
 
   const refreshPreviewStatus = async () => {
     if (!projectName) return;
     const { running, url: detectedUrl } = await apiRefreshStatus(projectName);
     setPreviewRunning(running);
     if (running && !userEditedUrl && !isPaused) {
-      // If we have a detected URL, use it directly for the iframe
+      // Gate the proxy URL until upstream server responds
+      const proxy = `/preview/${encodeURIComponent(projectName)}/`;
+      setStagedProxyUrl(proxy);
       if (detectedUrl) {
-        setCurrentUrl(detectedUrl);
         setUiUrl(detectedUrl);
-      } else {
-        // Fall back to proxy route only if no direct URL available
-        setCurrentUrl(`/preview/${encodeURIComponent(projectName)}/`);
+        waitForServer(detectedUrl);
       }
     }
   };
@@ -86,6 +91,7 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
   const startBackendPreview = async () => {
     if (!projectName || starting) return;
     setStarting(true);
+    setStartHint('');
     setShowFileTree(false);
     try {
       const result = await apiStartPreview(projectName);
@@ -103,11 +109,14 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
       
       const { url: detectedUrl } = result;
       setPreviewRunning(true);
+      // Stage proxy url and wait the upstream server to respond before swapping into iframe
+      const proxy = `/preview/${encodeURIComponent(projectName)}/`;
+      setStagedProxyUrl(proxy);
       if (detectedUrl) {
-        // Use the actual URL for the iframe
-        setCurrentUrl(detectedUrl);
+        // Keep the actual URL in the input for external open
         setUiUrl(detectedUrl);
         setUserEditedUrl(false);
+        // Ping the real server URL to detect readiness, then refresh the proxy iframe
         waitForServer(detectedUrl);
       }
     } catch (err) {
@@ -124,15 +133,22 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
       try {
         const controller = new AbortController();
         const t = setTimeout(() => controller.abort(), 800);
+        setNetStatus('checking');
         // Use no-cors to avoid CORS errors; success if fetch resolves
         await fetch(url, { mode: 'no-cors', cache: 'no-cache', signal: controller.signal });
         clearTimeout(t);
+        setNetStatus('online');
+        setLastCheckedAt(new Date());
         setStarting(false);
         setPreviewRunning(true);
+        // Only now load the proxy into the iframe
+        const proxy = stagedProxyUrl || `/preview/${encodeURIComponent(projectName)}/`;
+        setCurrentUrl(proxy);
         handleRefresh();
         return;
       } catch (e) {
-        // keep trying
+        setNetStatus('offline');
+        setLastCheckedAt(new Date());
       }
       if (pingAttemptsRef.current < 30) { // ~24s total
         pingTimerRef.current = setTimeout(attempt, 800);
@@ -142,6 +158,40 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
     };
     pingTimerRef.current = setTimeout(attempt, 300);
   };
+
+  // Ping external URLs periodically to inform the user when blank
+  useEffect(() => {
+    try { if (pingTimerRef.current) clearTimeout(pingTimerRef.current); } catch {}
+    if (currentUrl && !currentUrl.startsWith('/preview/')) {
+      // initial check
+      (async () => {
+        try {
+          setNetStatus('checking');
+          const ctrl = new AbortController();
+          const t = setTimeout(()=>ctrl.abort(), 1200);
+          await fetch(currentUrl, { mode: 'no-cors', cache: 'no-cache', signal: ctrl.signal });
+          clearTimeout(t);
+          setNetStatus('online');
+        } catch { setNetStatus('offline'); }
+        setLastCheckedAt(new Date());
+      })();
+      // schedule periodic checks
+      const interval = setInterval(async () => {
+        try {
+          const ctrl = new AbortController();
+          const t = setTimeout(()=>ctrl.abort(), 1200);
+          await fetch(currentUrl, { mode: 'no-cors', cache: 'no-cache', signal: ctrl.signal });
+          clearTimeout(t);
+          setNetStatus('online');
+        } catch { setNetStatus('offline'); }
+        setLastCheckedAt(new Date());
+      }, 5000);
+      return () => clearInterval(interval);
+    } else {
+      setNetStatus('idle');
+      setLastCheckedAt(null);
+    }
+  }, [currentUrl]);
 
   const stopBackendPreview = async () => {
     if (!projectName || stopping) return;
@@ -184,16 +234,22 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
     })();
   }, [projectPath]);
   
-  useEffect(() => {
+  useEffect(() => { 
     // Only update from props if user hasn't edited the URL
     if (!userEditedUrl && !isPaused && url) {
-      setCurrentUrl(url);
-      setUiUrl(url); // Also set the UI URL for external open
+      // If a direct URL was provided by Shell, keep it as external; do NOT rewrite to proxy
+      if (/^https?:\/\//.test(url)) {
+        setCurrentUrl(url);
+        setUiUrl(url);
+      } else {
+        setCurrentUrl(url);
+        setUiUrl(url); // Also set the UI URL for external open
+      }
       setIsLoading(true);
       setError(null);
       setLogs([]);
     }
-  }, [url]);
+  }, [url, userEditedUrl, isPaused]);
 
   // File content preview handled by FileManagerSimple on demand
 
@@ -278,6 +334,72 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
     }
   };
   
+  // Live preview updates via WebSocket events from server
+  const { registerMessageHandler } = useClaudeWebSocket();
+  useEffect(() => {
+    if (!projectName || typeof registerMessageHandler !== 'function') return undefined;
+    const id = `preview-panel-${projectName}`;
+    return registerMessageHandler(id, (msg) => {
+      try {
+        if (!msg || !msg.type) return;
+        if (msg.project && msg.project !== projectName) return;
+        switch (msg.type) {
+          case 'preview_starting': {
+            setStarting(true);
+            setPreviewRunning(false);
+            setPreviewBlocked(false);
+            setBlockReason('');
+            setStartHint('');
+            setCurrentUrl(`/preview/${encodeURIComponent(projectName)}/`);
+            if (msg.url) setUiUrl(msg.url);
+            break;
+          }
+          case 'preview_success': {
+            setStarting(false);
+            setPreviewRunning(true);
+            setPreviewBlocked(false);
+            setBlockReason('');
+            setStartHint('');
+            if (msg.url) setUiUrl(msg.url);
+            setCurrentUrl(`/preview/${encodeURIComponent(projectName)}/`);
+            if (!isPaused) {
+              try { handleRefresh(); } catch {}
+            }
+            break;
+          }
+          case 'preview_error': {
+            const err = String(msg.error || '').toLowerCase();
+            if (err.includes('not available') || err.includes('no package.json') || err.includes('system or configuration')) {
+              setStarting(false);
+              setPreviewRunning(false);
+              setPreviewBlocked(true);
+              setBlockReason(msg.error || 'Preview not available for this project');
+              setStartHint('');
+            } else if (err.includes('retrying') && err.includes('port')) {
+              // Keep starting state while preview manager retries
+              setStarting(true);
+              setStartHint(msg.error || 'Port in use, retrying with next available port...');
+            } else {
+              setStarting(false);
+              setError(msg.error || 'Preview error');
+              setStartHint('');
+            }
+            break;
+          }
+          case 'preview_stopped': {
+            setStarting(false);
+            setPreviewRunning(false);
+            setCurrentUrl('');
+            setStartHint('');
+            break;
+          }
+          default:
+            break;
+        }
+      } catch {}
+    });
+  }, [projectName, registerMessageHandler, isPaused]);
+
   // Expose refresh function to global scope for MainContent
   useEffect(() => {
     window.refreshPreview = handleRefresh;
@@ -362,8 +484,28 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
       event.stopPropagation();
     }
     setIsLoading(false);
-    setError('Unable to load preview. The server might not be running or the URL might be incorrect.');
+    
+    // More specific error messages based on context
+    if (currentUrl && currentUrl.includes('/preview/')) {
+      // Proxy error - likely server not running on expected port
+      const match = uiUrl?.match(/:(\d+)/);
+      const port = match ? match[1] : 'unknown';
+      setError(
+        `Preview server not responding on port ${port}.\n` +
+        `Possible issues:\n` +
+        `• Server failed to start (check console logs)\n` +
+        `• Port ${port} is blocked or in use\n` +
+        `• Application crashed during startup`
+      );
+    } else {
+      setError('Unable to load preview. The server might not be running or the URL might be incorrect.');
+    }
   };
+
+  // Panel wrapper classes: when docked to Shell on the left, keep only right corners rounded
+  const wrapperClass = tightEdgeLeft
+    ? 'h-full flex flex-col border border-border bg-card rounded-r-lg overflow-hidden'
+    : 'h-full flex flex-col border border-border bg-card rounded-lg overflow-hidden';
 
   // Validate URL to ensure it's a safe preview URL
   const isValidPreviewUrl = (url) => {
@@ -409,7 +551,7 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
 
   if (!isValidPreviewUrl(currentUrl)) {
     return (
-      <div className="h-full flex flex-col bg-card rounded-xl border border-border">
+      <div className={wrapperClass}>
         <div className="flex items-center justify-between px-2 py-1.5 border-b border-border bg-card">
           <div className="flex items-center gap-1.5">
             <span className="text-sm font-medium text-foreground">Preview Panel</span>
@@ -442,74 +584,137 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
   }
 
   return (
-    <div className="h-full flex flex-col bg-card rounded-xl border border-border relative">
+    <div className={`${wrapperClass} relative`}>
       {/* Preview Toolbar */}
-      <div className="flex items-center justify-between px-2 py-2 border-b border-border">
-        <div className="flex items-center gap-1.5 flex-1 min-w-0">
+      <div className="flex items-center justify-between px-2 py-1.5 border-b border-border">
+        <div className="flex items-center gap-1 flex-1 min-w-0">
           {/* URL Display */}
           <div className="flex items-center gap-2 flex-1 min-w-0">
-            <div 
-              className={`w-2 h-2 rounded-full ${previewRunning ? 'bg-green-500 animate-pulse' : 'bg-gray-500'}`} 
-              title={previewRunning ? 'Running' : 'Stopped'} 
-            />
-            <input
-              type="text"
-              value={uiUrl || currentUrl}
-              onChange={(e) => {
-                setUserEditedUrl(true);
-                setUiUrl(e.target.value);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  // Map typed URL to proxy path for same-origin features
-                  try {
-                    let newUi = (uiUrl || '').trim();
-                    if (!newUi) return;
-                    if (newUi.startsWith('/preview/')) {
-                      setCurrentUrl(newUi);
-                      setUserEditedUrl(false);
-                      handleRefresh();
-                      return;
-                    }
-                    if (newUi.startsWith('http')) {
-                      const u = new URL(newUi);
-                      const proxy = `/preview/${encodeURIComponent(projectName)}${u.pathname}${u.search}${u.hash}`;
+            <div className="relative flex-1 url-pill px-3">
+              {/* Status dot inside the URL pill */}
+              <span
+                className={`absolute left-2 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full ${previewRunning ? 'bg-green-500 animate-pulse' : 'bg-gray-500'}`}
+                title={previewRunning ? 'Running' : 'Stopped'}
+              />
+              <input
+                type="text"
+                value={uiUrl || currentUrl}
+                onChange={(e) => {
+                  setUserEditedUrl(true);
+                  setUiUrl(e.target.value);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    // Map typed URL to proxy path for same-origin features
+                    try {
+                      let newUi = (uiUrl || '').trim();
+                      if (!newUi) return;
+                      if (newUi.startsWith('/preview/')) {
+                        setCurrentUrl(newUi);
+                        setUserEditedUrl(false);
+                        handleRefresh();
+                        return;
+                      }
+                      if (newUi.startsWith('http')) {
+                        const u = new URL(newUi);
+                        const proxy = `/preview/${encodeURIComponent(projectName)}${u.pathname}${u.search}${u.hash}`;
+                        setCurrentUrl(proxy);
+                        setUiUrl(newUi);
+                        setUserEditedUrl(false);
+                        handleRefresh();
+                        return;
+                      }
+                      // Relative path -> mount under proxy root
+                      if (newUi.startsWith('/')) {
+                        const proxy = `/preview/${encodeURIComponent(projectName)}${newUi}`;
+                        setCurrentUrl(proxy);
+                        setUserEditedUrl(false);
+                        handleRefresh();
+                        return;
+                      }
+                      // Fallback: treat as host without protocol
+                      const proxy = `/preview/${encodeURIComponent(projectName)}/`;
                       setCurrentUrl(proxy);
-                      setUiUrl(newUi);
                       setUserEditedUrl(false);
                       handleRefresh();
-                      return;
-                    }
-                    // Relative path -> mount under proxy root
-                    if (newUi.startsWith('/')) {
-                      const proxy = `/preview/${encodeURIComponent(projectName)}${newUi}`;
-                      setCurrentUrl(proxy);
-                      setUserEditedUrl(false);
+                    } catch {
                       handleRefresh();
-                      return;
                     }
-                    // Fallback: treat as host without protocol
-                    const proxy = `/preview/${encodeURIComponent(projectName)}/`;
-                    setCurrentUrl(proxy);
-                    setUserEditedUrl(false);
-                    handleRefresh();
-                  } catch {
-                    handleRefresh();
                   }
-                }
-              }}
-              className="flex-1 px-2 py-1 text-sm bg-muted rounded-md border border-border focus:outline-none focus:ring-1 focus:ring-ring"
-              placeholder="http://localhost:3000"
-            />
+                }}
+                className="url-pill-input w-full text-sm placeholder:text-[#999999] pr-36 pl-6"
+                placeholder="http://localhost:3000"
+              />
+              {/* Trailing actions inside the URL pill */}
+              <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-2 text-muted-foreground/80">
+                {projectName && (
+                  <button
+                    onClick={() => setShowFileTree(v => !v)}
+                    className="p-1 hover:text-foreground"
+                    title={showFileTree ? 'Hide project files' : 'Show project files'}
+                    aria-label="Toggle files"
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M3 7h5l2 2h11v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/>
+                    </svg>
+                  </button>
+                )}
+                {projectName && (previewRunning ? (
+                  <button
+                    onClick={stopBackendPreview}
+                    disabled={stopping}
+                    className={`p-1 hover:text-foreground ${stopping ? 'opacity-60' : ''}`}
+                    title="Stop preview"
+                    aria-label="Stop preview"
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="8" y="8" width="8" height="8"/>
+                    </svg>
+                  </button>
+                ) : (
+                  <button
+                    onClick={startBackendPreview}
+                    disabled={starting}
+                    className={`p-1 hover:text-foreground ${starting ? 'opacity-60' : ''}`}
+                    title="Start preview"
+                    aria-label="Start preview"
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M8 5v14l11-7z"/>
+                    </svg>
+                  </button>
+                ))}
+                <button
+                  onClick={handleRefresh}
+                  className="p-1 hover:text-foreground"
+                  title="Refresh preview"
+                  aria-label="Refresh"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                </button>
+                <button
+                  onClick={onClose}
+                  className="p-1 hover:text-foreground"
+                  title="Close preview"
+                  aria-label="Close"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
           </div>
 
           {/* Action Buttons */}
-          <div className="flex items-center gap-1">
+          {false && (<div className="flex items-center gap-1.5">
             {/* File tree toggle */}
             {projectName && (
               <button
                 onClick={() => setShowFileTree(v => !v)}
-                className={`p-1.5 rounded-md hover:bg-accent transition-colors ${showFileTree ? 'opacity-100' : 'opacity-80'}`}
+                className={`icon-pill-sm ${showFileTree ? '' : ''}`}
                 title={showFileTree ? 'Hide project files' : 'Show project files'}
               >
                 {/* Folder icon */}
@@ -518,11 +723,12 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
                 </svg>
               </button>
             )}
-            {/* Device mode */}
-            <div className="hidden md:flex items-center gap-1">
+            {/* Device mode (hidden for minimal toolbar) */}
+            {false && (
+            <div className="flex items-center gap-1">
               <button
                 onClick={() => setDeviceMode('desktop')}
-                className={`p-1.5 rounded-md hover:bg-accent transition-colors ${deviceMode==='desktop' ? 'opacity-100' : 'opacity-70'}`}
+                className={`p-1 rounded-md hover:bg-accent transition-colors ${deviceMode==='desktop' ? 'opacity-100' : 'opacity-70'}`}
                 title="Desktop preview"
               >
                 {/* Monitor icon */}
@@ -533,7 +739,7 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
               </button>
               <button
                 onClick={() => setDeviceMode('mobile')}
-                className={`p-1.5 rounded-md hover:bg-accent transition-colors ${deviceMode==='mobile' ? 'opacity-100' : 'opacity-70'}`}
+                className={`p-1 rounded-md hover:bg-accent transition-colors ${deviceMode==='mobile' ? 'opacity-100' : 'opacity-70'}`}
                 title="Mobile preview"
               >
                 {/* Mobile icon */}
@@ -543,13 +749,14 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
                 </svg>
               </button>
             </div>
+            )}
             {/* Backend preview lifecycle */}
             {projectName && (
               previewRunning ? (
                 <button
                   onClick={stopBackendPreview}
                   disabled={stopping}
-                  className={`p-1.5 rounded-md hover:bg-accent transition-colors ${stopping ? 'opacity-50' : ''}`}
+                  className={`icon-pill-sm ${stopping ? 'opacity-60' : ''}`}
                   title="Stop preview"
                 >
                   {/* Stop icon */}
@@ -561,7 +768,7 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
                 <button
                   onClick={startBackendPreview}
                   disabled={starting}
-                  className={`p-1.5 rounded-md hover:bg-accent transition-colors ${starting ? 'opacity-50' : ''}`}
+                  className={`icon-pill-sm ${starting ? 'opacity-60' : ''}`}
                   title="Start preview"
                 >
                   {/* Play icon */}
@@ -572,7 +779,8 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
               )
             )}
             
-            {/* Element Selection Toggle */}
+            {/* Element Selection Toggle (hidden) */}
+            {false && (
             <button
               onClick={() => {
                 // Element selection only works with same-origin content (proxy route)
@@ -582,7 +790,7 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
                 }
                 setElementSelectionMode(!elementSelectionMode);
               }}
-              className={`p-1.5 rounded-md transition-colors ${
+              className={`p-1 rounded-md transition-colors ${
                 elementSelectionMode 
                   ? 'bg-blue-500/20 text-blue-600 dark:text-blue-400 hover:bg-blue-500/30' 
                   : currentUrl && !currentUrl.startsWith('/preview/') 
@@ -602,8 +810,10 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2z" />
               </svg>
             </button>
+            )}
             
-            {/* Microphone Permission */}
+            {/* Microphone Permission (hidden) */}
+            {false && (
             <button
               onClick={() => {
                 if (microphoneStatus === 'prompt' || microphoneStatus === 'denied') {
@@ -612,7 +822,7 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
                   requestMicrophonePermission();
                 }
               }}
-              className={`p-1.5 rounded-md transition-colors ${
+              className={`p-1 rounded-md transition-colors ${
                 microphoneStatus === 'granted' 
                   ? 'text-muted-foreground hover:bg-accent' 
                   : 'text-yellow-500 hover:bg-accent'
@@ -629,21 +839,22 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14a3 3 0 003-3V7a3 3 0 10-6 0v4a3 3 0 003 3zm6-3a6 6 0 11-12 0m6 6v3m-4 0h8" />
               </svg>
             </button>
+            )}
 
             {/* Pause/Play toggle removed */}
             <button
               onClick={handleRefresh}
-              className="p-1.5 hover:bg-accent rounded-md transition-colors"
+              className="icon-pill-sm"
               title="Refresh preview"
               
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
             </button>
             
             {/* Error Console Button - Only highlight if there are errors */}
-            <div className="relative" ref={logsRef}>
+            {false && (<div className="relative" ref={logsRef}>
               <button
                 onClick={() => setShowLogs(!showLogs)}
                 className={`p-1.5 hover:bg-accent rounded-md transition-colors relative ${
@@ -757,10 +968,9 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
                   </div>
                 </div>
               )}
-            </div>
+            </div>)}
             
-            {/* Server Logs Button */}
-            <button
+            {false && (<button
               onClick={() => setShowServerLogs(!showServerLogs)}
               className={`p-1.5 rounded-md transition-colors ${
                 showServerLogs 
@@ -772,9 +982,8 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
-            </button>
-            
-            <button
+            </button>)}
+            {false && (<button
               onClick={handleOpenExternal}
               className="p-1.5 hover:bg-accent rounded-md transition-colors"
               title="Open in new tab"
@@ -782,17 +991,17 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
               </svg>
-            </button>
+            </button>)}
             <button
               onClick={onClose}
-              className="p-1.5 hover:bg-accent rounded-md transition-colors"
+              className="icon-pill-sm"
               title="Close preview"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
-          </div>
+          </div>)}
         </div>
       </div>
 
@@ -905,12 +1114,23 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
               </div>
               <h3 className="text-lg font-semibold text-foreground mb-2">Unable to Load Preview</h3>
               <p className="text-sm text-muted-foreground mb-4">{error}</p>
-              <button
-                onClick={handleRefresh}
-                className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
-              >
-                Try Again
-              </button>
+              <div className="flex items-center justify-center gap-2">
+                <button
+                  onClick={handleRefresh}
+                  className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+                >
+                  Try Again
+                </button>
+                {projectName && (
+                  <button
+                    onClick={() => setShowServerLogs(true)}
+                    className="px-3 py-2 bg-muted text-foreground rounded-md hover:bg-accent transition-colors"
+                    title="View server logs"
+                  >
+                    View Server Logs
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -922,6 +1142,7 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
             <FileManagerSimple
               selectedProject={{ name: projectName, path: projectPath }}
               onClose={() => setShowFileTree(false)}
+              embedded={true}
             />
           </div>
         )}
@@ -931,15 +1152,72 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
             <div className="text-center text-foreground/90">
               <PreviewBlockedMessage reason={blockReason} />
             </div>
-          ) : (starting || !previewRunning || !currentUrl) ? (
-            <div className="text-center text-foreground/90">
-              <ClaudableLoader starting={starting} onStart={startBackendPreview} />
-            </div>
-          ) : (
-            <div className={`${deviceMode==='mobile' ? 'w-[375px] h-[667px] rounded-[20px] border-8 border-neutral-800 shadow-2xl overflow-hidden' : 'w-full h-full'} bg-background`}>
+          ) : (() => {
+            const isProxy = !!currentUrl && currentUrl.startsWith('/preview/');
+            const isStatic = !!currentUrl && currentUrl.startsWith('/preview-static/');
+            const isExternal = !!currentUrl && !(isProxy || isStatic);
+            // If user provided an external URL, show preview panel even when previewRunning=false
+            if (isExternal || isStatic) {
+              return (
+                <div className={`${deviceMode==='mobile' ? 'w-[375px] h-[667px] rounded-[20px] border-8 border-neutral-800 shadow-2xl overflow-hidden' : 'w-full h-full'} bg-background relative`}>
+                  {currentUrl && !currentUrl.startsWith('/preview/') && (
+                    <div className="absolute top-2 right-2 z-20 flex items-center gap-2 bg-background/80 backdrop-blur px-2 py-1 rounded border border-border text-[11px] text-muted-foreground">
+                      <span className="hidden sm:inline">External URL</span>
+                      <button onClick={handleOpenExternal} className="px-2 py-0.5 rounded border border-border hover:bg-accent text-foreground">Open</button>
+                      <button onClick={startBackendPreview} className="px-2 py-0.5 rounded bg-primary text-primary-foreground hover:bg-primary/90">Start preview</button>
+                    </div>
+                  )}
+                  <iframe
+                    ref={iframeRef}
+                    src={currentUrl || 'about:blank'}
+                    className="w-full h-full border-0"
+                    style={{ backgroundColor: 'transparent' }}
+                    onLoad={handleIframeLoad}
+                    onError={handleIframeError}
+                    title="Preview"
+                    loading="lazy"
+                    data-preview-frame="true"
+                    {...(currentUrl && !(currentUrl.startsWith('/preview/') || currentUrl.startsWith('/preview-static/')) && {
+                      sandbox: "allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads allow-storage-access-by-user-activation allow-top-navigation-by-user-activation"
+                    })}
+                    allow="microphone *; camera *; geolocation *; accelerometer *; gyroscope *; magnetometer *; midi *; encrypted-media *"
+                  />
+                  {(!starting && !previewBlocked && !isPaused && isExternal) && (
+                    <div className="absolute inset-0 flex items-center justify-center text-center text-sm text-muted-foreground pointer-events-none">
+                      <div className="bg-background/70 backdrop-blur px-3 py-2 rounded border border-border">
+                        <div>Opening external preview…</div>
+                        {netStatus !== 'idle' && (
+                          <div className="mt-1 text-[11px]">
+                            {netStatus === 'checking' ? 'Checking server…' : netStatus === 'offline' ? 'Server offline' : 'Server online'}
+                            {lastCheckedAt && ` • ${Math.max(0, Math.round((Date.now()-lastCheckedAt.getTime())/1000))}s ago`}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            }
+            if (starting || !previewRunning || !currentUrl) {
+              return (
+                <div className="text-center text-foreground/90">
+                  <ClaudableLoader starting={starting} onStart={startBackendPreview} hint={startHint} />
+                </div>
+              );
+            }
+            return (
+            <div className={`${deviceMode==='mobile' ? 'w-[375px] h-[667px] rounded-[20px] border-8 border-neutral-800 shadow-2xl overflow-hidden' : 'w-full h-full'} bg-background relative`}>
+              {/* Guidance overlay for direct URLs / blank content */}
+              {currentUrl && !currentUrl.startsWith('/preview/') && (
+                <div className="absolute top-2 right-2 z-20 flex items-center gap-2 bg-background/80 backdrop-blur px-2 py-1 rounded border border-border text-[11px] text-muted-foreground">
+                  <span className="hidden sm:inline">External URL</span>
+                  <button onClick={handleOpenExternal} className="px-2 py-0.5 rounded border border-border hover:bg-accent text-foreground">Open</button>
+                  <button onClick={startBackendPreview} className="px-2 py-0.5 rounded bg-primary text-primary-foreground hover:bg-primary/90">Start preview</button>
+                </div>
+              )}
               <iframe
                 ref={iframeRef}
-                src={(currentUrl && (!currentUrl.startsWith('http') && !currentUrl.startsWith('/')) ? 'http://' + currentUrl : currentUrl) || 'about:blank'}
+                src={currentUrl || 'about:blank'}
                 className="w-full h-full border-0"
                 style={{ backgroundColor: 'transparent' }}
                 onLoad={handleIframeLoad}
@@ -947,13 +1225,29 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
                 title="Preview"
                 loading="lazy"
                 data-preview-frame="true"
-                {...(currentUrl && !currentUrl.startsWith('/preview/') && {
+                {...(currentUrl && !(currentUrl.startsWith('/preview/') || currentUrl.startsWith('/preview-static/')) && {
                   sandbox: "allow-scripts allow-same-origin allow-forms allow-popups allow-modals allow-downloads allow-storage-access-by-user-activation allow-top-navigation-by-user-activation"
                 })}
                 allow="microphone *; camera *; geolocation *; accelerometer *; gyroscope *; magnetometer *; midi *; encrypted-media *"
               />
+              {/* Fallback hint when not running */}
+              {(!starting && !previewBlocked && !isPaused && (!previewRunning || !currentUrl)) && (
+                <div className="absolute inset-0 flex items-center justify-center text-center text-sm text-muted-foreground pointer-events-none">
+                  <div className="bg-background/70 backdrop-blur px-3 py-2 rounded border border-border">
+                    <div>No preview running for this project.</div>
+                    <div className="hidden sm:block">Use Start preview or type a URL, depois abra em uma nova aba.</div>
+                    {currentUrl && !currentUrl.startsWith('/preview/') && (
+                      <div className="mt-1 text-[11px]">
+                        {netStatus === 'checking' ? 'Checking server…' : netStatus === 'offline' ? 'Server offline' : netStatus === 'online' ? 'Server online (loading may be blocked by cross-origin)' : ''}
+                        {lastCheckedAt && ` • ${Math.max(0, Math.round((Date.now()-lastCheckedAt.getTime())/1000))}s ago`}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
-          )}
+            );
+          })()}
         </div>
 
         {/* Server Logs Panel */}
@@ -1035,13 +1329,16 @@ function PreviewPanel({ url, projectPath, projectName = null, onClose, initialPa
 
 export default React.memo(PreviewPanel);
 
-function ClaudableLoader({ starting, onStart }) {
+function ClaudableLoader({ starting, onStart, hint = '' }) {
   return (
   <div className="text-center">
     <RingLogo spinning={starting} />
     <div className="mt-4">{!starting && (<CtaButton onClick={onStart} size="sm" className="justify-center">Start Preview</CtaButton>)}</div>
       <h2 className="text-3xl font-semibold mt-6">{starting ? 'Starting Preview…' : 'Preview Not Running'}</h2>
       <p className="text-sm text-white/60 mt-2">Start your development server to see live changes</p>
+      {starting && hint && (
+        <p className="text-xs text-muted-foreground mt-2">{hint}</p>
+      )}
     </div>
   );
 }

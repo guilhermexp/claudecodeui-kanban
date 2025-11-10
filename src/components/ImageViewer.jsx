@@ -1,8 +1,32 @@
+import React, { useEffect, useState } from 'react';
 import { Button } from './ui/button';
 import { X } from 'lucide-react';
+import { authenticatedFetch } from '../utils/api';
 
 function ImageViewer({ file, onClose, inline = false }) {
-  const imagePath = `/api/projects/${file.projectName}/files/content?path=${encodeURIComponent(file.path)}`;
+  const [blobUrl, setBlobUrl] = useState(null);
+
+  // Fetch the image with Authorization and create an object URL for <img>
+  useEffect(() => {
+    let revoked = false;
+    const fetchImage = async () => {
+      try {
+        const res = await authenticatedFetch(`/api/projects/${encodeURIComponent(file.projectName)}/files/content?path=${encodeURIComponent(file.path)}`);
+        if (!res.ok) throw new Error('Failed to load image');
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        if (!revoked) setBlobUrl(url);
+      } catch (e) {
+        setBlobUrl('');
+      }
+    };
+    fetchImage();
+    return () => {
+      revoked = true;
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [file?.path, file?.projectName]);
 
   // For inline mode, no modal wrapper
   if (inline) {
@@ -10,7 +34,7 @@ function ImageViewer({ file, onClose, inline = false }) {
       <div className="h-full flex flex-col bg-background">
         <div className="flex-1 p-4 flex justify-center items-center bg-muted/20">
           <img
-            src={imagePath}
+            src={blobUrl || ''}
             alt={file.name}
             className="max-w-full max-h-full object-contain rounded-lg"
             onError={(e) => {
@@ -54,7 +78,7 @@ function ImageViewer({ file, onClose, inline = false }) {
 
         <div className="p-4 flex justify-center items-center bg-gray-50 dark:bg-gray-900 min-h-[400px]">
           <img
-            src={imagePath}
+            src={blobUrl || ''}
             alt={file.name}
             className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-md"
             onError={(e) => {
