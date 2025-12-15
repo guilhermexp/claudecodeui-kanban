@@ -8,16 +8,16 @@ import { fileURLToPath } from 'url';
 import authRoutes from '../routes/auth.js';
 import gitRoutes from '../routes/git.js';
 import previewRoutes from '../routes/preview.js';
+import { previewProxyRouter, previewStaticRouter, previewNextAssetRouter } from '../routes/previewProxy.js';
 import usageRoutes from '../routes/usage.js';
 import systemRoutes from '../routes/system.js';
 import filesRoutes from '../routes/files.js';
-import claudeHooksRoutes from '../routes/claude-hooks.js';
-import claudeStreamRoutes from '../routes/claude-stream.js';
 import ttsRoutes from '../routes/tts.js';
 import aiRoutes from '../routes/ai.js';
 import promptEnhancerRoutes from '../routes/prompt-enhancer.js';
 import indexerRoutes from '../routes/indexer.js';
 import promptsRoutes from '../routes/prompts.js';
+import projectsRoutes from '../routes/projects.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -26,17 +26,19 @@ export function setupRoutes(app) {
   // API Routes
   app.use('/api/auth', authRoutes);
   app.use('/api/git', gitRoutes);
-  app.use('/api/preview', previewRoutes);
+  app.use('/api', previewRoutes);
   app.use('/api/usage', usageRoutes);
   app.use('/api/system', systemRoutes);
   app.use('/api/files', filesRoutes);
-  app.use('/api/claude-hooks', claudeHooksRoutes);
-  app.use('/api/claude-stream', claudeStreamRoutes);
   app.use('/api/tts', ttsRoutes);
   app.use('/api/ai', aiRoutes);
   app.use('/api/prompt-enhancer', promptEnhancerRoutes);
   app.use('/api/indexer', indexerRoutes);
   app.use('/api/prompts', promptsRoutes);
+  app.use('/api/projects', projectsRoutes);
+  app.use('/preview', previewProxyRouter);
+  app.use('/preview-static', previewStaticRouter);
+  app.use('/_next', previewNextAssetRouter);
 
   // Health check endpoint
   app.get('/api/health', (req, res) => {

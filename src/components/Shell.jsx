@@ -8,10 +8,35 @@ import { useDropzone } from 'react-dropzone';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import PreviewPanel from './PreviewPanel';
 import FileManagerSimple from './FileManagerSimple';
+import ProjectBrowserSidebar from './ProjectBrowserSidebar';
 import CtaButton from './ui/CtaButton';
 import { detectBestPreviewUrl } from '../utils/detectPreviewUrl';
+import { authPersistence } from '../utils/auth-persistence';
 import { useCleanup } from '../hooks/useCleanup';
 import 'xterm/css/xterm.css';
+
+const DEFAULT_FONT_SIZE = 18;
+const MIN_FONT_SIZE = 12;
+const MAX_FONT_SIZE = 26;
+const clampFontSize = (size) => Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, size));
+const getStoredFontSize = () => {
+  if (typeof window === 'undefined') return DEFAULT_FONT_SIZE;
+  const saved = parseInt(window.localStorage?.getItem('terminal-font-size') || '', 10);
+  if (Number.isNaN(saved)) return DEFAULT_FONT_SIZE;
+  return clampFontSize(saved);
+};
+
+const PROJECT_BROWSER_OPEN_KEY = 'app-project-browser-open';
+const getStoredBrowserState = () => {
+  if (typeof window === 'undefined') return true;
+  try {
+    const stored = window.localStorage?.getItem(PROJECT_BROWSER_OPEN_KEY);
+    if (stored === null) return true;
+    return stored !== '0';
+  } catch {
+    return true;
+  }
+};
 
 // CSS to make xterm responsive and remove focus outline
   const xtermStyles = `
@@ -60,7 +85,6 @@ import 'xterm/css/xterm.css';
   /* Mobile optimizations */
   @media (max-width: 640px) {
     .xterm {
-      font-size: 11px !important;
       padding: 0.375rem 0.625rem !important; /* Slightly more padding on mobile for touch */
     }
     
@@ -133,7 +157,25 @@ if (typeof document !== 'undefined') {
 // Global store for shell sessions to persist across tab switches AND project switches
 const shellSessions = new Map();
 
-function Shell({ selectedProject, selectedSession, isActive, onConnectionChange, onSessionStateChange, isMobile, resizeTrigger, onSidebarClose, activeSidePanel, onPreviewStateChange, onBindControls = null, onTerminalVisibilityChange = null, disablePreview = false, flushRight = false }) {
+function Shell({
+  selectedProject,
+  selectedSession,
+  isActive,
+  onConnectionChange,
+  onSessionStateChange,
+  isMobile,
+  resizeTrigger,
+  onSidebarClose,
+  activeSidePanel,
+  onPreviewStateChange,
+  onBindControls = null,
+  onTerminalVisibilityChange = null,
+  disablePreview = false,
+  flushRight = false,
+  projects = [],
+  onProjectSelect: onProjectSidebarSelect = null,
+  onProjectsRefresh = null
+}) {
   const terminalRef = useRef(null);
   const terminal = useRef(null);
   const fitAddon = useRef(null);
@@ -144,9 +186,12 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   const [lastSessionId, setLastSessionId] = useState(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isBypassingPermissions, setIsBypassingPermissions] = useState(false);
-  const [isManualDisconnect, setIsManualDisconnect] = useState(false);
+  const [isManualDisconnect, setIsManualDisconnect] = useState(true);
   const [toast, setToast] = useState(null);
+  const [terminalFontSize, setTerminalFontSize] = useState(getStoredFontSize);
   const isAuthenticatedRef = useRef(false);
+  const terminalFontSizeRef = useRef(terminalFontSize);
+  terminalFontSizeRef.current = terminalFontSize;
   
   // Command history state
   const commandHistory = useRef([]);
@@ -169,12 +214,57 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   const terminalPanelRef = useRef(null);
   const [lockedTerminalWidth, setLockedTerminalWidth] = useState(null);
   const [wasPreviewOpen, setWasPreviewOpen] = useState(false);
+  const [showProjectBrowser, setShowProjectBrowser] = useState(() => getStoredBrowserState());
   
   // Terminal visibility (allow chat + preview without terminal)
   const [showTerminal, setShowTerminal] = useState(true);
   
   // Unified cleanup utilities for listeners/timers
   const { addManagedEventListener } = useCleanup();
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage?.setItem(PROJECT_BROWSER_OPEN_KEY, showProjectBrowser ? '1' : '0');
+    } catch {
+      // Ignore persistence errors
+    }
+  }, [showProjectBrowser]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        window.localStorage.setItem('terminal-font-size', String(terminalFontSize));
+      } catch {}
+    }
+
+    if (!terminal.current) {
+      return;
+    }
+
+    const appliedSize = clampFontSize(terminalFontSize);
+    if (terminal.current.options.fontSize !== appliedSize) {
+      terminal.current.options.fontSize = appliedSize;
+      try {
+        terminal.current.refresh(0, terminal.current.rows - 1);
+      } catch {}
+    }
+
+    requestAnimationFrame(() => {
+      if (fitAddon.current) {
+        try { fitAddon.current.fit(); } catch {}
+      }
+      if (ws.current && ws.current.readyState === WebSocket.OPEN && terminal.current) {
+        try {
+          ws.current.send(JSON.stringify({
+            type: 'resize',
+            cols: terminal.current.cols,
+            rows: terminal.current.rows
+          }));
+        } catch {}
+      }
+    });
+  }, [terminalFontSize]);
 
   useEffect(() => {
     try { onTerminalVisibilityChange && onTerminalVisibilityChange(showTerminal); } catch {}
@@ -358,8 +448,20 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   const isLocalhostUrl = (url) => {
     try {
       const urlObj = new URL(url);
+      const hostname = urlObj.hostname;
+
+      // Standard localhost addresses
       const validHosts = ['localhost', '127.0.0.1', '0.0.0.0', '[::1]'];
-      return validHosts.includes(urlObj.hostname);
+      if (validHosts.includes(hostname)) return true;
+
+      // Private network IPs (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
+      if (hostname.startsWith('192.168.') ||
+          hostname.startsWith('10.') ||
+          hostname.match(/^172\.(1[6-9]|2[0-9]|3[0-1])\./)) {
+        return true;
+      }
+
+      return false;
     } catch {
       return false;
     }
@@ -396,16 +498,26 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   }, []);
 
   const handlePreviewUrl = (url) => {
+    console.log('[Preview] handlePreviewUrl called with URL:', url);
+    console.log('[Preview] isMobile:', isMobile);
+    console.log('[Preview] Current showPreview:', showPreview);
+
     // Prevent preview from opening on mobile devices
     if (isMobile) {
+      console.log('[Preview] Blocked: mobile mode');
       return;
     }
-    
+
+    console.log('[Preview] Setting preview URL and showing preview');
     setPreviewUrl(url);
     setShowPreview(true);
     detectUrlsInTerminal();
+
+    console.log('[Preview] Preview should now be visible with URL:', url);
+
     // Close sidebar when preview opens to maximize space
     if (onSidebarClose) {
+      console.log('[Preview] Closing sidebar to maximize space');
       onSidebarClose();
     }
   };
@@ -422,6 +534,9 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
         toggleFiles: () => previewControlsRef.current?.toggleFiles?.(),
         showFiles: () => previewControlsRef.current?.showFiles?.(),
         hideFiles: () => previewControlsRef.current?.hideFiles?.(),
+        showProjectBrowser: () => setShowProjectBrowser(true),
+        hideProjectBrowser: () => setShowProjectBrowser(false),
+        toggleProjectBrowser: () => setShowProjectBrowser((prev) => !prev),
         // Shell actions exposed for header buttons
         toggleBypass: () => toggleBypassPermissions(),
         restart: () => restartShell(),
@@ -480,6 +595,11 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     setDetectedUrls(urls);
     return urls;
   };
+
+  const handleProjectBrowserSelect = useCallback((project) => {
+    if (!project) return;
+    onProjectSidebarSelect?.(project);
+  }, [onProjectSidebarSelect]);
   
   // Scroll to bottom functionality
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
@@ -549,12 +669,28 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   // Connect to shell function
   const connectToShell = () => {
     if (!isInitialized || isConnected || isConnecting) return;
-    
+
     // Reset manual disconnect flag when connecting manually
     setIsManualDisconnect(false);
-    
+
     setIsConnecting(true);
-    
+
+    // Start the WebSocket connection
+    connectWebSocket();
+  };
+
+  // Connect to Codex function (auto-starts codex with bypass)
+  const connectToCodex = () => {
+    if (!isInitialized || isConnected || isConnecting) return;
+
+    // Reset manual disconnect flag when connecting manually
+    setIsManualDisconnect(false);
+
+    setIsConnecting(true);
+
+    // Store flag to auto-start codex after connection
+    sessionStorage.setItem('auto-start-codex', 'true');
+
     // Start the WebSocket connection
     connectWebSocket();
   };
@@ -608,13 +744,25 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     // Keep toast state clear to avoid showing the floating banner in the wrong place.
     setToast(null);
     
-    // Send message to server if connected
-    if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+    // Send message to server if connected and authenticated
+    if (ws.current && ws.current.readyState === WebSocket.OPEN && isAuthenticatedRef.current) {
       ws.current.send(JSON.stringify({
         type: 'bypassPermissions',
         enabled: newState
       }));
     }
+  };
+
+  const increaseFontSize = () => {
+    setTerminalFontSize((current) => clampFontSize(current + 1));
+  };
+
+  const decreaseFontSize = () => {
+    setTerminalFontSize((current) => clampFontSize(current - 1));
+  };
+
+  const resetFontSize = () => {
+    setTerminalFontSize((current) => (current === DEFAULT_FONT_SIZE ? current : DEFAULT_FONT_SIZE));
   };
   
   // Change terminal theme
@@ -699,16 +847,18 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
                 // Extract base64 data from data URL
                 const base64Data = imageData.split(',')[1];
                 
-                // First upload the image to server
-                ws.current.send(JSON.stringify({
-                  type: 'image',
-                  data: {
-                    filename: fileName,
-                    type: file.type,
-                    size: file.size,
-                    base64: base64Data
-                  }
-                }));
+                // First upload the image to server (only if authenticated)
+                if (isAuthenticatedRef.current) {
+                  ws.current.send(JSON.stringify({
+                    type: 'image',
+                    data: {
+                      filename: fileName,
+                      type: file.type,
+                      size: file.size,
+                      base64: base64Data
+                    }
+                  }));
+                }
                 
                 // Don't show processing message - keep terminal clean
               }
@@ -766,7 +916,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
               printFramedMessage(data);
             }
             
-            if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+            if (ws.current && ws.current.readyState === WebSocket.OPEN && isAuthenticatedRef.current) {
               ws.current.send(JSON.stringify({
                 type: 'input',
                 data: data
@@ -779,7 +929,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
             printFramedMessage(data);
           }
           
-          if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+          if (ws.current && ws.current.readyState === WebSocket.OPEN && isAuthenticatedRef.current) {
             ws.current.send(JSON.stringify({
               type: 'input',
               data: data
@@ -1035,12 +1185,14 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       }
     };
     
+    const computedFontSize = clampFontSize(terminalFontSizeRef.current || DEFAULT_FONT_SIZE);
+
     // Initialize new terminal with responsive settings and performance optimizations
     terminal.current = new Terminal({
       cursorBlink: true,
       cursorStyle: 'block', // Use block cursor for better visibility
       cursorWidth: 1,
-      fontSize: isMobile ? 15 : 16,  // Increased font size for better readability
+      fontSize: computedFontSize,
       fontFamily: 'Menlo, Monaco, "Courier New", monospace',
       allowProposedApi: true, // Required for clipboard addon
       allowTransparency: true,
@@ -1085,7 +1237,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
         brightCyan: '#29b8db',
         brightWhite: '#ffffff',
         
-        // Extended colors for better Claude output
+        // Extended colors for better terminal output
         extendedAnsi: [
           // 16-color palette extension for 256-color support
           '#000000', '#800000', '#008000', '#808000',
@@ -1108,30 +1260,54 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
     // Configure WebLinksAddon with custom handler for localhost URLs
     // Note: WebLinksAddon must be loaded after the terminal is opened
     const webLinksAddon = new WebLinksAddon((event, uri) => {
+      console.log('[WebLinks] Link clicked:', uri);
+      console.log('[WebLinks] Event:', event);
+      console.log('[WebLinks] isMobile:', isMobile);
+
       // Check if it's a localhost URL
-      if (isLocalhostUrl(uri)) {
-        event.preventDefault();
+      const isLocalhost = isLocalhostUrl(uri);
+      console.log('[WebLinks] Is localhost/private IP:', isLocalhost);
+
+      if (isLocalhost) {
+        // CRITICAL: Stop all event propagation
+        if (event) {
+          event.preventDefault();
+          event.stopPropagation();
+          event.stopImmediatePropagation();
+        }
+        console.log('[WebLinks] Prevented default + stopped propagation, handling internally');
+
         // On mobile, open localhost URLs in new tab instead of preview
         if (isMobile) {
+          console.log('[WebLinks] Opening in new tab (mobile mode)');
           window.open(uri, '_blank');
         } else {
+          console.log('[WebLinks] Opening in preview panel');
           handlePreviewUrl(uri);
         }
+        return false; // Extra safety: return false to prevent default
       } else {
         // Let non-localhost URLs open normally
+        console.log('[WebLinks] Opening external URL in new tab');
         window.open(uri, '_blank');
       }
+    }, {
+      // Add validation to ensure we only handle HTTP(S) links
+      willLinkActivate: (event, uri) => {
+        console.log('[WebLinks] willLinkActivate:', uri);
+        return true; // Allow all links to be activated
+      }
     });
-    
+
     // WebGL addon disabled for better performance on input
     // Uncomment if needed for specific use cases
     // try {
     //   terminal.current.loadAddon(webglAddon);
     // } catch (error) {
     // }
-    
+
     terminal.current.open(terminalRef.current);
-    
+
     // Load WebLinksAddon after terminal is opened
     terminal.current.loadAddon(webLinksAddon);
 
@@ -1346,11 +1522,13 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
           currentLineBuffer += data;
         }
         
-        // Send input to terminal
-        ws.current.send(JSON.stringify({
-          type: 'input',
-          data: data
-        }));
+        // Send input to terminal (only if authenticated)
+        if (isAuthenticatedRef.current && ws.current && ws.current.readyState === WebSocket.OPEN) {
+          ws.current.send(JSON.stringify({
+            type: 'input',
+            data: data
+          }));
+        }
       }
     });
 
@@ -1381,8 +1559,8 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
             if (fitAddon.current && terminal.current) {
               fitAddon.current.fit();
               
-              // Send updated terminal size to backend after resize
-              if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+              // Send updated terminal size to backend after resize (only if authenticated)
+              if (ws.current && ws.current.readyState === WebSocket.OPEN && isAuthenticatedRef.current) {
                 ws.current.send(JSON.stringify({
                   type: 'resize',
                   cols: terminal.current.cols,
@@ -1471,6 +1649,27 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       }
     };
   }, [terminalRef.current, selectedProject, selectedSession, isRestarting]);
+
+  // Auto-connect when terminal is initialized and project is selected
+  useEffect(() => {
+    console.log('[Shell Debug] Auto-connect check:', {
+      isInitialized,
+      hasSelectedProject: !!selectedProject,
+      isConnected,
+      isConnecting,
+      isManualDisconnect,
+      willConnect: isInitialized && selectedProject && !isConnected && !isConnecting && !isManualDisconnect
+    });
+
+    if (isInitialized && selectedProject && !isConnected && !isConnecting && !isManualDisconnect) {
+      console.log('[Shell Debug] Auto-connecting WebSocket...');
+      // Small delay to ensure terminal is fully ready
+      const timer = setTimeout(() => {
+        connectWebSocket();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [isInitialized, selectedProject, isConnected, isConnecting, isManualDisconnect]);
 
   // Fit terminal when tab becomes active
   useEffect(() => {
@@ -1681,11 +1880,17 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
 
   // WebSocket connection function (called manually)
   const connectWebSocket = async () => {
-    if (isConnecting || isConnected) return;
-    
+    console.log('[Shell Debug] connectWebSocket called', { isConnecting, isConnected });
+
+    if (isConnecting || isConnected) {
+      console.log('[Shell Debug] Already connecting or connected, returning');
+      return;
+    }
+
     try {
       // Get authentication token
-      const token = localStorage.getItem('auth-token');
+      const token = await authPersistence.getToken();
+      console.log('[Shell Debug] Token retrieved:', token ? 'exists' : 'missing');
       if (!token) {
         console.error('No authentication token found for Shell WebSocket connection');
         return;
@@ -1711,20 +1916,21 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
         }
       } catch (error) {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        // For development, API server is typically on port 3002 when Vite is on 3001
-        const apiPort = window.location.port === '3001' ? '3002' : window.location.port;
-        wsBaseUrl = `${protocol}//${window.location.hostname}:${apiPort}`;
+        wsBaseUrl = `${protocol}//${window.location.hostname}:7347`;
       }
       
       // Include token in WebSocket URL for backward compatibility (server now expects auth message)
       const wsUrl = `${wsBaseUrl}/shell?token=${encodeURIComponent(token)}`;
-      
+
+      console.log('[Shell Debug] Creating WebSocket connection to:', wsUrl);
+
       // Reset initialization flag before creating new connection
       hasInitialized.current = false;
-      
+
       ws.current = new WebSocket(wsUrl);
 
       ws.current.onopen = () => {
+        console.log('[Shell Debug] WebSocket opened successfully');
         setIsConnected(true);
         setIsConnecting(false);
         // Reset auth state for this connection and send auth as FIRST message
@@ -1735,26 +1941,11 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
           // If sending fails, connection will close and retry
         }
         
-        // Show reconnection success message if this was a reconnection
-        if (lastSessionId && terminal.current) {
-          terminal.current.write('\x1b[32m✓ Reconnected successfully. Session context maintained.\x1b[0m\r\n');
-        }
-        
         // Reset reconnection attempts on successful connection
         reconnectAttempts.current = 0;
         
-        // Start heartbeat to keep connection alive
-        if (heartbeatInterval.current) {
-          clearInterval(heartbeatInterval.current);
-        }
-        
-        heartbeatInterval.current = setInterval(() => {
-          if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-            ws.current.send(JSON.stringify({ type: 'ping' }));
-          }
-        }, 30000); // Send ping every 30 seconds
-        
-        // Initialization now happens after receiving auth-success
+        // Don't start heartbeat here - wait for auth-success
+        // Initialization and heartbeat will happen after receiving auth-success
       };
 
       ws.current.onmessage = (event) => {
@@ -1763,6 +1954,23 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
           if (data.type === 'auth-success') {
             // Mark authenticated and perform initialization handshake
             isAuthenticatedRef.current = true;
+            
+            // Show reconnection success message if this was a reconnection
+            if (lastSessionId && terminal.current) {
+              terminal.current.write('\x1b[32m✓ Reconnected successfully. Session context maintained.\x1b[0m\r\n');
+            }
+            
+            // Start heartbeat to keep connection alive (only after authentication)
+            if (heartbeatInterval.current) {
+              clearInterval(heartbeatInterval.current);
+            }
+            
+            heartbeatInterval.current = setInterval(() => {
+              if (ws.current && ws.current.readyState === WebSocket.OPEN && isAuthenticatedRef.current) {
+                ws.current.send(JSON.stringify({ type: 'ping' }));
+              }
+            }, 30000); // Send ping every 30 seconds
+            
             // Fit and send init + initial resize
             setTimeout(() => {
               if (fitAddon.current && terminal.current && ws.current?.readyState === WebSocket.OPEN) {
@@ -1785,6 +1993,81 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
                     if (projectPathToUse) lastProjectPath.current = projectPathToUse;
                     try { ws.current.send(JSON.stringify(initPayload)); } catch {}
                     hasInitialized.current = true;
+
+                    // Auto-start Claude Code or Codex if enabled and not reconnecting
+                    if (!lastSessionId) {
+                      console.log('[Shell] Checking auto-start configuration...');
+                      try {
+                        // Check if Codex auto-start was requested
+                        const autoStartCodex = sessionStorage.getItem('auto-start-codex');
+
+                        if (autoStartCodex === 'true') {
+                          console.log('[Shell] Codex auto-start requested, will send command in 500ms');
+                          // Clear the flag
+                          sessionStorage.removeItem('auto-start-codex');
+
+                          // Wait a bit for the shell to be ready, then send the command
+                          setTimeout(() => {
+                            if (ws.current?.readyState === WebSocket.OPEN) {
+                              try {
+                                const command = 'codex --dangerously-bypass-approvals-and-sandbox\r';
+                                console.log('[Shell] Sending Codex auto-start command');
+                                ws.current.send(JSON.stringify({ type: 'input', data: command }));
+                                console.log('[Shell] Codex command sent successfully');
+                              } catch (e) {
+                                console.error('[Shell] Failed to auto-start codex:', e);
+                              }
+                            } else {
+                              console.warn('[Shell] WebSocket not open, cannot send codex command');
+                            }
+                          }, 500);
+                        } else {
+                          // Check for Claude Code auto-start
+                          const settings = localStorage.getItem('claude-tools-settings');
+                          console.log('[Shell] Settings from localStorage:', settings);
+                          let shouldAutoStart = false;
+
+                          if (settings) {
+                            const parsed = JSON.parse(settings);
+                            console.log('[Shell] Parsed settings:', parsed);
+                            shouldAutoStart = parsed.autoStartClaudeCode;
+                            console.log('[Shell] shouldAutoStart:', shouldAutoStart);
+                          }
+
+                          if (shouldAutoStart) {
+                            console.log('[Shell] Auto-start is enabled, will send command in 500ms');
+                            // Wait a bit for the shell to be ready, then send the command
+                            setTimeout(() => {
+                              if (ws.current?.readyState === WebSocket.OPEN) {
+                                try {
+                                  // Build command with bypass flag if enabled
+                                  let command = 'claude code';
+                                  if (isBypassingPermissions) {
+                                    command += ' --dangerously-skip-permissions';
+                                    console.log('[Shell] Adding --dangerously-skip-permissions flag');
+                                  }
+                                  command += '\r';
+
+                                  console.log('[Shell] Sending auto-start command:', command.replace('\r', '\\r'));
+                                  ws.current.send(JSON.stringify({ type: 'input', data: command }));
+                                  console.log('[Shell] Auto-start command sent successfully');
+                                } catch (e) {
+                                  console.error('[Shell] Failed to auto-start claude code:', e);
+                                }
+                              } else {
+                                console.warn('[Shell] WebSocket not open, cannot send auto-start command');
+                              }
+                            }, 500);
+                          } else {
+                            console.log('[Shell] Auto-start is disabled or not configured');
+                          }
+                        }
+                      } catch (e) {
+                        console.error('[Shell] Error checking auto-start setting:', e);
+                      }
+                    } else {
+                      console.log('[Shell] Skipping auto-start (reconnection detected, lastSessionId:', lastSessionId, ')');
+                    }
                   }
                   // Send resize after init
                   setTimeout(() => {
@@ -1803,8 +2086,13 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
             }, 200);
             return;
           }
+          // Only process messages after authentication
+          if (!isAuthenticatedRef.current) {
+            return;
+          }
+          
           if (data.type === 'output') {
-            // Mark session as active when receiving output from Claude
+            // Mark session as active when receiving output
             markSessionActive();
             // Removed URL regex processing here for better performance
             // URLs are already handled by WebLinksAddon
@@ -1835,8 +2123,16 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
             window.open(data.url, '_blank');
           } else if (data.type === 'pong') {
             // Server responded to our ping - connection is alive
-          } else if (data.type === 'claude-complete') {
-            // Claude finished a task - no sound in Shell per design
+          } else if (data.type === 'init-success') {
+            // Shell initialization successful
+            setIsInitialized(true);
+            // Don't write anything here - let the shell show its own prompt
+            // The shell will output its prompt naturally when ready
+          } else if (data.type === 'error') {
+            // Handle errors from server
+            if (terminal.current) {
+              terminal.current.write(`\r\n\x1b[31mError: ${data.error || 'Unknown error'}\x1b[0m\r\n`);
+            }
           }
         } catch (error) {
         }
@@ -1945,7 +2241,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
             </svg>
             <p className="text-sm font-medium text-primary dark:text-primary mb-1">Solte as imagens aqui</p>
             <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
-              Imagens serão enviadas para o chat do Claude
+              Imagens serão processadas no terminal
             </p>
             <p className="text-xs text-gray-400 dark:text-gray-500 text-center mt-1">
               Ou pressione ⌘V para colar da área de transferência
@@ -1966,26 +2262,39 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
       
       {/* Connect button when not connected */}
       {isInitialized && !isConnected && !isConnecting && (
-        <div className="absolute inset-0 flex items-center justify-center bg-transparent">
-          <div className="flex flex-col items-center gap-3 text-center" style={{ marginTop: '-200px' }}>
-            {/* Button row (aligns with chats) */}
-            <div className="flex items-center gap-2 h-7">
-              <button onClick={connectToShell} className="h-7 px-3 rounded-[10px] border border-border bg-background text-[12px] text-foreground/90 hover:bg-accent">Connect</button>
-            </div>
-            {/* Subtitle block (same hierarchy used nos chats) */}
+        <div className="absolute inset-0 flex items-center justify-center bg-transparent px-4">
+          <div className="flex flex-col items-center gap-3 sm:gap-4 text-center max-w-md w-full">
+            {/* Title */}
             <div className="text-center select-none">
-              <div className="text-sm sm:text-base font-semibold text-foreground/90">Start Shell session</div>
-              <div className="text-muted-foreground text-xs">Open a terminal connection for this project</div>
-              {/* Persistent bypass status directly under the subtitle */}
-              {isBypassingPermissions && (
-                <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-lg border shadow-sm bg-amber-500/10 border-amber-500/30 text-amber-600">
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                  <span className="text-[11px] font-medium">Bypass permissions enabled</span>
-                </div>
-              )}
+              <div className="text-base sm:text-lg font-semibold text-foreground/90 mb-1">Start Shell session</div>
+              <div className="text-muted-foreground text-xs sm:text-sm">Choose your AI assistant</div>
             </div>
+
+            {/* Buttons - stacked on mobile, side by side on desktop */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
+              <button
+                onClick={connectToShell}
+                className="h-11 sm:h-10 px-6 sm:px-8 rounded-lg border-2 border-blue-500/50 bg-blue-500/10 text-sm font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-500/20 hover:border-blue-500 active:scale-95 transition-all min-w-[120px]"
+              >
+                Claude
+              </button>
+              <button
+                onClick={connectToCodex}
+                className="h-11 sm:h-10 px-6 sm:px-8 rounded-lg border-2 border-orange-500/50 bg-orange-500/10 text-sm font-medium text-orange-600 dark:text-orange-400 hover:bg-orange-500/20 hover:border-orange-500 active:scale-95 transition-all min-w-[120px]"
+              >
+                Codex
+              </button>
+            </div>
+
+            {/* Bypass status badge */}
+            {isBypassingPermissions && (
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-500">
+                <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                <span className="text-xs font-medium">Bypass enabled</span>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1999,7 +2308,7 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
               <span className="text-sm sm:text-base font-medium">Connecting...</span>
             </div>
             <p className="text-muted-foreground text-xs sm:text-sm mt-2 sm:mt-3 px-2 break-words">
-              Starting Claude CLI in {selectedProject.displayName || selectedProject.name}
+              Starting shell session in {selectedProject.displayName || selectedProject.name}
             </p>
           </div>
         </div>
@@ -2118,22 +2427,64 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
   );
   
   // Always use PanelGroup for consistent DOM structure
+  const sidebarVisible = showProjectBrowser && !isMobile;
+
   return (
-    <PanelGroup direction="horizontal" className="h-full w-full flex">
-      {/* Terminal Panel - Always present */}
-      <Panel 
-        ref={terminalPanelHandleRef}
-        defaultSize={showPreview && !isMobile ? 30 : 100} 
-        minSize={0} 
-        className="h-full"
-        style={lockedTerminalWidth ? { flex: `0 0 ${lockedTerminalWidth}px` } : undefined}
-      >
-        <div 
-          ref={terminalPanelRef}
-          className={`h-full min-h-0 flex flex-col relative ${showTerminal ? `${(showPreview || flushRight) ? 'border border-r-0 rounded-l-lg' : 'border rounded-lg'} border-border bg-card overflow-hidden` : 'border-0'} ${overlayActive ? 'shell-cursor-hidden' : ''}`} 
+    <div className="h-full w-full flex gap-3 p-4 pr-2 md:pr-3">
+      {sidebarVisible && (
+        <div className="h-full flex-shrink-0 w-[230px]">
+          <ProjectBrowserSidebar
+            projects={projects}
+            selectedProject={selectedProject}
+            onProjectSelect={handleProjectBrowserSelect}
+            onProjectsRefresh={onProjectsRefresh}
+            onCollapse={() => setShowProjectBrowser(false)}
+            className="h-full shadow-[0_20px_60px_rgba(0,0,0,0.45)]"
+          />
+        </div>
+      )}
+
+      <div className="flex-1 h-full rounded-[28px] border border-border/40 bg-card/70 backdrop-blur-xl shadow-[0_20px_80px_rgba(0,0,0,0.45)] overflow-hidden">
+        <PanelGroup direction="horizontal" className="h-full w-full flex">
+          {/* Terminal Panel - Always present */}
+          <Panel 
+            ref={terminalPanelHandleRef}
+            defaultSize={showPreview && !isMobile ? 45 : 100} 
+            minSize={0} 
+            className="h-full"
+            style={lockedTerminalWidth ? { flex: `0 0 ${lockedTerminalWidth}px` } : undefined}
+          >
+            <div 
+            ref={terminalPanelRef}
+          className={`h-full min-h-0 flex flex-col relative ${showTerminal ? `${(showPreview || flushRight) ? 'border border-r-0 rounded-[26px] rounded-r-none' : 'border rounded-[26px]' } border-border/60 bg-background/60 backdrop-blur-2xl overflow-hidden` : 'border-0'} ${overlayActive ? 'shell-cursor-hidden' : ''}`} 
           {...dropzoneProps}>
           {/* Shell controls in local header (top-right) */}
           <div className="absolute top-2 right-2 z-20 flex items-center gap-1.5">
+            <div
+              className="flex items-center gap-1 h-7 px-2 rounded-full border border-border bg-background/90 text-[10px] sm:text-[11px] font-semibold text-muted-foreground shadow-sm"
+              title={`Tamanho da fonte do Shell (${terminalFontSize}px). Duplo clique para resetar.`}
+              onDoubleClick={resetFontSize}
+            >
+              <button
+                type="button"
+                onClick={decreaseFontSize}
+                disabled={terminalFontSize <= MIN_FONT_SIZE}
+                className="text-xs font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed hover:text-foreground"
+                title="Diminuir fonte"
+              >
+                A-
+              </button>
+              <span className="text-[10px] tracking-wide">{terminalFontSize}px</span>
+              <button
+                type="button"
+                onClick={increaseFontSize}
+                disabled={terminalFontSize >= MAX_FONT_SIZE}
+                className="text-xs font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed hover:text-foreground"
+                title="Aumentar fonte"
+              >
+                A+
+              </button>
+            </div>
             <button
               onClick={toggleBypassPermissions}
               className={`icon-pill-sm ${isBypassingPermissions ? 'text-amber-400' : 'text-muted-foreground'}`}
@@ -2193,42 +2544,46 @@ function Shell({ selectedProject, selectedSession, isActive, onConnectionChange,
         </div>
     </Panel>
     
-    {/* Preview panel - always render for consistent DOM structure */}
-    {!isMobile && (
-      <>
-        {/* Resize Handle - only interactive when preview shown */}
-        {!disablePreview && (
-          <PanelResizeHandle 
-            className={showPreview ? "w-px bg-border transition-colors cursor-col-resize" : "w-0 pointer-events-none"} 
-            disabled={!showPreview}
-          />
-        )}
-        
-        {/* Preview Panel - hidden when not in use */}
-        <Panel 
-          ref={previewPanelHandleRef}
-          defaultSize={disablePreview ? 0 : (showPreview ? 70 : 0)} 
-          minSize={disablePreview ? 0 : (showPreview ? 30 : 0)}
-          maxSize={disablePreview ? 0 : (showPreview ? 100 : 0)}
-          className={disablePreview || !showPreview ? "h-full hidden" : "h-full"}
-        >
-          {!disablePreview && showPreview && (
-            <PreviewPanel
-              url={initialPreviewPaused ? '' : previewUrl}
-              projectPath={selectedProject?.fullPath || selectedProject?.path}
-              projectName={selectedProject?.name}
-              onClose={() => setShowPreview(false)}
-              onRefresh={() => detectUrlsInTerminal()}
-              isMobile={false}
-              initialPaused={initialPreviewPaused}
-              tightEdgeLeft={true}
-              onBindControls={(controls) => { previewControlsRef.current = controls; }}
-            />
+          {/* Preview panel - always render for consistent DOM structure */}
+          {!isMobile && (
+            <>
+              {/* Resize Handle - only interactive when preview shown */}
+              {!disablePreview && (
+                <PanelResizeHandle 
+                  className={showPreview ? "w-px bg-border transition-colors cursor-col-resize" : "w-0 pointer-events-none"} 
+                  disabled={!showPreview}
+                />
+              )}
+              
+              {/* Preview Panel - hidden when not in use */}
+              <Panel 
+                ref={previewPanelHandleRef}
+                defaultSize={disablePreview ? 0 : (showPreview ? 55 : 0)} 
+                minSize={disablePreview ? 0 : (showPreview ? 30 : 0)}
+                maxSize={disablePreview ? 0 : (showPreview ? 100 : 0)}
+                className={disablePreview || !showPreview ? "h-full hidden" : "h-full"}
+              >
+                {!disablePreview && showPreview && (
+                  <div className="h-full w-full border border-l-0 border-border/60 rounded-[26px] rounded-l-none overflow-hidden bg-background/60 backdrop-blur-2xl">
+                    <PreviewPanel
+                      url={initialPreviewPaused ? '' : previewUrl}
+                      projectPath={selectedProject?.fullPath || selectedProject?.path}
+                      projectName={selectedProject?.name}
+                      onClose={() => setShowPreview(false)}
+                      onRefresh={() => detectUrlsInTerminal()}
+                      isMobile={false}
+                      initialPaused={initialPreviewPaused}
+                      tightEdgeLeft={true}
+                      onBindControls={(controls) => { previewControlsRef.current = controls; }}
+                    />
+                  </div>
+                )}
+              </Panel>
+            </>
           )}
-        </Panel>
-      </>
-    )}
-  </PanelGroup>
+        </PanelGroup>
+      </div>
+    </div>
   );
 }
 

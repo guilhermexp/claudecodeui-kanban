@@ -112,6 +112,18 @@ export function getAllocatedPorts() {
   return Array.from(portsInUse).sort((a, b) => a - b);
 }
 
+export function getPreviewProxyInfo(projectName) {
+  if (!projectName) return null;
+  const rec = processes.get(projectName);
+  if (!rec) return null;
+  return {
+    port: rec.port || null,
+    staticRoot: rec.staticRoot || null,
+    external: !!rec.external,
+    repoPath: rec.repoPath || null
+  };
+}
+
 export function getActivePreview() {
   const previews = [];
   for (const [name, rec] of processes.entries()) {
@@ -135,6 +147,79 @@ export function getLogs(projectName, lines = 200) {
   return logs.slice(-lines).join('');
 }
 
+/**
+ * Detect port from various configuration files
+ * Checks: vite.config.js, vite.config.ts, next.config.js, package.json scripts
+ */
+async function detectPortFromConfig(repoPath) {
+  const fs = await import('fs').then(m => m.promises);
+  const path = await import('path');
+
+  // 1. Check vite.config.js/ts
+  const viteConfigs = ['vite.config.js', 'vite.config.ts', 'vite.config.mjs'];
+  for (const configFile of viteConfigs) {
+    try {
+      const configPath = path.join(repoPath, configFile);
+      const content = await fs.readFile(configPath, 'utf8');
+
+      // Look for server.port or preview.port
+      const portMatch = content.match(/(?:server|preview):\s*{[^}]*port:\s*(\d+)/s);
+      if (portMatch) {
+        const port = parseInt(portMatch[1], 10);
+        console.log(`[Preview] Detected port ${port} from ${configFile}`);
+        return port;
+      }
+    } catch {}
+  }
+
+  // 2. Check next.config.js
+  try {
+    const nextConfigPath = path.join(repoPath, 'next.config.js');
+    const content = await fs.readFile(nextConfigPath, 'utf8');
+
+    // Look for PORT env variable or port config
+    const portMatch = content.match(/port:\s*(\d+)|PORT:\s*(\d+)/);
+    if (portMatch) {
+      const port = parseInt(portMatch[1] || portMatch[2], 10);
+      console.log(`[Preview] Detected port ${port} from next.config.js`);
+      return port;
+    }
+  } catch {}
+
+  // 3. Check .env files for PORT variable
+  const envFiles = ['.env', '.env.local', '.env.development'];
+  for (const envFile of envFiles) {
+    try {
+      const envPath = path.join(repoPath, envFile);
+      const content = await fs.readFile(envPath, 'utf8');
+
+      const portMatch = content.match(/^PORT=(\d+)/m);
+      if (portMatch) {
+        const port = parseInt(portMatch[1], 10);
+        console.log(`[Preview] Detected port ${port} from ${envFile}`);
+        return port;
+      }
+    } catch {}
+  }
+
+  // 4. Check package.json scripts
+  try {
+    const packageJsonPath = path.join(repoPath, 'package.json');
+    const packageContent = await fs.readFile(packageJsonPath, 'utf8');
+    const packageJson = JSON.parse(packageContent);
+
+    const devScript = packageJson?.scripts?.dev || '';
+    const portMatch = devScript.match(/-p\s+(\d+)|--port[=\s]+(\d+)/);
+    if (portMatch) {
+      const port = parseInt(portMatch[1] || portMatch[2], 10);
+      console.log(`[Preview] Detected port ${port} from package.json script`);
+      return port;
+    }
+  } catch {}
+
+  return null;
+}
+
 export async function startPreview(projectName, repoPath, preferredPort = null) {
   // First, check if there's already a dev server running for this project
   // This happens when user manually started the project outside of our UI
@@ -143,8 +228,8 @@ export async function startPreview(projectName, repoPath, preferredPort = null) 
       const testUrl = `http://localhost:${checkPort}`;
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 500);
-      await fetch(testUrl, { 
-        method: 'HEAD', 
+      await fetch(testUrl, {
+        method: 'HEAD',
         signal: controller.signal,
         headers: { 'Accept': '*/*' }
       });
@@ -154,42 +239,35 @@ export async function startPreview(projectName, repoPath, preferredPort = null) 
       return false;
     }
   };
-  
-  // Try to detect port from package.json first
+
+  // Try to detect port from configuration files
   let detectedPort = null;
   try {
-    const packageJsonPath = path.join(repoPath, 'package.json');
-    const fs = await import('fs').then(m => m.promises);
-    const packageContent = await fs.readFile(packageJsonPath, 'utf8');
-    const packageJson = JSON.parse(packageContent);
-    
-    // Check dev script for port configuration
-    const devScript = packageJson?.scripts?.dev || '';
-    const portMatch = devScript.match(/-p\s+(\d+)|--port[=\s]+(\d+)/);
-    if (portMatch) {
-      detectedPort = parseInt(portMatch[1] || portMatch[2], 10);
-      console.log(`[Preview] Detected port ${detectedPort} from package.json for ${projectName}`);
-      
+    detectedPort = await detectPortFromConfig(repoPath);
+
+    if (detectedPort) {
+      console.log(`[Preview] Using detected port ${detectedPort} for ${projectName}`);
+
       // Check if server is already running on this port
       if (await checkExistingServer(detectedPort)) {
         console.log(`[Preview] Server already running on port ${detectedPort} for ${projectName}, using existing server`);
-        
+
         // Register this as running without starting a new process
-        processes.set(projectName, { 
+        processes.set(projectName, {
           proc: null, // No process since we're using existing server
-          port: detectedPort, 
-          logs: ['Using existing server'], 
-          startedAt: Date.now(), 
+          port: detectedPort,
+          logs: ['Using existing server'],
+          startedAt: Date.now(),
           repoPath: path.resolve(repoPath),
           external: true // Flag to indicate this is an external server
         });
-        
+
         broadcast({ type: 'preview_success', project: projectName, port: detectedPort, url: `http://localhost:${detectedPort}` });
         return { port: detectedPort, url: `http://localhost:${detectedPort}` };
       }
     }
   } catch (e) {
-    console.log(`[Preview] Could not detect port from package.json: ${e.message}`);
+    console.log(`[Preview] Could not detect port from config: ${e.message}`);
   }
   
   // Check if this project should not have preview
@@ -278,34 +356,50 @@ export async function startPreview(projectName, repoPath, preferredPort = null) 
   // Stop existing
   try { await stopPreview(projectName); } catch {}
 
-  // If preferred port is provided, check if it's free first
+  // Determine which port to use (priority: preferredPort > detectedPort > 4000)
   let port;
+  const tryPort = (p) => new Promise((resolve) => {
+    const srv = net.createServer();
+    srv.once('error', () => resolve(false));
+    srv.once('listening', () => srv.close(() => resolve(true)));
+    srv.listen(p, '127.0.0.1');
+  });
+
+  // First try preferred port if provided
   if (preferredPort) {
-    const tryPort = (p) => new Promise((resolve) => {
-      const srv = net.createServer();
-      srv.once('error', () => resolve(false));
-      srv.once('listening', () => srv.close(() => resolve(true)));
-      srv.listen(p, '127.0.0.1');
-    });
-    
     const isPreferredFree = await tryPort(preferredPort);
     if (isPreferredFree) {
       port = preferredPort;
       console.log(`[Preview] Using preferred port ${port} for ${projectName}`);
     } else {
       console.log(`[Preview] Preferred port ${preferredPort} is in use for ${projectName}, finding alternative...`);
-      // Find next available port starting from preferredPort + 1
       port = await findFreePort(
         preferredPort + 1,
         Number(process.env.PREVIEW_PORT_END) || 4999
       );
     }
-  } else {
-    // No preferred port, find first available starting from 4000
+  }
+  // Try detected port from config files if available
+  else if (detectedPort) {
+    const isDetectedFree = await tryPort(detectedPort);
+    if (isDetectedFree) {
+      port = detectedPort;
+      console.log(`[Preview] Using detected config port ${port} for ${projectName}`);
+    } else {
+      console.log(`[Preview] Detected port ${detectedPort} is in use for ${projectName}, finding alternative...`);
+      port = await findFreePort(
+        detectedPort + 1,
+        Number(process.env.PREVIEW_PORT_END) || 4999
+      );
+    }
+  }
+  // Fall back to finding any available port starting from 4000
+  else {
     port = await findFreePort(
       Number(process.env.PREVIEW_PORT_START) || 4000,
       Number(process.env.PREVIEW_PORT_END) || 4999
     );
+    console.log(`[Preview] No config port detected, using available port ${port} for ${projectName}`);
   }
 
   // Detect the right command to run
@@ -373,8 +467,8 @@ export async function startPreview(projectName, repoPath, preferredPort = null) 
     console.log(`[Preview] Using script-defined port ${port} for ${projectName}`);
     fullArgs = [...args];
   } else if (isNextJs) {
-    // Next.js uses -p PORT directly (no --)
-    fullArgs = [...args, '-p', String(port)];
+    // Next.js supports -p but npm needs -- to forward args
+    fullArgs = [...args, '--', '-p', String(port)];
   } else if (isVite) {
     // Vite uses --port PORT
     fullArgs = [...args, '--', '--port', String(port)];

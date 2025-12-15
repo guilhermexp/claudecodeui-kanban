@@ -20,7 +20,8 @@
     "hooks:disable": "node scripts/claude-hooks-cli.js disable",
     "hooks:list": "node scripts/claude-hooks-cli.js list",
     "hooks:status": "node scripts/claude-hooks-cli.js status",
-    "hooks:test": "node scripts/claude-hooks-cli.js test"
+    "hooks:test": "node scripts/claude-hooks-cli.js test",
+    "test": "node tests/run-all.js"
   },
   "keywords": [
     "claude",
@@ -62,6 +63,7 @@
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.515.0",
     "multer": "^2.0.1",
+    "node-pty": "^1.0.0",
     "pidusage": "^4.0.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
@@ -83,6 +85,8 @@
     "@vitejs/plugin-react": "^4.6.0",
     "autoprefixer": "^10.4.16",
     "eslint": "^9.37.0",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.0.1",
     "node-fetch": "^2.7.0",
     "postcss": "^8.4.32",
     "tailwindcss": "^3.4.0",

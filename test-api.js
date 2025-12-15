@@ -5,40 +5,40 @@ import fetch from 'node-fetch';
 async function testAPIs() {
   const baseUrl = 'http://localhost:7347';
   
-  // Common test credentials - you may need to adjust these
-  const credentials = [
-    { username: 'guilherme-varela@hotmail.com', password: 'password' },
-    { username: 'test@test.com', password: 'test123' },
-    { username: 'test@test.com', password: 'password' },
-    { username: 'admin', password: 'admin123' }
-  ];
+  const cred = { username: 'test@test.com', password: 'test123' };
   
   let token = null;
   
-  // Try to login with different credentials
   console.log('🔐 Attempting to authenticate...\n');
-  for (const cred of credentials) {
-    try {
-      const loginRes = await fetch(`${baseUrl}/api/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(cred)
-      });
-      
-      const data = await loginRes.json();
-      if (data.success) {
-        console.log(`✅ Login successful with: ${cred.username}`);
-        token = data.token;
-        break;
-      }
-    } catch (e) {
-      // Try next credential
+  try {
+    const loginRes = await fetch(`${baseUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cred)
+    });
+    const data = await loginRes.json();
+    if (data.success) {
+      console.log(`✅ Login successful with: ${cred.username}`);
+      token = data.token;
+    }
+  } catch {}
+
+  if (!token) {
+    console.log('No user found — registering test user...');
+    const regRes = await fetch(`${baseUrl}/api/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cred)
+    });
+    const regData = await regRes.json();
+    if (regData.success) {
+      console.log('✅ Registration successful');
+      token = regData.token;
     }
   }
   
   if (!token) {
-    console.log('❌ Could not authenticate with any credentials');
-    console.log('Please provide valid credentials or run: node setup-user.js');
+    console.log('❌ Could not authenticate/register');
     return;
   }
   
@@ -92,6 +92,38 @@ async function testAPIs() {
     } catch (error) {
       console.error(`Error testing ${test.mode}:`, error.message);
     }
+  }
+
+  // Test projects list (should not error, may be empty)
+  console.log('\n📁 Testing Projects API...\n');
+  try {
+    const res = await fetch(`${baseUrl}/api/projects`, { headers: { 'Authorization': `Bearer ${token}` } });
+    console.log('Projects status:', res.status);
+    const txt = await res.text();
+    console.log('Projects raw:', txt.slice(0, 120).replace(/\n/g,' '), '...');
+    try {
+      const data = JSON.parse(txt);
+      console.log('Projects length:', Array.isArray(data) ? data.length : (Array.isArray(data?.projects) ? data.projects.length : 0));
+    } catch {}
+  } catch (error) {
+    console.error('Projects error:', error.message);
+  }
+
+  // Test TTS summarize (expected to error if keys/scripts missing, but endpoint should respond JSON)
+  console.log('\n🔊 Testing TTS Summarize (expect graceful error without keys)...\n');
+  try {
+    const res = await fetch(`${baseUrl}/api/tts/gemini-summarize`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ text: 'Este é um teste de síntese em áudio.', voiceName: 'Zephyr' })
+    });
+    const data = await res.json();
+    console.log('TTS status:', res.status, 'error:', data.error || 'none');
+  } catch (error) {
+    console.error('TTS error:', error.message);
   }
   
   console.log('\n✨ API Testing Complete!');

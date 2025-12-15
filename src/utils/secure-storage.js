@@ -97,7 +97,7 @@ class SecureStorage {
       const decodedData = new TextDecoder().decode(decryptedData);
       return JSON.parse(decodedData);
     } catch (error) {
-      log.error('Decryption failed:', error);
+      log.warn('Decryption failed:', error);
       return null;
     }
   }

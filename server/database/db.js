@@ -56,6 +56,13 @@ if (!Database || !db) {
             if (u) u.last_login = new Date().toISOString();
             return { changes: u ? 1 : 0 };
           }
+          if (/update\s+users\s+set\s+password_hash/.test(text)) {
+            const passwordHash = a;
+            const username = b;
+            const u = mem.users.find(u => u.username === username && u.is_active === 1);
+            if (u) u.password_hash = passwordHash;
+            return { changes: u ? 1 : 0 };
+          }
           return { changes: 0 };
         },
         get: (a) => {
@@ -145,6 +152,16 @@ const userDb = {
     try {
       const row = db.prepare('SELECT id, username, created_at, last_login FROM users WHERE id = ? AND is_active = 1').get(userId);
       return row;
+    } catch (err) {
+      throw err;
+    }
+  },
+
+  updatePassword: (username, passwordHash) => {
+    try {
+      const stmt = db.prepare('UPDATE users SET password_hash = ? WHERE username = ? AND is_active = 1');
+      const result = stmt.run(passwordHash, username);
+      return result?.changes > 0;
     } catch (err) {
       throw err;
     }

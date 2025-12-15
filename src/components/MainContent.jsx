@@ -12,12 +12,10 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { useClaudeWebSocket } from '../contexts/ClaudeWebSocketContext';
 import FileManagerSimple from './FileManagerSimple';
 import CodeEditor from './CodeEditor';
 import Shell from './Shell';
 import GitPanel from './GitPanel';
-import OverlayChatClaude from './OverlayChatClaude';
 import ResourceMonitor from './ResourceMonitor';
 import PromptsModal from './PromptsModal';
 import ErrorBoundary from './ErrorBoundary';
@@ -26,7 +24,7 @@ import { createLogger } from '../utils/logger';
 import ProjectsModal from './ProjectsModal';
 import DarkModeToggle from './DarkModeToggle';
 import PromptEnhancer from './PromptEnhancer';
-import { Folder, Settings as SettingsIcon } from 'lucide-react';
+import { Folder, Settings as SettingsIcon, HardDrive } from 'lucide-react';
 import CtaButton from './ui/CtaButton';
 import TimerChip from './TimerChip';
 
@@ -73,37 +71,17 @@ function MainContent({
   // openShellSessions removed - was set but never used
   const [contextWindowPercentage, setContextWindowPercentage] = useState(null);
   const [shellResizeTrigger, setShellResizeTrigger] = useState(0);
-  // Panel states - only one can be open at a time
-  const [activeSidePanel, setActiveSidePanel] = useState(null); // 'codex-chat' | 'claude-chat'
+  // Panel states
   const [hasPreviewOpen, setHasPreviewOpen] = useState(false); // Track if preview is open
   const [shellVisible, setShellVisible] = useState(true); // Terminal visibility for header dynamics
-  // Shell terminals state removed - single terminal mode only
   
   // Modal states
   const [showProjectsModal, setShowProjectsModal] = useState(false);
-  // const [showKanbanModal, setShowKanbanModal] = useState(false);
   const [showGitModal, setShowGitModal] = useState(false);
   const [showPromptsModal, setShowPromptsModal] = useState(false);
-  // Desktop Files overlay removed; Files opens inside Preview/Shell area
   const [toast, setToast] = useState(null);
   const [showPromptEnhancer, setShowPromptEnhancer] = useState(false);
-  const [claudeOverlaySessionId, setClaudeOverlaySessionId] = useState(null);
-  const [claudeOverlayControls, setClaudeOverlayControls] = useState(null);
-  const [codexOverlayControls, setCodexOverlayControls] = useState(null);
-  const [chatActivity, setChatActivity] = useState(false); // true if any chat is active
-  const [productivityMode, setProductivityMode] = useState(false);
-  const { registerMessageHandler } = useClaudeWebSocket();
-  const [ctxUsed, setCtxUsed] = useState({ claude: 0, codex: 0 });
   
-  // Debug logging for endClaudeOverlaySession updates
-  useEffect(() => {
-    const log = createLogger('MainContent');
-    log.debug('claudeOverlayControls updated:', {
-      hasEnd: typeof claudeOverlayControls?.end === 'function',
-      hasNew: typeof claudeOverlayControls?.new === 'function'
-    });
-  }, [claudeOverlayControls]);
-
   // Expose openPromptEnhancer globally for other components
   useEffect(() => {
     window.openPromptEnhancer = () => setShowPromptEnhancer(true);
@@ -111,68 +89,6 @@ function MainContent({
       delete window.openPromptEnhancer;
     };
   }, []);
-
-  // Listen for backend context window updates and reflect in header chip
-  useEffect(() => {
-    const unsub = registerMessageHandler('ctx-window', (msg) => {
-      try {
-        if (!msg || msg.type !== 'context-usage') return;
-        // Server may send percentage directly. Prefer it if present.
-        if (typeof msg.percentage === 'number') {
-          setContextWindowPercentage(Math.max(0, Math.min(100, Math.round(msg.percentage))));
-          return;
-        }
-        // Otherwise compute locally using provider defaults and accumulated usage.
-        const provider = (msg.provider || 'claude').toLowerCase();
-        const usedIncrement = Number(msg.used || 0);
-        // Accumulate tokens per provider (approx if server only sends per-message usage)
-        setCtxUsed((prev) => {
-          const next = { ...prev };
-          if (!Number.isFinite(next[provider])) next[provider] = 0;
-          next[provider] += usedIncrement;
-          // Compute limit
-          let limit = 200000; // default 200k
-          if (provider === 'codex') {
-            try {
-              const label = (localStorage.getItem('codex-model-label') || '').toLowerCase();
-              limit = label === 'gpt-high' ? 400000 : 200000;
-            } catch {}
-          } else {
-            // Claude defaults to 200k for Sonnet/Opus; adjust here if needed in the future
-            limit = 200000;
-          }
-          const pct = Math.max(0, Math.min(100, Math.round((next[provider] / Math.max(1, limit)) * 100)));
-          setContextWindowPercentage(pct);
-          return next;
-        });
-      } catch {}
-    });
-    return () => { try { unsub && unsub(); } catch {} };
-  }, [registerMessageHandler]);
-
-  // Reset context usage counters when new sessions start
-  useEffect(() => {
-    const unsub = registerMessageHandler('ctx-reset', (msg) => {
-      try {
-        if (!msg) return;
-        if (msg.type === 'claude-session-started') {
-          setCtxUsed((p) => ({ ...p, claude: 0 }));
-          setContextWindowPercentage(0);
-        } else if (msg.type === 'codex-session-started') {
-          setCtxUsed((p) => ({ ...p, codex: 0 }));
-          setContextWindowPercentage(0);
-        }
-      } catch {}
-    });
-    return () => { try { unsub && unsub(); } catch {} };
-  }, [registerMessageHandler]);
-
-  // Notify parent component about active side panel changes
-  useEffect(() => {
-    if (onActiveSidePanelChange) {
-      onActiveSidePanelChange(activeSidePanel);
-    }
-  }, [activeSidePanel, onActiveSidePanelChange]);
 
   // (Removed assistant side panel integration)
   
@@ -223,74 +139,22 @@ function MainContent({
     }
   };
 
-  // Helpers to ensure chat panels are open before sending from Prompt Enhancer
-  const waitFor = (check, { timeout = 2000, interval = 50 } = {}) => new Promise((resolve) => {
-    const start = Date.now();
-    const tick = () => {
-      if (check()) return resolve(true);
-      if (Date.now() - start >= timeout) return resolve(false);
-      setTimeout(tick, interval);
-    };
-    tick();
-  });
-
-  const ensureClaudeOpen = async () => {
-    if (activeSidePanel !== 'claude-chat') setActiveSidePanel('claude-chat');
-    const ok = await waitFor(() => !!claudeOverlayControls && typeof claudeOverlayControls.insert === 'function');
-    if (!ok) {
-      setToast({ message: 'Abra o painel do Claude para enviar o texto' });
-      setTimeout(() => setToast(null), 2200);
-    }
-    return ok;
-  };
-
-  const ensureCodexOpen = async () => {
-    if (activeSidePanel !== 'codex-chat') setActiveSidePanel('codex-chat');
-    const ok = await waitFor(() => !!codexOverlayControls && typeof codexOverlayControls.insert === 'function');
-    if (!ok) {
-      setToast({ message: 'Abra o painel do Codex para enviar o texto' });
-      setTimeout(() => setToast(null), 2200);
-    }
-    return ok;
-  };
-
   // Handler for executing prompts from PromptsHub
   const handleExecutePrompt = async (promptText) => {
-    // Check which tab/panel is active and send the prompt there
+    // Send to Shell terminal
     if (activeTab === 'shell') {
-      // Send to Shell terminal
       const shellElement = document.querySelector('.xterm-screen');
       if (shellElement) {
-        // Focus the terminal and paste the prompt
-        const terminal = window.shellTerminal; // Assuming terminal is exposed globally
+        const terminal = window.shellTerminal;
         if (terminal) {
           terminal.paste(promptText);
           setToast({ message: 'Prompt enviado para o Shell!' });
           setTimeout(() => setToast(null), 2000);
         } else {
-          // Fallback: copy to clipboard
           navigator.clipboard.writeText(promptText);
           setToast({ message: 'Prompt copiado! Cole no Shell com Cmd+V' });
           setTimeout(() => setToast(null), 3000);
         }
-      }
-    } else if (activeSidePanel === 'claude-chat') {
-      // Send to Claude overlay
-      const ready = await ensureClaudeOpen();
-      if (ready && claudeOverlayControls) {
-        claudeOverlayControls.insert(promptText);
-        claudeOverlayControls.send();
-        setToast({ message: 'Prompt enviado para o Claude!' });
-        setTimeout(() => setToast(null), 2000);
-      }
-    } else {
-      // Default: open Claude and send
-      const ready = await ensureClaudeOpen();
-      if (ready && claudeOverlayControls) {
-        claudeOverlayControls.insert(promptText);
-        claudeOverlayControls.send();
-        setToast({ message: 'Prompt enviado para o Claude!' });
-        setTimeout(() => setToast(null), 2000);
       }
     }
   };
@@ -448,17 +312,6 @@ function MainContent({
     <div className="h-full min-h-0 flex flex-col relative overflow-hidden">
       {/* Header with tabs */}
       <div className="h-11 md:h-12 px-3 md:px-3 flex items-center flex-shrink-0 relative z-50 bg-background overflow-visible">
-        {/* Chat column header overlay: make header area match chat background when open */}
-        {(!isMobile && (activeSidePanel === 'codex-chat' || activeSidePanel === 'claude-chat')) && (
-          <div
-            className={`absolute top-0 right-0 h-full bg-card border-l border-border pointer-events-none transition-all duration-300 ease-in-out rounded-r-lg overflow-hidden ${
-              activeSidePanel === 'codex-chat' || activeSidePanel === 'claude-chat'
-                ? 'w-[260px] sm:w-[320px] md:w-[360px] lg:w-[420px]'
-                : 'w-0'
-            }`}
-            style={{ zIndex: 20 }}
-          />
-        )}
         <div className="flex items-center justify-between gap-4 md:gap-6 w-full">
           <div className="flex items-center space-x-2 sm:space-x-3 flex-1 order-1">
             {isMobile && (
@@ -476,33 +329,30 @@ function MainContent({
             )}
 
             {/* Preview button - toggles preview panel (icon-only) */}
-            {!productivityMode && (
-              <button
-                onClick={() => {
-                  if (hasPreviewOpen) {
-                    try { window.__shellControls?.closePreview?.(); } catch {}
-                  } else {
-                    try { window.__shellControls?.openPreview?.(); } catch {}
-                  }
-                  setTimeout(() => setShellResizeTrigger(prev => prev + 1), 300);
-                }}
-                className={`hidden sm:inline-flex items-center p-2 rounded-md transition-all duration-200 ${
-                  hasPreviewOpen ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground hover:bg-accent'
-                }`}
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                </svg>
-              </button>
-            )}
+            <button
+              onClick={() => {
+                if (hasPreviewOpen) {
+                  try { window.__shellControls?.closePreview?.(); } catch {}
+                } else {
+                  try { window.__shellControls?.openPreview?.(); } catch {}
+                }
+                setTimeout(() => setShellResizeTrigger(prev => prev + 1), 300);
+              }}
+              className={`hidden sm:inline-flex items-center p-2 rounded-md transition-all duration-200 ${
+                hasPreviewOpen ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+            </button>
             {/* Projects button (desktop) moved into centered tabs */}
             <div className="flex items-center gap-3 flex-1">
               <div className="min-w-0 flex-1">
                 {
                   <div className="flex items-center gap-3">
-                    <h2 className="text-sm sm:text-base font-semibold text-gray-900 dark:text-white whitespace-nowrap">
-                      Shell {activeSidePanel && `+ ${activeSidePanel === 'files' ? 'Files' : 
-                                                      activeSidePanel === 'chat' ? 'Assistant' : ''}`}
+                    <h2 className="text-sm sm:text-base font-semibold text-foreground whitespace-nowrap">
+                      Shell
                     </h2>
                     <span className="inline-block px-2 py-0.5 text-xs rounded-full bg-gradient-to-r from-primary/20 to-accent/20 dark:from-primary/30 dark:to-accent/30 text-primary dark:text-primary-foreground font-medium shrink-0">
                       {selectedProject.displayName}
@@ -579,6 +429,21 @@ function MainContent({
                 </span>
               </button>
               
+              <button
+                onClick={() => {
+                  try {
+                    window.__shellControls?.toggleProjectBrowser?.();
+                  } catch {}
+                }}
+                className="relative inline-flex items-center justify-center w-9 h-9 rounded-lg transition-all duration-200 bg-background/60 backdrop-blur-md hover:bg-accent border border-white/20 dark:border-white/10 text-foreground/70 hover:text-foreground shadow-inner"
+                title="Toggle local folders panel"
+              >
+                <span className="flex items-center gap-1 sm:gap-1.5 leading-none">
+                  <HardDrive className="w-4 h-4" />
+                  <span className="hidden">Folders</span>
+                </span>
+              </button>
+              
               { /* Kanban button removed */ }
 
               {/* Files (desktop hidden if mobile). Opens preview + file tree */}
@@ -644,75 +509,6 @@ function MainContent({
                   <span className="hidden">Source Control</span>
                 </span>
               </button>
-              {/* Codex AI button - opens Codex chat panel */}
-              <button
-                onClick={() => {
-                  if (activeSidePanel === 'codex-chat') {
-                    setActiveSidePanel(null);
-                  } else {
-                    // Don't close preview - allow both to be open
-                    // Close Claude chat if open
-                    if (activeSidePanel === 'claude-chat') {
-                      setActiveSidePanel('codex-chat');
-                    } else {
-                      setActiveSidePanel('codex-chat');
-                    }
-                    if (sidebarOpen && onSidebarOpen) {
-                      onSidebarOpen();
-                    }
-                  }
-                  setTimeout(() => setShellResizeTrigger(prev => prev + 1), 350);
-                }}
-                className={`relative inline-flex items-center justify-center w-9 h-9 rounded-lg transition-all duration-200 ${
-                  activeSidePanel === 'codex-chat'
-                    ? 'bg-accent border border-border text-foreground'
-                    : 'bg-background/60 hover:bg-accent border border-border/50 text-foreground/70 hover:text-foreground'
-                }`}
-                title="Open Codex AI Assistant"
-              >
-                <span className="flex items-center gap-1 sm:gap-1.5 leading-none">
-                  {/* OpenAI/Codex logo */}
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M21.55 10.004a5.416 5.416 0 00-.478-4.501c-1.217-2.09-3.662-3.166-6.05-2.66A5.59 5.59 0 0010.831 1C8.39.995 6.224 2.546 5.473 4.838A5.553 5.553 0 001.76 7.496a5.487 5.487 0 00.691 6.5 5.416 5.416 0 00.477 4.502c1.217 2.09 3.662 3.165 6.05 2.66A5.586 5.586 0 0013.168 23c2.443.006 4.61-1.546 5.361-3.84a5.553 5.553 0 003.715-2.66 5.488 5.488 0 00-.693-6.497v.001zm-8.381 11.558a4.199 4.199 0 01-2.675-.954c.034-.018.093-.05.132-.074l4.44-2.53a.71.71 0 00.364-.623v-6.176l1.877 1.069c.02.01.033.029.036.05v5.115c-.003 2.274-1.87 4.118-4.174 4.123zM4.192 17.78a4.059 4.059 0 01-.498-2.763c.032.02.09.055.131.078l4.44 2.53c.225.13.504.13.73 0l5.42-3.088v2.138a.068.068 0 01-.027.057L9.9 19.288c-1.999 1.136-4.552.46-5.707-1.51h-.001zM3.023 8.216A4.15 4.15 0 015.198 6.41l-.002.151v5.06a.711.711 0 00.364.624l5.42 3.087-1.876 1.07a.067.067 0 01-.063.005l-4.489-2.559c-1.995-1.14-2.679-3.658-1.53-5.63h.001zm15.417 3.54l-5.42-3.088L14.896 7.6a.067.067 0 01.063-.006l4.489 2.557c1.998 1.14 2.683 3.662 1.529 5.633a4.163 4.163 0 01-2.174 1.807V12.38a.71.71 0 00-.363-.623zm1.867-2.773a6.04 6.04 0 00-.132-.078l-4.44-2.53a.731.731 0 00-.729 0l-5.42 3.088V7.325a.068.068 0 01.027-.057L14.1 4.713c2-1.137 4.555-.46 5.707 1.513.487.833.664 1.809.499 2.757h.001zm-11.741 3.81l-1.877-1.068a.065.065 0 01-.036-.051V6.559c.001-2.277 1.873-4.122 4.181-4.12.976 0 1.92.338 2.671.954-.034.018-.092.05-.131.073l-4.44 2.53a.71.71 0 00-.365.623l-.003 6.173v.002zm1.02-2.168L12 9.25l2.414 1.375v2.75L12 14.75l-2.415-1.375v-2.75z"/>
-                  </svg>
-                  <span className="hidden">Codex</span>
-                </span>
-              </button>
-              
-              {/* Claude Code button - opens Claude chat panel */}
-              <button
-                onClick={() => {
-                  if (activeSidePanel === 'claude-chat') {
-                    setActiveSidePanel(null);
-                  } else {
-                    // Don't close preview - allow both to be open
-                    // Close Codex chat if open
-                    if (activeSidePanel === 'codex-chat') {
-                      setActiveSidePanel('claude-chat');
-                    } else {
-                      setActiveSidePanel('claude-chat');
-                    }
-                    if (sidebarOpen && onSidebarOpen) {
-                      onSidebarOpen();
-                    }
-                  }
-                  setTimeout(() => setShellResizeTrigger(prev => prev + 1), 350);
-                }}
-                className={`relative inline-flex items-center justify-center w-9 h-9 rounded-lg transition-all duration-200 ${
-                  activeSidePanel === 'claude-chat'
-                    ? 'bg-accent border border-border text-foreground'
-                    : 'bg-background/60 hover:bg-accent border border-border/50 text-foreground/70 hover:text-foreground'
-                }`}
-                title="Open Claude Code Assistant"
-              >
-                <span className="flex items-center gap-1 sm:gap-1.5 leading-none">
-                  {/* Claude logo with original color */}
-                  <svg className="w-4 h-4" viewBox="0 0 512 510" fill="#D77655">
-                    <path d="M142.27 316.619l73.655-41.326 1.238-3.589-1.238-1.996-3.589-.001-12.31-.759-42.084-1.138-36.498-1.516-35.361-1.896-8.897-1.895-8.34-10.995.859-5.484 7.482-5.03 10.717.935 23.683 1.617 35.537 2.452 25.782 1.517 38.193 3.968h6.064l.86-2.451-2.073-1.517-1.618-1.517-36.776-24.922-39.81-26.338-20.852-15.166-11.273-7.683-5.687-7.204-2.451-15.721 10.237-11.273 13.75.935 3.513.936 13.928 10.716 29.749 23.027 38.848 28.612 5.687 4.727 2.275-1.617.278-1.138-2.553-4.271-21.13-38.193-22.546-38.848-10.035-16.101-2.654-9.655c-.935-3.968-1.617-7.304-1.617-11.374l11.652-15.823 6.445-2.073 15.545 2.073 6.547 5.687 9.655 22.092 15.646 34.78 24.265 47.291 7.103 14.028 3.791 12.992 1.416 3.968 2.449-.001v-2.275l1.997-26.641 3.69-32.707 3.589-42.084 1.239-11.854 5.863-14.206 11.652-7.683 9.099 4.348 7.482 10.716-1.036 6.926-4.449 28.915-8.72 45.294-5.687 30.331h3.313l3.792-3.791 15.342-20.372 25.782-32.227 11.374-12.789 13.27-14.129 8.517-6.724 16.1-.001 11.854 17.617-5.307 18.199-16.581 21.029-13.75 17.819-19.716 26.54-12.309 21.231 1.138 1.694 2.932-.278 44.536-9.479 24.062-4.347 28.714-4.928 12.992 6.066 1.416 6.167-5.106 12.613-30.71 7.583-36.018 7.204-53.636 12.689-.657.48.758.935 24.164 2.275 10.337.556h25.301l47.114 3.514 12.309 8.139 7.381 9.959-1.238 7.583-18.957 9.655-25.579-6.066-59.702-14.205-20.474-5.106-2.83-.001v1.694l17.061 16.682 31.266 28.233 39.152 36.397 1.997 8.999-5.03 7.102-5.307-.758-34.401-25.883-13.27-11.651-30.053-25.302-1.996-.001v2.654l6.926 10.136 36.574 54.975 1.895 16.859-2.653 5.485-9.479 3.311-10.414-1.895-21.408-30.054-22.092-33.844-17.819-30.331-2.173 1.238-10.515 113.261-4.929 5.788-11.374 4.348-9.478-7.204-5.03-11.652 5.03-23.027 6.066-30.052 4.928-23.886 4.449-29.674 2.654-9.858-.177-.657-2.173.278-22.37 30.71-34.021 45.977-26.919 28.815-6.445 2.553-11.173-5.789 1.037-10.337 6.243-9.2 37.257-47.392 22.47-29.371 14.508-16.961-.101-2.451h-.859l-98.954 64.251-17.618 2.275-7.583-7.103.936-11.652 3.589-3.791 29.749-20.474-.101.102.024.101z"/>
-                  </svg>
-                  <span className="hidden">Claude</span>
-                </span>
-              </button>
               
 
             </div>
@@ -720,39 +516,13 @@ function MainContent({
             {/* Timer moved to right-side controls to avoid affecting tabs sizing */}
           </div>
           
-          {/* Right-side controls group - centered over chat when open; hide extra controls in Prod */}
-          <div className={`absolute top-1/2 -translate-y-1/2 z-40 items-center ${
-            (!isMobile && (activeSidePanel === 'codex-chat' || activeSidePanel === 'claude-chat'))
-              ? 'right-0 w-[260px] sm:w-[320px] md:w-[360px] lg:w-[420px] flex justify-center'
-              : 'right-4 flex'
-          }`}>
+          {/* Right-side controls group */}
+          <div className="absolute top-1/2 -translate-y-1/2 z-40 right-4 flex items-center">
             <div className="flex items-center gap-1.5">
               {/* Timer (always visible on desktop) */}
               <div className="hidden md:block mr-2">
                 <TimerChip projectName={selectedProject?.displayName ?? selectedProject?.name ?? 'Standalone'} />
               </div>
-              {/* Productivity mode toggle */}
-              <button
-                onClick={() => setProductivityMode(v => !v)}
-                className={`px-2 h-7 rounded-[12px] text-[11px] border ${productivityMode ? 'bg-blue-500/20 text-blue-400 border-blue-500/30' : 'text-muted-foreground bg-background/80 border-border hover:bg-accent hover:text-foreground'}`}
-                title="Toggle Productivity Mode (Shell + Claude + Codex)"
-              >Prod</button>
-              {!productivityMode && (
-              <>
-              {claudeOverlaySessionId && !String(claudeOverlaySessionId).startsWith('temp-') && (
-                <span className="hidden sm:inline-flex items-center h-7 px-2 rounded-[12px] bg-accent/30 text-[11px] text-muted-foreground border border-border mr-1" title="Claude session active">
-                  Active
-                </span>
-              )}
-              {(activeSidePanel === 'claude-chat' ? claudeOverlayControls?.new : codexOverlayControls?.new) && (
-                <button
-                  onClick={() => { try { (activeSidePanel === 'claude-chat' ? claudeOverlayControls.new : codexOverlayControls.new)(); } catch {}; if (!activeSidePanel) setActiveSidePanel('claude-chat'); }}
-                  className="icon-pill-sm text-muted-foreground"
-                  title="New session"
-                >
-                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14M5 12h14"/></svg>
-                </button>
-              )}
               {/* Settings */}
               <button
                 onClick={onShowSettings}
@@ -771,21 +541,17 @@ function MainContent({
               <div className="icon-pill-sm text-muted-foreground flex items-center justify-center">
                 <ResourceMonitor />
               </div>
-              </>
-              )}
             </div>
           </div>
         </div>
 
       <div className="flex-1 min-h-0 flex relative bg-background">
-        {productivityMode ? (
-          <div className="flex w-full h-full">
-            {/* Left: Shell (keeps its own bordered container) */}
-            <div className="w-1/3 min-w-0 overflow-hidden rounded-none">
-              {!isMobile && (
-                <Shell
-                  key="shell-main" // Fixed key to preserve session
-                  selectedProject={selectedProject}
+        <div className={`min-h-0 flex flex-col transition-all duration-300 flex-1 bg-background`}>
+          <div className="h-full overflow-hidden">
+            {!isMobile && (
+                <Shell 
+                  key="shell-main"
+                  selectedProject={selectedProject} 
                   selectedSession={selectedSession}
                   isActive={true}
                   onConnectionChange={onShellConnectionChange}
@@ -793,144 +559,21 @@ function MainContent({
                   isMobile={false}
                   resizeTrigger={shellResizeTrigger}
                   activeSidePanel={null}
-                  onPreviewStateChange={() => {}}
+                  onPreviewStateChange={setHasPreviewOpen}
                   onBindControls={(controls) => { window.__shellControls = controls; }}
                   onTerminalVisibilityChange={setShellVisible}
-                  onSidebarClose={() => {}}
-                  disablePreview={true}
-                  flushRight={true}
-                />
-              )}
-            </div>
-            {/* Middle: Claude (wrapper draws border; inner is borderless) */}
-            <div className="w-1/3 min-w-0 overflow-hidden rounded-none">
-              {!isMobile && (
-                <div className="h-full border border-border rounded-none overflow-hidden">
-                  <OverlayChatClaude
-                  key="claude-chat-panel" // Use same key as panel mode
-                  embedded={true}
-                  disableInlinePanel={true}
-                  cliProviderFixed="claude"
-                  chatId="claude-instance" // Use same chatId as panel mode
-                  projectPath={selectedProject?.path}
+                  onSidebarClose={() => {
+                    if (sidebarOpen && onSidebarOpen) {
+                      onSidebarOpen();
+                    }
+                  }}
                   projects={projects}
-                  previewUrl={null}
-                  onSessionIdChange={setClaudeOverlaySessionId}
-                  onBindControls={setClaudeOverlayControls}
-                  onActivityChange={(active) => setChatActivity(active)}
-                  onPanelClosed={() => {}}
-                  tightEdgeLeft={true}
+                  onProjectSelect={onProjectSelect}
+                  onProjectsRefresh={onRefresh}
                 />
-                </div>
-              )}
-            </div>
-            {/* Right: Codex (wrapper with right rounded) */}
-            <div className="w-1/3 min-w-0 overflow-hidden">
-              {!isMobile && (
-                <div className="h-full border border-border rounded-r-lg overflow-hidden">
-                  <OverlayChatClaude
-                  key="codex-chat-panel" // Use same key as panel mode
-                  embedded={true}
-                  disableInlinePanel={true}
-                  cliProviderFixed="codex"
-                  chatId="codex-instance" // Use same chatId as panel mode
-                  projectPath={selectedProject?.path}
-                  projects={projects}
-                  previewUrl={null}
-                  onSessionIdChange={() => {}}
-                  onBindControls={setCodexOverlayControls}
-                  onActivityChange={(active) => setChatActivity(active)}
-                  onPanelClosed={() => {}}
-                  tightEdgeLeft={true}
-                />
-                </div>
-              )}
-            </div>
+            )}
           </div>
-        ) : (
-          <div className={`min-h-0 flex flex-col transition-all duration-300 flex-1 bg-background`}>
-            <div className="h-full overflow-hidden">
-              {!isMobile && (
-                  <Shell 
-                    key="shell-main" // Fixed key to preserve session
-                    selectedProject={selectedProject} 
-                    selectedSession={selectedSession}
-                    isActive={true}
-                    onConnectionChange={onShellConnectionChange}
-                    onSessionStateChange={handleShellSessionStateChange}
-                    isMobile={false}
-                    resizeTrigger={shellResizeTrigger}
-                    activeSidePanel={activeSidePanel}
-                    onPreviewStateChange={setHasPreviewOpen}
-                    onBindControls={(controls) => { window.__shellControls = controls; }}
-                    onTerminalVisibilityChange={setShellVisible}
-                    onSidebarClose={() => {
-                      if (sidebarOpen && onSidebarOpen) {
-                        onSidebarOpen();
-                      }
-                      setActiveSidePanel(null);
-                    }}
-                  />
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Removed empty-state overlay when shell is hidden to avoid duplication */}
-
-        {/* Codex Chat panel integrated (uses unified Claude overlay for consistent UI) */}
-        {!isMobile && !productivityMode && (
-          <div className={`transition-all duration-300 ease-in-out overflow-hidden ${
-            activeSidePanel === 'codex-chat' ? 'w-[260px] sm:w-[320px] md:w-[360px] lg:w-[420px] bg-transparent' : 'w-0'
-          }`}>
-            {/* Always mounted to preserve session state when switching panels */}
-            <div className={`${activeSidePanel === 'codex-chat' ? 'opacity-100' : 'opacity-0'} transition-opacity duration-200`}
-                 style={{ pointerEvents: activeSidePanel === 'codex-chat' ? 'auto' : 'none', height: '100%' }}>
-              <OverlayChatClaude 
-                key="codex-chat-panel"
-                embedded={true}
-                disableInlinePanel={true}
-                cliProviderFixed="codex"
-                chatId="codex-instance"
-                projectPath={selectedProject?.path}
-                projects={projects}
-                previewUrl={null}
-                onSessionIdChange={() => {}}
-                onBindControls={setCodexOverlayControls}
-                onActivityChange={(active) => setChatActivity(active)}
-                onPanelClosed={() => setActiveSidePanel(null)}
-                tightEdgeLeft={true}
-              />
-            </div>
-          </div>
-        )}
-        
-        {/* Claude Chat panel integrated */}
-        {!isMobile && !productivityMode && (
-          <div className={`transition-all duration-300 ease-in-out overflow-hidden ${
-            activeSidePanel === 'claude-chat' ? 'w-[260px] sm:w-[320px] md:w-[360px] lg:w-[420px] bg-transparent' : 'w-0'
-          }`}>
-            {/* Always mounted to preserve session state when switching panels */}
-            <div className={`${activeSidePanel === 'claude-chat' ? 'opacity-100' : 'opacity-0'} transition-opacity duration-200`}
-                 style={{ pointerEvents: activeSidePanel === 'claude-chat' ? 'auto' : 'none', height: '100%' }}>
-              <OverlayChatClaude 
-                key="claude-chat-panel"
-                embedded={true}
-                disableInlinePanel={true}
-                cliProviderFixed="claude"
-                chatId="claude-instance"
-                projectPath={selectedProject?.path}
-                projects={projects}
-                previewUrl={null}
-                onSessionIdChange={setClaudeOverlaySessionId}
-                onBindControls={setClaudeOverlayControls}
-                onActivityChange={(active) => setChatActivity(active)}
-                onPanelClosed={() => setActiveSidePanel(null)}
-                tightEdgeLeft={true}
-              />
-            </div>
-          </div>
-        )}
+        </div>
 
         {/* Files overlay removed: Files opens inside Preview to avoid overlapping other panels */}
         
@@ -1019,24 +662,6 @@ function MainContent({
       <PromptEnhancer
         open={showPromptEnhancer}
         onClose={() => setShowPromptEnhancer(false)}
-        onSendToClaude={async (text, opts = { send: false }) => {
-          const ready = await ensureClaudeOpen();
-          if (!ready) return;
-          try {
-            claudeOverlayControls.insert?.(text, { mode: 'replace' });
-            claudeOverlayControls.focus?.();
-            if (opts.send) claudeOverlayControls.send?.();
-          } catch {}
-        }}
-        onSendToCodex={async (text, opts = { send: false }) => {
-          const ready = await ensureCodexOpen();
-          if (!ready) return;
-          try {
-            codexOverlayControls.insert?.(text, { mode: 'replace' });
-            codexOverlayControls.focus?.();
-            if (opts.send) codexOverlayControls.send?.();
-          } catch {}
-        }}
       />
 
 
