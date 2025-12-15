@@ -34,6 +34,7 @@ import http from 'http';
 import { createLogger } from './utils/logger.js';
 import { createApp } from './config/app.js';
 import { setupRoutes } from './config/routes.js';
+import { attachPreviewUpgradeHandler } from './routes/previewProxy.js';
 import { createWebSocketServer, setupWebSocketHandlers } from './websocket/server.js';
 import { initializeDatabase } from './database/db.js';
 import { 
@@ -63,7 +64,6 @@ async function startServer() {
     // Setup rate limiting and security middleware
     app.use('/api', apiRateLimit);
     app.use('/api', userRateLimit); // User-based rate limiting after IP-based
-    app.use('/api/claude-stream', strictRateLimit);
     app.use(resourceMonitor);
     app.use(processLimiter);
 
@@ -76,6 +76,7 @@ async function startServer() {
     // Setup WebSocket server
     const { wss, connectedClients, connectionTracker } = createWebSocketServer(server);
     setupWebSocketHandlers(wss, connectedClients, connectionTracker);
+    attachPreviewUpgradeHandler(server);
 
     // Start server
     server.listen(PORT, HOST, () => {

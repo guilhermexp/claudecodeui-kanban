@@ -93,20 +93,20 @@ export const api = {
   // Auth endpoints (no token required)
   auth: {
     status: () => fetch('/api/auth/status'),
-    login: (username, password) => {
-      console.log('[API] Login request:', { username, password });
-      const body = JSON.stringify({ username, password });
-      console.log('[API] Request body:', body);
-      return fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: body,
-      });
-    },
+    login: (username, password) => fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    }),
     register: (username, password) => fetch('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
+    }),
+    reset: (username, newPassword, resetCode) => fetch('/api/auth/reset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, newPassword, resetCode }),
     }),
     refresh: () => refreshToken(),
     user: () => authenticatedFetch('/api/auth/user'),
@@ -153,15 +153,15 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ path }),
     }),
-  readFile: (projectName, filePath) =>
-    authenticatedFetch(`/api/projects/${projectName}/file?filePath=${encodeURIComponent(filePath)}`),
+  readFile: (filePath, projectPath) =>
+    authenticatedFetch(`/api/files/read?path=${encodeURIComponent(filePath)}${projectPath ? `&projectPath=${encodeURIComponent(projectPath)}` : ''}`),
   saveFile: (projectName, filePath, content) =>
     authenticatedFetch(`/api/projects/${projectName}/file`, {
       method: 'PUT',
       body: JSON.stringify({ filePath, content }),
     }),
   getFiles: (projectName) =>
-    authenticatedFetch(`/api/projects/${projectName}/files`),
+    authenticatedFetch(`/api/files/tree/${encodeURIComponent(projectName)}`),
   transcribe: (formData) =>
     authenticatedFetch('/api/transcribe', {
       method: 'POST',

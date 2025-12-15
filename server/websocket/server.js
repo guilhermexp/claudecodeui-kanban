@@ -1,5 +1,8 @@
 // server/websocket/server.js - WebSocket Server Management
 import { WebSocketServer } from 'ws';
+import { spawn as nodePtySpawn } from 'node-pty';
+import { homedir } from 'os';
+import { existsSync } from 'fs';
 import { createLogger } from '../utils/logger.js';
 import { 
   createSecureVerifyClient, 
@@ -11,6 +14,9 @@ import {
 } from '../middleware/websocket-security.js';
 
 const log = createLogger('WEBSOCKET');
+
+// Store shell processes per WebSocket connection
+const shellProcesses = new Map(); // ws -> { process, projectPath, sessionId }
 
 // Enhanced client tracking with user context for session isolation
 const connectedClients = new Map(); // ws -> { userId, username, activeProject, lastActivity }
@@ -58,6 +64,15 @@ export function createWebSocketServer(server) {
   return { wss, connectedClients, connectionTracker };
 }
 
+// Helper function to expand tilde (~) in paths
+function expandTilde(filepath) {
+  if (!filepath) return filepath;
+  if (filepath === '~' || filepath.startsWith('~/')) {
+    return filepath.replace('~', homedir());
+  }
+  return filepath;
+}
+
 // Handle authenticated WebSocket messages
 async function handleAuthenticatedMessage(ws, data, context) {
   const log = createLogger('WS-AUTH');
@@ -89,22 +104,156 @@ async function handleAuthenticatedMessage(ws, data, context) {
     userLimit.count++;
     rateLimits.set(rateLimitKey, userLimit);
     
-    // Log security-relevant messages
-    if (['claude-start-session', 'codex-start-session', 'claude-stream-message'].includes(data.type)) {
-      log.info('WebSocket authenticated message', {
-        userId,
-        username: context.username,
-        type: data.type,
-        projectPath: data.options?.projectPath
-      });
+    // Handle specific message types
+    switch (data.type) {
+      case 'ping':
+        // Respond to ping with pong
+        ws.send(JSON.stringify({ type: 'pong' }));
+        return;
+      
+      case 'init':
+        // Shell initialization - store session info in context
+        context.activeProject = data.projectPath || null;
+
+        // Initialize shell process
+        try {
+          // Expand tilde in project path
+          let projectPath = data.projectPath && data.projectPath !== 'STANDALONE_MODE'
+            ? expandTilde(data.projectPath)
+            : process.cwd();
+
+          // Determine shell command based on platform
+          const isWindows = process.platform === 'win32';
+          const shellCmd = isWindows ? 'cmd.exe' : process.env.SHELL || '/bin/bash';
+
+          log.info(`Initializing shell - ${JSON.stringify({
+            userId,
+            originalPath: data.projectPath,
+            expandedPath: projectPath,
+            sessionId: data.sessionId,
+            shell: shellCmd,
+            shellExists: existsSync(shellCmd),
+            cwdExists: existsSync(projectPath)
+          })}`);
+
+          // Create environment that makes shell think it's in a terminal
+          const shellEnv = {
+            ...process.env,
+            TERM: 'xterm-256color',
+            COLORTERM: 'truecolor',
+            FORCE_COLOR: '1'
+          };
+
+          // Spawn shell process with PTY for proper terminal support
+          log.info(`About to spawn shell with PTY: ${shellCmd} in ${projectPath}`);
+          const shellProcess = nodePtySpawn(shellCmd, [], {
+            name: 'xterm-256color',
+            cols: data.cols || 80,
+            rows: data.rows || 24,
+            cwd: projectPath,
+            env: shellEnv
+          });
+
+          log.info(`Shell process spawned with PID: ${shellProcess.pid}`);
+
+          // Store process info
+          shellProcesses.set(ws, {
+            process: shellProcess,
+            projectPath,
+            sessionId: data.sessionId,
+            cols: data.cols || 80,
+            rows: data.rows || 24
+          });
+
+          log.info(`Stored shell process in map for session: ${data.sessionId}`);
+
+          // Handle output from PTY (combines stdout and stderr)
+          shellProcess.onData((data) => {
+            log.info(`Shell output: ${data.substring(0, 100)}`);
+            if (ws.readyState === ws.OPEN) {
+              ws.send(JSON.stringify({
+                type: 'output',
+                data: data
+              }));
+              log.info(`Sent output to client`);
+            } else {
+              log.warn(`WebSocket not open, cannot send output`);
+            }
+          });
+          
+          // Handle process exit
+          shellProcess.onExit(({ exitCode, signal }) => {
+            log.debug(`Shell process exited - code: ${exitCode}, signal: ${signal}, sessionId: ${data.sessionId}`);
+            shellProcesses.delete(ws);
+            if (ws.readyState === ws.OPEN) {
+              ws.send(JSON.stringify({
+                type: 'output',
+                data: `\r\n[Process exited with code ${exitCode}]\r\n`
+              }));
+            }
+          });
+          
+          // Send init-success
+          log.info(`Sending init-success to client for session: ${data.sessionId}`);
+          ws.send(JSON.stringify({ type: 'init-success' }));
+          log.info(`init-success sent successfully - PTY will automatically show prompt`);
+        } catch (error) {
+          log.error(`Failed to initialize shell - ${JSON.stringify({
+            errorMessage: error.message,
+            errorCode: error.code,
+            errorStack: error.stack,
+            userId,
+            projectPath: data.projectPath
+          })}`);
+          ws.send(JSON.stringify({
+            type: 'error',
+            error: `Failed to initialize shell: ${error.message}`,
+            details: {
+              code: error.code,
+              stack: error.stack
+            }
+          }));
+        }
+        return;
+      
+      case 'input':
+        // Shell input - forward to shell process
+        const shellInfo = shellProcesses.get(ws);
+        if (shellInfo && shellInfo.process) {
+          try {
+            shellInfo.process.write(data.data || '');
+          } catch (error) {
+            log.error(`Failed to write to shell PTY - error: ${error.message}, userId: ${userId}`);
+          }
+        }
+        return;
+      
+      case 'resize':
+        // Terminal resize - update shell process dimensions
+        const shellInfoResize = shellProcesses.get(ws);
+        if (shellInfoResize && shellInfoResize.process) {
+          const cols = data.cols || 80;
+          const rows = data.rows || 24;
+
+          shellInfoResize.cols = cols;
+          shellInfoResize.rows = rows;
+
+          // Resize the PTY
+          try {
+            shellInfoResize.process.resize(cols, rows);
+          } catch (error) {
+            log.error(`Failed to resize PTY - error: ${error.message}`);
+          }
+        }
+        return;
+      
+      default:
+        // Unknown message type - log and continue
+        log.debug('Authenticated WebSocket message processed', {
+          userId,
+          type: data.type
+        });
     }
-    
-    // TODO: Add specific message handlers here based on message type
-    // For now, just log that we received an authenticated message
-    log.debug('Authenticated WebSocket message processed', {
-      userId,
-      type: data.type
-    });
     
   } catch (error) {
     log.error('Error handling authenticated WebSocket message:', error);
@@ -144,9 +293,11 @@ function cleanupInactiveConnections(connectedClients) {
 
 export function setupWebSocketHandlers(wss, connectedClients, connectionTracker) {
   wss.on('connection', (ws, request) => {
+    log.info(`[WebSocket] New connection from ${request.socket.remoteAddress}, URL: ${request.url}`);
+
     // Setup connection cleanup
     setupConnectionCleanup(ws);
-    
+
     // Initialize client context
     connectedClients.set(ws, {
       userId: null,
@@ -157,18 +308,59 @@ export function setupWebSocketHandlers(wss, connectedClients, connectionTracker)
 
     ws.on('message', async (message) => {
       try {
-        // Validate message format and security
-        const isValid = validateMessage(message);
-        if (!isValid) {
-          ws.close(1003, 'Invalid message format');
+        const clientIP = ws._socket?.remoteAddress || 'unknown';
+
+        log.info(`[WebSocket] Received message from ${clientIP}: ${message.toString().substring(0, 100)}...`);
+
+        // Validate message format and security (this also parses JSON)
+        const data = validateMessage(message, ws, clientIP);
+        if (!data) {
+          // validateMessage already sent error response and logged
           return;
         }
 
-        const data = JSON.parse(message);
+        log.info(`[WebSocket] Message type: ${data.type}`);
         
         // Handle authentication messages
         if (data.type === 'auth') {
-          await handleAuthMessage(ws, data, connectedClients, connectionTracker);
+          log.info(`[WebSocket] Processing auth message...`);
+          const authResult = handleAuthMessage(ws, message, clientIP);
+
+          log.info(`[WebSocket] Auth result:`, { authenticated: authResult.authenticated, user: authResult.user?.username });
+
+          if (authResult.authenticated) {
+            // Update client context with authenticated user info
+            const context = connectedClients.get(ws);
+            if (context) {
+              context.userId = authResult.user.userId;
+              context.username = authResult.user.username;
+              context.lastActivity = Date.now();
+            }
+
+            // Track connection
+            connectionTracker.track(authResult.user.username);
+
+            // Send auth-success response
+            log.info(`[WebSocket] Sending auth-success response`);
+            ws.send(JSON.stringify(authResult.response));
+
+            log.debug('WebSocket authenticated', {
+              userId: authResult.user.userId,
+              username: authResult.user.username,
+              ip: clientIP
+            });
+          } else {
+            log.warn('WebSocket authentication failed', {
+              error: authResult.error,
+              ip: clientIP
+            });
+            ws.send(JSON.stringify({
+              type: 'error',
+              error: authResult.error || 'Authentication failed',
+              code: 'AUTH_FAILED'
+            }));
+            ws.close(1008, 'Authentication failed');
+          }
           return;
         }
 
@@ -200,6 +392,18 @@ export function setupWebSocketHandlers(wss, connectedClients, connectionTracker)
     });
 
     ws.on('close', () => {
+      // Clean up shell process if exists
+      const shellInfo = shellProcesses.get(ws);
+      if (shellInfo && shellInfo.process) {
+        log.debug(`Cleaning up shell process on WebSocket close - sessionId: ${shellInfo.sessionId}`);
+        try {
+          shellInfo.process.kill();
+        } catch (error) {
+          log.error(`Error cleaning up shell process - error: ${error.message}`);
+        }
+        shellProcesses.delete(ws);
+      }
+
       connectedClients.delete(ws);
       log.debug('WebSocket connection closed');
     });

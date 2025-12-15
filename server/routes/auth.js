@@ -185,4 +185,34 @@ router.post('/logout', authenticateToken, (req, res) => {
   res.json({ success: true, message: 'Logged out successfully' });
 });
 
+router.post('/reset', async (req, res) => {
+  try {
+    const { username, newPassword, resetCode } = req.body || {};
+    if (!username || !newPassword || !resetCode) {
+      return res.status(400).json({ error: 'username, newPassword and resetCode are required' });
+    }
+    const expected = process.env.RESET_CODE;
+    if (!expected) {
+      return res.status(400).json({ error: 'RESET_CODE not configured in environment' });
+    }
+    if (resetCode !== expected) {
+      return res.status(403).json({ error: 'Invalid reset code' });
+    }
+    const user = userDb.getUserByUsername(username);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    const saltRounds = 12;
+    const hash = await bcrypt.hash(newPassword, saltRounds);
+    const ok = userDb.updatePassword(username, hash);
+    if (!ok) {
+      return res.status(500).json({ error: 'Failed to update password' });
+    }
+    return res.json({ success: true });
+  } catch (error) {
+    log.error(`Password reset error: ${error.message}`);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;

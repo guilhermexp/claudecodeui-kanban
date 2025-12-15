@@ -391,7 +391,7 @@ function FileManagerSimple({ selectedProject, onClose, embedded = false }) {
       case 'svg':
         return <span className="text-xs flex-shrink-0">🖼️</span>;
       default:
-        return <File className="w-3 h-3 text-muted-foreground flex-shrink-0" />;
+        return <File className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />;
     }
   };
   
@@ -462,15 +462,15 @@ function FileManagerSimple({ selectedProject, onClose, embedded = false }) {
                     className="p-0.5 hover:bg-accent-foreground/10 rounded"
                   >
                     {isExpanded ? (
-                      <ChevronDown className="w-3 h-3" />
+                      <ChevronDown className="w-3.5 h-3.5" />
                     ) : (
-                      <ChevronRight className="w-3 h-3" />
+                      <ChevronRight className="w-3.5 h-3.5" />
                     )}
                   </button>
                   {isExpanded ? (
-                    <FolderOpen className="w-3 h-3 text-primary flex-shrink-0" />
+                    <FolderOpen className="w-3.5 h-3.5 text-primary flex-shrink-0" />
                   ) : (
-                    <Folder className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                    <Folder className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
                   )}
                 </>
               ) : (
@@ -495,7 +495,7 @@ function FileManagerSimple({ selectedProject, onClose, embedded = false }) {
                   autoFocus
                 />
               ) : (
-                <span className={`truncate text-foreground ${compact ? 'text-[11px]' : 'text-xs'} max-w-full`} title={item.name}>
+                <span className={`truncate text-foreground ${compact ? 'text-xs' : 'text-sm'} max-w-full`} title={item.name}>
                   {item.name}
                 </span>
               )}
@@ -910,7 +910,11 @@ function FileManagerSimple({ selectedProject, onClose, embedded = false }) {
                     if (selectedImage && selectedImage.path) {
                       try {
                         // Fetch the image and download it
-                        const response = await fetch(`/api/files/read?path=${encodeURIComponent(selectedImage.path)}&projectPath=${encodeURIComponent(selectedImage.projectPath)}`);
+                        const response = await fetch(`/api/files/read?path=${encodeURIComponent(selectedImage.path)}&projectPath=${encodeURIComponent(selectedImage.projectPath)}`, {
+                          headers: {
+                            'Authorization': `Bearer ${localStorage.getItem('auth-token')}`
+                          }
+                        });
                         const blob = await response.blob();
                         const url = window.URL.createObjectURL(blob);
                         const a = document.createElement('a');

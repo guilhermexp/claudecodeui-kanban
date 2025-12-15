@@ -111,6 +111,9 @@ const ModernLoginForm = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [step, setStep] = useState("email");
+  const [mode, setMode] = useState("login");
+  const [resetCode, setResetCode] = useState("");
+  const [newPassword, setNewPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [initialCanvasVisible, setInitialCanvasVisible] = useState(true);
@@ -120,34 +123,47 @@ const ModernLoginForm = () => {
 
   const handleEmailSubmit = async (e) => {
     e.preventDefault();
-    if (!email || !password) {
-      setError('Please enter both email and password');
-      return;
+    if (mode === 'login') {
+      if (!email || !password) {
+        setError('Please enter both email and password');
+        return;
+      }
+    } else {
+      if (!email || !newPassword || !resetCode) {
+        setError('Enter username, new password and reset code');
+        return;
+      }
     }
 
     setError('');
     setIsLoading(true);
 
     try {
-      // Try to login directly with email/password
-      const result = await login(email, password);
-      
-      if (result.success) {
-        // Login successful - show success animation
-        setReverseCanvasVisible(true);
-        
-        setTimeout(() => {
-          setInitialCanvasVisible(false);
-        }, 50);
-        
-        setTimeout(() => {
-          setStep("success");
-        }, 1500);
+      if (mode === 'login') {
+        const result = await login(email, password);
+        if (result.success) {
+          setReverseCanvasVisible(true);
+          setTimeout(() => { setInitialCanvasVisible(false); }, 50);
+          setTimeout(() => { setStep("success"); }, 1500);
+        } else {
+          setError(result.error || 'Invalid credentials');
+        }
       } else {
-        setError(result.error || 'Invalid credentials');
+        const res = await fetch('/api/auth/reset', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: email, newPassword, resetCode })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          setMode('login');
+          setError('');
+        } else {
+          setError(data.error || 'Reset failed');
+        }
       }
     } catch (err) {
-      setError('Login failed. Please try again.');
+      setError('Request failed. Please try again.');
     }
     
     setIsLoading(false);
@@ -252,48 +268,89 @@ const ModernLoginForm = () => {
                         />
                       </div>
 
-                      <div className="relative">
-                        <input 
-                          type="password" 
-                          placeholder="Enter your password"
-                          value={password}
-                          onChange={(e) => setPassword(e.target.value)}
-                          className="w-full backdrop-blur-sm bg-white/5 text-white border border-white/10 rounded-full py-3 px-4 focus:outline-none focus:border-white/30 text-center placeholder-white/40 transition-all duration-300"
-                          required
-                          disabled={isLoading}
-                        />
-                        <motion.button 
-                          type="submit"
-                          className="absolute right-1.5 top-1.5 text-white w-9 h-9 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-colors group overflow-hidden"
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
-                          disabled={isLoading}
-                        >
-                          <AnimatePresence mode="wait">
-                            {isLoading ? (
-                              <motion.div 
-                                key="loading"
-                                className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full"
-                                initial={{ opacity: 0, scale: 0.5 }}
-                                animate={{ opacity: 1, scale: 1, rotate: 360 }}
-                                exit={{ opacity: 0, scale: 0.5 }}
-                                transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                              />
-                            ) : (
-                              <motion.div
-                                key="arrow"
-                                initial={{ opacity: 0, x: -10 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                exit={{ opacity: 0, x: 10 }}
-                                transition={{ duration: 0.2 }}
-                              >
-                                <ArrowRight className="w-4 h-4" />
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
-                        </motion.button>
-                      </div>
+                      {mode === 'login' ? (
+                        <div className="relative">
+                          <input 
+                            type="password" 
+                            placeholder="Enter your password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            className="w-full backdrop-blur-sm bg-white/5 text-white border border-white/10 rounded-full py-3 px-4 focus:outline-none focus:border-white/30 text-center placeholder-white/40 transition-all duration-300"
+                            required
+                            disabled={isLoading}
+                          />
+                          <motion.button 
+                            type="submit"
+                            className="absolute right-1.5 top-1.5 text-white w-9 h-9 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-colors group overflow-hidden"
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            disabled={isLoading}
+                          >
+                            <AnimatePresence mode="wait">
+                              {isLoading ? (
+                                <motion.div 
+                                  key="loading"
+                                  className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full"
+                                  initial={{ opacity: 0, scale: 0.5 }}
+                                  animate={{ opacity: 1, scale: 1, rotate: 360 }}
+                                  exit={{ opacity: 0, scale: 0.5 }}
+                                  transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                                />
+                              ) : (
+                                <motion.div
+                                  key="arrow"
+                                  initial={{ opacity: 0, x: -10 }}
+                                  animate={{ opacity: 1, x: 0 }}
+                                  exit={{ opacity: 0, x: 10 }}
+                                  transition={{ duration: 0.2 }}
+                                >
+                                  <ArrowRight className="w-4 h-4" />
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          </motion.button>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="relative">
+                            <input 
+                              type="password" 
+                              placeholder="New password"
+                              value={newPassword}
+                              onChange={(e) => setNewPassword(e.target.value)}
+                              className="w-full backdrop-blur-sm bg-white/5 text-white border border-white/10 rounded-full py-3 px-4 focus:outline-none focus:border-white/30 text-center placeholder-white/40 transition-all duration-300"
+                              required
+                              disabled={isLoading}
+                            />
+                          </div>
+                          <div className="relative">
+                            <input 
+                              type="text" 
+                              placeholder="Reset code"
+                              value={resetCode}
+                              onChange={(e) => setResetCode(e.target.value)}
+                              className="w-full backdrop-blur-sm bg-white/5 text-white border border-white/10 rounded-full py-3 px-4 focus:outline-none focus:border-white/30 text-center placeholder-white/40 transition-all duration-300"
+                              required
+                              disabled={isLoading}
+                            />
+                          </div>
+                          <motion.button 
+                            type="submit"
+                            className="w-full text-white h-10 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                            disabled={isLoading}
+                          >
+                            Reset password
+                          </motion.button>
+                        </>
+                      )}
                     </form>
+                    <div className="text-center">
+                      <button className="text-xs text-white/60 underline" onClick={() => { setMode(mode === 'login' ? 'reset' : 'login'); setError(''); }}>
+                        {mode === 'login' ? 'Esqueci minha senha' : 'Voltar ao login'}
+                      </button>
+                    </div>
                   </motion.div>
 
                   {error && (

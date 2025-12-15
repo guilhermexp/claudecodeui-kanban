@@ -1,5 +1,4 @@
 import React, { useEffect, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { useChatState } from '../../hooks/chat/useChatState';
 import { useWebSocketConnection } from '../../hooks/chat/useWebSocketConnection';
 import { ChatInput } from './ChatInput';
@@ -14,10 +13,10 @@ const log = createLogger('ChatInterface');
  */
 export function ChatInterface({
   projectPath,
-  projects = [],
-  previewUrl,
+  projects: _projects = [],
+  previewUrl: _previewUrl,
   embedded = false,
-  disableInlinePanel = false,
+  disableInlinePanel: _disableInlinePanel = false,
   cliProviderFixed = null,
   chatId = 'default',
   onSessionIdChange = null,
@@ -62,7 +61,6 @@ export function ChatInterface({
     trayInputRef,
     messagesScrollRef,
     addMessage,
-    updateMessage,
     clearMessages,
     resetCurrentSession,
     resetTypingState,
@@ -426,6 +424,76 @@ export function ChatInterface({
     );
   };
 
+  const forwardSelectionToChat = useCallback((selection) => {
+    if (!selection) return;
+    const pathSegments = selection.pathSegments || selection.path || [];
+    const pathLabel = selection.pathLabel || formatSelectorBreadcrumbs(pathSegments);
+    const selector = selection.selector || (pathSegments[0] ? formatSelectorBreadcrumbs([pathSegments[0]]) : 'div');
+    const trimmedHtmlRaw = (selection.html || '').trim();
+    const maxChars = 4000;
+    const trimmedHtml = trimmedHtmlRaw.length > maxChars 
+      ? `${trimmedHtmlRaw.slice(0, maxChars)}\n<!-- truncated -->`
+      : trimmedHtmlRaw;
+    const textPreview = (selection.text || selection.textContent || '').trim();
+    const commentParts = [];
+    if (selector) commentParts.push(`selector: ${selector}`);
+    if (pathLabel) commentParts.push(`path: ${pathLabel}`);
+    if (textPreview) {
+      const snippet = textPreview.length > 140 ? `${textPreview.slice(0, 140)}…` : textPreview;
+      commentParts.push(`text: ${snippet}`);
+    }
+    const commentLine = commentParts.length ? `<!-- ${commentParts.join(' | ')} -->` : '';
+    const htmlBlock = trimmedHtml || `<${selector}></${selector.split(/[.#]/)[0] || 'div'}>`;
+    const composedMessage = [commentLine, htmlBlock].filter(Boolean).join('\n');
+
+    setInput(prev => {
+      if (!prev || !prev.trim().length) return composedMessage;
+      return `${prev.replace(/\s*$/, '')}\n\n${composedMessage}`;
+    });
+
+    setAttachments(prev => [
+      ...prev,
+      {
+        type: 'element',
+        tag: selector.replace(/[#.].*$/, '') || selector || 'element',
+        selector,
+        path: pathLabel,
+        html: htmlBlock,
+        text: textPreview
+      }
+    ]);
+
+    setShowSlashMenu(false);
+    setSlashFilter('');
+    setSelectedCommandIndex(0);
+
+    requestAnimationFrame(() => {
+      try {
+        if (trayInputRef.current) {
+          trayInputRef.current.focus();
+          const len = trayInputRef.current.value.length;
+          if (typeof trayInputRef.current.setSelectionRange === 'function') {
+            trayInputRef.current.setSelectionRange(len, len);
+          }
+        }
+      } catch {}
+    });
+  }, [setInput, setAttachments, setShowSlashMenu, setSlashFilter, setSelectedCommandIndex, trayInputRef]);
+
+  useEffect(() => {
+    const handleSelectionEvent = (event) => {
+      forwardSelectionToChat(event.detail);
+    };
+    window.insertElementIntoChat = forwardSelectionToChat;
+    window.addEventListener('preview-element-selected', handleSelectionEvent);
+    return () => {
+      if (window.insertElementIntoChat === forwardSelectionToChat) {
+        delete window.insertElementIntoChat;
+      }
+      window.removeEventListener('preview-element-selected', handleSelectionEvent);
+    };
+  }, [forwardSelectionToChat]);
+
   return (
     <div className={`${embedded 
       ? `w-full h-full flex flex-col bg-card ${tightEdgeLeft ? 'rounded-none border-none' : 'rounded-xl border border-border'}` 
@@ -493,4 +561,17 @@ export function ChatInterface({
       />
     </div>
   );
+}
+
+function formatSelectorBreadcrumbs(segments = []) {
+  if (!Array.isArray(segments)) return '';
+  return segments
+    .map(({ tag, id, classes }) => {
+      const base = (tag || 'div').toLowerCase();
+      const idPart = id ? `#${id}` : '';
+      const classList = Array.isArray(classes) ? classes.filter(Boolean) : (typeof classes === 'string' ? classes.split(' ') : []);
+      const classPart = classList.length ? `.${classList.join('.')}` : '';
+      return `${base}${idPart}${classPart}`;
+    })
+    .join(' ⟶ ');
 }

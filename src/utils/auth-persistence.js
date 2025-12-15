@@ -16,7 +16,6 @@ export const authPersistence = {
    */
   async saveToken(token) {
     if (!token || typeof token !== 'string') {
-      log.warn('Invalid token provided to saveToken');
       return false;
     }
 
@@ -47,6 +46,11 @@ export const authPersistence = {
       // Check if expired
       if (token && expiry && Date.now() > expiry) {
         log.info('Token expired, clearing...');
+        await this.clearToken();
+        return null;
+      }
+
+      if (!token && expiry) {
         await this.clearToken();
         return null;
       }

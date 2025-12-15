@@ -182,15 +182,23 @@ const CodeEditor = forwardRef(({
     const loadFileContent = async () => {
       try {
         setLoading(true);
-        
-        const response = await api.readFile(file.projectName, file.path);
-        
+
+        const response = await api.readFile(file.path, projectPath);
+
         if (!response.ok) {
           throw new Error(`Failed to load file: ${response.status} ${response.statusText}`);
         }
-        
+
         const data = await response.json();
-        setContent(data.content);
+
+        // Handle both base64 encoded (images, binary) and text content
+        if (data.encoding === 'base64') {
+          // For base64, we might want to handle it differently
+          // For now, just show a message
+          setContent(`// Binary file (${data.mimeType})\n// Path: ${file.path}\n// Size: ${data.content.length} bytes (base64)`);
+        } else {
+          setContent(data.content);
+        }
       } catch (error) {
         // Error loading file
         setContent(`// Error loading file: ${error.message}\n// File: ${file.name}\n// Path: ${file.path}`);

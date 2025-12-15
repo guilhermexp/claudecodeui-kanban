@@ -78,6 +78,20 @@ export default defineConfig(({ command, mode }) => {
           ws: true,
           changeOrigin: true
         },
+        // Preview HTTP proxy paths
+        '/preview': {
+          target: 'http://localhost:7347',
+          changeOrigin: true
+        },
+        '/preview-static': {
+          target: 'http://localhost:7347',
+          changeOrigin: true
+        },
+        '/_next': {
+          target: 'http://localhost:7347',
+          changeOrigin: true,
+          ws: true
+        },
         // Shell WebSocket
         '/shell': {
           target: 'ws://localhost:7347',

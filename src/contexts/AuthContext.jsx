@@ -87,7 +87,6 @@ export const AuthProvider = ({ children }) => {
   const login = async (username, password) => {
     try {
       setError(null);
-      console.log('[AuthContext] Login attempt:', { username, password });
       const response = await api.auth.login(username, password);
 
       const data = await response.json();
@@ -102,7 +101,7 @@ export const AuthProvider = ({ children }) => {
         return { success: false, error: data.error || 'Login failed' };
       }
     } catch (error) {
-      console.error('Login error:', error);
+      
       const errorMessage = 'Network error. Please try again.';
       setError(errorMessage);
       return { success: false, error: errorMessage };

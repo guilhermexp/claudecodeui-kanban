@@ -6,6 +6,7 @@ import { useTheme } from '../contexts/ThemeContext';
 function ToolsSettings({ isOpen, onClose }) {
   const { isDarkMode, toggleDarkMode } = useTheme();
   const [skipPermissions, setSkipPermissions] = useState(false);
+  const [autoStartClaudeCode, setAutoStartClaudeCode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState(null);
   const [projectSortOrder, setProjectSortOrder] = useState('name');
@@ -23,9 +24,10 @@ function ToolsSettings({ isOpen, onClose }) {
       if (savedSettings) {
         const localData = JSON.parse(savedSettings);
         setSkipPermissions(localData.skipPermissions || false);
+        setAutoStartClaudeCode(localData.autoStartClaudeCode || false);
         setProjectSortOrder(localData.projectSortOrder || 'name');
       }
-      
+
       // Then try to load from backend (which may be more up-to-date)
       const token = localStorage.getItem('auth-token');
       const response = await fetch('/api/settings', {
@@ -33,14 +35,16 @@ function ToolsSettings({ isOpen, onClose }) {
           'Authorization': `Bearer ${token}`
         }
       });
-      
+
       if (response.ok) {
         const data = await response.json();
         setSkipPermissions(data.skipPermissions || false);
+        setAutoStartClaudeCode(data.autoStartClaudeCode || false);
         setProjectSortOrder(data.projectSortOrder || 'name');
         // Update localStorage with backend data
         localStorage.setItem('claude-tools-settings', JSON.stringify({
           skipPermissions: data.skipPermissions || false,
+          autoStartClaudeCode: data.autoStartClaudeCode || false,
           projectSortOrder: data.projectSortOrder || 'name'
         }));
       }
@@ -53,10 +57,10 @@ function ToolsSettings({ isOpen, onClose }) {
     setIsSaving(true);
     try {
       // Save to localStorage immediately for components to read
-      const settingsData = { skipPermissions, projectSortOrder };
-      
+      const settingsData = { skipPermissions, autoStartClaudeCode, projectSortOrder };
+
       localStorage.setItem('claude-tools-settings', JSON.stringify(settingsData));
-      
+
       // Also save to backend
       const token = localStorage.getItem('auth-token');
       const response = await fetch('/api/settings', {
@@ -123,6 +127,22 @@ function ToolsSettings({ isOpen, onClose }) {
               </div>
             </div>
 
+            {/* Auto-start Claude Code */}
+            <div className="border border-border rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-medium text-foreground">Auto-start Claude Code</h3>
+                  <p className="text-sm text-muted-foreground mt-1">Automatically run "claude code" when connecting to Shell</p>
+                </div>
+                <button
+                  onClick={() => setAutoStartClaudeCode(!autoStartClaudeCode)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${autoStartClaudeCode ? 'bg-primary' : 'bg-muted'}`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${autoStartClaudeCode ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+              </div>
+            </div>
+
             {/* Theme */}
             <div>
               <div className="flex items-center justify-between">
@@ -168,10 +188,10 @@ function ToolsSettings({ isOpen, onClose }) {
               {isSaving ? 'Saving...' : 'Save Settings'}
             </Button>
             {saveStatus === 'success' && (
-              <span className="text-sm text-green-500">Saved!</span>
+              <span className="text-sm text-success">Saved!</span>
             )}
             {saveStatus === 'error' && (
-              <span className="text-sm text-red-500">Error saving</span>
+              <span className="text-sm text-destructive">Error saving</span>
             )}
           </div>
         </div>

@@ -314,13 +314,22 @@ async function main() {
   const allowedProcesses = {};
 
   // Start Server (Claude Code UI Backend) with memory optimizations
+  const nodeHeaderOpts = process.env.NODE_OPTIONS
+    ? `${process.env.NODE_OPTIONS} --max-http-header-size=65536`
+    : '--max-http-header-size=65536';
+
   const startServer = () => spawnService(
       'SERVER',
       'node',
       ['--expose-gc', '--max-old-space-size=2048', 'server/index.js'],
       {
         color: colors.brightGreen,
-        env: { PORT: PORTS.SERVER, VITE_PORT: PORTS.CLIENT },
+        env: { 
+          ...process.env,
+          PORT: PORTS.SERVER, 
+          VITE_PORT: PORTS.CLIENT,
+          NODE_OPTIONS: nodeHeaderOpts
+        },
         registerCallback: (pid) => {} // portProtector.registerAllowedProcess('SERVER', pid)
       }
     );
@@ -377,7 +386,12 @@ async function main() {
     ['vite', '--host', '--port', PORTS.CLIENT.toString()],
     {
       color: colors.brightCyan,
-      env: { VITE_PORT: PORTS.CLIENT, AUTO_KILL_PORTS: process.env.AUTO_KILL_PORTS || '' },
+      env: { 
+        ...process.env,
+        VITE_PORT: PORTS.CLIENT, 
+        AUTO_KILL_PORTS: process.env.AUTO_KILL_PORTS || '',
+        NODE_OPTIONS: nodeHeaderOpts
+      },
       registerCallback: (pid) => {} // portProtector.registerAllowedProcess('CLIENT', pid)
     }
   );

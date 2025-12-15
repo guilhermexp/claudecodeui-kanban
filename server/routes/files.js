@@ -11,6 +11,96 @@ import { createLogger } from '../utils/logger.js';
 const router = express.Router();
 const log = createLogger('FILES');
 
+// Directory and file exclusions to keep the tree compact
+const EXCLUDED_DIRECTORIES = new Set([
+  'node_modules',
+  '.git',
+  '.next',
+  '.turbo',
+  '.cache',
+  '.output',
+  '.expo',
+  '.nuxt',
+  '.vercel',
+  'dist',
+  'build',
+  'tmp',
+  'temp'
+]);
+const EXCLUDED_FILES = new Set(['.DS_Store', 'Thumbs.db']);
+const MAX_FILE_TREE_ITEMS = 6000;
+const collator = new Intl.Collator('en', { sensitivity: 'base', numeric: true });
+
+const toPosixPath = (relativePath) => relativePath.split(path.sep).join('/');
+
+const readDirectoryEntries = async (absolutePath) => {
+  try {
+    return await fsPromises.readdir(absolutePath, { withFileTypes: true });
+  } catch (error) {
+    log.warn(`Unable to read directory ${absolutePath}: ${error.message}`);
+    return [];
+  }
+};
+
+const walkProjectTree = async (rootDir, relativePath, state) => {
+  if (state.total >= MAX_FILE_TREE_ITEMS) {
+    return [];
+  }
+
+  const absolute = relativePath ? path.join(rootDir, relativePath) : rootDir;
+  const entries = await readDirectoryEntries(absolute);
+
+  entries.sort((a, b) => {
+    const aIsDir = a.isDirectory() && !a.isSymbolicLink();
+    const bIsDir = b.isDirectory() && !b.isSymbolicLink();
+    if (aIsDir !== bIsDir) {
+      return aIsDir ? -1 : 1;
+    }
+    return collator.compare(a.name, b.name);
+  });
+
+  const nodes = [];
+
+  for (const entry of entries) {
+    if (state.total >= MAX_FILE_TREE_ITEMS) {
+      break;
+    }
+
+    if (!entry || !entry.name) continue;
+
+    const isDirectory = entry.isDirectory() && !entry.isSymbolicLink();
+    if (isDirectory && EXCLUDED_DIRECTORIES.has(entry.name)) {
+      continue;
+    }
+    if (!isDirectory && EXCLUDED_FILES.has(entry.name)) {
+      continue;
+    }
+
+    const nextRelative = relativePath ? path.join(relativePath, entry.name) : entry.name;
+    const normalizedPath = toPosixPath(nextRelative);
+
+    const node = {
+      name: entry.name,
+      path: normalizedPath,
+      type: isDirectory ? 'directory' : 'file'
+    };
+
+    state.total += 1;
+    nodes.push(node);
+
+    if (isDirectory) {
+      node.children = await walkProjectTree(rootDir, nextRelative, state);
+    }
+  }
+
+  return nodes;
+};
+
+const buildProjectFileTree = async (projectDir) => {
+  const traversalState = { total: 0 };
+  return walkProjectTree(projectDir, '', traversalState);
+};
+
 // Configure multer for file uploads
 const upload = multer({
   dest: path.join(os.tmpdir(), 'claude-code-uploads'),
@@ -96,6 +186,25 @@ router.get('/list-dirs', authenticateToken, async (req, res) => {
   } catch (error) {
     log.error(`Error listing directories: ${error.message}`);
     res.status(500).json({ error: 'Failed to list directories' });
+  }
+});
+
+// Return a project-scoped file tree for the sidebar/preview panel
+router.get('/tree/:projectName', authenticateToken, async (req, res) => {
+  const { projectName } = req.params;
+
+  try {
+    if (!projectName) {
+      return res.status(400).json({ error: 'Project name is required' });
+    }
+
+    const projectDir = await extractProjectDirectory(projectName);
+    const tree = await buildProjectFileTree(projectDir);
+    res.json(tree);
+  } catch (error) {
+    log.error(`Error building tree for ${projectName}: ${error.message}`);
+    const status = error.code === 'NOT_FOUND' ? 404 : 500;
+    res.status(status).json({ error: 'Failed to load project files' });
   }
 });
 
@@ -359,19 +468,19 @@ router.post('/move', authenticateToken, async (req, res) => {
   }
 });
 
-// Upload files
-router.post('/upload', authenticateToken, upload.array('files', 100), async (req, res) => {
+// Create new file or folder
+router.post('/create', authenticateToken, async (req, res) => {
   try {
-    const { projectName, targetPath } = req.body;
-    
-    if (!projectName) {
-      return res.status(400).json({ error: 'Project name is required' });
+    const { projectName, path: filePath, type } = req.body;
+
+    if (!projectName || !filePath || !type) {
+      return res.status(400).json({ error: 'Project name, path, and type are required' });
     }
-    
-    if (!req.files || req.files.length === 0) {
-      return res.status(400).json({ error: 'No files uploaded' });
+
+    if (!['file', 'folder'].includes(type)) {
+      return res.status(400).json({ error: 'Type must be "file" or "folder"' });
     }
-    
+
     // Get the actual project directory
     let projectDir;
     try {
@@ -380,20 +489,150 @@ router.post('/upload', authenticateToken, upload.array('files', 100), async (req
       log.error(`Error extracting project directory: ${error.message}`);
       return res.status(404).json({ error: 'Project not found' });
     }
-    
+
+    // Construct the full path
+    const fullPath = path.join(projectDir, filePath);
+
+    // Check if already exists
+    try {
+      await fsPromises.access(fullPath);
+      return res.status(400).json({ error: `${type === 'file' ? 'File' : 'Folder'} already exists` });
+    } catch (e) {
+      // Good, it doesn't exist
+    }
+
+    // Create file or folder
+    if (type === 'folder') {
+      await fsPromises.mkdir(fullPath, { recursive: true });
+      log.info(`Created folder: ${fullPath}`);
+    } else {
+      // Ensure parent directory exists
+      const parentDir = path.dirname(fullPath);
+      await fsPromises.mkdir(parentDir, { recursive: true });
+
+      // Create empty file
+      await fsPromises.writeFile(fullPath, '', 'utf8');
+      log.info(`Created file: ${fullPath}`);
+    }
+
+    res.json({
+      success: true,
+      message: `${type === 'file' ? 'File' : 'Folder'} created successfully`,
+      path: fullPath
+    });
+  } catch (error) {
+    log.error(`Error creating: ${error.message}`);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Read file contents
+router.get('/read', authenticateToken, async (req, res) => {
+  try {
+    const { path: filePath, projectPath } = req.query;
+
+    if (!filePath) {
+      return res.status(400).json({ error: 'File path is required' });
+    }
+
+    // Resolve the full path
+    let fullPath;
+    if (projectPath) {
+      // If projectPath is provided, use it as base
+      fullPath = path.isAbsolute(filePath) ? filePath : path.join(projectPath, filePath);
+    } else {
+      // Otherwise, use filePath as absolute path
+      fullPath = path.isAbsolute(filePath) ? filePath : path.resolve(filePath);
+    }
+
+    // Check if file exists
+    try {
+      const stats = await fsPromises.stat(fullPath);
+      if (stats.isDirectory()) {
+        return res.status(400).json({ error: 'Path is a directory, not a file' });
+      }
+    } catch (err) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    // Detect if it's a binary file based on extension
+    const ext = path.extname(fullPath).toLowerCase();
+    const binaryExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.svg', '.webp',
+                              '.pdf', '.zip', '.tar', '.gz', '.exe', '.dll', '.so', '.dylib'];
+
+    if (binaryExtensions.includes(ext)) {
+      // For binary files (especially images), send as base64
+      const fileBuffer = await fsPromises.readFile(fullPath);
+      const base64 = fileBuffer.toString('base64');
+      const mimeTypes = {
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.gif': 'image/gif',
+        '.bmp': 'image/bmp',
+        '.ico': 'image/x-icon',
+        '.svg': 'image/svg+xml',
+        '.webp': 'image/webp',
+        '.pdf': 'application/pdf'
+      };
+      const mimeType = mimeTypes[ext] || 'application/octet-stream';
+
+      res.json({
+        content: base64,
+        encoding: 'base64',
+        mimeType: mimeType,
+        path: fullPath
+      });
+    } else {
+      // For text files, read as UTF-8
+      const content = await fsPromises.readFile(fullPath, 'utf8');
+      res.json({
+        content: content,
+        encoding: 'utf8',
+        path: fullPath
+      });
+    }
+  } catch (error) {
+    log.error(`Error reading file: ${error.message}`);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Upload files
+router.post('/upload', authenticateToken, upload.array('files', 100), async (req, res) => {
+  try {
+    const { projectName, targetPath } = req.body;
+
+    if (!projectName) {
+      return res.status(400).json({ error: 'Project name is required' });
+    }
+
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: 'No files uploaded' });
+    }
+
+    // Get the actual project directory
+    let projectDir;
+    try {
+      projectDir = await extractProjectDirectory(projectName);
+    } catch (error) {
+      log.error(`Error extracting project directory: ${error.message}`);
+      return res.status(404).json({ error: 'Project not found' });
+    }
+
     // Determine target directory
-    const fullTargetDir = targetPath 
+    const fullTargetDir = targetPath
       ? path.join(projectDir, targetPath)
       : projectDir;
-    
+
     // Ensure target directory exists
     await fsPromises.mkdir(fullTargetDir, { recursive: true });
-    
+
     // Process uploaded files
     const uploadedFiles = [];
     for (const file of req.files) {
       const targetFilePath = path.join(fullTargetDir, file.originalname);
-      
+
       // Check if file already exists
       let finalPath = targetFilePath;
       try {
@@ -402,7 +641,7 @@ router.post('/upload', authenticateToken, upload.array('files', 100), async (req
         let counter = 1;
         const ext = path.extname(file.originalname);
         const nameWithoutExt = path.basename(file.originalname, ext);
-        
+
         while (true) {
           finalPath = path.join(fullTargetDir, `${nameWithoutExt}_${counter}${ext}`);
           try {
@@ -415,20 +654,20 @@ router.post('/upload', authenticateToken, upload.array('files', 100), async (req
       } catch {
         // File doesn't exist, use original name
       }
-      
+
       // Move file from temp to target
       await fsPromises.rename(file.path, finalPath);
       log.info(`Uploaded: ${file.originalname} → ${finalPath}`);
-      
+
       uploadedFiles.push({
         originalName: file.originalname,
         path: finalPath,
         size: file.size
       });
     }
-    
-    res.json({ 
-      success: true, 
+
+    res.json({
+      success: true,
       message: `Uploaded ${uploadedFiles.length} file(s) successfully`,
       files: uploadedFiles
     });

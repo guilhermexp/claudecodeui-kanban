@@ -61,9 +61,9 @@ function ImageViewer({ file, onClose, inline = false }) {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-4xl max-h-[90vh] w-full mx-4 overflow-hidden">
+      <div className="bg-card rounded-lg shadow-xl max-w-4xl max-h-[90vh] w-full mx-4 overflow-hidden">
         <div className="flex items-center justify-between p-4 border-b">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+          <h3 className="text-lg font-semibold text-foreground">
             {file.name}
           </h3>
           <Button
@@ -76,7 +76,7 @@ function ImageViewer({ file, onClose, inline = false }) {
           </Button>
         </div>
 
-        <div className="p-4 flex justify-center items-center bg-gray-50 dark:bg-gray-900 min-h-[400px]">
+        <div className="p-4 flex justify-center items-center bg-muted/20 min-h-[400px]">
           <img
             src={blobUrl || ''}
             alt={file.name}
@@ -87,7 +87,7 @@ function ImageViewer({ file, onClose, inline = false }) {
             }}
           />
           <div
-            className="text-center text-gray-500 dark:text-gray-400"
+            className="text-center text-muted-foreground"
             style={{ display: 'none' }}
           >
             <p>Unable to load image</p>
@@ -95,8 +95,8 @@ function ImageViewer({ file, onClose, inline = false }) {
           </div>
         </div>
 
-        <div className="p-4 border-t bg-gray-50 dark:bg-gray-800">
-          <p className="text-sm text-gray-600 dark:text-gray-400">
+        <div className="p-4 border-t bg-muted/20">
+          <p className="text-sm text-muted-foreground">
             {file.path}
           </p>
         </div>

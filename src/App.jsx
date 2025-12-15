@@ -11,8 +11,6 @@ const SessionKeepAlive = lazy(() => import('./components/SessionKeepAlive'));
 const FloatingMicMenu = lazy(() => import('./components/FloatingMicMenu').then(module => ({ default: module.FloatingMicMenu })));
 const SessionsView = lazy(() => import('./components/SessionsView'));
 
-// WebSocket is managed by ClaudeWebSocketProvider; avoid duplicate connections
-import { useClaudeWebSocket } from './contexts/ClaudeWebSocketContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -67,20 +65,6 @@ function AppContent() {
   const { isLoading: authLoading, user } = useAuth();
   const authReady = !authLoading && !!user;
   
-  // Use the unified Claude WebSocket from context (single connection)
-  const { isConnected, registerMessageHandler, connect } = useClaudeWebSocket();
-
-
-  // Ensure socket connects once auth is ready
-  useEffect(() => {
-    if (authReady && !isConnected) {
-      try {
-        connect();
-      } catch (error) {
-        log.error('Failed to connect WebSocket:', error);
-      }
-    }
-  }, [authReady, isConnected, connect]);
 
   // Enable compact UI globally (minimal spacing/buttons)
   useEffect(() => {
@@ -246,86 +230,6 @@ function AppContent() {
     return sessionUnchanged;
   };
 
-  // Handle WebSocket messages for real-time project updates (single provider socket)
-  useEffect(() => {
-    const unsubscribe = registerMessageHandler('app-projects', (latestMessage) => {
-
-      // Handle session not found error (when resuming external Claude CLI sessions)
-      if (latestMessage.type === 'session-not-found') {
-        log.warn('Session not found - creating new session');
-
-        // Show a user-friendly notification
-        const notification = document.createElement('div');
-        notification.className = 'fixed top-4 right-4 bg-yellow-500 text-white px-4 py-2 rounded-lg shadow-lg z-50 animate-pulse';
-        notification.textContent = 'Session not found. Starting a new session...';
-        document.body.appendChild(notification);
-
-        setTimeout(() => {
-          notification.remove();
-        }, 3000);
-
-        // The backend will automatically create a new session
-        // No need to do anything else here
-        return;
-      }
-
-      if (latestMessage.type === 'projects_updated') {
-        log.debug('Projects updated via WebSocket');
-
-        // Session Protection Logic: Allow additions but prevent changes during active conversations
-        // This allows new sessions/projects to appear in sidebar while protecting active chat messages
-        // We check for two types of active sessions:
-        // 1. Existing sessions: selectedSession.id exists in activeSessions
-        // 2. New sessions: temporary "new-session-*" identifiers in activeSessions (before real session ID is received)
-        const hasActiveSession = (selectedSession && activeSessions.has(selectedSession.id)) ||
-                                 (activeSessions.size > 0 && Array.from(activeSessions).some(id => id.startsWith('new-session-')));
-        
-        if (hasActiveSession) {
-          // Allow updates but be selective: permit additions, prevent changes to existing items
-          const updatedProjects = latestMessage.projects;
-          const currentProjects = projects;
-          
-          // Check if this is purely additive (new sessions/projects) vs modification of existing ones
-          const isAdditiveUpdate = isUpdateAdditive(currentProjects, updatedProjects, selectedProject, selectedSession);
-          
-          if (!isAdditiveUpdate) {
-            // Skip updates that would modify existing selected session/project
-            return;
-          }
-          // Continue with additive updates below
-        }
-        
-        // Update projects state with the new data from WebSocket
-        const updatedProjects = latestMessage.projects;
-        setProjects(updatedProjects);
-        
-        // Update selected project if it exists in the updated projects
-        if (selectedProject) {
-          const updatedSelectedProject = updatedProjects.find(p => p.name === selectedProject.name);
-          if (updatedSelectedProject) {
-            setSelectedProject(updatedSelectedProject);
-            
-            // Update selected session only if it was deleted - avoid unnecessary reloads
-            if (selectedSession) {
-              const updatedSelectedSession = updatedSelectedProject.sessions?.find(s => s.id === selectedSession.id);
-              if (!updatedSelectedSession) {
-                // Session was deleted
-                setSelectedSession(null);
-              }
-              // Don't update if session still exists with same ID - prevents reload
-            }
-          }
-        }
-      }
-    });
-    return () => {
-      try {
-        if (unsubscribe) unsubscribe();
-      } catch (error) {
-        log.warn('Failed to unsubscribe from WebSocket handler:', error);
-      }
-    };
-  }, [registerMessageHandler, selectedProject, selectedSession, activeSessions, projects]);
 
   const fetchProjects = async () => {
     try {
@@ -615,12 +519,12 @@ function AppContent() {
     }
   };
 
-  // handleStartStandaloneSession: Start fresh Claude session (like opening terminal and typing 'claude')
+  // handleStartStandaloneSession: Start fresh standalone session
   const handleStartStandaloneSession = () => {
     // Create a standalone project - no sessions, always fresh
     const standaloneProject = {
-      name: 'claude-standalone',
-      displayName: 'Claude Standalone',
+      name: 'standalone',
+      displayName: 'Standalone',
       path: 'STANDALONE_MODE',
       fullPath: 'STANDALONE_MODE',
       isStandalone: true,
@@ -665,7 +569,6 @@ function AppContent() {
           selectedSession={selectedSession}
           activeTab={activeTab}
           setActiveTab={setActiveTab}
-          // WebSocket handled via ClaudeWebSocketContext; no direct props needed
           isMobile={isMobile}
           isLoading={isLoadingProjects}
           onInputFocusChange={setIsInputFocused}
