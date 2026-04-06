@@ -17,8 +17,8 @@ import { cn } from '../lib/utils';
 import { api } from '../utils/api';
 
 function FolderPicker({ isOpen, onClose, onSelect }) {
-  // Start in user's home directory
-  const defaultPath = `/Users/${window.location.hostname === 'localhost' ? 'guilhermevarela' : 'user'}`;
+  // Start at the filesystem root to avoid hardcoded user-specific paths.
+  const defaultPath = '/';
   const [currentPath, setCurrentPath] = useState(defaultPath);
   const [folders, setFolders] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -66,9 +66,7 @@ function FolderPicker({ isOpen, onClose, onSelect }) {
   };
 
   const goHome = () => {
-    // Go directly to user's home directory
-    const username = window.location.hostname === 'localhost' ? 'guilhermevarela' : 'user';
-    setCurrentPath(`/Users/${username}`);
+    setCurrentPath(defaultPath);
   };
 
   const handleSelect = () => {

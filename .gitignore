@@ -117,6 +117,7 @@ temp/
 
 # Secrets and env variants
 .env.*
+certs/*.pem
 
 # Do not commit local indexes or source mirrors
 server/database/repo-indexes/

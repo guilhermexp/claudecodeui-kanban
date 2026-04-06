@@ -100,7 +100,7 @@ Final stats: { "total": 0, "shutdownInProgress": 0 }
 
 | Componente | Status | Detalhes |
 |------------|--------|---------|
-| **Environment Loading** | ✅ PASS | .env carregado de `<home>/Documents/Projetos/Codeui/.env` |
+| **Environment Loading** | ✅ PASS | .env carregado de `<project-root>/.env` |
 | **JWT_SECRET** | ✅ PASS | Carregado corretamente (128 chars) |
 | **Database** | ✅ PASS | SQLite inicializado |
 | **Server Startup** | ✅ PASS | Rodando em http://0.0.0.0:7347 |

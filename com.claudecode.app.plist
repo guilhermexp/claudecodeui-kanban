@@ -8,7 +8,7 @@
     <key>ProgramArguments</key>
     <array>
         <string>/bin/bash</string>
-        <string><home>/Documents/Repositorios/claudecodeui-main/start-background-prod.sh</string>
+        <string>/path/to/claudecodeui-kanban/start-background-prod.sh</string>
     </array>
     
     <key>RunAtLoad</key>
@@ -19,10 +19,10 @@
     <false/>
     
     <key>StandardOutPath</key>
-    <string><home>/Documents/Repositorios/claudecodeui-main/claudecode.log</string>
+    <string>/path/to/claudecodeui-kanban/claudecode.log</string>
     
     <key>StandardErrorPath</key>
-    <string><home>/Documents/Repositorios/claudecodeui-main/claudecode.error.log</string>
+    <string>/path/to/claudecodeui-kanban/claudecode.error.log</string>
     
     <key>EnvironmentVariables</key>
     <dict>
@@ -33,6 +33,6 @@
     </dict>
     
     <key>WorkingDirectory</key>
-    <string><home>/Documents/Repositorios/claudecodeui-main</string>
+    <string>/path/to/claudecodeui-kanban</string>
 </dict>
 </plist>
