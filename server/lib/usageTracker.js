@@ -220,7 +220,7 @@ class UsageTracker {
         if (!stats.isDirectory()) continue;
 
         // O nome do diretório é o path codificado com - no lugar de /
-        // Por exemplo: -Users-guilhermevarela-Documents-projeto
+        // Por exemplo: -Users-username-Documents-projeto
         let decodedProjectPath = projectDir;
         if (projectDir.startsWith('-')) {
           // Convert back to real path

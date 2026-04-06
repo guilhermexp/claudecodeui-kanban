@@ -1,5 +1,6 @@
 import { spawn } from 'child_process';
 import net from 'net';
+import os from 'os';
 import path from 'path';
 
 // In-memory registry
@@ -271,17 +272,18 @@ export async function startPreview(projectName, repoPath, preferredPort = null) 
   }
   
   // Check if this project should not have preview
+  const homeDir = os.homedir();
   const blockedPaths = [
-    '/Users/guilhermevarela/.claude',
+    path.join(homeDir, '.claude'),
     '/.claude'
   ];
   
   // These paths should be blocked only as exact matches, not subdirectories
   const exactMatchOnlyPaths = [
-    '/Users/guilhermevarela',
-    '/Users/guilhermevarela/Documents',
-    '/Users/guilhermevarela/Desktop',
-    '/Users/guilhermevarela/Downloads'
+    homeDir,
+    path.join(homeDir, 'Documents'),
+    path.join(homeDir, 'Desktop'),
+    path.join(homeDir, 'Downloads')
   ];
   
   const normalizedPath = path.resolve(repoPath);
